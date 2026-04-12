@@ -486,6 +486,7 @@ DIRETRIZES DA EXPLICAÇÃO (Deep Dive):
 - Cada questão deve trazer imediatamente o gabarito e a explicação profunda.
 - A explicação deve ser uma verdadeira aula. Comece pelas bases e vá aprofundando.
 - Explique o porquê da correta e dê os diferenciais ('high-yield') que excluem as incorretas no mesmo bloco. Não precisa de um parágrafo isolado para distratores.
+- Caso você queira se referir a alguma alternativa, se refira ao que ela diz e não à letra, pois as alternativas serão embaralhadas.
 
 REFERÊNCIAS PRIORITÁRIAS:
 - Patologia: Robbins & Cotran; Rosai & Ackerman; Rubin’s; WHO Tumours.
@@ -1172,7 +1173,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     value={materialText} 
                     onChange={(e) => setMaterialText(e.target.value)} 
                     onPaste={handlePaste}
-                    placeholder="Insira o néctar ou suas anotações aqui... Você também pode dar Ctrl+V ou colar os arquivos PDF/Word diretamente aqui." 
+                    placeholder="Insira o néctar ou suas anotações aqui..." 
                     className={`w-full h-48 p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} resize-none outline-none focus:ring-2 focus:ring-yellow-500`} 
                   />
                   
