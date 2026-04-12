@@ -221,8 +221,27 @@ export default function QuestionBankApp() {
   });
   
   const [showSummary, setShowSummary] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false); // Estado do Modal de Confirmação
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
+  // MÁGICA DO TÍTULO E FAVICON (ÍCONE DA ABA)
+  useEffect(() => {
+    // Muda o título
+    document.title = "Ágora do Saber";
+
+    // Ícone SVG (Landmark/Templo em formato URL Encodado para o Favicon)
+    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
+    
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    // Aplica o ícone dourado dinamicamente
+    link.href = `data:image/svg+xml,${encodeURIComponent(svgIcon)}`;
+  }, []);
+
+  // Sincroniza cor de fundo global com o modo noturno
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? '#111827' : '#f9fafb'; 
     document.body.style.transition = 'background-color 0.3s ease';
