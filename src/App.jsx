@@ -20,6 +20,7 @@ const FileUp = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width
 const Sparkles = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 3 1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/></svg>);
 const Send = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>);
 const Eraser = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>);
+const Copy = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>);
 
 // --- API Gemini ---
 const apiKey = ""; 
@@ -181,7 +182,7 @@ const GrecianModal = ({ title, message, onConfirm, onCancel, confirmText, darkMo
         <div className="flex gap-3 w-full">
           {!isAlert && (
             <button onClick={onCancel} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}>
-              Cancelar
+              Desistir
             </button>
           )}
           <button onClick={onConfirm} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-md transition-colors ${isAlert ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-red-600 hover:bg-red-700'}`}>
@@ -273,6 +274,7 @@ export default function QuestionBankApp() {
   
   const [isBusy, setIsBusy] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
   
   const [activeSubjectId, setActiveSubjectId] = useState(null);
   const [activeTopicId, setActiveTopicId] = useState(null);
@@ -294,6 +296,20 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     document.title = "Ágora do Saber";
+    // Gera o ícone em base64 nativamente para garantir que não quebre a cor
+    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
+    const encodedData = window.btoa(svgIcon);
+    
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = `data:image/svg+xml;base64,${encodedData}`;
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem('qb_v2_library', JSON.stringify(library));
     localStorage.setItem('qb_v2_settings', JSON.stringify(settings));
     localStorage.setItem('qb_darkmode', JSON.stringify(darkMode));
@@ -302,6 +318,56 @@ export default function QuestionBankApp() {
 
   const activeSubject = library.find(s => s.id === activeSubjectId);
   const activeTopic = activeSubject?.topics.find(t => t.id === activeTopicId);
+
+  const getFullPromptText = () => {
+    const qCount = settings.numSubtopics * settings.qPerSub;
+    return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
+Gere questões divididas em ${settings.numSubtopics} subtópicos, com ${settings.qPerSub} questões por subtópico (Total: ${qCount} questões).
+
+DIRETRIZES GERAIS (ESTUDO REVERSO):
+- Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
+- Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
+- Alternativas homogêneas, plausíveis e com tamanho semelhante. A alternativa correta não deve se destacar visualmente por ser mais longa.
+- Ensine cada ponto apenas uma vez de forma progressiva. Faça apenas conexões breves se o conceito já foi ensinado.
+- A explicação deve soar direta, natural e autoral (não use "segundo o texto").
+
+DIRETRIZES DA EXPLICAÇÃO (Deep Dive):
+- Cada questão deve trazer imediatamente o gabarito e a explicação profunda.
+- A explicação deve ser uma verdadeira aula. Comece pelas bases e vá aprofundando.
+- Explique o porquê da correta e dê os diferenciais ('high-yield') que excluem as incorretas no mesmo bloco. Não precisa de um parágrafo isolado para distratores.
+
+REFERÊNCIAS PRIORITÁRIAS:
+- Patologia: Robbins & Cotran; Rosai & Ackerman; Rubin’s; WHO Tumours.
+- Fisiologia: Guyton & Hall; Boron; Berne & Levy; West's.
+- Clínica: Harrison; Goldman-Cecil; Oxford Handbook.
+- Anatomia: Gray’s.
+- Laboratório: Wallach; Henry’s; Diretrizes SBPC/ML.
+
+TEMPLATE DE SAÍDA OBRIGATÓRIO (MUITO IMPORTANTE):
+### Subtópico [X.Y] - [Nome do Subtópico]
+## Questão [X.Y.Z]
+[Texto do Enunciado]
+A) [Alternativa]
+B) [Alternativa]
+C) [Alternativa]
+D) [Alternativa]
+E) [Alternativa]
+Alternativa correta: [Letra]
+Explicação:
+[Aula profunda e diferenciais]
+---
+
+### Resumo de Consolidação
+[Ao final de tudo, escreva um "Resumo de Consolidação" EXCLUSIVAMENTE em parágrafos de texto corrido. É ESTRITAMENTE PROIBIDO o uso de bullet points, listas numeradas ou tabelas. Escreva reforçando pontos importantes, conexões de conceitos e erros frequentes].
+
+${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}` : ''}`;
+  };
+
+  const copyPromptToClipboard = () => {
+    navigator.clipboard.writeText(getFullPromptText());
+    setCopiedPrompt(true);
+    setTimeout(() => setCopiedPrompt(false), 3000);
+  };
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || e.clipboardData?.files || []);
@@ -328,7 +394,7 @@ export default function QuestionBankApp() {
         } else {
           setErrorModal({
             title: 'Formato Ignorado',
-            message: `O arquivo ${file.name} não foi processado. O Oráculo lê apenas TXT, MD, PDF e DOC/DOCX.`
+            message: `O formato do artefato ${file.name} é desconhecido. O Oráculo decifra apenas pedras TXT, MD, PDF e DOC/DOCX.`
           });
           continue;
         }
@@ -337,7 +403,7 @@ export default function QuestionBankApp() {
         console.error("Erro lendo arquivo", err);
         setErrorModal({
           title: 'Pergaminho Corrompido',
-          message: `Falha ao decifrar ${file.name}. O arquivo pode estar corrompido ou magicamente selado.`
+          message: `O feitiço falhou em ${file.name}. O pergaminho pode estar corrompido ou selado com magia negra.`
         });
       }
     }
@@ -455,7 +521,6 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
   const generateTopicBatch = async (topicId, additionalPrompt = "") => {
     setIsBusy(true);
 
-    // Apaga as questões imediatamente para exibir o status de Invocação
     setLibrary(prev => prev.map(s => {
       if (s.id !== activeSubjectId) return s;
       return {
@@ -464,56 +529,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       };
     }));
 
-    // Capturamos o tópico atual pelo estado mais recente da renderização
     const topic = activeSubject.topics.find(t => t.id === topicId);
     const qCount = settings.numSubtopics * settings.qPerSub;
     
-    const FULL_SYSTEM_PROMPT = `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
-Gere EXATAMENTE ${qCount} questões sobre o tópico "${topic.title}" do assunto "${activeSubject.title}".
-Divida as questões cobrindo ${settings.numSubtopics} subtópicos, com ${settings.qPerSub} questões por subtópico.
-
-DIRETRIZES GERAIS (ESTUDO REVERSO):
-- Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
-- Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
-- Alternativas homogêneas, plausíveis e com tamanho semelhante. A alternativa correta não deve se destacar visualmente por ser mais longa.
-- Ensine cada ponto apenas uma vez de forma progressiva. Faça apenas conexões breves se o conceito já foi ensinado.
-- A explicação deve soar direta, natural e autoral (não use "segundo o texto").
-
-DIRETRIZES DA EXPLICAÇÃO (Deep Dive):
-- Cada questão deve trazer imediatamente o gabarito e a explicação profunda.
-- A explicação deve ser uma verdadeira aula. Comece pelas bases e vá aprofundando.
-- Explique o porquê da correta e dê os diferenciais ('high-yield') que excluem as incorretas no mesmo bloco. Não precisa de um parágrafo isolado para distratores.
-
-REFERÊNCIAS PRIORITÁRIAS:
-- Patologia: Robbins & Cotran; Rosai & Ackerman; Rubin’s; WHO Tumours.
-- Fisiologia: Guyton & Hall; Boron; Berne & Levy; West's.
-- Clínica: Harrison; Goldman-Cecil; Oxford Handbook.
-- Anatomia: Gray’s.
-- Laboratório: Wallach; Henry’s; Diretrizes SBPC/ML.
-
-TEMPLATE DE SAÍDA OBRIGATÓRIO (MUITO IMPORTANTE):
-### Subtópico [X.Y] - [Nome do Subtópico]
-## Questão [X.Y.Z]
-[Texto do Enunciado]
-A) [Alternativa]
-B) [Alternativa]
-C) [Alternativa]
-D) [Alternativa]
-E) [Alternativa]
-Alternativa correta: [Letra]
-Explicação:
-[Aula profunda e diferenciais]
----
-(Repita o bloco para todas as ${qCount} questões)
-
-### Resumo de Consolidação
-[Ao final de tudo, escreva um "Resumo de Consolidação" EXCLUSIVAMENTE em parágrafos de texto corrido. É ESTRITAMENTE PROIBIDO o uso de bullet points, listas numeradas ou tabelas. Escreva reforçando pontos importantes, conexões de conceitos e erros frequentes].
-
-Contexto Extra do Usuário: ${settings.customPrompt}
-Instruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
+    const FULL_SYSTEM_PROMPT = getFullPromptText() + `\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
 
     try {
-      const result = await callGemini(`Invoque o conhecimento sobre: ${topic.title}`, FULL_SYSTEM_PROMPT);
+      const result = await callGemini(`Invoque o conhecimento sobre: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT);
       const parsed = parseData(result);
       
       setLibrary(prev => prev.map(s => {
@@ -536,7 +558,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
     if (parsed.questions.length === 0) {
       setErrorModal({
         title: "Pergaminho Ilegível",
-        message: "O Oráculo não conseguiu decifrar provações neste texto. Certifique-se de que os deuses antigos aprovariam o formato de suas marcações (## Questão, A), B), Alternativa correta:, Explicação:)."
+        message: "O Oráculo não compreendeu estes símbolos. Assegure-se de que os deuses antigos aprovariam a estrutura (## Questão, A), B), Alternativa correta:, Explicação:)."
       });
       return;
     }
@@ -656,6 +678,14 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                 <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${statsBadge}`}>{library.filter(s=>s.source === 'external').length} Pastas</div>
               </div>
             </div>
+
+            <div className="mt-12 flex justify-center animate-in fade-in">
+              <button onClick={copyPromptToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all border ${darkMode ? 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt ? 'ring-2 ring-yellow-500 text-yellow-600' : ''}`}>
+                {copiedPrompt ? <CheckCircle2 className="w-5 h-5 text-yellow-500" /> : <Copy className="w-5 h-5" />}
+                {copiedPrompt ? "Prece Copiada!" : "Copiar Prece ao Oráculo (Prompt)"}
+              </button>
+            </div>
+            {copiedPrompt && <p className="text-center text-xs mt-2 opacity-50">Cole no ChatGPT ou DeepSeek para obter as provações.</p>}
           </div>
         )}
 
@@ -664,21 +694,21 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
           <div className="animate-in slide-in-from-right">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
               <div>
-                <button onClick={() => setView('library')} className={`flex items-center gap-2 mb-4 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
+                <button onClick={() => setView('library')} className={`flex items-center gap-2 mb-4 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
                 <h2 className="text-3xl font-serif font-bold text-yellow-600">
                   {libraryFilter === 'gemini' ? 'Acervo do Oráculo' : 'Pergaminhos Externos'}
                 </h2>
                 <p className="opacity-60 mt-1">Selecione uma pasta para estudar.</p>
               </div>
               {libraryFilter === 'gemini' ? (
-                <button onClick={() => setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><Sparkles className="w-4 h-4" /> Novo Assunto</button>
+                <button onClick={() => setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><Sparkles className="w-4 h-4" /> Novo Panteão</button>
               ) : (
-                <button onClick={() => setView('paste')} className="bg-stone-700 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-stone-800 transition-all flex items-center gap-2"><ScrollText className="w-4 h-4" /> Nova Importação</button>
+                <button onClick={() => setView('paste')} className="bg-stone-700 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-stone-800 transition-all flex items-center gap-2"><ScrollText className="w-4 h-4" /> Novos Escritos</button>
               )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {subjectsToShow.length === 0 && <div className="col-span-full py-10 text-center opacity-40 italic">Nenhuma pasta criada nesta sessão ainda.</div>}
+              {subjectsToShow.length === 0 && <div className="col-span-full py-10 text-center opacity-40 italic">As prateleiras da biblioteca estão vazias nesta sessão.</div>}
               
               {subjectsToShow.map(subject => (
                 <div key={subject.id} onClick={() => { setActiveSubjectId(subject.id); setView('subject'); }} className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-6 rounded-2xl border hover:border-yellow-500 cursor-pointer group transition-all flex flex-col justify-between`}>
@@ -699,12 +729,12 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
         {/* VIEW: PASTE EXTERNAL */}
         {view === 'paste' && (
           <div className="animate-in slide-in-from-right max-w-3xl mx-auto">
-            <button onClick={() => setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Cancelar</button>
+            <button onClick={() => setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Desistir da Jornada</button>
             <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2 flex items-center gap-3"><ScrollText className="w-8 h-8"/> Decifrar Pergaminho Externo</h2>
             <p className="opacity-60 mb-6">Crie uma nova pasta ou adicione tópicos a uma existente colando questões de outras IAs.</p>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div className="relative w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
+              <div className="w-full">
                 <input 
                   type="text" 
                   value={pasteSubjectName} 
@@ -718,7 +748,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                   className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'}`} 
                 />
                 {showSubjectSuggestions && externalFolderNames.filter(n => n.toLowerCase().includes(pasteSubjectName.toLowerCase())).length > 0 && (
-                  <ul className={`absolute z-20 w-full mt-2 rounded-xl border shadow-lg overflow-hidden ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <ul className={`absolute z-20 w-[calc(50%-0.5rem)] mt-2 rounded-xl border shadow-lg overflow-hidden ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                     {externalFolderNames.filter(n => n.toLowerCase().includes(pasteSubjectName.toLowerCase())).map((name, idx) => (
                       <li 
                         key={idx} 
@@ -753,7 +783,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
             
             <div className="mt-6 flex justify-end">
               <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-stone-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg hover:bg-stone-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
-                <Folder className="w-5 h-5" /> Importar e Criar Pastas
+                <Folder className="w-5 h-5" /> Gravar nas Pedras
               </button>
             </div>
           </div>
@@ -762,7 +792,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
         {/* VIEW: SUBJECT (PASTA INTERNA) */}
         {view === 'subject' && activeSubject && (
           <div className="animate-in slide-in-from-right">
-            <button onClick={() => { setLibraryFilter(activeSubject.source); setView('sub-library'); }} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
+            <button onClick={() => { setLibraryFilter(activeSubject.source); setView('sub-library'); }} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
             <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">{activeSubject.title}</h2>
             <p className="opacity-60 mb-8">{activeSubject.source === 'gemini' ? 'Sumário Estruturado pelo Oráculo' : 'Subpastas Importadas'}</p>
 
@@ -773,10 +803,10 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                     <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0"><ScrollText className="w-5 h-5" /></div>
                     <div className="truncate">
                       <h4 className="font-bold text-sm truncate">{topic.title}</h4>
-                      <p className="text-xs opacity-50">{topic.questions.length > 0 ? `${Object.keys(topic.answers).length}/${topic.questions.length} respondidas` : 'Vazio - Aguardando Invocação'}</p>
+                      <p className="text-xs opacity-50">{topic.questions.length > 0 ? `${Object.keys(topic.answers).length}/${topic.questions.length} respondidas` : 'Silêncio - Aguardando os Deuses'}</p>
                     </div>
                   </div>
-                  <div className="h-2 w-24 md:w-32 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                  <div className="h-2 w-24 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div className="bg-yellow-500 h-full" style={{ width: topic.questions.length ? `${(Object.keys(topic.answers).length / topic.questions.length)*100}%` : '0%' }} />
                   </div>
                 </div>
@@ -790,7 +820,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
           <div className="animate-in fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 border-b border-gray-200 dark:border-gray-700 pb-6">
               <div>
-                <button onClick={() => setView('subject')} className={`flex items-center gap-2 mb-2 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
+                <button onClick={() => setView('subject')} className={`flex items-center gap-2 mb-2 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
                 <div className="flex items-center gap-3">
                   <h2 className="text-2xl font-serif font-bold text-yellow-600">{activeTopic.title}</h2>
                 </div>
@@ -798,7 +828,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 {activeTopic.questions.length > 0 && (
                   <button onClick={() => setDeleteId({type:'reset_topic', id:activeTopic.id})} className="flex-1 sm:flex-none flex justify-center items-center gap-2 p-2 px-4 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-bold text-sm">
-                    <Eraser className="w-4 h-4" /> Limpar
+                    <Eraser className="w-4 h-4" /> Purificar
                   </button>
                 )}
                 {activeTopic.questions.length > 0 && activeSubject.source === 'gemini' && (
@@ -851,18 +881,18 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
         {/* VIEW: CREATOR (INVOCAR ASSUNTO GEMINI) */}
         {view === 'creator' && (
           <div className="animate-in slide-in-from-bottom max-w-2xl mx-auto">
-            <button onClick={abortCreation} className={`mb-6 font-bold flex items-center gap-2 transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/> Abortar Invocação</button>
+            <button onClick={abortCreation} className={`mb-6 font-bold flex items-center gap-2 transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/> Desistir da Jornada</button>
             {creatorStep === 1 ? (
               <div className="space-y-6">
                 <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3">
                   <Sparkles className="w-8 h-8" />
                   Invocar Assunto (Gemini)
                 </h2>
-                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome da Pasta (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
+                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome do Novo Panteão (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
                 
                 {/* Upload Section */}
                 <div className="relative">
-                  <div className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Materiais Base (Copie & Cole textos ou Arquivos PDF, DOCX, TXT)</div>
+                  <div className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Textos Sagrados (Copie & Cole textos ou Oferende Arquivos PDF, DOCX, TXT)</div>
                   
                   {uploadedFiles.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -884,7 +914,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                     className={`w-full h-48 p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} resize-none outline-none focus:ring-2 focus:ring-yellow-500`} 
                   />
                   
-                  <button onClick={() => fileInputRef.current.click()} title="Upar arquivos (PDF, DOCX, TXT, MD)" className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 transition-colors">
+                  <button onClick={() => fileInputRef.current.click()} title="Oferendar arquivos (PDF, DOCX, TXT, MD)" className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 transition-colors">
                     <FileUp className="w-5 h-5" />
                   </button>
                   <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx" />
@@ -897,8 +927,8 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
               </div>
             ) : (
               <div className="space-y-6">
-                <h2 className="text-2xl font-serif font-bold text-yellow-600">Sumário Proposto</h2>
-                <p className="opacity-60 mb-6">Analise o sumário proposto. Você pode pedir ao Oráculo para alterá-lo na caixa abaixo.</p>
+                <h2 className="text-2xl font-serif font-bold text-yellow-600">O Mapa da Jornada</h2>
+                <p className="opacity-60 mb-6">Analise os caminhos propostos. Dialogue com o Oráculo abaixo para ajustar seu destino.</p>
                 
                 <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm leading-relaxed overflow-y-auto whitespace-pre-wrap ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-200 text-gray-800'}`}>
                   {proposedSyllabus}
@@ -908,7 +938,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                   <textarea 
                     value={syllabusFeedback} 
                     onChange={(e) => setSyllabusFeedback(e.target.value)} 
-                    placeholder="Pedir ao Oráculo para alterar algo no sumário..." 
+                    placeholder="Suplique aos deuses por mudanças na jornada..." 
                     className={`w-full h-24 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'}`} 
                   />
                   <button onClick={handleReviseSyllabus} disabled={!syllabusFeedback.trim() || isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 disabled:opacity-50">
@@ -917,8 +947,8 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                 </div>
 
                 <div className="flex gap-4 mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
-                  <button onClick={() => setCreatorStep(1)} className={`flex-1 py-4 font-bold rounded-xl transition-colors ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}>Voltar</button>
-                  <button onClick={finalizeSubject} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-yellow-700 transition-colors">Confirmar e Criar Pastas</button>
+                  <button onClick={() => setCreatorStep(1)} className={`flex-1 py-4 font-bold rounded-xl transition-colors ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}>Retornar</button>
+                  <button onClick={finalizeSubject} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-yellow-700 transition-colors">Selar os Pergaminhos</button>
                 </div>
               </div>
             )}
@@ -930,7 +960,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
           <div className="animate-in fade-in max-w-xl mx-auto space-y-8">
             <div className="flex items-center gap-4 mb-8">
               <button onClick={() => setView('library')} className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`}><ArrowLeft className="w-5 h-5" /></button>
-              <h2 className="text-3xl font-serif font-bold text-yellow-600">Preferências do Oráculo</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600">Leis do Oráculo</h2>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -969,7 +999,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra (Diretrizes Adicionais)</label>
               <textarea value={settings.customPrompt} onChange={(e) => setSettings({...settings, customPrompt: e.target.value})} placeholder="Ex: Priorize exames laboratoriais na explicação..." className={`w-full h-32 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
             </div>
-            <button onClick={() => setView('library')} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Salvar Alterações</button>
+            <button onClick={() => setView('library')} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Gravar nas Pedras</button>
           </div>
         )}
       </main>
@@ -1005,7 +1035,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
         <GrecianModal 
           title="Purificar Provações?" 
           message="Deseja apagar todas as marcações para refazer este bloco?" 
-          confirmText="Apagar Tudo" 
+          confirmText="Expurgar Tudo" 
           onConfirm={() => {
             resetAnswers();
             setDeleteId(null);
@@ -1024,7 +1054,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
                 <RotateCcw className="w-8 h-8 text-yellow-600" />
               </div>
               <h3 className="text-2xl font-serif font-bold mb-2">Reinvocar Tópico</h3>
-              <p className="mb-6 opacity-70 text-sm">Atenção: Suas questões atuais para este tópico serão apagadas. Informe abaixo se deseja focar em algo na nova geração.</p>
+              <p className="mb-6 opacity-70 text-sm">Cuidado: As provações atuais deste tópico serão varridas da história. Informe aos deuses se deseja um novo foco.</p>
               
               <textarea
                 value={regeneratePrompt}
@@ -1034,7 +1064,7 @@ Instruções específicas para esta geração (refazer com foco): ${additionalPr
               />
               
               <div className="flex gap-4 w-full">
-                <button onClick={() => setRegenerateModalOpen(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+                <button onClick={() => setRegenerateModalOpen(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}>Recuar</button>
                 <button onClick={() => {
                   setRegenerateModalOpen(false);
                   generateTopicBatch(activeTopic.id, regeneratePrompt);
