@@ -473,7 +473,10 @@ export default function QuestionBankApp() {
   const getFullPromptText = () => {
     const qCount = settings.numSubtopics * settings.qPerSub;
     return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
-Gere questões divididas em ${settings.numSubtopics} subtópicos, com ${settings.qPerSub} questões por subtópico (Total: ${qCount} questões).
+ATENÇÃO - REGRA DE QUANTIDADE DE QUESTÕES (MANDATÓRIA):
+Você DEVE OBRIGATORIAMENTE abordar EXATAMENTE ${settings.numSubtopics} subtópicos diferentes.
+Para CADA UM desses ${settings.numSubtopics} subtópicos, você DEVE gerar EXATAMENTE ${settings.qPerSub} questão(ões).
+O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões geradas. Sob nenhuma hipótese gere menos do que ${qCount} questões, continue produzindo até completar a cota exata.
 
 DIRETRIZES GERAIS (ESTUDO REVERSO):
 - Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
