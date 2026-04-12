@@ -473,32 +473,23 @@ export default function QuestionBankApp() {
   const getFullPromptText = () => {
     const qCount = settings.numSubtopics * settings.qPerSub;
     return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
+
 ATENÇÃO - REGRA DE QUANTIDADE DE QUESTÕES (MANDATÓRIA):
 Você DEVE OBRIGATORIAMENTE abordar EXATAMENTE ${settings.numSubtopics} subtópicos diferentes.
 Para CADA UM desses ${settings.numSubtopics} subtópicos, você DEVE gerar EXATAMENTE ${settings.qPerSub} questão(ões).
-O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões geradas. Sob nenhuma hipótese gere menos do que ${qCount} questões, continue produzindo até completar a cota exata.
+O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões geradas. Sob nenhuma hipótese pare antes de completar as ${qCount} questões na tela.
 
 DIRETRIZES GERAIS (ESTUDO REVERSO):
 - Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
 - Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
-- Alternativas homogêneas, plausíveis e com tamanho semelhante. A alternativa correta não deve se destacar visualmente por ser mais longa.
-- Ensine cada ponto apenas uma vez de forma progressiva. Faça apenas conexões breves se o conceito já foi ensinado.
-- A explicação deve soar direta, natural e autoral (não use "segundo o texto").
+- Alternativas homogêneas, plausíveis e com tamanho semelhante. 
 
-DIRETRIZES DA EXPLICAÇÃO (Deep Dive):
-- Cada questão deve trazer imediatamente o gabarito e a explicação profunda.
-- A explicação deve ser uma verdadeira aula. Comece pelas bases e vá aprofundando.
-- Explique o porquê da correta e dê os diferenciais ('high-yield') que excluem as incorretas no mesmo bloco. Não precisa de um parágrafo isolado para distratores.
-- Caso você queira se referir a alguma alternativa, se refira ao que ela diz e não à letra, pois as alternativas serão embaralhadas.
+DIRETRIZES DA EXPLICAÇÃO (CONCISA E DIRETA):
+- A explicação deve ler uma aula sobre o assunto. O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit).
+- É ESTRITAMENTE PROIBIDO se referir às letras das alternativas na explicação (ex: NUNCA diga "A alternativa A está errada..."). Em vez disso, cite o próprio termo (ex: "A Penicilina não é indicada porque...").
+- Explique o porquê da correta e dê os diferenciais que excluem as incorretas de forma unificada e ágil.
 
-REFERÊNCIAS PRIORITÁRIAS:
-- Patologia: Robbins & Cotran; Rosai & Ackerman; Rubin’s; WHO Tumours.
-- Fisiologia: Guyton & Hall; Boron; Berne & Levy; West's.
-- Clínica: Harrison; Goldman-Cecil; Oxford Handbook.
-- Anatomia: Gray’s.
-- Laboratório: Wallach; Henry’s; Diretrizes SBPC/ML.
-
-TEMPLATE DE SAÍDA OBRIGATÓRIO (MUITO IMPORTANTE):
+TEMPLATE DE SAÍDA OBRIGATÓRIO:
 ### Subtópico [X.Y] - [Nome do Subtópico]
 ## Questão [X.Y.Z]
 [Texto do Enunciado]
@@ -509,11 +500,11 @@ D) [Alternativa]
 E) [Alternativa]
 Alternativa correta: [Letra]
 Explicação:
-[Aula profunda e diferenciais]
+[Explicação direta, objetiva e citando os termos/conceitos ao invés das letras]
 ---
 
 ### Resumo de Consolidação
-[Ao final de tudo, escreva um "Resumo de Consolidação" EXCLUSIVAMENTE em parágrafos de texto corrido. É ESTRITAMENTE PROIBIDO o uso de bullet points, listas numeradas ou tabelas. Escreva reforçando pontos importantes, conexões de conceitos e erros frequentes].
+[Ao final de todas as ${qCount} questões, escreva um "Resumo de Consolidação" EXCLUSIVAMENTE em parágrafos de texto corrido. É PROIBIDO o uso de bullet points ou listas].
 
 ${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}` : ''}`;
   };
