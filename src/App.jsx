@@ -3,12 +3,46 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
-// --- Configuração do Firebase ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// ============================================================================
+// 🛑 ATENÇÃO: PARA A NUVEM (CROSS-DEVICE) FUNCIONAR NA VERCEL/STACKBLITZ 🛑
+// Substitua o `null` abaixo pelas configurações do seu projeto Firebase.
+// 1. Vá em console.firebase.google.com e crie um projeto.
+// 2. Adicione um App Web (</>) e copie o objeto firebaseConfig.
+// 3. Ative o Firestore Database (Modo Teste) e o Authentication (Modo Anônimo).
+//
+// Exemplo de como deve ficar:
+// const YOUR_FIREBASE_CONFIG = {
+//   apiKey: "AIzaSy...",
+//   authDomain: "seu-projeto.firebaseapp.com",
+//   projectId: "seu-projeto",
+//   storageBucket: "seu-projeto.appspot.com",
+//   messagingSenderId: "123456789",
+//   appId: "1:123456789:web:abcdef"
+// };
+// ============================================================================
+const YOUR_FIREBASE_CONFIG = null; 
+
+// --- Inicialização Blindada do Firebase ---
+let app, auth, db;
+let isFirebaseActive = false;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'agora-saber-app';
+
+try {
+  let configToUse = YOUR_FIREBASE_CONFIG;
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    configToUse = JSON.parse(__firebase_config);
+  }
+
+  if (configToUse && Object.keys(configToUse).length > 0) {
+    app = initializeApp(configToUse);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    isFirebaseActive = true;
+  }
+} catch (e) {
+  console.warn("Aviso: Banco de Dados não configurado. Rodando em Modo Local/Offline.", e);
+}
+
 
 // --- Ícones Temáticos (Grécia / Filosofia) ---
 const Landmark = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>);
@@ -319,8 +353,21 @@ export default function QuestionBankApp() {
     localStorage.setItem('qb_darkmode', JSON.stringify(darkMode));
   }, [darkMode]);
 
+  // Sync Library and Settings in Local Storage when Offline
+  useEffect(() => {
+    if (username && !isFirebaseActive) {
+      localStorage.setItem(`qb_lib_${username}`, JSON.stringify(library));
+    }
+  }, [library, username]);
+
   // Firebase Auth Setup
   useEffect(() => {
+    if (!isFirebaseActive) {
+      setUser({ uid: 'local-offline-user' });
+      setAuthReady(true);
+      return;
+    }
+
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -346,11 +393,41 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!user || !username) return;
 
+    if (!isFirebaseActive) {
+      const savedLib = JSON.parse(localStorage.getItem(`qb_lib_${username}`) || '[]');
+      if (savedLib.length === 0 && !savedLib.find(s => s.id === 'imported-folder')) {
+         savedLib.push({
+            id: 'imported-folder',
+            title: 'Pergaminhos Diversos',
+            fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
+            source: 'external',
+            topics: []
+         });
+      }
+      setLibrary(savedLib);
+      
+      const savedSettings = JSON.parse(localStorage.getItem(`qb_settings_${username}`));
+      if (savedSettings) {
+         setSettings({ ...defaultSettings, ...savedSettings });
+      }
+      return;
+    }
+
     const libRef = collection(db, 'artifacts', appId, 'public', 'data', `lib_${username}`);
     const unsubLib = onSnapshot(libRef, (snapshot) => {
       const loadedLib = snapshot.docs.map(d => d.data());
       loadedLib.sort((a,b) => b.id - a.id);
-      setLibrary(loadedLib);
+      if (loadedLib.length === 0) {
+         setLibrary([{
+            id: 'imported-folder',
+            title: 'Pergaminhos Diversos',
+            fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
+            source: 'external',
+            topics: []
+         }]);
+      } else {
+         setLibrary(loadedLib);
+      }
     }, (err) => console.error(err));
 
     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', username);
@@ -371,12 +448,22 @@ export default function QuestionBankApp() {
     if(!loginInput.trim() || !user) return;
     const cleanName = loginInput.trim().toLowerCase();
     
-    const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName));
-    if (userDoc.exists()) {
+    if (isFirebaseActive) {
+      try {
+        const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName));
+        if (userDoc.exists()) {
+          setUsername(cleanName);
+          localStorage.setItem('qb_username', cleanName);
+        } else {
+          setLoginView('signup');
+        }
+      } catch(e) {
+        console.error(e);
+        setErrorModal({ title: 'Erro', message: "Falha ao consultar os registros da biblioteca.", isAlert: true });
+      }
+    } else {
       setUsername(cleanName);
       localStorage.setItem('qb_username', cleanName);
-    } else {
-      setLoginView('signup');
     }
   };
 
@@ -385,7 +472,12 @@ export default function QuestionBankApp() {
     const cleanName = loginInput.trim().toLowerCase();
     const newSettings = { ...defaultSettings, apiKey: signupApiKey.trim() };
     
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName), newSettings);
+    if (isFirebaseActive) {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName), newSettings);
+    } else {
+      localStorage.setItem(`qb_settings_${cleanName}`, JSON.stringify(newSettings));
+    }
+    
     setUsername(cleanName);
     localStorage.setItem('qb_username', cleanName);
   };
@@ -400,20 +492,43 @@ export default function QuestionBankApp() {
     setLoginInput('');
   };
 
-  // --- FIREBASE MUTATIONS ---
-  const saveSubjectToCloud = async (subjectData) => {
-    if (!user || !username) return;
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, subjectData.id.toString()), subjectData);
+  // --- MUTATIONS ---
+  const updateSubjectState = async (updatedSubject) => {
+    setLibrary(prev => prev.map(s => s.id === updatedSubject.id ? updatedSubject : s));
+    if (isFirebaseActive && user && username) {
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, updatedSubject.id.toString()), updatedSubject);
+      } catch(e) { console.error(e); }
+    }
   };
 
-  const deleteSubjectFromCloud = async (subjId) => {
-    if (!user || !username) return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, subjId.toString()));
+  const addSubjectState = async (newSubject) => {
+    setLibrary(prev => [newSubject, ...prev]);
+    if (isFirebaseActive && user && username) {
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, newSubject.id.toString()), newSubject);
+      } catch(e) { console.error(e); }
+    }
   };
 
-  const saveSettingsToCloud = async (newSettings) => {
-    if (!user || !username) return;
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', username), newSettings);
+  const removeSubjectState = async (subjId) => {
+    setLibrary(prev => prev.filter(s => s.id !== subjId));
+    if (isFirebaseActive && user && username) {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, subjId.toString()));
+      } catch(e) { console.error(e); }
+    }
+  };
+
+  const saveSettingsGlobal = async (newSettings) => {
+    setSettings(newSettings);
+    if (isFirebaseActive && user && username) {
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', username), newSettings);
+      } catch(e) { console.error(e); }
+    } else {
+      localStorage.setItem(`qb_settings_${username}`, JSON.stringify(newSettings));
+    }
   };
 
   // --- APP LOGIC ---
@@ -492,7 +607,8 @@ ${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}`
         } else {
           setErrorModal({
             title: 'Formato Ignorado',
-            message: `O formato do artefato ${file.name} é desconhecido. O Oráculo decifra apenas pedras TXT, MD, PDF e DOC/DOCX.`
+            message: `O formato do artefato ${file.name} é desconhecido. O Oráculo decifra apenas pedras TXT, MD, PDF e DOC/DOCX.`,
+            isAlert: true
           });
           continue;
         }
@@ -501,7 +617,8 @@ ${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}`
         console.error("Erro lendo arquivo", err);
         setErrorModal({
           title: 'Pergaminho Corrompido',
-          message: `O feitiço falhou em ${file.name}. O pergaminho pode estar corrompido ou selado com magia negra.`
+          message: `O feitiço falhou em ${file.name}. O pergaminho pode estar corrompido ou selado com magia negra.`,
+          isAlert: true
         });
       }
     }
@@ -615,7 +732,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       topics: topics
     };
 
-    await saveSubjectToCloud(newSubject);
+    await addSubjectState(newSubject);
     setLibraryFilter('gemini');
     setView('sub-library');
     setCreatorStep(1);
@@ -641,7 +758,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       ...activeSubject,
       topics: activeSubject.topics.map(t => t.id === topicId ? { ...t, questions: [], summary: '', answers: {} } : t)
     };
-    await saveSubjectToCloud(clearedSubject);
+    await updateSubjectState(clearedSubject);
 
     const topic = clearedSubject.topics.find(t => t.id === topicId);
     
@@ -659,7 +776,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         ...clearedSubject,
         topics: clearedSubject.topics.map(t => t.id === topicId ? { ...t, questions: parsed.questions, summary: parsed.summary, answers: {} } : t)
       };
-      await saveSubjectToCloud(updatedSubject);
+      await updateSubjectState(updatedSubject);
       setShowSummary(false);
     } catch (e) { 
       if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
@@ -691,12 +808,19 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       answers: {}
     };
 
-    let targetSubj = library.find(s => s.title.toLowerCase() === subjectName.toLowerCase() && s.source === 'external');
+    let targetSubj = library.find(s => s.title.toLowerCase() === subjectName.toLowerCase() && s.source === 'external' && s.id !== 'imported-folder');
 
     if (targetSubj) {
-      const updated = { ...targetSubj, topics: [...targetSubj.topics, newTopic] };
-      await saveSubjectToCloud(updated);
+      const updated = { ...targetSubj, topics: [newTopic, ...targetSubj.topics] };
+      await updateSubjectState(updated);
       setActiveSubjectId(targetSubj.id);
+    } else if (!pasteSubjectName.trim()) {
+      const importFolder = library.find(s => s.id === 'imported-folder');
+      if (importFolder) {
+         const updated = { ...importFolder, topics: [newTopic, ...importFolder.topics] };
+         await updateSubjectState(updated);
+      }
+      setActiveSubjectId('imported-folder');
     } else {
       const newSubj = {
         id: Date.now(),
@@ -705,7 +829,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         fullSyllabus: "Importado via texto externo",
         topics: [newTopic]
       };
-      await saveSubjectToCloud(newSubj);
+      await addSubjectState(newSubj);
       setActiveSubjectId(newSubj.id);
     }
     
@@ -723,7 +847,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         return { ...t, answers: { ...t.answers, [qId]: letter } };
       })
     };
-    await saveSubjectToCloud(updated);
+    await updateSubjectState(updated);
   };
 
   const resetAnswers = async () => {
@@ -731,10 +855,9 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       ...activeSubject,
       topics: activeSubject.topics.map(t => t.id === activeTopicId ? { ...t, answers: {} } : t)
     };
-    await saveSubjectToCloud(updated);
+    await updateSubjectState(updated);
     setShowSummary(false);
   };
-
 
   // --- RENDERS ---
   if (!authReady) {
@@ -750,6 +873,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     return (
       <div className={`min-h-screen flex items-center justify-center font-sans p-4 ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
         <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+          
+          {!isFirebaseActive && (
+            <div className="mb-6 p-4 rounded-xl border border-red-500/50 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm text-left shadow-inner">
+              <strong>⚠️ Modo Offline Ativado:</strong> O aplicativo está rodando em modo local, sem sincronização. Para usar a Nuvem e compartilhar progressos, adicione sua configuração do Firebase no arquivo <code>app.jsx</code> (linha 16).
+            </div>
+          )}
+
           <div className="flex flex-col items-center text-center mb-8">
             <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
               <Landmark className="w-10 h-10 text-yellow-600" />
@@ -767,7 +897,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50">Nome de Usuário (Identificador)</label>
               <input 
                 type="text" 
-                value={loginView === 'login' ? loginInput : loginInput}
+                value={loginInput}
                 onChange={(e) => setLoginInput(e.target.value)}
                 placeholder="Ex: socratinhas" 
                 disabled={loginView === 'signup'}
@@ -795,7 +925,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             <button 
               onClick={loginView === 'login' ? handleLogin : handleSignup} 
               disabled={loginView === 'login' ? !loginInput.trim() : (!loginInput.trim() || !signupApiKey.trim())}
-              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2"
+              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2 disabled:opacity-50"
             >
               {loginView === 'login' ? 'Entrar nos Portões' : 'Forjar Identidade'}
             </button>
@@ -813,7 +943,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
 
   // --- MAIN APP ---
   const subjectsToShow = library.filter(s => s.source === libraryFilter);
-  const externalFolderNames = Array.from(new Set(library.filter(s => s.source === 'external').map(s => s.title)));
+  const externalFolderNames = Array.from(new Set(library.filter(s => s.source === 'external' && s.id !== 'imported-folder').map(s => s.title)));
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${mainBg}`}>
@@ -910,7 +1040,9 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   <div>
                     <div className="flex justify-between items-start mb-4">
                       <Folder className="w-10 h-10 text-yellow-600" />
-                      <button onClick={(e) => { e.stopPropagation(); setDeleteId({type:'subject', id:subject.id}); }} className="p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-5 h-5" /></button>
+                      {subject.id !== 'imported-folder' && (
+                         <button onClick={(e) => { e.stopPropagation(); setDeleteId({type:'subject', id:subject.id}); }} className="p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-5 h-5" /></button>
+                      )}
                     </div>
                     <h3 className="font-serif font-bold text-xl mb-1 truncate">{subject.title}</h3>
                   </div>
@@ -939,7 +1071,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   }} 
                   onFocus={() => setShowSubjectSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSubjectSuggestions(false), 200)}
-                  placeholder="Pasta Principal (Assunto) - ex: Nefrologia" 
+                  placeholder="Pasta Principal (Assunto) - Opcional" 
                   className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'}`} 
                 />
                 {showSubjectSuggestions && externalFolderNames.filter(n => n.toLowerCase().includes(pasteSubjectName.toLowerCase())).length > 0 && (
@@ -1083,7 +1215,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   <Sparkles className="w-8 h-8" />
                   Invocar Assunto (Gemini)
                 </h2>
-                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome da Pasta (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
+                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome do Novo Panteão (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
                 
                 {/* Upload Section */}
                 <div className="relative">
@@ -1206,7 +1338,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra (Diretrizes Adicionais)</label>
               <textarea value={settings.customPrompt} onChange={(e) => setSettings({...settings, customPrompt: e.target.value})} placeholder="Ex: Priorize exames laboratoriais na explicação..." className={`w-full h-32 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
             </div>
-            <button onClick={() => { saveSettingsToCloud(settings); setView('library'); }} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Gravar nas Pedras</button>
+            <button onClick={() => { saveSettingsGlobal(settings); setView('library'); }} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Gravar nas Pedras</button>
           </div>
         )}
       </main>
@@ -1230,7 +1362,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           message="Esta ação queimará este registro para sempre na biblioteca." 
           confirmText="Expurgar" 
           onConfirm={() => {
-            deleteSubjectFromCloud(deleteId.id);
+            removeSubjectState(deleteId.id);
             setDeleteId(null);
           }} 
           onCancel={() => setDeleteId(null)} 
