@@ -264,6 +264,7 @@ export default function QuestionBankApp() {
     }).filter(s => s.id !== 'imported-folder'); 
   });
   
+  // Incluído campo para apiKey
   const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, customPrompt: "", apiKey: "" };
   const [settings, setSettings] = useState(() => {
     try {
@@ -526,6 +527,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       title: newSubjectName,
       fullSyllabus: proposedSyllabus,
       source: 'gemini',
+      sourceMaterials: getCombinedMaterials(),
       topics: topics
     };
 
@@ -562,10 +564,14 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     const topic = activeSubject.topics.find(t => t.id === topicId);
     const qCount = settings.numSubtopics * settings.qPerSub;
     
-    const FULL_SYSTEM_PROMPT = getFullPromptText() + `\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
+    const contextText = activeSubject.sourceMaterials
+      ? `\n\nMATERIAIS DE BASE OBRIGATÓRIOS (Textos Sagrados):\nAs questões geradas DEVEM refletir e focar primariamente nos conceitos encontrados nos textos a seguir:\n${activeSubject.sourceMaterials}`
+      : '';
+
+    const FULL_SYSTEM_PROMPT = getFullPromptText() + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
 
     try {
-      const result = await callGemini(`Invoque o conhecimento sobre: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
+      const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
       const parsed = parseData(result);
       
       setLibrary(prev => prev.map(s => {
@@ -639,13 +645,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         ...s,
         topics: s.topics.map(t => {
           if (t.id !== activeTopicId) return t;
-          let oracleData = {};
-          if (!t.oracleFired && Math.random() < CHANCE_ORACULO) {
-            setOraclePrediction(PREDICTIONS[Math.floor(Math.random() * PREDICTIONS.length)]);
-            setOracleModal('prompt');
-            oracleData = { oracleFired: true };
-          }
-          return { ...t, answers: { ...t.answers, [qId]: letter }, ...oracleData };
+          return { ...t, answers: { ...t.answers, [qId]: letter } };
         })
       };
     }));
