@@ -220,7 +220,6 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
 
 export default function QuestionBankApp() {
   const [view, setView] = useState(() => localStorage.getItem('qb_view') || 'input');
-  // Alterado para vazio para que o placeholder apareça adequadamente
   const [rawText, setRawText] = useState(() => localStorage.getItem('qb_rawText') || '');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('qb_darkmode');
@@ -273,6 +272,10 @@ export default function QuestionBankApp() {
   useEffect(() => { localStorage.setItem('qb_answers', JSON.stringify(userAnswers)); }, [userAnswers]);
   useEffect(() => { localStorage.setItem('qb_oracleFired', JSON.stringify(hasOracleFired)); }, [hasOracleFired]);
 
+  // VARIÁVEL DE CONTROLE DA CHANCE DO ORÁCULO
+  // Altere esse valor para testar. 0.01 = 1%, 1.0 = 100%.
+  const CHANCE_ORACULO = 0.01;
+
   const handleProcess = () => {
     const data = parseData(rawText);
     setParsedData(data);
@@ -289,10 +292,12 @@ export default function QuestionBankApp() {
       [questionId]: letter
     }));
 
-    // Oráculo do Plantão: 1% de chance, no máximo 1 vez por simulado
-    if (!hasOracleFired && Math.random() < 0.02) {
+    // Oráculo do Plantão com chance baseada na variável configurável
+    if (!hasOracleFired && Math.random() < CHANCE_ORACULO) {
       setHasOracleFired(true);
-      const randomPred = PREDICTIONS[Math.floor(Math.random() * PREDICTIONS.length)];
+      // Garantir aleatoriedade da predição extraindo de forma isolada
+      const randomIndex = Math.floor(Math.random() * PREDICTIONS.length);
+      const randomPred = PREDICTIONS[randomIndex];
       setOraclePrediction(randomPred);
       setOracleModal('prompt');
     }
@@ -332,7 +337,8 @@ export default function QuestionBankApp() {
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${mainBg}`}>
-      <header className={`${headerBg} border-b sticky top-0 z-10 shadow-sm transition-colors duration-300`}>
+      {/* Removido o sticky top-0 para o header seguir o fluxo natural da página */}
+      <header className={`${headerBg} border-b relative z-10 shadow-sm transition-colors duration-300`}>
         <div className="max-w-5xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-3">
             <div className="bg-yellow-600 p-1.5 md:p-2 rounded-lg shadow-md">
