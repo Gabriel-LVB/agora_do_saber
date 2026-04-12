@@ -839,7 +839,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     type="text" 
                     value={signupUsername}
                     onChange={(e) => setSignupUsername(e.target.value)}
-                    placeholder="Ex: SOCRATINHAS" 
+                    placeholder="Ex: SEU NOME NÉ PORRA" 
                     className={`w-full p-4 rounded-xl border uppercase font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
                   />
                 </div>
@@ -854,7 +854,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   />
                 </div>
                 <div className={`p-4 rounded-lg text-xs leading-relaxed ${darkMode ? 'bg-yellow-900/20 text-yellow-200' : 'bg-yellow-50 text-yellow-800'}`}>
-                  <strong>Por que preciso de uma API Key?</strong> A Ágora exige uma "chave" para conectar ao cérebro do Oráculo (Google AI Studio). Crie gratuitamente em: <br/>
+                  <strong>Por que preciso de uma API Key?</strong> A Ágora precisa que cada usuário tenha uma API gratuita (do contrário eu teria que pagar por cada pergunta mobral que você faz pra IA) e por isso exige uma "chave" para conectar ao cérebro do Oráculo (Google AI Studio). Crie gratuitamente em: <br/>
                   <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold break-all">aistudio.google.com/app/apikey</a>
                 </div>
 
