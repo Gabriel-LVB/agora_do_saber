@@ -15,7 +15,21 @@ const Moon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="
 const GraduationCap = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21.42 10.922a2 2 0 0 1-.01 2.83l-7.1 7.11a2 2 0 0 1-2.83 0l-7.1-7.1a2 2 0 0 1-.01-2.83l7.1-7.1a2 2 0 0 1 2.83 0l7.1 7.1Z"/><path d="M22 10v6"/><path d="M6 12v6a6 6 0 0 0 12 0v-6"/></svg>);
 const Award = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>);
 
-const DEFAULT_TEXT = `Insira aqui o néctar`;
+// Profecias do Oráculo
+const PREDICTIONS = [
+  "Você vai comprar jaleco de marca cara, caneta Montblanc de 2 mil reais, estetoscópio Litmann preto fosco, e vai atender numa UBS de madeirite que chove dentro do consultório.",
+  "Você vai salvar a vida de alguém na rua. O vídeo vai viralizar no TikTok. Nos comentários: 'fake', 'isso é crime', 'cadê o CRM?', 'meu cachorro faz isso'.",
+  "Você vai formar em medicina, abrir consultório, e seu primeiro paciente vai perguntar se você atende por plano. Você vai dizer que sim. O plano vai te pagar R$ 18,50 por consulta. Você vai passar 40 minutos atendendo. Seu lucro por hora: R$ 27,75. O frentista do posto ganha R$ 32,00.",
+  "Você vai dar plantão noturno num hospital que não tem tomógrafo. Um paciente vai chegar com suspeita de AVC. Você vai ter que adivinhar se é isquêmico ou hemorrágico jogando cara ou coroa. Você vai acertar. Vai se sentir o novo Deus da Medicina. No dia seguinte, o paciente vai ter infarto.",
+  "Você vai formar em psiquiatria, abrir consultório, e descobrir que 90% dos seus pacientes só querem uma coisa: receita de rivotril. Os outros 10% querem atestado. Você vai passar 30 anos escrevendo clonazepam 2mg e carimbando 'repouso de 3 dias'.",
+  "Você vai dar plantão numa UPA de periferia e atender um paciente com 'dor no peito'. Era o isqueiro novo do camelô no bolso da camisa. Você vai fazer ECG, troponina, raio-X. Tudo normal. Vai escrever no prontuário: 'paciente negou isqueiro. Exame físico: isqueiro encontrado.'",
+  "Você vai formar, juntar dinheiro por 5 anos, abrir uma clínica de medicina do trabalho, e seu dia mais emocionante vai ser quando um funcionário pedir atestado porque 'o capacete apertou a cabeça'. Você vai dar 3 dias. Ele vai voltar na segunda com o mesmo capacete.",
+  "Você vai comprar um estetoscópio de 3 mil reais, usar no pescoço todo dia, e na primeira vez que for ouvir o coração de um paciente obeso vai perceber que não escuta porra nenhuma. Vai fingir que ouviu, anotar 'RCR 2T sem sopros', e o paciente vai dizer: 'Doutor, eu tenho marca-passo.'",
+  "Você vai formar, passar em anestesio, e sua maior habilidade profissional vai ser ficar sentado olhando pro monitor enquanto o cirurgião sua. Um dia o monitor vai apitar. Você vai olhar. Era a bateria do mouse.",
+  "Você vai formar em medicina, não passar em residência nenhuma por 3 anos seguidos, desistir, fazer concurso pra médico do trabalho de uma prefeitura do interior, passar, se mudar pra uma cidade de 5 mil habitantes, e seu trabalho vai ser atestar 'apto' ou 'inapto' pra funcionário público que quer se aposentar. O prefeito vai te ligar uma vez por mês pedindo pra liberar atestado pra prima dele. Você vai liberar. O prefeito vai te dar um cargo comissionado. Ele vai te demitir porque você se negou a entrar no esquema de rachadinha.",
+  "Você vai se formar, juntar dinheiro por 3 anos, fazer uma pós de medicina estética de fim de semana, comprar um aplicador de botox chinês no Mercado Livre, e abrir consultório. Sua primeira paciente vai ser sua tia. Ela vai pedir 50% de desconto. Você vai dar. Ela vai dizer que não gostou. Você vai devolver o dinheiro. Sua tia vai contar no almoço de domingo que você não sabe aplicar botox.",
+  "Você vai dar plantão no PS por 5 anos. Um dia vai chegar um paciente com parada cardiorrespiratória. Você vai fazer RCP por 40 minutos, vai dar choque, vai entubar, vai salvar. No dia seguinte, o paciente vai processar o hospital porque quebrou duas costelas na massagem cardíaca. Você vai ser chamado pra depor. O advogado vai perguntar: 'O senhor tinha certeza que ele estava morto?' Você vai responder: 'Mais ou menos.'"
+];
 
 // ALGORITMO DE PARSER ULTRA RESILIENTE
 const parseData = (text) => {
@@ -206,7 +220,8 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
 
 export default function QuestionBankApp() {
   const [view, setView] = useState(() => localStorage.getItem('qb_view') || 'input');
-  const [rawText, setRawText] = useState(() => localStorage.getItem('qb_rawText') || DEFAULT_TEXT);
+  // Alterado para vazio para que o placeholder apareça adequadamente
+  const [rawText, setRawText] = useState(() => localStorage.getItem('qb_rawText') || '');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('qb_darkmode');
     return saved ? JSON.parse(saved) : false;
@@ -220,15 +235,20 @@ export default function QuestionBankApp() {
     return saved ? JSON.parse(saved) : {};
   });
   
+  // Controle do Oráculo
+  const [hasOracleFired, setHasOracleFired] = useState(() => {
+    const saved = localStorage.getItem('qb_oracleFired');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [oracleModal, setOracleModal] = useState(null); // 'prompt', 'prediction' ou null
+  const [oraclePrediction, setOraclePrediction] = useState('');
+
   const [showSummary, setShowSummary] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // MÁGICA DO TÍTULO E FAVICON (ÍCONE DA ABA)
   useEffect(() => {
-    // Muda o título
     document.title = "Ágora do Saber";
-
-    // Ícone SVG (Landmark/Templo em formato URL Encodado para o Favicon)
     const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
     
     let link = document.querySelector("link[rel~='icon']");
@@ -237,7 +257,6 @@ export default function QuestionBankApp() {
       link.rel = 'icon';
       document.head.appendChild(link);
     }
-    // Aplica o ícone dourado dinamicamente
     link.href = `data:image/svg+xml,${encodeURIComponent(svgIcon)}`;
   }, []);
 
@@ -252,12 +271,14 @@ export default function QuestionBankApp() {
   useEffect(() => { localStorage.setItem('qb_darkmode', JSON.stringify(darkMode)); }, [darkMode]);
   useEffect(() => { localStorage.setItem('qb_parsedData', JSON.stringify(parsedData)); }, [parsedData]);
   useEffect(() => { localStorage.setItem('qb_answers', JSON.stringify(userAnswers)); }, [userAnswers]);
+  useEffect(() => { localStorage.setItem('qb_oracleFired', JSON.stringify(hasOracleFired)); }, [hasOracleFired]);
 
   const handleProcess = () => {
     const data = parseData(rawText);
     setParsedData(data);
     setUserAnswers({}); 
     setShowSummary(false);
+    setHasOracleFired(false); // Reseta a chance do oráculo ao colar novas questões
     setView('bank');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -267,6 +288,14 @@ export default function QuestionBankApp() {
       ...prev,
       [questionId]: letter
     }));
+
+    // Oráculo do Plantão: 1% de chance, no máximo 1 vez por simulado
+    if (!hasOracleFired && Math.random() < 0.01) {
+      setHasOracleFired(true);
+      const randomPred = PREDICTIONS[Math.floor(Math.random() * PREDICTIONS.length)];
+      setOraclePrediction(randomPred);
+      setOracleModal('prompt');
+    }
   };
 
   const handleResetClick = () => {
@@ -276,6 +305,7 @@ export default function QuestionBankApp() {
   const confirmReset = () => {
     setUserAnswers({});
     setShowSummary(false);
+    setHasOracleFired(false); // Reseta o oráculo para permitir novamente
     setShowConfirmModal(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -347,7 +377,7 @@ export default function QuestionBankApp() {
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
                 className={`w-full flex-1 p-4 md:p-6 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-yellow-500 font-mono text-sm leading-relaxed ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                placeholder="Cole as questões aqui..."
+                placeholder="Insira aqui o néctar..."
               />
             </div>
 
@@ -456,6 +486,59 @@ export default function QuestionBankApp() {
           </div>
         )}
       </main>
+
+      {/* MODAL DO ORÁCULO (PROFECIAS MÉDICAS) */}
+      {oracleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-6 md:p-8 animate-in zoom-in-95 duration-200 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+            <div className="flex flex-col items-center text-center">
+              <div className={`p-4 rounded-full mb-4 ${darkMode ? 'bg-yellow-900 bg-opacity-30' : 'bg-yellow-100'}`}>
+                <Flame className={`w-8 h-8 ${darkMode ? 'text-yellow-500' : 'text-yellow-600'}`} />
+              </div>
+              
+              {oracleModal === 'prompt' ? (
+                <>
+                  <h3 className={`text-xl md:text-2xl font-serif font-bold mb-2 ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                    Visão do Oráculo
+                  </h3>
+                  <p className={`mb-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    As fumaças do templo revelaram uma profecia sombria sobre o seu futuro médico. Deseja decifrar este presságio?
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 w-full">
+                    <button
+                      onClick={() => setOracleModal(null)}
+                      className={`flex-1 py-3 px-4 font-medium rounded-xl transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                    >
+                      Ignorar Profecia
+                    </button>
+                    <button
+                      onClick={() => setOracleModal('prediction')}
+                      className="flex-1 py-3 px-4 font-medium rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white shadow-md transition-all flex justify-center items-center"
+                    >
+                      Ler o Destino
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className={`text-xl md:text-2xl font-serif font-bold mb-4 ${darkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                    A Profecia
+                  </h3>
+                  <p className={`mb-8 italic leading-relaxed text-left ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    "{oraclePrediction}"
+                  </p>
+                  <button
+                    onClick={() => setOracleModal(null)}
+                    className="w-full py-3 px-4 font-medium rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white shadow-md transition-all flex justify-center items-center"
+                  >
+                    Aceitar o Destino
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE CONFIRMAÇÃO PARA LIMPAR RESPOSTAS */}
       {showConfirmModal && (
