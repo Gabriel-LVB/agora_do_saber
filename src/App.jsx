@@ -290,7 +290,7 @@ export default function QuestionBankApp() {
     }));
 
     // Oráculo do Plantão: 1% de chance, no máximo 1 vez por simulado
-    if (!hasOracleFired && Math.random() < 1) {
+    if (!hasOracleFired && Math.random() < 0.02) {
       setHasOracleFired(true);
       const randomPred = PREDICTIONS[Math.floor(Math.random() * PREDICTIONS.length)];
       setOraclePrediction(randomPred);
