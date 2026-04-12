@@ -235,7 +235,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
 
   return (
     <div className={`${cardBg} rounded-xl shadow-sm border p-4 md:p-6 mb-6 transition-all`}>
-      <span className={`${tagBg} text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-4 inline-block`}>Prova {question.id}</span>
+      <span className={`${tagBg} text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-4 inline-block`}>Questão {question.id}</span>
       <div className={`${statementColor} text-base md:text-lg mb-6 leading-relaxed whitespace-pre-wrap`}>{formatText(question.statement, darkMode)}</div>
       <div className="space-y-3 mb-6">
         {question.options.map((opt) => {
