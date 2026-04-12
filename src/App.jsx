@@ -647,14 +647,21 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
   };
 
   const finalizeSubject = async () => {
-    const topicLines = proposedSyllabus.split('\n').filter(l => l.match(/(?:^|\n)Tópico\s*\d+/i));
-    const topics = topicLines.map((title, idx) => ({
-      id: `topic-${idx}-${Date.now()}`,
-      title: title.trim(),
-      questions: [],
-      answers: {},
-      summary: ''
-    }));
+    // Regex relaxado: procura "Tópico" (com ou sem acento) em qualquer lugar da linha, 
+    // ignorando marcações de negrito (**), títulos (##) ou números soltos.
+    const topicLines = proposedSyllabus.split('\n').filter(l => /T[óo]pico\s*\d+/i.test(l));
+
+    const topics = topicLines.map((title, idx) => {
+      // Limpa a sujeira visual (asteriscos e hashtags) para o nome da pasta ficar bonito
+      const cleanTitle = title.replace(/[*#]/g, '').trim();
+      return {
+        id: `topic-${idx}-${Date.now()}`,
+        title: cleanTitle,
+        questions: [],
+        answers: {},
+        summary: ''
+      };
+    });
 
     const newSubject = {
       id: Date.now(),
