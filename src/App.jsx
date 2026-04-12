@@ -1,48 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
-// ============================================================================
-// 🛑 ATENÇÃO: PARA A NUVEM (CROSS-DEVICE) FUNCIONAR NA VERCEL/STACKBLITZ 🛑
-// Substitua o `null` abaixo pelas configurações do seu projeto Firebase.
-// 1. Vá em console.firebase.google.com e crie um projeto.
-// 2. Adicione um App Web (</>) e copie o objeto firebaseConfig.
-// 3. Ative o Firestore Database (Modo Teste) e o Authentication (Modo Anônimo).
-//
-// Exemplo de como deve ficar:
-// const YOUR_FIREBASE_CONFIG = {
-//   apiKey: "AIzaSy...",
-//   authDomain: "seu-projeto.firebaseapp.com",
-//   projectId: "seu-projeto",
-//   storageBucket: "seu-projeto.appspot.com",
-//   messagingSenderId: "123456789",
-//   appId: "1:123456789:web:abcdef"
-// };
-// ============================================================================
-const YOUR_FIREBASE_CONFIG = null; 
+// --- Configuração Oficial do Firebase do Usuário ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
+  authDomain: "agora-do-saber.firebaseapp.com",
+  projectId: "agora-do-saber",
+  storageBucket: "agora-do-saber.firebasestorage.app",
+  messagingSenderId: "169091563204",
+  appId: "1:169091563204:web:de924d4507acb1649e9391",
+  measurementId: "G-X7CEZMXVL1"
+};
 
-// --- Inicialização Blindada do Firebase ---
-let app, auth, db;
-let isFirebaseActive = false;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'agora-saber-app';
-
-try {
-  let configToUse = YOUR_FIREBASE_CONFIG;
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    configToUse = JSON.parse(__firebase_config);
-  }
-
-  if (configToUse && Object.keys(configToUse).length > 0) {
-    app = initializeApp(configToUse);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    isFirebaseActive = true;
-  }
-} catch (e) {
-  console.warn("Aviso: Banco de Dados não configurado. Rodando em Modo Local/Offline.", e);
-}
-
+// Inicialização
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 // --- Ícones Temáticos (Grécia / Filosofia) ---
 const Landmark = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>);
@@ -68,8 +43,10 @@ const Copy = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="
 const Key = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>);
 const LogOut = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
 const UserIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
+const GoogleIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>);
 
 // --- API Gemini ---
+// O modelo agora aponta para a versão pública e estável do Gemini.
 const callGemini = async (prompt, systemPrompt, userApiKey) => {
   if (!userApiKey) {
     throw new Error("API_KEY_MISSING");
@@ -298,10 +275,10 @@ export default function QuestionBankApp() {
   
   // --- AUTH & SYNC STATE ---
   const [user, setUser] = useState(null);
-  const [username, setUsername] = useState(localStorage.getItem('qb_username') || null);
+  const [username, setUsername] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [loginView, setLoginView] = useState('login'); // 'login' | 'signup'
-  const [loginInput, setLoginInput] = useState('');
+  const [signupUsername, setSignupUsername] = useState('');
   const [signupApiKey, setSignupApiKey] = useState('');
   
   // App States
@@ -353,67 +330,38 @@ export default function QuestionBankApp() {
     localStorage.setItem('qb_darkmode', JSON.stringify(darkMode));
   }, [darkMode]);
 
-  // Sync Library and Settings in Local Storage when Offline
-  useEffect(() => {
-    if (username && !isFirebaseActive) {
-      localStorage.setItem(`qb_lib_${username}`, JSON.stringify(library));
-    }
-  }, [library, username]);
-
   // Firebase Auth Setup
   useEffect(() => {
-    if (!isFirebaseActive) {
-      setUser({ uid: 'local-offline-user' });
-      setAuthReady(true);
-      return;
-    }
-
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        try {
+          const userDoc = await getDoc(doc(db, 'users', u.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUsername(data.username.toUpperCase());
+            setSettings(prev => ({ ...prev, ...data.settings, apiKey: data.apiKey }));
+          } else {
+            setLoginView('signup');
+          }
+        } catch (e) {
+          console.error("Erro ao checar usuário no Firebase:", e);
         }
-      } catch (e) {
-        console.error("Auth falhou", e);
-        setAuthReady(true);
+      } else {
+        setUser(null);
+        setUsername(null);
+        setLoginView('login');
       }
-    };
-    initAuth();
-    
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
       setAuthReady(true);
     });
     return () => unsubscribe();
   }, []);
 
-  // Sync Library and Settings
+  // Sync Library
   useEffect(() => {
     if (!user || !username) return;
 
-    if (!isFirebaseActive) {
-      const savedLib = JSON.parse(localStorage.getItem(`qb_lib_${username}`) || '[]');
-      if (savedLib.length === 0 && !savedLib.find(s => s.id === 'imported-folder')) {
-         savedLib.push({
-            id: 'imported-folder',
-            title: 'Pergaminhos Diversos',
-            fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
-            source: 'external',
-            topics: []
-         });
-      }
-      setLibrary(savedLib);
-      
-      const savedSettings = JSON.parse(localStorage.getItem(`qb_settings_${username}`));
-      if (savedSettings) {
-         setSettings({ ...defaultSettings, ...savedSettings });
-      }
-      return;
-    }
-
-    const libRef = collection(db, 'artifacts', appId, 'public', 'data', `lib_${username}`);
+    const libRef = collection(db, 'users', user.uid, 'library');
     const unsubLib = onSnapshot(libRef, (snapshot) => {
       const loadedLib = snapshot.docs.map(d => d.data());
       loadedLib.sort((a,b) => b.id - a.id);
@@ -430,104 +378,94 @@ export default function QuestionBankApp() {
       }
     }, (err) => console.error(err));
 
-    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', username);
-    const unsubSet = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setSettings({ ...defaultSettings, ...docSnap.data() });
-      }
-    }, (err) => console.error(err));
-
-    return () => { unsubLib(); unsubSet(); };
+    return () => unsubLib();
   }, [user, username]);
 
   const activeSubject = library.find(s => s.id === activeSubjectId);
   const activeTopic = activeSubject?.topics.find(t => t.id === activeTopicId);
 
   // --- LOGIN FLOW ---
-  const handleLogin = async () => {
-    if(!loginInput.trim() || !user) return;
-    const cleanName = loginInput.trim().toLowerCase();
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      console.error(e);
+      setErrorModal({ title: 'Erro de Autenticação', message: "Os deuses do Google rejeitaram sua entrada. Tente novamente.", isAlert: true });
+    }
+  };
+
+  const handleCompleteRegistration = async () => {
+    if(!signupUsername.trim() || !signupApiKey.trim() || !user) return;
+    const cleanName = signupUsername.trim().toUpperCase();
+    const newSettings = { ...defaultSettings };
     
-    if (isFirebaseActive) {
-      try {
-        const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName));
-        if (userDoc.exists()) {
-          setUsername(cleanName);
-          localStorage.setItem('qb_username', cleanName);
-        } else {
-          setLoginView('signup');
-        }
-      } catch(e) {
-        console.error(e);
-        setErrorModal({ title: 'Erro', message: "Falha ao consultar os registros da biblioteca.", isAlert: true });
-      }
-    } else {
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        username: cleanName,
+        apiKey: signupApiKey.trim(),
+        settings: newSettings
+      });
       setUsername(cleanName);
-      localStorage.setItem('qb_username', cleanName);
+      setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
+    } catch(e) {
+      console.error(e);
+      setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao selar seu registro nos servidores.", isAlert: true });
     }
   };
 
-  const handleSignup = async () => {
-    if(!loginInput.trim() || !signupApiKey.trim() || !user) return;
-    const cleanName = loginInput.trim().toLowerCase();
-    const newSettings = { ...defaultSettings, apiKey: signupApiKey.trim() };
-    
-    if (isFirebaseActive) {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName), newSettings);
-    } else {
-      localStorage.setItem(`qb_settings_${cleanName}`, JSON.stringify(newSettings));
-    }
-    
-    setUsername(cleanName);
-    localStorage.setItem('qb_username', cleanName);
-  };
-
-  const handleLogout = () => {
-    setUsername(null);
-    localStorage.removeItem('qb_username');
+  const handleLogout = async () => {
+    await signOut(auth);
     setLibrary([]);
     setSettings(defaultSettings);
     setView('library');
-    setLoginView('login');
-    setLoginInput('');
+    setSignupUsername('');
+    setSignupApiKey('');
   };
 
   // --- MUTATIONS ---
   const updateSubjectState = async (updatedSubject) => {
     setLibrary(prev => prev.map(s => s.id === updatedSubject.id ? updatedSubject : s));
-    if (isFirebaseActive && user && username) {
+    if (user) {
       try {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, updatedSubject.id.toString()), updatedSubject);
+        await setDoc(doc(db, 'users', user.uid, 'library', updatedSubject.id.toString()), updatedSubject);
       } catch(e) { console.error(e); }
     }
   };
 
   const addSubjectState = async (newSubject) => {
     setLibrary(prev => [newSubject, ...prev]);
-    if (isFirebaseActive && user && username) {
+    if (user) {
       try {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, newSubject.id.toString()), newSubject);
+        await setDoc(doc(db, 'users', user.uid, 'library', newSubject.id.toString()), newSubject);
       } catch(e) { console.error(e); }
     }
   };
 
   const removeSubjectState = async (subjId) => {
     setLibrary(prev => prev.filter(s => s.id !== subjId));
-    if (isFirebaseActive && user && username) {
+    if (user) {
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, subjId.toString()));
+        await deleteDoc(doc(db, 'users', user.uid, 'library', subjId.toString()));
       } catch(e) { console.error(e); }
     }
   };
 
   const saveSettingsGlobal = async (newSettings) => {
     setSettings(newSettings);
-    if (isFirebaseActive && user && username) {
+    if (user) {
       try {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', username), newSettings);
+        await setDoc(doc(db, 'users', user.uid), {
+          username: username,
+          apiKey: newSettings.apiKey,
+          settings: {
+            numTopics: newSettings.numTopics,
+            numSubtopics: newSettings.numSubtopics,
+            qPerSub: newSettings.qPerSub,
+            customPrompt: newSettings.customPrompt
+          }
+        }, { merge: true });
       } catch(e) { console.error(e); }
-    } else {
-      localStorage.setItem(`qb_settings_${username}`, JSON.stringify(newSettings));
     }
   };
 
@@ -769,7 +707,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     const FULL_SYSTEM_PROMPT = getFullPromptText() + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
 
     try {
-      const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
+      const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
       const parsed = parseData(result);
       
       const updatedSubject = {
@@ -873,13 +811,6 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     return (
       <div className={`min-h-screen flex items-center justify-center font-sans p-4 ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
         <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-          
-          {!isFirebaseActive && (
-            <div className="mb-6 p-4 rounded-xl border border-red-500/50 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm text-left shadow-inner">
-              <strong>⚠️ Modo Offline Ativado:</strong> O aplicativo está rodando em modo local, sem sincronização. Para usar a Nuvem e compartilhar progressos, adicione sua configuração do Firebase no arquivo <code>app.jsx</code> (linha 16).
-            </div>
-          )}
-
           <div className="flex flex-col items-center text-center mb-8">
             <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
               <Landmark className="w-10 h-10 text-yellow-600" />
@@ -887,53 +818,57 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             <h1 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Ágora do Saber</h1>
             <p className="opacity-70 text-sm">
               {loginView === 'login' 
-                ? "Identifique-se para acessar seus pergaminhos de qualquer dispositivo." 
-                : "Parece que você é novo por aqui. Vamos registrar seu nome nos anais da história."}
+                ? "Atravesse os portões e acesse seus pergaminhos sagrados." 
+                : "Apresente-se aos deuses. Escolha seu nome de estudioso e oferte sua chave."}
             </p>
           </div>
 
           <div className="space-y-5">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50">Nome de Usuário (Identificador)</label>
-              <input 
-                type="text" 
-                value={loginInput}
-                onChange={(e) => setLoginInput(e.target.value)}
-                placeholder="Ex: socratinhas" 
-                disabled={loginView === 'signup'}
-                className={`w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white disabled:opacity-50' : 'bg-gray-50 border-gray-200 text-gray-900 disabled:opacity-50'}`} 
-              />
-            </div>
-
-            {loginView === 'signup' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4">
-                <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (API Key)</label>
-                <input 
-                  type="password" 
-                  value={signupApiKey}
-                  onChange={(e) => setSignupApiKey(e.target.value)}
-                  placeholder="Cole a chave do Gemini aqui..." 
-                  className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
-                />
-                <div className={`mt-3 p-4 rounded-lg text-xs leading-relaxed ${darkMode ? 'bg-yellow-900/20 text-yellow-200' : 'bg-yellow-50 text-yellow-800'}`}>
-                  <strong>Por que preciso de uma API Key?</strong> Como a Ágora é gratuita e não tem fins lucrativos, cada estudioso precisa de sua própria "chave" para conectar o cérebro do Oráculo (Google AI Studio). É gratuita e leva 1 minuto para criar em: <br/>
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">aistudio.google.com/app/apikey</a>
-                </div>
-              </div>
-            )}
-
-            <button 
-              onClick={loginView === 'login' ? handleLogin : handleSignup} 
-              disabled={loginView === 'login' ? !loginInput.trim() : (!loginInput.trim() || !signupApiKey.trim())}
-              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2 disabled:opacity-50"
-            >
-              {loginView === 'login' ? 'Entrar nos Portões' : 'Forjar Identidade'}
-            </button>
-            
-            {loginView === 'signup' && (
-              <button onClick={() => { setLoginView('login'); setLoginInput(''); }} className="w-full mt-2 py-3 opacity-60 hover:opacity-100 font-bold text-sm">
-                Recuar
+            {loginView === 'login' ? (
+               <button 
+                onClick={handleGoogleLogin} 
+                className={`w-full py-4 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-3 border ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50'}`}
+              >
+                <GoogleIcon className="w-6 h-6" /> Entrar com Google
               </button>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-bottom-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50">Nome de Estudioso</label>
+                  <input 
+                    type="text" 
+                    value={signupUsername}
+                    onChange={(e) => setSignupUsername(e.target.value)}
+                    placeholder="Ex: SOCRATINHAS" 
+                    className={`w-full p-4 rounded-xl border uppercase font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (API Key)</label>
+                  <input 
+                    type="password" 
+                    value={signupApiKey}
+                    onChange={(e) => setSignupApiKey(e.target.value)}
+                    placeholder="Cole a chave do Gemini aqui..." 
+                    className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
+                  />
+                </div>
+                <div className={`p-4 rounded-lg text-xs leading-relaxed ${darkMode ? 'bg-yellow-900/20 text-yellow-200' : 'bg-yellow-50 text-yellow-800'}`}>
+                  <strong>Por que preciso de uma API Key?</strong> A Ágora exige uma "chave" para conectar ao cérebro do Oráculo (Google AI Studio). Crie gratuitamente em: <br/>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold break-all">aistudio.google.com/app/apikey</a>
+                </div>
+
+                <button 
+                  onClick={handleCompleteRegistration} 
+                  disabled={!signupUsername.trim() || !signupApiKey.trim()}
+                  className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2 disabled:opacity-50"
+                >
+                  Forjar Identidade
+                </button>
+                <button onClick={handleLogout} className="w-full py-3 opacity-60 hover:opacity-100 font-bold text-sm">
+                  Recuar
+                </button>
+              </div>
             )}
           </div>
         </div>
