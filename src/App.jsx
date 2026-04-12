@@ -1,4 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+
+// --- Configuração do Firebase ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- Ícones Temáticos (Grécia / Filosofia) ---
 const Landmark = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>);
@@ -22,9 +32,10 @@ const Send = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="
 const Eraser = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>);
 const Copy = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>);
 const Key = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>);
+const LogOut = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
+const UserIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 
 // --- API Gemini ---
-// O modelo agora aponta para a versão pública e estável do Gemini.
 const callGemini = async (prompt, systemPrompt, userApiKey) => {
   if (!userApiKey) {
     throw new Error("API_KEY_MISSING");
@@ -192,7 +203,7 @@ const GrecianModal = ({ title, message, onConfirm, onCancel, confirmText, darkMo
         <div className="flex gap-3 w-full">
           {!isAlert && (
             <button onClick={onCancel} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}>
-              Desistir
+              Recuar
             </button>
           )}
           <button onClick={onConfirm} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-md transition-colors ${isAlert ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-red-600 hover:bg-red-700'}`}>
@@ -245,37 +256,28 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
 // --- APP PRINCIPAL ---
 
 export default function QuestionBankApp() {
-  // Variáveis de Tema
   const [darkMode, setDarkMode] = useState(() => JSON.parse(localStorage.getItem('qb_darkmode') || 'false'));
   const mainBg = darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900";
   const headerBg = darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
   const titleColor = darkMode ? "text-yellow-500" : "text-yellow-700";
   const statsBadge = darkMode ? "bg-gray-700 text-gray-200" : "bg-gray-100 text-gray-800";
   
-  // Estados principais
+  // --- AUTH & SYNC STATE ---
+  const [user, setUser] = useState(null);
+  const [username, setUsername] = useState(localStorage.getItem('qb_username') || null);
+  const [authReady, setAuthReady] = useState(false);
+  const [loginView, setLoginView] = useState('login'); // 'login' | 'signup'
+  const [loginInput, setLoginInput] = useState('');
+  const [signupApiKey, setSignupApiKey] = useState('');
+  
+  // App States
   const [view, setView] = useState('library'); 
-  const [libraryFilter, setLibraryFilter] = useState('gemini'); // 'gemini' ou 'external'
-  const [library, setLibrary] = useState(() => {
-    const saved = JSON.parse(localStorage.getItem('qb_v2_library') || '[]');
-    return saved.map(s => {
-      if (s.isImportFolder) return { ...s, source: 'external', title: 'Pergaminhos Diversos', isImportFolder: false };
-      if (!s.source) return { ...s, source: 'gemini' };
-      return s;
-    }).filter(s => s.id !== 'imported-folder'); 
-  });
+  const [libraryFilter, setLibraryFilter] = useState('gemini');
+  const [library, setLibrary] = useState([]);
   
-  // Incluído campo para apiKey
   const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, customPrompt: "", apiKey: "" };
-  const [settings, setSettings] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('qb_v2_settings'));
-      return saved ? { ...defaultSettings, ...saved } : defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
-  });
+  const [settings, setSettings] = useState(defaultSettings);
   
-  // Estados de Criação e Navegação
   const [creatorStep, setCreatorStep] = useState(1);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [materialText, setMaterialText] = useState('');
@@ -292,9 +294,8 @@ export default function QuestionBankApp() {
   
   const [deleteId, setDeleteId] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [errorModal, setErrorModal] = useState(null); // { title, message, isAlert }
+  const [errorModal, setErrorModal] = useState(null);
   
-  // Paste states
   const [pasteInputText, setPasteInputText] = useState('');
   const [pasteSubjectName, setPasteSubjectName] = useState('');
   const [showSubjectSuggestions, setShowSubjectSuggestions] = useState(false);
@@ -305,30 +306,117 @@ export default function QuestionBankApp() {
   
   const fileInputRef = useRef(null);
 
+  // Favicon & Body Color
   useEffect(() => {
     document.title = "Ágora do Saber";
     const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
     const encodedData = window.btoa(svgIcon);
-    
     let link = document.querySelector("link[rel~='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
+    if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
     link.href = `data:image/svg+xml;base64,${encodedData}`;
+    
+    document.body.style.backgroundColor = darkMode ? '#111827' : '#fafaf9';
+    localStorage.setItem('qb_darkmode', JSON.stringify(darkMode));
+  }, [darkMode]);
+
+  // Firebase Auth Setup
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (e) {
+        console.error("Auth falhou", e);
+        setAuthReady(true);
+      }
+    };
+    initAuth();
+    
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
+  // Sync Library and Settings
   useEffect(() => {
-    localStorage.setItem('qb_v2_library', JSON.stringify(library));
-    localStorage.setItem('qb_v2_settings', JSON.stringify(settings));
-    localStorage.setItem('qb_darkmode', JSON.stringify(darkMode));
-    document.body.style.backgroundColor = darkMode ? '#111827' : '#fafaf9';
-  }, [library, settings, darkMode]);
+    if (!user || !username) return;
+
+    const libRef = collection(db, 'artifacts', appId, 'public', 'data', `lib_${username}`);
+    const unsubLib = onSnapshot(libRef, (snapshot) => {
+      const loadedLib = snapshot.docs.map(d => d.data());
+      loadedLib.sort((a,b) => b.id - a.id);
+      setLibrary(loadedLib);
+    }, (err) => console.error(err));
+
+    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', username);
+    const unsubSet = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setSettings({ ...defaultSettings, ...docSnap.data() });
+      }
+    }, (err) => console.error(err));
+
+    return () => { unsubLib(); unsubSet(); };
+  }, [user, username]);
 
   const activeSubject = library.find(s => s.id === activeSubjectId);
   const activeTopic = activeSubject?.topics.find(t => t.id === activeTopicId);
 
+  // --- LOGIN FLOW ---
+  const handleLogin = async () => {
+    if(!loginInput.trim() || !user) return;
+    const cleanName = loginInput.trim().toLowerCase();
+    
+    const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName));
+    if (userDoc.exists()) {
+      setUsername(cleanName);
+      localStorage.setItem('qb_username', cleanName);
+    } else {
+      setLoginView('signup');
+    }
+  };
+
+  const handleSignup = async () => {
+    if(!loginInput.trim() || !signupApiKey.trim() || !user) return;
+    const cleanName = loginInput.trim().toLowerCase();
+    const newSettings = { ...defaultSettings, apiKey: signupApiKey.trim() };
+    
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cleanName), newSettings);
+    setUsername(cleanName);
+    localStorage.setItem('qb_username', cleanName);
+  };
+
+  const handleLogout = () => {
+    setUsername(null);
+    localStorage.removeItem('qb_username');
+    setLibrary([]);
+    setSettings(defaultSettings);
+    setView('library');
+    setLoginView('login');
+    setLoginInput('');
+  };
+
+  // --- FIREBASE MUTATIONS ---
+  const saveSubjectToCloud = async (subjectData) => {
+    if (!user || !username) return;
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, subjectData.id.toString()), subjectData);
+  };
+
+  const deleteSubjectFromCloud = async (subjId) => {
+    if (!user || !username) return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `lib_${username}`, subjId.toString()));
+  };
+
+  const saveSettingsToCloud = async (newSettings) => {
+    if (!user || !username) return;
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', username), newSettings);
+  };
+
+  // --- APP LOGIC ---
   const getFullPromptText = () => {
     const qCount = settings.numSubtopics * settings.qPerSub;
     return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
@@ -448,7 +536,6 @@ ${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}`
     return materialText + "\n" + uploadedFiles.map(f => `[CONTEÚDO DO ARQUIVO: ${f.name}]\n${f.content}`).join("\n\n");
   }
 
-  // Função central para checar a chave da API
   const checkApiKey = () => {
     if (!settings.apiKey || settings.apiKey.trim() === '') {
       setErrorModal({
@@ -480,11 +567,8 @@ DIRETRIZES DO SUMÁRIO:
       setProposedSyllabus(result);
       setCreatorStep(2);
     } catch (e) { 
-      if (e.message === "API_KEY_INVALID") {
-        setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
-      } else {
-        setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente.", isAlert: true });
-      }
+      if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
+      else setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente.", isAlert: true });
     }
     finally { setIsBusy(false); }
   };
@@ -512,7 +596,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     finally { setIsBusy(false); }
   };
 
-  const finalizeSubject = () => {
+  const finalizeSubject = async () => {
     const topicLines = proposedSyllabus.split('\n').filter(l => l.match(/(?:^|\n)Tópico\s*\d+/i));
     const topics = topicLines.map((title, idx) => ({
       id: `topic-${idx}-${Date.now()}`,
@@ -531,7 +615,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       topics: topics
     };
 
-    setLibrary([newSubject, ...library]);
+    await saveSubjectToCloud(newSubject);
     setLibraryFilter('gemini');
     setView('sub-library');
     setCreatorStep(1);
@@ -553,19 +637,16 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     
     setIsBusy(true);
 
-    setLibrary(prev => prev.map(s => {
-      if (s.id !== activeSubjectId) return s;
-      return {
-        ...s,
-        topics: s.topics.map(t => t.id === topicId ? { ...t, questions: [], summary: '', answers: {} } : t)
-      };
-    }));
+    const clearedSubject = {
+      ...activeSubject,
+      topics: activeSubject.topics.map(t => t.id === topicId ? { ...t, questions: [], summary: '', answers: {} } : t)
+    };
+    await saveSubjectToCloud(clearedSubject);
 
-    const topic = activeSubject.topics.find(t => t.id === topicId);
-    const qCount = settings.numSubtopics * settings.qPerSub;
+    const topic = clearedSubject.topics.find(t => t.id === topicId);
     
-    const contextText = activeSubject.sourceMaterials
-      ? `\n\nMATERIAIS DE BASE OBRIGATÓRIOS (Textos Sagrados):\nAs questões geradas DEVEM refletir e focar primariamente nos conceitos encontrados nos textos a seguir:\n${activeSubject.sourceMaterials}`
+    const contextText = clearedSubject.sourceMaterials
+      ? `\n\nMATERIAIS DE BASE OBRIGATÓRIOS (Textos Sagrados):\nAs questões geradas DEVEM refletir e focar primariamente nos conceitos encontrados nos textos a seguir:\n${clearedSubject.sourceMaterials}`
       : '';
 
     const FULL_SYSTEM_PROMPT = getFullPromptText() + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
@@ -574,26 +655,21 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
       const parsed = parseData(result);
       
-      setLibrary(prev => prev.map(s => {
-        if (s.id !== activeSubjectId) return s;
-        return {
-          ...s,
-          topics: s.topics.map(t => t.id === topicId ? { ...t, questions: parsed.questions, summary: parsed.summary, answers: {} } : t)
-        };
-      }));
+      const updatedSubject = {
+        ...clearedSubject,
+        topics: clearedSubject.topics.map(t => t.id === topicId ? { ...t, questions: parsed.questions, summary: parsed.summary, answers: {} } : t)
+      };
+      await saveSubjectToCloud(updatedSubject);
       setShowSummary(false);
     } catch (e) { 
-      if (e.message === "API_KEY_INVALID") {
-        setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
-      } else {
-        setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida pelo tempo ou pelos Deuses. Tente novamente.", isAlert: true });
-      }
+      if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
+      else setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida pelo tempo ou pelos Deuses. Tente novamente.", isAlert: true });
     } finally { 
       setIsBusy(false); 
     }
   };
 
-  const handlePasteImport = () => {
+  const handlePasteImport = async () => {
     const parsed = parseData(pasteInputText);
     if (parsed.questions.length === 0) {
       setErrorModal({
@@ -618,7 +694,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     let targetSubj = library.find(s => s.title.toLowerCase() === subjectName.toLowerCase() && s.source === 'external');
 
     if (targetSubj) {
-      setLibrary(prev => prev.map(s => s.id === targetSubj.id ? { ...s, topics: [...s.topics, newTopic] } : s));
+      const updated = { ...targetSubj, topics: [...targetSubj.topics, newTopic] };
+      await saveSubjectToCloud(updated);
       setActiveSubjectId(targetSubj.id);
     } else {
       const newSubj = {
@@ -628,7 +705,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         fullSyllabus: "Importado via texto externo",
         topics: [newTopic]
       };
-      setLibrary(prev => [newSubj, ...prev]);
+      await saveSubjectToCloud(newSubj);
       setActiveSubjectId(newSubj.id);
     }
     
@@ -638,30 +715,103 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     setView('topic');
   };
 
-  const handleAnswer = (qId, letter) => {
-    setLibrary(prev => prev.map(s => {
-      if (s.id !== activeSubjectId) return s;
-      return {
-        ...s,
-        topics: s.topics.map(t => {
-          if (t.id !== activeTopicId) return t;
-          return { ...t, answers: { ...t.answers, [qId]: letter } };
-        })
-      };
-    }));
+  const handleAnswer = async (qId, letter) => {
+    const updated = {
+      ...activeSubject,
+      topics: activeSubject.topics.map(t => {
+        if (t.id !== activeTopicId) return t;
+        return { ...t, answers: { ...t.answers, [qId]: letter } };
+      })
+    };
+    await saveSubjectToCloud(updated);
   };
 
-  const resetAnswers = () => {
-    setLibrary(prev => prev.map(s => {
-      if (s.id !== activeSubjectId) return s;
-      return {
-        ...s,
-        topics: s.topics.map(t => t.id === activeTopicId ? { ...t, answers: {} } : t)
-      };
-    }));
+  const resetAnswers = async () => {
+    const updated = {
+      ...activeSubject,
+      topics: activeSubject.topics.map(t => t.id === activeTopicId ? { ...t, answers: {} } : t)
+    };
+    await saveSubjectToCloud(updated);
     setShowSummary(false);
   };
 
+
+  // --- RENDERS ---
+  if (!authReady) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-900 text-yellow-500' : 'bg-gray-50 text-yellow-600'}`}>
+        <div className="w-12 h-12 border-4 border-current border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // --- LOGIN / SIGNUP VIEW ---
+  if (!username) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center font-sans p-4 ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
+        <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
+              <Landmark className="w-10 h-10 text-yellow-600" />
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Ágora do Saber</h1>
+            <p className="opacity-70 text-sm">
+              {loginView === 'login' 
+                ? "Identifique-se para acessar seus pergaminhos de qualquer dispositivo." 
+                : "Parece que você é novo por aqui. Vamos registrar seu nome nos anais da história."}
+            </p>
+          </div>
+
+          <div className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50">Nome de Usuário (Identificador)</label>
+              <input 
+                type="text" 
+                value={loginView === 'login' ? loginInput : loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+                placeholder="Ex: socratinhas" 
+                disabled={loginView === 'signup'}
+                className={`w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white disabled:opacity-50' : 'bg-gray-50 border-gray-200 text-gray-900 disabled:opacity-50'}`} 
+              />
+            </div>
+
+            {loginView === 'signup' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4">
+                <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (API Key)</label>
+                <input 
+                  type="password" 
+                  value={signupApiKey}
+                  onChange={(e) => setSignupApiKey(e.target.value)}
+                  placeholder="Cole a chave do Gemini aqui..." 
+                  className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
+                />
+                <div className={`mt-3 p-4 rounded-lg text-xs leading-relaxed ${darkMode ? 'bg-yellow-900/20 text-yellow-200' : 'bg-yellow-50 text-yellow-800'}`}>
+                  <strong>Por que preciso de uma API Key?</strong> Como a Ágora é gratuita e não tem fins lucrativos, cada estudioso precisa de sua própria "chave" para conectar o cérebro do Oráculo (Google AI Studio). É gratuita e leva 1 minuto para criar em: <br/>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">aistudio.google.com/app/apikey</a>
+                </div>
+              </div>
+            )}
+
+            <button 
+              onClick={loginView === 'login' ? handleLogin : handleSignup} 
+              disabled={loginView === 'login' ? !loginInput.trim() : (!loginInput.trim() || !signupApiKey.trim())}
+              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2"
+            >
+              {loginView === 'login' ? 'Entrar nos Portões' : 'Forjar Identidade'}
+            </button>
+            
+            {loginView === 'signup' && (
+              <button onClick={() => { setLoginView('login'); setLoginInput(''); }} className="w-full mt-2 py-3 opacity-60 hover:opacity-100 font-bold text-sm">
+                Recuar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- MAIN APP ---
   const subjectsToShow = library.filter(s => s.source === libraryFilter);
   const externalFolderNames = Array.from(new Set(library.filter(s => s.source === 'external').map(s => s.title)));
 
@@ -676,8 +826,12 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             <h1 className={`font-serif font-bold text-lg md:text-xl tracking-wide ${titleColor}`}>ÁGORA DO SABER</h1>
           </div>
           <div className="flex items-center gap-2">
+            <span className={`hidden sm:flex items-center gap-2 text-xs font-bold mr-2 opacity-60 border-r pr-4 ${darkMode ? 'border-gray-700' : 'border-gray-300'}`}>
+              <UserIcon className="w-4 h-4"/> {username}
+            </span>
             <button onClick={() => setView('settings')} className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-yellow-500' : 'bg-gray-100 hover:bg-gray-200 text-yellow-600'}`}><SettingsIcon className="w-5 h-5" /></button>
             <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-yellow-500' : 'bg-gray-100 hover:bg-gray-200 text-yellow-600'}`}>{darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
+            <button onClick={handleLogout} title="Sair da Ágora" className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-red-400' : 'bg-gray-100 hover:bg-gray-200 text-red-500'}`}><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
       </header>
@@ -929,7 +1083,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   <Sparkles className="w-8 h-8" />
                   Invocar Assunto (Gemini)
                 </h2>
-                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome do Novo Panteão (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
+                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome da Pasta (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
                 
                 {/* Upload Section */}
                 <div className="relative">
@@ -1052,7 +1206,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra (Diretrizes Adicionais)</label>
               <textarea value={settings.customPrompt} onChange={(e) => setSettings({...settings, customPrompt: e.target.value})} placeholder="Ex: Priorize exames laboratoriais na explicação..." className={`w-full h-32 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
             </div>
-            <button onClick={() => setView('library')} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Gravar nas Pedras</button>
+            <button onClick={() => { saveSettingsToCloud(settings); setView('library'); }} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Gravar nas Pedras</button>
           </div>
         )}
       </main>
@@ -1076,7 +1230,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           message="Esta ação queimará este registro para sempre na biblioteca." 
           confirmText="Expurgar" 
           onConfirm={() => {
-            setLibrary(library.filter(s => s.id !== deleteId.id));
+            deleteSubjectFromCloud(deleteId.id);
             setDeleteId(null);
           }} 
           onCancel={() => setDeleteId(null)} 
