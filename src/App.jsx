@@ -24,13 +24,13 @@ const Copy = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="
 const Key = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>);
 
 // --- API Gemini ---
-// Modificado para aceitar a API Key que vem do estado do usuário
+// O modelo agora aponta para a versão pública e estável do Gemini.
 const callGemini = async (prompt, systemPrompt, userApiKey) => {
   if (!userApiKey) {
     throw new Error("API_KEY_MISSING");
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${userApiKey}`;
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemPrompt }] }
@@ -44,7 +44,9 @@ const callGemini = async (prompt, systemPrompt, userApiKey) => {
         body: JSON.stringify(payload)
       });
       
-      if (response.status === 403) throw new Error("API_KEY_INVALID");
+      if (response.status === 403 || response.status === 400 || response.status === 404) {
+         throw new Error("API_KEY_INVALID");
+      }
       if (!response.ok) throw new Error("Conexão falhou");
       
       const result = await response.json();
@@ -262,7 +264,6 @@ export default function QuestionBankApp() {
     }).filter(s => s.id !== 'imported-folder'); 
   });
   
-  // Incluído campo para apiKey
   const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, customPrompt: "", apiKey: "" };
   const [settings, setSettings] = useState(() => {
     try {
@@ -638,7 +639,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         ...s,
         topics: s.topics.map(t => {
           if (t.id !== activeTopicId) return t;
-          return { ...t, answers: { ...t.answers, [qId]: letter } };
+          let oracleData = {};
+          if (!t.oracleFired && Math.random() < CHANCE_ORACULO) {
+            setOraclePrediction(PREDICTIONS[Math.floor(Math.random() * PREDICTIONS.length)]);
+            setOracleModal('prompt');
+            oracleData = { oracleFired: true };
+          }
+          return { ...t, answers: { ...t.answers, [qId]: letter }, ...oracleData };
         })
       };
     }));
