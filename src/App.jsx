@@ -21,12 +21,16 @@ const Sparkles = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" wid
 const Send = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>);
 const Eraser = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>);
 const Copy = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>);
+const Key = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>);
 
 // --- API Gemini ---
-const apiKey = ""; 
+// Modificado para aceitar a API Key que vem do estado do usuário
+const callGemini = async (prompt, systemPrompt, userApiKey) => {
+  if (!userApiKey) {
+    throw new Error("API_KEY_MISSING");
+  }
 
-const callGemini = async (prompt, systemPrompt) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userApiKey}`;
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemPrompt }] }
@@ -39,10 +43,14 @@ const callGemini = async (prompt, systemPrompt) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      
+      if (response.status === 403) throw new Error("API_KEY_INVALID");
       if (!response.ok) throw new Error("Conexão falhou");
+      
       const result = await response.json();
       return result.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (err) {
+      if (err.message === "API_KEY_INVALID" || err.message === "API_KEY_MISSING") throw err;
       if (n === 1) throw err;
       await new Promise(r => setTimeout(r, delay));
       return retry(n - 1, delay * 2);
@@ -254,7 +262,8 @@ export default function QuestionBankApp() {
     }).filter(s => s.id !== 'imported-folder'); 
   });
   
-  const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, customPrompt: "" };
+  // Incluído campo para apiKey
+  const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, customPrompt: "", apiKey: "" };
   const [settings, setSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('qb_v2_settings'));
@@ -281,7 +290,7 @@ export default function QuestionBankApp() {
   
   const [deleteId, setDeleteId] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [errorModal, setErrorModal] = useState(null); // { title, message }
+  const [errorModal, setErrorModal] = useState(null); // { title, message, isAlert }
   
   // Paste states
   const [pasteInputText, setPasteInputText] = useState('');
@@ -296,7 +305,6 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     document.title = "Ágora do Saber";
-    // Gera o ícone em base64 nativamente para garantir que não quebre a cor
     const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
     const encodedData = window.btoa(svgIcon);
     
@@ -438,7 +446,22 @@ ${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}`
     return materialText + "\n" + uploadedFiles.map(f => `[CONTEÚDO DO ARQUIVO: ${f.name}]\n${f.content}`).join("\n\n");
   }
 
+  // Função central para checar a chave da API
+  const checkApiKey = () => {
+    if (!settings.apiKey || settings.apiKey.trim() === '') {
+      setErrorModal({
+        title: 'Oráculo sem Voz (API Key)',
+        message: 'Para invocar os deuses neste ambiente, você precisa fornecer a sua própria chave secreta. Vá até as "Leis do Oráculo" (ícone de engrenagem) e insira sua Gemini API Key gratuita.',
+        isAlert: true
+      });
+      return false;
+    }
+    return true;
+  };
+
   const handleStartCreation = async () => {
+    if (!checkApiKey()) return;
+    
     setIsBusy(true);
     const combinedMaterials = getCombinedMaterials();
     const systemPrompt = `Você é o Arquiteto de Alexandria. Seu dever é organizar o conhecimento médico.
@@ -451,17 +474,21 @@ DIRETRIZES DO SUMÁRIO:
 - Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.`;
     
     try {
-      const result = await callGemini(`Materiais: ${combinedMaterials}`, systemPrompt);
+      const result = await callGemini(`Materiais: ${combinedMaterials}`, systemPrompt, settings.apiKey);
       setProposedSyllabus(result);
       setCreatorStep(2);
     } catch (e) { 
-      setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente." });
+      if (e.message === "API_KEY_INVALID") {
+        setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
+      } else {
+        setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente.", isAlert: true });
+      }
     }
     finally { setIsBusy(false); }
   };
 
   const handleReviseSyllabus = async () => {
-    if(!syllabusFeedback.trim()) return;
+    if(!syllabusFeedback.trim() || !checkApiKey()) return;
     setIsBusy(true);
     
     const systemPrompt = `Você é o Arquiteto de Alexandria. O usuário solicitou uma alteração no sumário proposto.
@@ -474,11 +501,11 @@ Feedback/Pedido do Usuário: "${syllabusFeedback}"
 Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura de ${settings.numTopics} Tópicos e ${settings.numSubtopics} Subtópicos.`;
 
     try {
-      const result = await callGemini(`Ajuste o sumário conforme o pedido.`, systemPrompt);
+      const result = await callGemini(`Ajuste o sumário conforme o pedido.`, systemPrompt, settings.apiKey);
       setProposedSyllabus(result);
       setSyllabusFeedback('');
     } catch (e) { 
-      setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente." }); 
+      setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente.", isAlert: true }); 
     }
     finally { setIsBusy(false); }
   };
@@ -519,6 +546,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
   };
 
   const generateTopicBatch = async (topicId, additionalPrompt = "") => {
+    if (!checkApiKey()) return;
+    
     setIsBusy(true);
 
     setLibrary(prev => prev.map(s => {
@@ -535,7 +564,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     const FULL_SYSTEM_PROMPT = getFullPromptText() + `\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
 
     try {
-      const result = await callGemini(`Invoque o conhecimento sobre: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT);
+      const result = await callGemini(`Invoque o conhecimento sobre: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
       const parsed = parseData(result);
       
       setLibrary(prev => prev.map(s => {
@@ -547,7 +576,11 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       }));
       setShowSummary(false);
     } catch (e) { 
-      setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida pelo tempo ou pelos Deuses. Tente novamente." });
+      if (e.message === "API_KEY_INVALID") {
+        setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
+      } else {
+        setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida pelo tempo ou pelos Deuses. Tente novamente.", isAlert: true });
+      }
     } finally { 
       setIsBusy(false); 
     }
@@ -558,7 +591,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     if (parsed.questions.length === 0) {
       setErrorModal({
         title: "Pergaminho Ilegível",
-        message: "O Oráculo não compreendeu estes símbolos. Assegure-se de que os deuses antigos aprovariam a estrutura (## Questão, A), B), Alternativa correta:, Explicação:)."
+        message: "O Oráculo não compreendeu estes símbolos. Assegure-se de que os deuses antigos aprovariam a estrutura (## Questão, A), B), Alternativa correta:, Explicação:).",
+        isAlert: true
       });
       return;
     }
@@ -806,7 +840,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                       <p className="text-xs opacity-50">{topic.questions.length > 0 ? `${Object.keys(topic.answers).length}/${topic.questions.length} respondidas` : 'Silêncio - Aguardando os Deuses'}</p>
                     </div>
                   </div>
-                  <div className="h-2 w-24 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-2 w-24 md:w-32 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
                     <div className="bg-yellow-500 h-full" style={{ width: topic.questions.length ? `${(Object.keys(topic.answers).length / topic.questions.length)*100}%` : '0%' }} />
                   </div>
                 </div>
@@ -963,6 +997,18 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <h2 className="text-3xl font-serif font-bold text-yellow-600">Leis do Oráculo</h2>
             </div>
             
+            <div className="col-span-2">
+              <label className="block text-xs font-bold uppercase mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (Gemini API Key)</label>
+              <input
+                type="password"
+                value={settings.apiKey}
+                onChange={(e) => setSettings({...settings, apiKey: e.target.value})}
+                placeholder="Cole sua chave AI Studio secreta aqui..."
+                className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
+              />
+              <p className="text-[11px] mt-2 opacity-60">Para invocar a IA em suas próprias terras (Vercel), os Deuses exigem um tributo. Obtenha sua chave gratuita em: aistudio.google.com/app/apikey. Ela repousa segura, apenas no cofre deste navegador.</p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tópicos (1-10)</label>
