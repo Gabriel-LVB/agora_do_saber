@@ -54,8 +54,7 @@ const Spinner = ({ className }) => (
   </svg>
 );
 
-// --- API Gemini ---
-// O modelo agora aponta para a versão pública e estável do Gemini.
+// --- API Gemini (Com suporte para detecção de limite Quota/RPD/TPM) ---
 const callGemini = async (prompt, systemPrompt, userApiKey) => {
   if (!userApiKey) {
     throw new Error("API_KEY_MISSING");
@@ -75,6 +74,9 @@ const callGemini = async (prompt, systemPrompt, userApiKey) => {
         body: JSON.stringify(payload)
       });
       
+      if (response.status === 429) {
+         throw new Error("QUOTA_EXCEEDED");
+      }
       if (response.status === 403 || response.status === 400 || response.status === 404) {
          throw new Error("API_KEY_INVALID");
       }
@@ -84,6 +86,9 @@ const callGemini = async (prompt, systemPrompt, userApiKey) => {
       return result.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (err) {
       if (err.message === "API_KEY_INVALID" || err.message === "API_KEY_MISSING") throw err;
+      if (err.message === "QUOTA_EXCEEDED") {
+          if (n === 1) throw err; 
+      }
       if (n === 1) throw err;
       await new Promise(r => setTimeout(r, delay));
       return retry(n - 1, delay * 2);
@@ -208,7 +213,7 @@ const formatText = (text, darkMode) => {
 
 // --- COMPONENTES ---
 
-const GrecianModal = ({ title, message, onConfirm, onCancel, confirmText, darkMode, children, isAlert = false }) => (
+const GrecianModal = ({ title, message, onConfirm, onCancel, confirmText, darkMode, children, isAlert = false, actionLabel, onAction }) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 animate-in fade-in">
     <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}>
       <div className="flex flex-col items-center text-center">
@@ -226,9 +231,16 @@ const GrecianModal = ({ title, message, onConfirm, onCancel, confirmText, darkMo
               Cancelar
             </button>
           )}
-          <button onClick={onConfirm} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-md transition-colors ${isAlert ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-red-600 hover:bg-red-700'}`}>
-            {confirmText}
-          </button>
+          
+          {actionLabel && onAction ? (
+             <button onClick={onAction} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-md transition-colors bg-yellow-600 hover:bg-yellow-700`}>
+               {actionLabel}
+             </button>
+          ) : (
+             <button onClick={onConfirm} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-md transition-colors ${isAlert ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-red-600 hover:bg-red-700'}`}>
+               {confirmText}
+             </button>
+          )}
         </div>
       </div>
     </div>
@@ -304,7 +316,18 @@ export default function QuestionBankApp() {
   const [libraryFilter, setLibraryFilter] = useState('gemini');
   const [library, setLibrary] = useState([]);
   
-  const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, numAlternatives: 5, customPrompt: "", apiKey: "" };
+  const defaultSettings = { 
+     numTopics: 10, 
+     numSubtopics: 5, 
+     qPerSub: 1, 
+     numAlternatives: 5, 
+     customPrompt: "", 
+     apiKey: "", 
+     apiKey1: "", 
+     apiKey2: "", 
+     apiKey3: "", 
+     activeKeyIndex: 1 
+  };
   const [settings, setSettings] = useState(defaultSettings);
   
   const [creatorStep, setCreatorStep] = useState(1);
@@ -366,7 +389,8 @@ export default function QuestionBankApp() {
              try {
                const localSettings = localStorage.getItem(`qb_settings_${localUser}`);
                if (localSettings) {
-                   setSettings({ ...defaultSettings, ...JSON.parse(localSettings) });
+                   const parsed = JSON.parse(localSettings);
+                   setSettings({ ...defaultSettings, ...parsed, apiKey1: parsed.apiKey1 || parsed.apiKey });
                }
              } catch(e) {}
           } else {
@@ -378,7 +402,7 @@ export default function QuestionBankApp() {
             if (userDoc.exists()) {
               const data = userDoc.data();
               setUsername(data.username.toUpperCase());
-              setSettings(prev => ({ ...prev, ...data.settings, apiKey: data.apiKey }));
+              setSettings(prev => ({ ...prev, ...data.settings, apiKey: data.apiKey, apiKey1: data.settings?.apiKey1 || data.apiKey }));
             } else {
               setLoginView('signup');
             }
@@ -410,8 +434,8 @@ export default function QuestionBankApp() {
        if (localLib.length === 0) {
           setLibrary([{
              id: 'imported-folder',
-             title: 'Acervo Diversificado',
-             fullSyllabus: 'Coleção de questões e blocos importados.',
+             title: 'Pergaminhos Diversos',
+             fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
              source: 'external',
              topics: []
           }]);
@@ -428,8 +452,8 @@ export default function QuestionBankApp() {
       if (loadedLib.length === 0) {
          setLibrary([{
             id: 'imported-folder',
-            title: 'Acervo Diversificado',
-            fullSyllabus: 'Coleção de questões e blocos importados.',
+            title: 'Pergaminhos Diversos',
+            fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
             source: 'external',
             topics: []
          }]);
@@ -451,7 +475,7 @@ export default function QuestionBankApp() {
       await signInWithPopup(auth, provider);
     } catch (e) {
       console.error(e);
-      setErrorModal({ title: 'Erro de Autenticação', message: "Ocorreu um erro na autenticação com o Google. Tente novamente.", isAlert: true });
+      setErrorModal({ title: 'Erro de Autenticação', message: "Os deuses do Google rejeitaram sua entrada. Tente novamente.", isAlert: true });
     }
   };
 
@@ -460,20 +484,20 @@ export default function QuestionBankApp() {
       await signInAnonymously(auth);
     } catch (e) {
       console.error("Erro no login anônimo:", e);
-      setErrorModal({ title: 'Erro de Autenticação', message: "Erro no login de convidado. Verifique a configuração do Firebase.", isAlert: true });
+      setErrorModal({ title: 'Erro de Autenticação', message: "Os deuses não permitiram sua entrada anônima. Verifique se o login Anônimo está ativado no Firebase.", isAlert: true });
     }
   };
 
   const handleCompleteRegistration = async () => {
     if(!signupUsername.trim() || !signupApiKey.trim() || !user) return;
     const cleanName = signupUsername.trim().toUpperCase();
-    const newSettings = { ...defaultSettings };
+    const newSettings = { ...defaultSettings, apiKey: signupApiKey.trim(), apiKey1: signupApiKey.trim(), activeKeyIndex: 1 };
     
     if (user.isAnonymous) {
        localStorage.setItem('qb_username', cleanName);
-       localStorage.setItem(`qb_settings_${cleanName}`, JSON.stringify({...newSettings, apiKey: signupApiKey.trim()}));
+       localStorage.setItem(`qb_settings_${cleanName}`, JSON.stringify(newSettings));
        setUsername(cleanName);
-       setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
+       setSettings(newSettings);
     } else {
        try {
          await setDoc(doc(db, 'users', user.uid), {
@@ -482,10 +506,10 @@ export default function QuestionBankApp() {
            settings: newSettings
          });
          setUsername(cleanName);
-         setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
+         setSettings(newSettings);
        } catch(e) {
          console.error(e);
-         setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao registrar seu perfil.", isAlert: true });
+         setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao selar seu registro nos servidores.", isAlert: true });
        }
     }
   };
@@ -540,13 +564,17 @@ export default function QuestionBankApp() {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           username: username,
-          apiKey: newSettings.apiKey,
+          apiKey: newSettings.apiKey1 || newSettings.apiKey,
           settings: {
             numTopics: newSettings.numTopics,
             numSubtopics: newSettings.numSubtopics,
             qPerSub: newSettings.qPerSub,
             numAlternatives: newSettings.numAlternatives || 5,
-            customPrompt: newSettings.customPrompt
+            customPrompt: newSettings.customPrompt,
+            apiKey1: newSettings.apiKey1,
+            apiKey2: newSettings.apiKey2,
+            apiKey3: newSettings.apiKey3,
+            activeKeyIndex: newSettings.activeKeyIndex
           }
         }, { merge: true });
       } catch(e) { console.error(e); }
@@ -575,6 +603,70 @@ export default function QuestionBankApp() {
     await updateSubjectState(updatedSubject);
     setEditingTopicId(null);
     setEditingTopicName('');
+  };
+
+  // --- GET ACTIVE API KEY ---
+  const getActiveApiKey = () => {
+    let key = settings.apiKey; 
+    if (settings.activeKeyIndex === 1 && settings.apiKey1) key = settings.apiKey1;
+    if (settings.activeKeyIndex === 2 && settings.apiKey2) key = settings.apiKey2;
+    if (settings.activeKeyIndex === 3 && settings.apiKey3) key = settings.apiKey3;
+    
+    if (!key) key = settings.apiKey1 || settings.apiKey2 || settings.apiKey3 || settings.apiKey;
+    return key;
+  };
+
+  const checkApiKey = () => {
+    const key = getActiveApiKey();
+    if (!key || key.trim() === '') {
+      setErrorModal({
+        title: 'Oráculo sem Voz (API Key)',
+        message: 'Para invocar os deuses neste ambiente, você precisa fornecer a sua própria chave secreta. Vá até as "Configurações" (ícone de engrenagem) e insira sua Gemini API Key gratuita.',
+        isAlert: true
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const switchToNextKey = async () => {
+    let nextIdx = settings.activeKeyIndex || 1;
+    for (let i = 0; i < 3; i++) {
+      nextIdx = (nextIdx % 3) + 1;
+      const keyAtIdx = nextIdx === 1 ? (settings.apiKey1 || settings.apiKey) : (nextIdx === 2 ? settings.apiKey2 : settings.apiKey3);
+      if (keyAtIdx && keyAtIdx.trim().length > 0) {
+        break;
+      }
+    }
+    const newSettings = { ...settings, activeKeyIndex: nextIdx };
+    await saveSettingsGlobal(newSettings);
+    return nextIdx;
+  };
+
+  // Lida visualmente e logicamente quando a cota da chave do usuário estoura
+  const handleQuotaError = (retryCallback) => {
+    const validKeys = [settings.apiKey1 || settings.apiKey, settings.apiKey2, settings.apiKey3].filter(k => k && k.trim().length > 0);
+
+    if (validKeys.length > 1) {
+      setErrorModal({
+        title: "Limites Mortais (Cota Excedida)",
+        message: "A energia desta Chave Divina se esgotou (Limite RPD/TPM atingido). O Oráculo exige um descanso para este canal. Como você possui outras chaves forjadas em seu panteão, deseja canalizar o poder da PRÓXIMA chave e tentar novamente?",
+        isAlert: false,
+        actionLabel: "Canalizar Próxima Chave",
+        onAction: async () => {
+          setErrorModal(null);
+          await switchToNextKey();
+          retryCallback(); 
+        },
+        onCancel: () => setErrorModal(null)
+      });
+    } else {
+      setErrorModal({
+        title: "Limites Mortais (Cota Excedida)",
+        message: "As energias desta Chave Divina se esgotaram por hoje (Limite RPD/TPM atingido). O Oráculo precisa de descanso. Para prosseguir sem interrupções, recomendamos que utilize outra conta do Google para gerar uma nova API Key gratuita e a adicione nas Configurações (você pode cadastrar até 3).",
+        isAlert: true
+      });
+    }
   };
 
   // --- APP LOGIC ---
@@ -630,7 +722,7 @@ Baseado no tema e nos materiais fornecidos, crie um Sumário Didático.
 
 DIRETRIZES DO SUMÁRIO:
 - Crie EXATAMENTE ${settings.numTopics} Tópicos Principais.
-- Cada tópico deve ter EXATAMENTE ${settings.numSubtopics} Subtópicos.
+- Cada tópico engage EXATAMENTE ${settings.numSubtopics} Subtópicos.
 - A ordem deve ser a mais didática possível.
 - Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.
 
@@ -714,18 +806,6 @@ DIRETRIZES DO SUMÁRIO:
     return materialText + "\n" + uploadedFiles.map(f => `[CONTEÚDO DO ARQUIVO: ${f.name}]\n${f.content}`).join("\n\n");
   }
 
-  const checkApiKey = () => {
-    if (!settings.apiKey || settings.apiKey.trim() === '') {
-      setErrorModal({
-        title: 'Oráculo sem Voz (API Key)',
-        message: 'Para invocar os deuses neste ambiente, você precisa fornecer a sua própria chave secreta. Vá até as "Configurações do Oráculo" (ícone de engrenagem) e insira sua Gemini API Key gratuita.',
-        isAlert: true
-      });
-      return false;
-    }
-    return true;
-  };
-
   const handleStartCreation = async () => {
     if (!checkApiKey()) return;
     
@@ -741,11 +821,12 @@ DIRETRIZES DO SUMÁRIO:
 - Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.`;
     
     try {
-      const result = await callGemini(`Materiais: ${combinedMaterials}`, systemPrompt, settings.apiKey);
+      const result = await callGemini(`Materiais: ${combinedMaterials}`, systemPrompt, getActiveApiKey());
       setProposedSyllabus(result);
       setCreatorStep(2);
     } catch (e) { 
       if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida.", isAlert: true });
+      else if (e.message === "QUOTA_EXCEEDED") handleQuotaError(handleStartCreation);
       else setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true });
     }
     finally { setIsBusy(false); }
@@ -765,11 +846,12 @@ Feedback/Pedido do Usuário: "${syllabusFeedback}"
 Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura de ${settings.numTopics} Tópicos e ${settings.numSubtopics} Subtópicos.`;
 
     try {
-      const result = await callGemini(`Ajuste o sumário conforme o pedido.`, systemPrompt, settings.apiKey);
+      const result = await callGemini(`Ajuste o sumário conforme o pedido.`, systemPrompt, getActiveApiKey());
       setProposedSyllabus(result);
       setSyllabusFeedback('');
     } catch (e) { 
-      setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true }); 
+      if (e.message === "QUOTA_EXCEEDED") handleQuotaError(handleReviseSyllabus);
+      else setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true }); 
     }
     finally { setIsBusy(false); }
   };
@@ -837,7 +919,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     const FULL_SYSTEM_PROMPT = getFullPromptText(true) + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
 
     try {
-      const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
+      const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT, getActiveApiKey());
       const parsed = parseData(result);
       
       const updatedSubject = {
@@ -848,7 +930,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       setShowSummary(false);
     } catch (e) { 
       if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida.", isAlert: true });
-      else setErrorModal({ title: 'Falha na Geração', message: "A conexão foi interrompida. Tente novamente.", isAlert: true });
+      else if (e.message === "QUOTA_EXCEEDED") handleQuotaError(() => generateTopicBatch(topicId, additionalPrompt));
+      else setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida. Tente novamente.", isAlert: true });
     } finally { 
       setIsBusy(false); 
     }
@@ -993,7 +1076,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave de API (Oráculo)</label>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (API Key)</label>
                   <input 
                     type="password" 
                     value={signupApiKey}
@@ -1056,7 +1139,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {view === 'library' && (
           <div className="animate-in fade-in">
             <div className="mb-10 text-center flex flex-col items-center justify-center">
-              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Visão Geral</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl mx-auto">
                 <button onClick={() => setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center justify-center gap-3">
@@ -1202,7 +1285,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             />
             
             <div className="mt-6 flex justify-end">
-              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white p-4 rounded-xl font-bold shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-xl font-bold shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 <Folder className="w-5 h-5" /> Salvar Importação
               </button>
             </div>
@@ -1340,7 +1423,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 
                 {/* Upload Section */}
                 <div className="relative">
-                  <div className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Material de Referência (Cole textos ou envie PDFs, DOCX, TXT)</div>
+                  <div className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Material Base (Cole textos ou envie PDFs, DOCX, TXT)</div>
                   
                   {uploadedFiles.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -1358,7 +1441,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     value={materialText} 
                     onChange={(e) => setMaterialText(e.target.value)} 
                     onPaste={handlePaste}
-                    placeholder="Cole o conteúdo base, anotações ou transcrições aqui..." 
+                    placeholder="Insira os textos base, anotações ou transcrições aqui..." 
                     className={`w-full h-48 p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} resize-none outline-none focus:ring-2 focus:ring-yellow-500`} 
                   />
                   
@@ -1408,19 +1491,36 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           <div className="animate-in fade-in max-w-xl mx-auto space-y-8">
             <div className="flex items-center gap-4 mb-8">
               <button onClick={() => setView('library')} className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`}><ArrowLeft className="w-5 h-5" /></button>
-              <h2 className="text-3xl font-serif font-bold text-yellow-600">Configurações</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600">Configurações do Oráculo</h2>
             </div>
             
-            <div className="col-span-2">
-              <label className="block text-xs font-bold uppercase mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave de API (Oráculo)</label>
-              <input
-                type="password"
-                value={settings.apiKey}
-                onChange={(e) => setSettings({...settings, apiKey: e.target.value})}
-                placeholder="Cole sua chave AI Studio secreta aqui..."
-                className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
-              />
-              <p className="text-[11px] mt-2 opacity-60">Para utilizar a inteligência artificial diretamente no site, insira sua API Key gratuita do Google. Pegue a sua em: aistudio.google.com/app/apikey.</p>
+            <div className="col-span-2 space-y-4">
+              <label className="block text-xs font-bold uppercase mb-2 opacity-50 flex items-center gap-2">
+                <Key className="w-4 h-4"/> Chaves Divinas (API Keys)
+              </label>
+              <p className="text-[11px] opacity-60">O Oráculo pode revesar entre múltiplas chaves caso uma atinja o limite diário de uso. Selecione a bolinha da chave que deseja usar por padrão.</p>
+              
+              {[1, 2, 3].map(num => (
+                <div key={num} className="flex items-center gap-3">
+                  <input 
+                    type="radio" 
+                    name="activeKey" 
+                    checked={(settings.activeKeyIndex || 1) === num} 
+                    onChange={() => setSettings({...settings, activeKeyIndex: num})}
+                    className="w-5 h-5 accent-yellow-600 cursor-pointer"
+                  />
+                  <input
+                    type="password"
+                    value={num === 1 ? (settings.apiKey1 !== undefined ? settings.apiKey1 : settings.apiKey) : settings[`apiKey${num}`] || ''}
+                    onChange={(e) => {
+                      if (num === 1) setSettings({...settings, apiKey1: e.target.value, apiKey: e.target.value});
+                      else setSettings({...settings, [`apiKey${num}`]: e.target.value});
+                    }}
+                    placeholder={`Chave Secreta ${num}...`}
+                    className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
+                  />
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1482,10 +1582,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         <GrecianModal 
           title={errorModal.title} 
           message={errorModal.message} 
-          confirmText="Compreendido" 
-          onConfirm={() => setErrorModal(null)} 
+          confirmText={errorModal.confirmText || "Compreendido"} 
+          onConfirm={errorModal.onConfirm || (() => setErrorModal(null))} 
+          onCancel={errorModal.onCancel || (() => setErrorModal(null))} 
+          actionLabel={errorModal.actionLabel}
+          onAction={errorModal.onAction}
           darkMode={darkMode} 
-          isAlert={true}
+          isAlert={errorModal.isAlert !== undefined ? errorModal.isAlert : true}
         />
       )}
 
@@ -1532,7 +1635,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <textarea
                 value={regeneratePrompt}
                 onChange={(e) => setRegeneratePrompt(e.target.value)}
-                placeholder="Ex: Crie questões focando apenas no tratamento farmacológico pediátrico..."
+                placeholder="Ex: Crie questões focando apenas no tratamento farmacológico..."
                 className={`w-full h-24 p-3 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 mb-6 text-sm ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
               />
               
