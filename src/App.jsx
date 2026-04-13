@@ -571,27 +571,32 @@ export default function QuestionBankApp() {
   };
 
   const saveSettingsGlobal = async (newSettings) => {
-    setSettings(newSettings);
+    const sanitizedSettings = {
+      ...newSettings,
+      activeKeyIndex: Number(newSettings.activeKeyIndex || 1)
+    };
+    setSettings(sanitizedSettings);
+    
     if (user && !user.isAnonymous) {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           username: username,
-          apiKey: newSettings.apiKey1 || newSettings.apiKey,
+          apiKey: sanitizedSettings.apiKey1 || sanitizedSettings.apiKey,
           settings: {
-            numTopics: newSettings.numTopics,
-            numSubtopics: newSettings.numSubtopics,
-            qPerSub: newSettings.qPerSub,
-            numAlternatives: newSettings.numAlternatives || 5,
-            customPrompt: newSettings.customPrompt,
-            apiKey1: newSettings.apiKey1,
-            apiKey2: newSettings.apiKey2,
-            apiKey3: newSettings.apiKey3,
-            activeKeyIndex: newSettings.activeKeyIndex
+            numTopics: sanitizedSettings.numTopics,
+            numSubtopics: sanitizedSettings.numSubtopics,
+            qPerSub: sanitizedSettings.qPerSub,
+            numAlternatives: sanitizedSettings.numAlternatives || 5,
+            customPrompt: sanitizedSettings.customPrompt,
+            apiKey1: sanitizedSettings.apiKey1,
+            apiKey2: sanitizedSettings.apiKey2,
+            apiKey3: sanitizedSettings.apiKey3,
+            activeKeyIndex: sanitizedSettings.activeKeyIndex
           }
         }, { merge: true });
       } catch(e) { console.error(e); }
     } else if (user && user.isAnonymous) {
-       localStorage.setItem(`qb_settings_${username}`, JSON.stringify(newSettings));
+       localStorage.setItem(`qb_settings_${username}`, JSON.stringify(sanitizedSettings));
     }
   };
 
@@ -875,7 +880,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
 
   const finalizeSubject = async () => {
     // Regex relaxado: procura "Tópico" (com ou sem acento) em qualquer lugar da linha, 
-    // ignorando marcações de negrito (**), títulos (##) ou números soltos.
+    // ignorando marcações de negrito (**), titles (##) ou números soltos.
     const topicLines = proposedSyllabus.split('\n').filter(l => /T[óo]pico\s*\d+/i.test(l));
 
     const topics = topicLines.map((title, idx) => {
@@ -1527,7 +1532,10 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                       type="radio" 
                       name="activeKey" 
                       checked={(settings.activeKeyIndex || 1) === num} 
-                      onChange={() => setSettings({...settings, activeKeyIndex: num})}
+                      onChange={() => {
+                        const newSettings = {...settings, activeKeyIndex: num};
+                        saveSettingsGlobal(newSettings);
+                      }}
                       disabled={isRadioDisabled}
                       className={`w-5 h-5 accent-yellow-600 ${isRadioDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                     />
