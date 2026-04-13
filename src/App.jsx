@@ -303,7 +303,7 @@ export default function QuestionBankApp() {
   const [libraryFilter, setLibraryFilter] = useState('gemini');
   const [library, setLibrary] = useState([]);
   
-  const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, customPrompt: "", apiKey: "" };
+  const defaultSettings = { numTopics: 10, numSubtopics: 5, qPerSub: 1, numAlternatives: 5, customPrompt: "", apiKey: "" };
   const [settings, setSettings] = useState(defaultSettings);
   
   const [creatorStep, setCreatorStep] = useState(1);
@@ -529,7 +529,7 @@ export default function QuestionBankApp() {
 
   const saveSettingsGlobal = async (newSettings) => {
     setSettings(newSettings);
-    if (user && !user.isAnonymous) {
+    if (user) {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           username: username,
@@ -538,18 +538,22 @@ export default function QuestionBankApp() {
             numTopics: newSettings.numTopics,
             numSubtopics: newSettings.numSubtopics,
             qPerSub: newSettings.qPerSub,
+            numAlternatives: newSettings.numAlternatives || 5,
             customPrompt: newSettings.customPrompt
           }
         }, { merge: true });
       } catch(e) { console.error(e); }
-    } else if (user && user.isAnonymous) {
-       localStorage.setItem(`qb_settings_${username}`, JSON.stringify(newSettings));
     }
   };
 
   // --- APP LOGIC ---
   const getFullPromptText = () => {
     const qCount = settings.numSubtopics * settings.qPerSub;
+    const numAlts = settings.numAlternatives || 5;
+    const alternativesTemplate = numAlts === 4 
+      ? `A) [Alternativa]\nB) [Alternativa]\nC) [Alternativa]\nD) [Alternativa]`
+      : `A) [Alternativa]\nB) [Alternativa]\nC) [Alternativa]\nD) [Alternativa]\nE) [Alternativa]`;
+
     return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
 
 ATENÇÃO - REGRA DE QUANTIDADE DE QUESTÕES (MANDATÓRIA):
@@ -560,11 +564,11 @@ O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões ger
 DIRETRIZES GERAIS (ESTUDO REVERSO):
 - Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
 - Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
-- Alternativas homogêneas, plausíveis e com tamanho semelhante. 
+- Alternativas homogêneas, plausíveis e com tamanho semelhante. OBRIGATÓRIO gerar EXATAMENTE ${numAlts} alternativas (de A até ${numAlts === 4 ? 'D' : 'E'}). 
 
 DIRETRIZES DA EXPLICAÇÃO (CONCISA E DIRETA):
 - A explicação deve servir como uma aula sobre o assunto.
-- SOMENTE PARA O GEMINI: O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit). O mesmo vale para a consolidação, mas se tiver que escolher, faça explicações maiores e uma consolidação mais resumida.
+- O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit). O mesmo vale para a consolidação, mas se tiver que escolher, faça explicações maiores e uma consolidação mais resumida.
 - É ESTRITAMENTE PROIBIDO se referir às letras das alternativas na explicação (ex: NUNCA diga "A alternativa A está errada..."). Em vez disso, cite o próprio termo (ex: "A Penicilina não é indicada porque...").
 - Explique o porquê da correta e dê os diferenciais que excluem as incorretas de forma unificada e ágil.
 
@@ -572,11 +576,7 @@ TEMPLATE DE SAÍDA OBRIGATÓRIO:
 ### Subtópico [X.Y] - [Nome do Subtópico]
 ## Questão [X.Y.Z]
 [Texto do Enunciado]
-A) [Alternativa]
-B) [Alternativa]
-C) [Alternativa]
-D) [Alternativa]
-E) [Alternativa]
+${alternativesTemplate}
 Alternativa correta: [Letra]
 Explicação:
 [Explicação direta, objetiva e citando os termos/conceitos ao invés das letras]
@@ -1359,15 +1359,28 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões por Subtópico (1-5)</label>
-              <input 
-                type="number" min="1" max="5" 
-                value={settings.qPerSub} 
-                onChange={(e) => setSettings({...settings, qPerSub: e.target.value})} 
-                onBlur={() => handleSettingBlur('qPerSub', 1, 5)}
-                className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} 
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões por Subtópico (1-5)</label>
+                <input 
+                  type="number" min="1" max="5" 
+                  value={settings.qPerSub} 
+                  onChange={(e) => setSettings({...settings, qPerSub: e.target.value})} 
+                  onBlur={() => handleSettingBlur('qPerSub', 1, 5)}
+                  className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas por Questão</label>
+                <select 
+                  value={settings.numAlternatives || 5} 
+                  onChange={(e) => setSettings({...settings, numAlternatives: parseInt(e.target.value)})} 
+                  className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
+                >
+                  <option value={4}>4 Alternativas (A - D)</option>
+                  <option value={5}>5 Alternativas (A - E)</option>
+                </select>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra (Diretrizes Adicionais)</label>
