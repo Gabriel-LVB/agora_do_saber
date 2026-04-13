@@ -564,7 +564,7 @@ DIRETRIZES GERAIS (ESTUDO REVERSO):
 
 DIRETRIZES DA EXPLICAÇÃO (CONCISA E DIRETA):
 - A explicação deve servir como uma aula sobre o assunto.
-- O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit). O mesmo vale para a consolidação, mas se tiver que escolher, faça explicações maiores e uma consolidação mais resumida.
+- SOMENTE PARA O GEMINI: O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit). O mesmo vale para a consolidação, mas se tiver que escolher, faça explicações maiores e uma consolidação mais resumida.
 - É ESTRITAMENTE PROIBIDO se referir às letras das alternativas na explicação (ex: NUNCA diga "A alternativa A está errada..."). Em vez disso, cite o próprio termo (ex: "A Penicilina não é indicada porque...").
 - Explique o porquê da correta e dê os diferenciais que excluem as incorretas de forma unificada e ágil.
 
