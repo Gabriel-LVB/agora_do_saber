@@ -1142,7 +1142,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {view === 'library' && (
           <div className="animate-in fade-in">
             <div className="mb-10 text-center flex flex-col items-center justify-center">
-              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria.</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl mx-auto">
                 <button onClick={() => setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center justify-center gap-3">
