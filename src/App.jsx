@@ -56,12 +56,13 @@ const Spinner = ({ className }) => (
   </svg>
 );
 
-// --- API Gemini (Com suporte para detecção de limite Quota/RPD/TPM) ---
+// --- API Gemini (Com suporte robusto a 503 e Quota) ---
 const callGemini = async (prompt, systemPrompt, userApiKey) => {
   if (!userApiKey) {
     throw new Error("API_KEY_MISSING");
   }
 
+  // Utilizando o Gemini 2.5 exatamente como solicitado
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${userApiKey}`;
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -76,9 +77,8 @@ const callGemini = async (prompt, systemPrompt, userApiKey) => {
         body: JSON.stringify(payload)
       });
       
-      if (response.status === 429) {
-         throw new Error("QUOTA_EXCEEDED");
-      }
+      if (response.status === 429) throw new Error("QUOTA_EXCEEDED");
+      if (response.status === 503) throw new Error("SERVER_OVERLOADED");
       if (response.status === 403 || response.status === 400 || response.status === 404) {
          throw new Error("API_KEY_INVALID");
       }
@@ -87,11 +87,12 @@ const callGemini = async (prompt, systemPrompt, userApiKey) => {
       const result = await response.json();
       return result.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (err) {
-      if (err.message === "API_KEY_INVALID" || err.message === "API_KEY_MISSING") throw err;
-      if (err.message === "QUOTA_EXCEEDED") {
-          if (n === 1) throw err; 
+      // Interrompe imediatamente para não drenar as tentativas ou cotas desnecessariamente
+      if (err.message === "API_KEY_INVALID" || err.message === "API_KEY_MISSING" || err.message === "QUOTA_EXCEEDED" || err.message === "SERVER_OVERLOADED") {
+          throw err; 
       }
-      if (n === 1) throw err;
+      
+      if (n <= 1) throw err;
       await new Promise(r => setTimeout(r, delay));
       return retry(n - 1, delay * 2);
     }
@@ -400,7 +401,11 @@ export default function QuestionBankApp() {
                const localSettings = localStorage.getItem(`qb_settings_${localUser}`);
                if (localSettings) {
                    const parsed = JSON.parse(localSettings);
-                   const newS = { ...defaultSettings, ...parsed, apiKey1: parsed.apiKey1 || parsed.apiKey };
+                   const newS = { 
+                     ...defaultSettings, 
+                     ...parsed, 
+                     apiKey1: parsed.apiKey1 !== undefined ? parsed.apiKey1 : (parsed.apiKey || "") 
+                   };
                    setSettings(newS);
                }
              } catch(e) {}
@@ -413,7 +418,13 @@ export default function QuestionBankApp() {
             if (userDoc.exists()) {
               const data = userDoc.data();
               setUsername(data.username.toUpperCase());
-              const newS = { ...defaultSettings, ...data.settings, apiKey: data.apiKey, apiKey1: data.settings?.apiKey1 || data.apiKey };
+              const settingsData = data.settings || {};
+              const newS = { 
+                ...defaultSettings, 
+                ...settingsData, 
+                apiKey: data.apiKey || "", 
+                apiKey1: settingsData.apiKey1 !== undefined ? settingsData.apiKey1 : (data.apiKey || "") 
+              };
               setSettings(newS);
             } else {
               setLoginView('signup');
@@ -581,16 +592,16 @@ export default function QuestionBankApp() {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           username: username,
-          apiKey: sanitizedSettings.apiKey1 || sanitizedSettings.apiKey,
+          apiKey: sanitizedSettings.apiKey1 || sanitizedSettings.apiKey || "",
           settings: {
             numTopics: sanitizedSettings.numTopics,
             numSubtopics: sanitizedSettings.numSubtopics,
             qPerSub: sanitizedSettings.qPerSub,
             numAlternatives: sanitizedSettings.numAlternatives || 5,
             customPrompt: sanitizedSettings.customPrompt,
-            apiKey1: sanitizedSettings.apiKey1,
-            apiKey2: sanitizedSettings.apiKey2,
-            apiKey3: sanitizedSettings.apiKey3,
+            apiKey1: sanitizedSettings.apiKey1 || "",
+            apiKey2: sanitizedSettings.apiKey2 || "",
+            apiKey3: sanitizedSettings.apiKey3 || "",
             activeKeyIndex: sanitizedSettings.activeKeyIndex
           }
         }, { merge: true });
@@ -711,7 +722,6 @@ O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões ger
 
 DIRETRIZES GERAIS (ESTUDO REVERSO):
 - Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
-- Nas perguntas de farmacologia, ao invés de se referir aos medicamentos diretamente, sempre que possível se refira à CLASSE/SUBCLASSE do fármaco.
 - Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
 - Alternativas homogêneas, plausíveis e com tamanho semelhante. OBRIGATÓRIO gerar EXATAMENTE ${numAlts} alternativas (de A até ${numAlts === 4 ? 'D' : 'E'}). 
 
@@ -744,13 +754,14 @@ Baseado no tema e nos materiais fornecidos, crie um Sumário Didático.
 
 DIRETRIZES DO SUMÁRIO:
 - Crie EXATAMENTE ${s.numTopics} Tópicos Principais.
-- Cada tópico engage EXATAMENTE ${s.numSubtopics} Subtópicos.
+- Cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos.
 - A ordem deve ser a mais didática possível.
 - Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.
 
+Primeiro envie o sumário e aguarde minha confirmação ou orientações para editar algo antes de começar a enviar as questões, e na hora de enviar as questões, envie um tópico por vez, seguindo a ordem dos subtópicos.
 `;
 
-    const questionsPrompt = `=== ETAPA 2: CRIAÇÃO DAS QUESTÕES ===\n${getFullPromptText(false)}`;
+    const questionsPrompt = `\n=== ETAPA 2: CRIAÇÃO DAS QUESTÕES ===\n${getFullPromptText(false)}`;
 
     navigator.clipboard.writeText(syllabusPrompt + questionsPrompt);
     setCopiedPrompt(true);
@@ -849,6 +860,7 @@ DIRETRIZES DO SUMÁRIO:
     } catch (e) { 
       if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida.", isAlert: true });
       else if (e.message === "QUOTA_EXCEEDED") handleQuotaError(handleStartCreation);
+      else if (e.message === "SERVER_OVERLOADED") setErrorModal({ title: 'Servidores Sobrecarregados', message: "Os servidores do Google Gemini estão sobrecarregados no momento (Erro 503). Aguarde um instante e tente novamente.", isAlert: true });
       else setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true });
     }
     finally { setIsBusy(false); }
@@ -873,6 +885,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       setSyllabusFeedback('');
     } catch (e) { 
       if (e.message === "QUOTA_EXCEEDED") handleQuotaError(handleReviseSyllabus);
+      else if (e.message === "SERVER_OVERLOADED") setErrorModal({ title: 'Servidores Sobrecarregados', message: "Os servidores do Google Gemini estão sobrecarregados no momento (Erro 503). Aguarde um instante e tente novamente.", isAlert: true });
       else setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true }); 
     }
     finally { setIsBusy(false); }
@@ -953,6 +966,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     } catch (e) { 
       if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida.", isAlert: true });
       else if (e.message === "QUOTA_EXCEEDED") handleQuotaError(() => generateTopicBatch(topicId, additionalPrompt));
+      else if (e.message === "SERVER_OVERLOADED") setErrorModal({ title: 'Servidores Sobrecarregados', message: "Os servidores do Google Gemini estão sobrecarregados no momento (Erro 503). Aguarde um instante e tente novamente.", isAlert: true });
       else setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida. Tente novamente.", isAlert: true });
     } finally { 
       setIsBusy(false); 
@@ -1557,6 +1571,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                         }
                         setSettings(newSettings);
                       }}
+                      onBlur={() => saveSettingsGlobal(settings)}
                       placeholder={`Chave Secreta ${num}...`}
                       className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
                     />
@@ -1602,7 +1617,11 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas por Questão</label>
                 <select 
                   value={settings.numAlternatives || 5} 
-                  onChange={(e) => setSettings({...settings, numAlternatives: parseInt(e.target.value)})} 
+                  onChange={(e) => {
+                     const newSettings = {...settings, numAlternatives: parseInt(e.target.value)};
+                     setSettings(newSettings);
+                     saveSettingsGlobal(newSettings);
+                  }} 
                   className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
                 >
                   <option value={4}>4 Alternativas (A - D)</option>
@@ -1612,7 +1631,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             </div>
             <div>
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra (Diretrizes Adicionais)</label>
-              <textarea value={settings.customPrompt} onChange={(e) => setSettings({...settings, customPrompt: e.target.value})} placeholder="Ex: Priorize exames laboratoriais na explicação..." className={`w-full h-32 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
+              <textarea value={settings.customPrompt} onChange={(e) => setSettings({...settings, customPrompt: e.target.value})} onBlur={() => saveSettingsGlobal(settings)} placeholder="Ex: Priorize exames laboratoriais na explicação..." className={`w-full h-32 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
             </div>
             <button onClick={() => { saveSettingsGlobal(settings); setView('library'); }} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Salvar Configurações</button>
           </div>
