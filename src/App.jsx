@@ -589,7 +589,21 @@ ${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}`
   };
 
   const copyPromptToClipboard = () => {
-    navigator.clipboard.writeText(getFullPromptText());
+    const syllabusPrompt = `=== ETAPA 1: CRIAÇÃO DO SUMÁRIO ===
+Você é o Arquiteto de Alexandria. Seu dever é organizar o conhecimento médico.
+Baseado no tema e nos materiais fornecidos, crie um Sumário Didático.
+
+DIRETRIZES DO SUMÁRIO:
+- Crie EXATAMENTE ${settings.numTopics} Tópicos Principais.
+- Cada tópico deve ter EXATAMENTE ${settings.numSubtopics} Subtópicos.
+- A ordem deve ser a mais didática possível.
+- Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.
+
+`;
+
+    const questionsPrompt = `=== ETAPA 2: CRIAÇÃO DAS QUESTÕES ===\n${getFullPromptText()}`;
+
+    navigator.clipboard.writeText(syllabusPrompt + questionsPrompt);
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 3000);
   };
