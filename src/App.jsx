@@ -24,12 +24,14 @@ const Landmark = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" wid
 const Flame = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>);
 const ScrollText = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5"/><path d="M15 12h-5"/></svg>);
 const Folder = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>);
+const ClipboardList = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>);
 const CheckCircle2 = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>);
 const XCircle = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>);
 const BookOpen = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>);
 const ArrowLeft = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>);
 const SettingsIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
 const Trash2 = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>);
+const EditIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>);
 const RotateCcw = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>);
 const Sun = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>);
 const Moon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>);
@@ -331,6 +333,12 @@ export default function QuestionBankApp() {
   
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regeneratePrompt, setRegeneratePrompt] = useState('');
+
+  const [editingSubjectId, setEditingSubjectId] = useState(null);
+  const [editingSubjectName, setEditingSubjectName] = useState('');
+
+  const [editingTopicId, setEditingTopicId] = useState(null);
+  const [editingTopicName, setEditingTopicName] = useState('');
   
   const fileInputRef = useRef(null);
 
@@ -529,7 +537,7 @@ export default function QuestionBankApp() {
 
   const saveSettingsGlobal = async (newSettings) => {
     setSettings(newSettings);
-    if (user) {
+    if (user && !user.isAnonymous) {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           username: username,
@@ -543,16 +551,22 @@ export default function QuestionBankApp() {
           }
         }, { merge: true });
       } catch(e) { console.error(e); }
+    } else if (user && user.isAnonymous) {
+       localStorage.setItem(`qb_settings_${username}`, JSON.stringify(newSettings));
     }
   };
 
   // --- APP LOGIC ---
-  const getFullPromptText = () => {
+  const getFullPromptText = (isForAPI = false) => {
     const qCount = settings.numSubtopics * settings.qPerSub;
     const numAlts = settings.numAlternatives || 5;
     const alternativesTemplate = numAlts === 4 
       ? `A) [Alternativa]\nB) [Alternativa]\nC) [Alternativa]\nD) [Alternativa]`
       : `A) [Alternativa]\nB) [Alternativa]\nC) [Alternativa]\nD) [Alternativa]\nE) [Alternativa]`;
+
+    const tokenLimitInstruction = isForAPI 
+      ? `\n- O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit). O mesmo vale para a consolidação, mas se tiver que escolher, faça explicações maiores e uma consolidação mais resumida.`
+      : '';
 
     return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
 
@@ -567,8 +581,7 @@ DIRETRIZES GERAIS (ESTUDO REVERSO):
 - Alternativas homogêneas, plausíveis e com tamanho semelhante. OBRIGATÓRIO gerar EXATAMENTE ${numAlts} alternativas (de A até ${numAlts === 4 ? 'D' : 'E'}). 
 
 DIRETRIZES DA EXPLICAÇÃO (CONCISA E DIRETA):
-- A explicação deve servir como uma aula sobre o assunto.
-- O tamanho da explicação deve ser inversamente proporcional à quantidade de questões, de forma que você consiga fazer tudo que esse prompt manda e o resultado caber no limite de tokens (output limit). O mesmo vale para a consolidação, mas se tiver que escolher, faça explicações maiores e uma consolidação mais resumida.
+- A explicação deve servir como uma aula sobre o assunto.${tokenLimitInstruction}
 - É ESTRITAMENTE PROIBIDO se referir às letras das alternativas na explicação (ex: NUNCA diga "A alternativa A está errada..."). Em vez disso, cite o próprio termo (ex: "A Penicilina não é indicada porque...").
 - Explique o porquê da correta e dê os diferenciais que excluem as incorretas de forma unificada e ágil.
 
@@ -601,7 +614,7 @@ DIRETRIZES DO SUMÁRIO:
 
 `;
 
-    const questionsPrompt = `=== ETAPA 2: CRIAÇÃO DAS QUESTÕES ===\n${getFullPromptText()}`;
+    const questionsPrompt = `=== ETAPA 2: CRIAÇÃO DAS QUESTÕES ===\n${getFullPromptText(false)}`;
 
     navigator.clipboard.writeText(syllabusPrompt + questionsPrompt);
     setCopiedPrompt(true);
@@ -799,7 +812,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       ? `\n\nMATERIAIS DE BASE OBRIGATÓRIOS (Textos Sagrados):\nAs questões geradas DEVEM refletir e focar primariamente nos conceitos encontrados nos textos a seguir:\n${clearedSubject.sourceMaterials}`
       : '';
 
-    const FULL_SYSTEM_PROMPT = getFullPromptText() + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
+    const FULL_SYSTEM_PROMPT = getFullPromptText(true) + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
 
     try {
       const result = await callGemini(`Invoque o conhecimento sobre o tópico: ${topic.title} dentro do assunto ${activeSubject.title}`, FULL_SYSTEM_PROMPT, settings.apiKey);
@@ -844,13 +857,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     let targetSubj = library.find(s => s.title.toLowerCase() === subjectName.toLowerCase() && s.source === 'external' && s.id !== 'imported-folder');
 
     if (targetSubj) {
-      const updated = { ...targetSubj, topics: [newTopic, ...targetSubj.topics] };
+      const updated = { ...targetSubj, topics: [...targetSubj.topics, newTopic] };
       await updateSubjectState(updated);
       setActiveSubjectId(targetSubj.id);
     } else if (!pasteSubjectName.trim()) {
       const importFolder = library.find(s => s.id === 'imported-folder');
       if (importFolder) {
-         const updated = { ...importFolder, topics: [newTopic, ...importFolder.topics] };
+         const updated = { ...importFolder, topics: [...importFolder.topics, newTopic] };
          await updateSubjectState(updated);
       }
       setActiveSubjectId('imported-folder');
@@ -1020,15 +1033,15 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {/* VIEW: MAIN LIBRARY (ROOT) */}
         {view === 'library' && (
           <div className="animate-in fade-in">
-            <div className="mb-10">
+            <div className="mb-10 text-center">
               <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
               <p className="opacity-60 mb-6">Escolha o seu caminho do conhecimento.</p>
-              <div className="flex flex-col sm:flex-row gap-4 w-full">
+              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl mx-auto">
                 <button onClick={() => setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center justify-center gap-3">
                   <Sparkles className="w-6 h-6" /> Invocar Assunto (Gemini)
                 </button>
-                <button onClick={() => setView('paste')} className={`flex-1 py-4 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-3 ${darkMode ? 'bg-gray-800 text-white hover:bg-gray-700 border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50'}`}>
-                  <ScrollText className="w-6 h-6 text-yellow-600" /> Decifrar Pergaminho (Externo)
+                <button onClick={() => { setPasteSubjectName(''); setPasteTopicName('Bloco 1'); setView('paste'); }} className={`flex-1 py-4 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-3 ${darkMode ? 'bg-gray-800 text-white hover:bg-gray-700 border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50'}`}>
+                  <ClipboardList className="w-6 h-6 text-yellow-600" /> Decifrar Pergaminho (Externo)
                 </button>
               </div>
             </div>
@@ -1077,7 +1090,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               {libraryFilter === 'gemini' ? (
                 <button onClick={() => setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><Sparkles className="w-4 h-4" /> Novo Panteão</button>
               ) : (
-                <button onClick={() => setView('paste')} className="bg-stone-700 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-stone-800 transition-all flex items-center gap-2"><ScrollText className="w-4 h-4" /> Novos Escritos</button>
+                <button onClick={() => { setPasteSubjectName(''); setPasteTopicName('Bloco 1'); setView('paste'); }} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Novos Escritos</button>
               )}
             </div>
 
@@ -1090,7 +1103,10 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     <div className="flex justify-between items-start mb-4">
                       <Folder className="w-10 h-10 text-yellow-600" />
                       {subject.id !== 'imported-folder' && (
-                         <button onClick={(e) => { e.stopPropagation(); setDeleteId({type:'subject', id:subject.id}); }} className="p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-5 h-5" /></button>
+                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button onClick={(e) => { e.stopPropagation(); setEditingSubjectId(subject.id); setEditingSubjectName(subject.title); }} className="p-2 text-gray-400 hover:text-yellow-500"><EditIcon className="w-5 h-5" /></button>
+                           <button onClick={(e) => { e.stopPropagation(); setDeleteId({type:'subject', id:subject.id}); }} className="p-2 text-gray-400 hover:text-red-500"><Trash2 className="w-5 h-5" /></button>
+                         </div>
                       )}
                     </div>
                     <h3 className="font-serif font-bold text-xl mb-1 truncate">{subject.title}</h3>
@@ -1106,7 +1122,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {view === 'paste' && (
           <div className="animate-in slide-in-from-right max-w-3xl mx-auto">
             <button onClick={() => setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Desistir da Jornada</button>
-            <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2 flex items-center gap-3"><ScrollText className="w-8 h-8"/> Decifrar Pergaminho Externo</h2>
+            <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2 flex items-center gap-3"><ClipboardList className="w-8 h-8"/> Decifrar Pergaminho Externo</h2>
             <p className="opacity-60 mb-6">Crie uma nova pasta ou adicione tópicos a uma existente colando questões de outras IAs.</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
@@ -1158,7 +1174,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             />
             
             <div className="mt-6 flex justify-end">
-              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-stone-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg hover:bg-stone-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors px-8 py-4 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 <Folder className="w-5 h-5" /> Gravar nas Pedras
               </button>
             </div>
@@ -1169,11 +1185,36 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {view === 'subject' && activeSubject && (
           <div className="animate-in slide-in-from-right">
             <button onClick={() => { setLibraryFilter(activeSubject.source); setView('sub-library'); }} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
-            <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">{activeSubject.title}</h2>
-            <p className="opacity-60 mb-8">{activeSubject.source === 'gemini' ? 'Sumário Estruturado pelo Oráculo' : 'Subpastas Importadas'}</p>
+            
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h2 className="text-3xl font-serif font-bold text-yellow-600">{activeSubject.title}</h2>
+                  {activeSubject.id !== 'imported-folder' && (
+                    <button onClick={() => { setEditingSubjectId(activeSubject.id); setEditingSubjectName(activeSubject.title); }} className={`p-2 rounded-full transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500 hover:bg-gray-800' : 'text-gray-500 hover:text-yellow-600 hover:bg-gray-100'}`}>
+                      <EditIcon className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+                <p className="opacity-60">{activeSubject.source === 'gemini' ? 'Sumário Estruturado pelo Oráculo' : 'Subpastas Importadas'}</p>
+              </div>
+              {activeSubject.source === 'external' && (
+                <button onClick={() => { 
+                  setPasteSubjectName(activeSubject.id === 'imported-folder' ? '' : activeSubject.title); 
+                  setPasteTopicName(`Bloco ${activeSubject.topics.length + 1}`);
+                  setView('paste'); 
+                }} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4" /> Novos Escritos
+                </button>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {activeSubject.topics.map(topic => (
+              {[...activeSubject.topics].sort((a, b) => {
+                const timeA = parseInt(a.id.split('-').pop()) || 0;
+                const timeB = parseInt(b.id.split('-').pop()) || 0;
+                return timeA - timeB;
+              }).map(topic => (
                 <div key={topic.id} onClick={() => { setActiveTopicId(topic.id); setView('topic'); }} className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group`}>
                   <div className="flex items-center gap-4 flex-1 truncate pr-4">
                     <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0"><ScrollText className="w-5 h-5" /></div>
@@ -1199,6 +1240,9 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 <button onClick={() => setView('subject')} className={`flex items-center gap-2 mb-2 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
                 <div className="flex items-center gap-3">
                   <h2 className="text-2xl font-serif font-bold text-yellow-600">{activeTopic.title}</h2>
+                  <button onClick={() => { setEditingTopicId(activeTopic.id); setEditingTopicName(activeTopic.title); }} className={`p-2 rounded-full transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500 hover:bg-gray-800' : 'text-gray-500 hover:text-yellow-600 hover:bg-gray-100'}`}>
+                    <EditIcon className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
               <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -1477,6 +1521,46 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL PARA RENOMEAR PASTA */}
+      {editingSubjectId && (
+        <GrecianModal 
+          title="Renomear Pergaminho" 
+          message="Insira um novo nome de registro para sua pasta:" 
+          confirmText="Renomear" 
+          onConfirm={handleEditSubject} 
+          onCancel={() => { setEditingSubjectId(null); setEditingSubjectName(''); }} 
+          darkMode={darkMode} 
+        >
+          <input 
+            type="text" 
+            value={editingSubjectName}
+            onChange={(e) => setEditingSubjectName(e.target.value)}
+            className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
+            autoFocus
+          />
+        </GrecianModal>
+      )}
+
+      {/* MODAL PARA RENOMEAR SUBPASTA (TÓPICO) */}
+      {editingTopicId && (
+        <GrecianModal 
+          title="Renomear Subpasta" 
+          message="Insira um novo nome para este bloco de provações:" 
+          confirmText="Renomear" 
+          onConfirm={handleEditTopic} 
+          onCancel={() => { setEditingTopicId(null); setEditingTopicName(''); }} 
+          darkMode={darkMode} 
+        >
+          <input 
+            type="text" 
+            value={editingTopicName}
+            onChange={(e) => setEditingTopicName(e.target.value)}
+            className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
+            autoFocus
+          />
+        </GrecianModal>
       )}
 
     </div>
