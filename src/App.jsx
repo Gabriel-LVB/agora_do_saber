@@ -49,7 +49,6 @@ const UserIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" wid
 const GoogleIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>);
 const Shield = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
 
-
 const Spinner = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{ animation: 'spin-animation 1s linear infinite', transformOrigin: 'center' }}>
     <style>{`@keyframes spin-animation { 100% { transform: rotate(360deg); } }`}</style>
@@ -293,6 +292,19 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
 export default function QuestionBankApp() {
   const isCanvasEnvironment = window.location.hostname.includes('scf.usercontent.goog') || window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
 
+  const defaultSettings = { 
+     numTopics: 10, 
+     numSubtopics: 5, 
+     qPerSub: 1, 
+     numAlternatives: 5, 
+     customPrompt: "", 
+     apiKey: "", 
+     apiKey1: "", 
+     apiKey2: "", 
+     apiKey3: "", 
+     activeKeyIndex: 1 
+  };
+
   const [darkMode, setDarkMode] = useState(() => {
     try {
       const val = localStorage.getItem('qb_darkmode');
@@ -319,19 +331,14 @@ export default function QuestionBankApp() {
   const [libraryFilter, setLibraryFilter] = useState('gemini');
   const [library, setLibrary] = useState([]);
   
-  const defaultSettings = { 
-     numTopics: 10, 
-     numSubtopics: 5, 
-     qPerSub: 1, 
-     numAlternatives: 5, 
-     customPrompt: "", 
-     apiKey: "", 
-     apiKey1: "", 
-     apiKey2: "", 
-     apiKey3: "", 
-     activeKeyIndex: 1 
+  const [settings, setSettingsState] = useState(defaultSettings);
+  const settingsRef = useRef(defaultSettings);
+  
+  // Centraliza o controle do Settings para sempre atualizar a Referência
+  const setSettings = (newSettings) => {
+      setSettingsState(newSettings);
+      settingsRef.current = newSettings;
   };
-  const [settings, setSettings] = useState(defaultSettings);
   
   const [creatorStep, setCreatorStep] = useState(1);
   const [newSubjectName, setNewSubjectName] = useState('');
@@ -393,7 +400,8 @@ export default function QuestionBankApp() {
                const localSettings = localStorage.getItem(`qb_settings_${localUser}`);
                if (localSettings) {
                    const parsed = JSON.parse(localSettings);
-                   setSettings({ ...defaultSettings, ...parsed, apiKey1: parsed.apiKey1 || parsed.apiKey });
+                   const newS = { ...defaultSettings, ...parsed, apiKey1: parsed.apiKey1 || parsed.apiKey };
+                   setSettings(newS);
                }
              } catch(e) {}
           } else {
@@ -405,7 +413,8 @@ export default function QuestionBankApp() {
             if (userDoc.exists()) {
               const data = userDoc.data();
               setUsername(data.username.toUpperCase());
-              setSettings(prev => ({ ...prev, ...data.settings, apiKey: data.apiKey, apiKey1: data.settings?.apiKey1 || data.apiKey }));
+              const newS = { ...defaultSettings, ...data.settings, apiKey: data.apiKey, apiKey1: data.settings?.apiKey1 || data.apiKey };
+              setSettings(newS);
             } else {
               setLoginView('signup');
             }
@@ -610,12 +619,13 @@ export default function QuestionBankApp() {
 
   // --- GET ACTIVE API KEY ---
   const getActiveApiKey = () => {
-    let key = settings.apiKey; 
-    if (settings.activeKeyIndex === 1 && settings.apiKey1) key = settings.apiKey1;
-    if (settings.activeKeyIndex === 2 && settings.apiKey2) key = settings.apiKey2;
-    if (settings.activeKeyIndex === 3 && settings.apiKey3) key = settings.apiKey3;
+    const s = settingsRef.current;
+    let key = s.apiKey; 
+    if (s.activeKeyIndex === 1 && s.apiKey1) key = s.apiKey1;
+    if (s.activeKeyIndex === 2 && s.apiKey2) key = s.apiKey2;
+    if (s.activeKeyIndex === 3 && s.apiKey3) key = s.apiKey3;
     
-    if (!key) key = settings.apiKey1 || settings.apiKey2 || settings.apiKey3 || settings.apiKey;
+    if (!key) key = s.apiKey1 || s.apiKey2 || s.apiKey3 || s.apiKey;
     return key;
   };
 
@@ -633,22 +643,24 @@ export default function QuestionBankApp() {
   };
 
   const switchToNextKey = async () => {
-    let nextIdx = settings.activeKeyIndex || 1;
+    const s = settingsRef.current;
+    let nextIdx = s.activeKeyIndex || 1;
     for (let i = 0; i < 3; i++) {
       nextIdx = (nextIdx % 3) + 1;
-      const keyAtIdx = nextIdx === 1 ? (settings.apiKey1 || settings.apiKey) : (nextIdx === 2 ? settings.apiKey2 : settings.apiKey3);
+      const keyAtIdx = nextIdx === 1 ? (s.apiKey1 || s.apiKey) : (nextIdx === 2 ? s.apiKey2 : s.apiKey3);
       if (keyAtIdx && keyAtIdx.trim().length > 0) {
         break;
       }
     }
-    const newSettings = { ...settings, activeKeyIndex: nextIdx };
+    const newSettings = { ...s, activeKeyIndex: nextIdx };
     await saveSettingsGlobal(newSettings);
     return nextIdx;
   };
 
   // Lida visualmente e logicamente quando a cota da chave do usuário estoura
   const handleQuotaError = (retryCallback) => {
-    const validKeys = [settings.apiKey1 || settings.apiKey, settings.apiKey2, settings.apiKey3].filter(k => k && k.trim().length > 0);
+    const s = settingsRef.current;
+    const validKeys = [s.apiKey1 || s.apiKey, s.apiKey2, s.apiKey3].filter(k => k && k.trim().length > 0);
 
     if (validKeys.length > 1) {
       setErrorModal({
@@ -674,8 +686,9 @@ export default function QuestionBankApp() {
 
   // --- APP LOGIC ---
   const getFullPromptText = (isForAPI = false) => {
-    const qCount = settings.numSubtopics * settings.qPerSub;
-    const numAlts = settings.numAlternatives || 5;
+    const s = settingsRef.current;
+    const qCount = s.numSubtopics * s.qPerSub;
+    const numAlts = s.numAlternatives || 5;
     const alternativesTemplate = numAlts === 4 
       ? `A) [Alternativa]\nB) [Alternativa]\nC) [Alternativa]\nD) [Alternativa]`
       : `A) [Alternativa]\nB) [Alternativa]\nC) [Alternativa]\nD) [Alternativa]\nE) [Alternativa]`;
@@ -687,8 +700,8 @@ export default function QuestionBankApp() {
     return `Você é o Oráculo de Medicina da Ágora do Saber. Seu objetivo é criar um estudo reverso de altíssima qualidade.
 
 ATENÇÃO - REGRA DE QUANTIDADE DE QUESTÕES (MANDATÓRIA):
-Você DEVE OBRIGATORIAMENTE abordar EXATAMENTE ${settings.numSubtopics} subtópicos diferentes.
-Para CADA UM desses ${settings.numSubtopics} subtópicos, você DEVE gerar EXATAMENTE ${settings.qPerSub} questão(ões).
+Você DEVE OBRIGATORIAMENTE abordar EXATAMENTE ${s.numSubtopics} subtópicos diferentes.
+Para CADA UM desses ${s.numSubtopics} subtópicos, você DEVE gerar EXATAMENTE ${s.qPerSub} questão(ões).
 O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões geradas. Sob nenhuma hipótese pare antes de completar as ${qCount} questões na tela.
 
 DIRETRIZES GERAIS (ESTUDO REVERSO):
@@ -715,17 +728,18 @@ Explicação:
 ### Resumo de Consolidação
 [Ao final de todas as ${qCount} questões, escreva um "Resumo de Consolidação" EXCLUSIVAMENTE em parágrafos de texto corrido. É PROIBIDO o uso de bullet points ou listas].
 
-${settings.customPrompt ? `Contexto Extra do Usuário: ${settings.customPrompt}` : ''}`;
+${s.customPrompt ? `Contexto Extra do Usuário: ${s.customPrompt}` : ''}`;
   };
 
   const copyPromptToClipboard = () => {
+    const s = settingsRef.current;
     const syllabusPrompt = `=== ETAPA 1: CRIAÇÃO DO SUMÁRIO ===
 Você é o Arquiteto de Alexandria. Seu dever é organizar o conhecimento médico.
 Baseado no tema e nos materiais fornecidos, crie um Sumário Didático.
 
 DIRETRIZES DO SUMÁRIO:
-- Crie EXATAMENTE ${settings.numTopics} Tópicos Principais.
-- Cada tópico engage EXATAMENTE ${settings.numSubtopics} Subtópicos.
+- Crie EXATAMENTE ${s.numTopics} Tópicos Principais.
+- Cada tópico engage EXATAMENTE ${s.numSubtopics} Subtópicos.
 - A ordem deve ser a mais didática possível.
 - Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.
 
@@ -802,7 +816,7 @@ DIRETRIZES DO SUMÁRIO:
     let val = parseInt(settings[key]);
     if (isNaN(val) || val < min) val = min;
     if (val > max) val = max;
-    setSettings(prev => ({ ...prev, [key]: val }));
+    setSettings({ ...settings, [key]: val });
   };
 
   const getCombinedMaterials = () => {
@@ -818,8 +832,8 @@ DIRETRIZES DO SUMÁRIO:
 Baseado no tema "${newSubjectName}" e nos materiais fornecidos, crie um Sumário Didático.
 
 DIRETRIZES DO SUMÁRIO:
-- Crie EXATAMENTE ${settings.numTopics} Tópicos Principais.
-- Cada tópico deve ter EXATAMENTE ${settings.numSubtopics} Subtópicos.
+- Crie EXATAMENTE ${settingsRef.current.numTopics} Tópicos Principais.
+- Cada tópico deve ter EXATAMENTE ${settingsRef.current.numSubtopics} Subtópicos.
 - A ordem deve ser a mais didática possível (mesmo que fuja da ordem do material base).
 - Responda APENAS o sumário em formato hierárquico claro, usando a palavra 'Tópico X' no início de cada linha principal.`;
     
@@ -846,7 +860,7 @@ ${proposedSyllabus}
 
 Feedback/Pedido do Usuário: "${syllabusFeedback}"
 
-Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura de ${settings.numTopics} Tópicos e ${settings.numSubtopics} Subtópicos.`;
+Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura de ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.`;
 
     try {
       const result = await callGemini(`Ajuste o sumário conforme o pedido.`, systemPrompt, getActiveApiKey());
@@ -1142,7 +1156,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {view === 'library' && (
           <div className="animate-in fade-in">
             <div className="mb-10 text-center flex flex-col items-center justify-center">
-              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria.</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl mx-auto">
                 <button onClick={() => setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center justify-center gap-3">
@@ -1288,7 +1302,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             />
             
             <div className="mt-6 flex justify-end">
-              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto text-white p-4 rounded-xl font-bold bg-yellow-600 hover:bg-yellow-700 shadow-md transition-colors shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-xl font-bold shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 <Folder className="w-5 h-5" /> Salvar Importação
               </button>
             </div>
