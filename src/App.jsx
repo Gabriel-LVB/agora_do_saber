@@ -1074,7 +1074,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   <Landmark className="w-12 h-12 text-yellow-600" />
                 </div>
                 <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Acervo do Oráculo</h3>
-                <p className="text-sm opacity-60">Assuntos e tópicos gerados via IA.</p>
+                <p className="text-sm opacity-60">Assuntos e tópicos gerados via Gemini.</p>
                 <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${statsBadge}`}>{library.filter(s=>s.source === 'gemini').length} Pastas</div>
               </div>
 
@@ -1408,7 +1408,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           <div className="animate-in fade-in max-w-xl mx-auto space-y-8">
             <div className="flex items-center gap-4 mb-8">
               <button onClick={() => setView('library')} className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`}><ArrowLeft className="w-5 h-5" /></button>
-              <h2 className="text-3xl font-serif font-bold text-yellow-600">Configurações do Oráculo</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600">Configurações</h2>
             </div>
             
             <div className="col-span-2">
