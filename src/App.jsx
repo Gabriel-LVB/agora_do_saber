@@ -1288,7 +1288,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             />
             
             <div className="mt-6 flex justify-end">
-              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white p-4 rounded-xl font-bold shadow-md transition-colors shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto text-white p-4 rounded-xl font-bold bg-yellow-600 hover:bg-yellow-700 shadow-md transition-colors shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                 <Folder className="w-5 h-5" /> Salvar Importação
               </button>
             </div>
