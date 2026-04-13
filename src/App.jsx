@@ -24,7 +24,7 @@ const Landmark = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" wid
 const Flame = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>);
 const ScrollText = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5"/><path d="M15 12h-5"/></svg>);
 const Folder = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>);
-const ClipboardList = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>);
+const Feather = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="6.5"/></svg>);
 const CheckCircle2 = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>);
 const XCircle = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>);
 const BookOpen = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>);
@@ -46,7 +46,6 @@ const Key = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="2
 const LogOut = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
 const UserIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 const GoogleIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>);
-const Shield = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
 
 const Spinner = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{ animation: 'spin-animation 1s linear infinite', transformOrigin: 'center' }}>
@@ -224,7 +223,7 @@ const GrecianModal = ({ title, message, onConfirm, onCancel, confirmText, darkMo
         <div className="flex gap-3 w-full">
           {!isAlert && (
             <button onClick={onCancel} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}>
-              Recuar
+              Cancelar
             </button>
           )}
           <button onClick={onConfirm} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-md transition-colors ${isAlert ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-red-600 hover:bg-red-700'}`}>
@@ -411,8 +410,8 @@ export default function QuestionBankApp() {
        if (localLib.length === 0) {
           setLibrary([{
              id: 'imported-folder',
-             title: 'Pergaminhos Diversos',
-             fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
+             title: 'Acervo Diversificado',
+             fullSyllabus: 'Coleção de questões e blocos importados.',
              source: 'external',
              topics: []
           }]);
@@ -429,8 +428,8 @@ export default function QuestionBankApp() {
       if (loadedLib.length === 0) {
          setLibrary([{
             id: 'imported-folder',
-            title: 'Pergaminhos Diversos',
-            fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
+            title: 'Acervo Diversificado',
+            fullSyllabus: 'Coleção de questões e blocos importados.',
             source: 'external',
             topics: []
          }]);
@@ -452,7 +451,7 @@ export default function QuestionBankApp() {
       await signInWithPopup(auth, provider);
     } catch (e) {
       console.error(e);
-      setErrorModal({ title: 'Erro de Autenticação', message: "Os deuses do Google rejeitaram sua entrada. Tente novamente.", isAlert: true });
+      setErrorModal({ title: 'Erro de Autenticação', message: "Ocorreu um erro na autenticação com o Google. Tente novamente.", isAlert: true });
     }
   };
 
@@ -461,7 +460,7 @@ export default function QuestionBankApp() {
       await signInAnonymously(auth);
     } catch (e) {
       console.error("Erro no login anônimo:", e);
-      setErrorModal({ title: 'Erro de Autenticação', message: "Os deuses não permitiram sua entrada anônima. Verifique se o login Anônimo está ativado no Firebase.", isAlert: true });
+      setErrorModal({ title: 'Erro de Autenticação', message: "Erro no login de convidado. Verifique a configuração do Firebase.", isAlert: true });
     }
   };
 
@@ -486,7 +485,7 @@ export default function QuestionBankApp() {
          setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
        } catch(e) {
          console.error(e);
-         setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao selar seu registro nos servidores.", isAlert: true });
+         setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao registrar seu perfil.", isAlert: true });
        }
     }
   };
@@ -556,6 +555,28 @@ export default function QuestionBankApp() {
     }
   };
 
+  const handleEditSubject = async () => {
+    if (!editingSubjectName.trim() || !editingSubjectId) return;
+    const subjToEdit = library.find(s => s.id === editingSubjectId);
+    if (subjToEdit) {
+      const updated = { ...subjToEdit, title: editingSubjectName.trim() };
+      await updateSubjectState(updated);
+    }
+    setEditingSubjectId(null);
+    setEditingSubjectName('');
+  };
+
+  const handleEditTopic = async () => {
+    if (!editingTopicName.trim() || !editingTopicId || !activeSubject) return;
+    const updatedTopics = activeSubject.topics.map(t => 
+      t.id === editingTopicId ? { ...t, title: editingTopicName.trim() } : t
+    );
+    const updatedSubject = { ...activeSubject, topics: updatedTopics };
+    await updateSubjectState(updatedSubject);
+    setEditingTopicId(null);
+    setEditingTopicName('');
+  };
+
   // --- APP LOGIC ---
   const getFullPromptText = (isForAPI = false) => {
     const qCount = settings.numSubtopics * settings.qPerSub;
@@ -577,6 +598,7 @@ O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões ger
 
 DIRETRIZES GERAIS (ESTUDO REVERSO):
 - Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
+- Nas perguntas de farmacologia, ao invés de se referir aos medicamentos diretamente, sempre que possível se refira à CLASSE/SUBCLASSE do fármaco.
 - Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
 - Alternativas homogêneas, plausíveis e com tamanho semelhante. OBRIGATÓRIO gerar EXATAMENTE ${numAlts} alternativas (de A até ${numAlts === 4 ? 'D' : 'E'}). 
 
@@ -646,7 +668,7 @@ DIRETRIZES DO SUMÁRIO:
         } else {
           setErrorModal({
             title: 'Formato Ignorado',
-            message: `O formato do artefato ${file.name} é desconhecido. O Oráculo decifra apenas pedras TXT, MD, PDF e DOC/DOCX.`,
+            message: `O formato do arquivo ${file.name} é desconhecido. Utilize apenas TXT, MD, PDF e DOC/DOCX.`,
             isAlert: true
           });
           continue;
@@ -655,8 +677,8 @@ DIRETRIZES DO SUMÁRIO:
       } catch(err) {
         console.error("Erro lendo arquivo", err);
         setErrorModal({
-          title: 'Pergaminho Corrompido',
-          message: `O feitiço falhou em ${file.name}. O pergaminho pode estar corrompido ou selado com magia negra.`,
+          title: 'Arquivo Corrompido',
+          message: `Falha ao ler o arquivo ${file.name}. O arquivo pode estar corrompido ou protegido.`,
           isAlert: true
         });
       }
@@ -696,7 +718,7 @@ DIRETRIZES DO SUMÁRIO:
     if (!settings.apiKey || settings.apiKey.trim() === '') {
       setErrorModal({
         title: 'Oráculo sem Voz (API Key)',
-        message: 'Para invocar os deuses neste ambiente, você precisa fornecer a sua própria chave secreta. Vá até as "Leis do Oráculo" (ícone de engrenagem) e insira sua Gemini API Key gratuita.',
+        message: 'Para invocar os deuses neste ambiente, você precisa fornecer a sua própria chave secreta. Vá até as "Configurações do Oráculo" (ícone de engrenagem) e insira sua Gemini API Key gratuita.',
         isAlert: true
       });
       return false;
@@ -723,8 +745,8 @@ DIRETRIZES DO SUMÁRIO:
       setProposedSyllabus(result);
       setCreatorStep(2);
     } catch (e) { 
-      if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
-      else setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente.", isAlert: true });
+      if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida.", isAlert: true });
+      else setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true });
     }
     finally { setIsBusy(false); }
   };
@@ -747,7 +769,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       setProposedSyllabus(result);
       setSyllabusFeedback('');
     } catch (e) { 
-      setErrorModal({ title: 'O Oráculo Calou-se', message: "Falha na conexão com os deuses antigos. Tente novamente.", isAlert: true }); 
+      setErrorModal({ title: 'Falha de Conexão', message: "Falha na conexão com a IA. Tente novamente.", isAlert: true }); 
     }
     finally { setIsBusy(false); }
   };
@@ -809,7 +831,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     const topic = clearedSubject.topics.find(t => t.id === topicId);
     
     const contextText = clearedSubject.sourceMaterials
-      ? `\n\nMATERIAIS DE BASE OBRIGATÓRIOS (Textos Sagrados):\nAs questões geradas DEVEM refletir e focar primariamente nos conceitos encontrados nos textos a seguir:\n${clearedSubject.sourceMaterials}`
+      ? `\n\nMATERIAIS DE BASE OBRIGATÓRIOS:\nAs questões geradas DEVEM refletir e focar primariamente nos conceitos encontrados nos textos a seguir:\n${clearedSubject.sourceMaterials}`
       : '';
 
     const FULL_SYSTEM_PROMPT = getFullPromptText(true) + contextText + `\n\nInstruções específicas para esta geração (refazer com foco): ${additionalPrompt}`;
@@ -825,8 +847,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       await updateSubjectState(updatedSubject);
       setShowSummary(false);
     } catch (e) { 
-      if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida pelos Deuses.", isAlert: true });
-      else setErrorModal({ title: 'A Invocação Falhou', message: "A conexão foi interrompida pelo tempo ou pelos Deuses. Tente novamente.", isAlert: true });
+      if (e.message === "API_KEY_INVALID") setErrorModal({ title: 'Chave Inválida', message: "A chave secreta fornecida nas configurações não foi reconhecida.", isAlert: true });
+      else setErrorModal({ title: 'Falha na Geração', message: "A conexão foi interrompida. Tente novamente.", isAlert: true });
     } finally { 
       setIsBusy(false); 
     }
@@ -836,15 +858,15 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
     const parsed = parseData(pasteInputText);
     if (parsed.questions.length === 0) {
       setErrorModal({
-        title: "Pergaminho Ilegível",
-        message: "O Oráculo não compreendeu estes símbolos. Assegure-se de que os deuses antigos aprovariam a estrutura (## Questão, A), B), Alternativa correta:, Explicação:).",
+        title: "Arquivo Ilegível",
+        message: "Não foi possível compreender o texto. Verifique se a estrutura está correta (## Questão, A), B), Alternativa correta:, Explicação:).",
         isAlert: true
       });
       return;
     }
     
-    const subjectName = pasteSubjectName.trim() || 'Pergaminhos Sem Nome';
-    const topicName = pasteTopicName.trim() || `Sessão de Provações (${new Date().toLocaleDateString()})`;
+    const subjectName = pasteSubjectName.trim() || 'Assunto Importado';
+    const topicName = pasteTopicName.trim() || `Bloco (${new Date().toLocaleDateString()})`;
 
     const newTopic = {
       id: `imported-${Date.now()}`,
@@ -926,8 +948,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             <h1 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Ágora do Saber</h1>
             <p className="opacity-70 text-sm">
               {loginView === 'login' 
-                ? "Atravesse os portões e acesse seus pergaminhos sagrados." 
-                : "Apresente-se aos deuses. Escolha seu nome de estudioso e oferte sua chave."}
+                ? "Acesse sua conta para explorar seus estudos." 
+                : "Crie seu perfil para acessar o Oráculo."}
             </p>
           </div>
 
@@ -961,17 +983,17 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             ) : (
               <div className="animate-in fade-in slide-in-from-bottom-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50">Nome de Estudioso</label>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50">Nome de Usuário</label>
                   <input 
                     type="text" 
                     value={signupUsername}
                     onChange={(e) => setSignupUsername(e.target.value)}
-                    placeholder="Ex: SEU NOME NÉ PORRA" 
+                    placeholder="Ex: JOÃO SILVA" 
                     className={`w-full p-4 rounded-xl border uppercase font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (API Key)</label>
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave de API (Oráculo)</label>
                   <input 
                     type="password" 
                     value={signupApiKey}
@@ -981,7 +1003,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   />
                 </div>
                 <div className={`p-4 rounded-lg text-xs leading-relaxed ${darkMode ? 'bg-yellow-900/20 text-yellow-200' : 'bg-yellow-50 text-yellow-800'}`}>
-                  <strong>Por que preciso de uma API Key?</strong> A Ágora precisa que cada usuário tenha uma API gratuita (do contrário eu teria que pagar por cada pergunta mobral que você faz pra IA) e por isso exige uma "chave" para conectar ao cérebro do Oráculo (Google AI Studio). Crie gratuitamente em: <br/>
+                  <strong>Por que preciso de uma API Key?</strong> O Oráculo precisa de uma chave gratuita para funcionar e estruturar suas questões na nuvem da IA. Crie a sua gratuitamente em: <br/>
                   <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold break-all">aistudio.google.com/app/apikey</a>
                 </div>
 
@@ -990,10 +1012,10 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   disabled={!signupUsername.trim() || !signupApiKey.trim()}
                   className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2 disabled:opacity-50"
                 >
-                  Forjar Identidade
+                  Criar Perfil
                 </button>
                 <button onClick={handleLogout} className="w-full py-3 opacity-60 hover:opacity-100 font-bold text-sm">
-                  Recuar
+                  Voltar
                 </button>
               </div>
             )}
@@ -1033,15 +1055,15 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {/* VIEW: MAIN LIBRARY (ROOT) */}
         {view === 'library' && (
           <div className="animate-in fade-in">
-            <div className="mb-10 text-center">
+            <div className="mb-10 text-center flex flex-col items-center justify-center">
               <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
-              <p className="opacity-60 mb-6">Escolha o seu caminho do conhecimento.</p>
+              <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl mx-auto">
                 <button onClick={() => setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center justify-center gap-3">
-                  <Sparkles className="w-6 h-6" /> Invocar Assunto (Gemini)
+                  <Sparkles className="w-6 h-6" /> Gerar Assunto
                 </button>
                 <button onClick={() => { setPasteSubjectName(''); setPasteTopicName('Bloco 1'); setView('paste'); }} className={`flex-1 py-4 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-3 ${darkMode ? 'bg-gray-800 text-white hover:bg-gray-700 border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50'}`}>
-                  <ClipboardList className="w-6 h-6 text-yellow-600" /> Decifrar Pergaminho (Externo)
+                  <Feather className="w-6 h-6 text-yellow-600" /> Importar Questões
                 </button>
               </div>
             </div>
@@ -1052,7 +1074,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   <Landmark className="w-12 h-12 text-yellow-600" />
                 </div>
                 <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Acervo do Oráculo</h3>
-                <p className="text-sm opacity-60">Assuntos e sumários gerados pelo Gemini.</p>
+                <p className="text-sm opacity-60">Assuntos e tópicos gerados via IA.</p>
                 <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${statsBadge}`}>{library.filter(s=>s.source === 'gemini').length} Pastas</div>
               </div>
 
@@ -1060,8 +1082,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform">
                   <Folder className="w-12 h-12 text-yellow-600" />
                 </div>
-                <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Pergaminhos Externos</h3>
-                <p className="text-sm opacity-60">Pastas e blocos importados manualmente de IAs externas.</p>
+                <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Acervo Externo</h3>
+                <p className="text-sm opacity-60">Questões e listas coladas de outras fontes.</p>
                 <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${statsBadge}`}>{library.filter(s=>s.source === 'external').length} Pastas</div>
               </div>
             </div>
@@ -1069,7 +1091,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             <div className="mt-12 flex justify-center animate-in fade-in">
               <button onClick={copyPromptToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all border ${darkMode ? 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt ? 'ring-2 ring-yellow-500 text-yellow-600' : ''}`}>
                 {copiedPrompt ? <CheckCircle2 className="w-5 h-5 text-yellow-500" /> : <Copy className="w-5 h-5" />}
-                {copiedPrompt ? "Prece Copiada!" : "Copiar Prece ao Oráculo (Prompt)"}
+                {copiedPrompt ? "Prompt Copiado!" : "Copiar Prompt"}
               </button>
             </div>
             {copiedPrompt && <p className="text-center text-xs mt-2 opacity-50">Cole no ChatGPT ou DeepSeek para obter as provações.</p>}
@@ -1081,16 +1103,22 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           <div className="animate-in slide-in-from-right">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
               <div>
-                <button onClick={() => setView('library')} className={`flex items-center gap-2 mb-4 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
+                <button onClick={() => setView('library')} className={`flex items-center gap-2 mb-4 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
                 <h2 className="text-3xl font-serif font-bold text-yellow-600">
-                  {libraryFilter === 'gemini' ? 'Acervo do Oráculo' : 'Pergaminhos Externos'}
+                  {libraryFilter === 'gemini' ? 'Acervo do Oráculo' : 'Acervo Externo'}
                 </h2>
                 <p className="opacity-60 mt-1">Selecione uma pasta para estudar.</p>
               </div>
               {libraryFilter === 'gemini' ? (
-                <button onClick={() => setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><Sparkles className="w-4 h-4" /> Novo Panteão</button>
+                <button onClick={() => setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><Sparkles className="w-4 h-4" /> Gerar Assunto</button>
               ) : (
-                <button onClick={() => { setPasteSubjectName(''); setPasteTopicName('Bloco 1'); setView('paste'); }} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Novos Escritos</button>
+                <button onClick={() => { 
+                  const exts = library.filter(s => s.source === 'external').sort((a,b) => b.id - a.id);
+                  const lastExt = exts.length > 0 ? exts[0] : null;
+                  setPasteSubjectName(lastExt && lastExt.id !== 'imported-folder' ? lastExt.title : ''); 
+                  setPasteTopicName(`Bloco ${lastExt ? lastExt.topics.length + 1 : 1}`); 
+                  setView('paste'); 
+                }} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2"><Feather className="w-4 h-4" /> Importar Questões</button>
               )}
             </div>
 
@@ -1121,9 +1149,9 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {/* VIEW: PASTE EXTERNAL */}
         {view === 'paste' && (
           <div className="animate-in slide-in-from-right max-w-3xl mx-auto">
-            <button onClick={() => setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Desistir da Jornada</button>
-            <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2 flex items-center gap-3"><ClipboardList className="w-8 h-8"/> Decifrar Pergaminho Externo</h2>
-            <p className="opacity-60 mb-6">Crie uma nova pasta ou adicione tópicos a uma existente colando questões de outras IAs.</p>
+            <button onClick={() => setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
+            <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2 flex items-center gap-3"><Feather className="w-8 h-8"/> Importar Questões</h2>
+            <p className="opacity-60 mb-6">Crie um novo assunto ou adicione blocos a um existente colando questões.</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div className="w-full">
@@ -1136,7 +1164,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   }} 
                   onFocus={() => setShowSubjectSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSubjectSuggestions(false), 200)}
-                  placeholder="Pasta Principal (Assunto) - Opcional" 
+                  placeholder="Assunto Principal (Opcional)" 
                   className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'}`} 
                 />
                 {showSubjectSuggestions && externalFolderNames.filter(n => n.toLowerCase().includes(pasteSubjectName.toLowerCase())).length > 0 && (
@@ -1174,8 +1202,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             />
             
             <div className="mt-6 flex justify-end">
-              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors px-8 py-4 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
-                <Folder className="w-5 h-5" /> Gravar nas Pedras
+              <button onClick={handlePasteImport} disabled={!pasteInputText.trim()} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white p-4 rounded-xl font-bold shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                <Folder className="w-5 h-5" /> Salvar Importação
               </button>
             </div>
           </div>
@@ -1184,7 +1212,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {/* VIEW: SUBJECT (PASTA INTERNA) */}
         {view === 'subject' && activeSubject && (
           <div className="animate-in slide-in-from-right">
-            <button onClick={() => { setLibraryFilter(activeSubject.source); setView('sub-library'); }} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
+            <button onClick={() => { setLibraryFilter(activeSubject.source); setView('sub-library'); }} className={`flex items-center gap-2 mb-6 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
             
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
               <div>
@@ -1196,7 +1224,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     </button>
                   )}
                 </div>
-                <p className="opacity-60">{activeSubject.source === 'gemini' ? 'Sumário Estruturado pelo Oráculo' : 'Subpastas Importadas'}</p>
+                <p className="opacity-60">{activeSubject.source === 'gemini' ? 'Estrutura elaborada pelo Oráculo' : 'Blocos de questões importadas'}</p>
               </div>
               {activeSubject.source === 'external' && (
                 <button onClick={() => { 
@@ -1204,7 +1232,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   setPasteTopicName(`Bloco ${activeSubject.topics.length + 1}`);
                   setView('paste'); 
                 }} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-yellow-700 transition-all flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4" /> Novos Escritos
+                  <Feather className="w-4 h-4" /> Importar Questões
                 </button>
               )}
             </div>
@@ -1220,7 +1248,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0"><ScrollText className="w-5 h-5" /></div>
                     <div className="truncate">
                       <h4 className="font-bold text-sm truncate">{topic.title}</h4>
-                      <p className="text-xs opacity-50">{topic.questions.length > 0 ? `${Object.keys(topic.answers).length}/${topic.questions.length} respondidas` : 'Silêncio - Aguardando os Deuses'}</p>
+                      <p className="text-xs opacity-50">{topic.questions.length > 0 ? `${Object.keys(topic.answers).length}/${topic.questions.length} respondidas` : 'Nenhuma questão resolvida'}</p>
                     </div>
                   </div>
                   <div className="h-2 w-24 md:w-32 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
@@ -1237,7 +1265,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           <div className="animate-in fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 border-b border-gray-200 dark:border-gray-700 pb-6">
               <div>
-                <button onClick={() => setView('subject')} className={`flex items-center gap-2 mb-2 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Retornar</button>
+                <button onClick={() => setView('subject')} className={`flex items-center gap-2 mb-2 font-bold transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4" /> Voltar</button>
                 <div className="flex items-center gap-3">
                   <h2 className="text-2xl font-serif font-bold text-yellow-600">{activeTopic.title}</h2>
                   <button onClick={() => { setEditingTopicId(activeTopic.id); setEditingTopicName(activeTopic.title); }} className={`p-2 rounded-full transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500 hover:bg-gray-800' : 'text-gray-500 hover:text-yellow-600 hover:bg-gray-100'}`}>
@@ -1248,17 +1276,17 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 {activeTopic.questions.length > 0 && (
                   <button onClick={() => setDeleteId({type:'reset_topic', id:activeTopic.id})} className="flex-1 sm:flex-none flex justify-center items-center gap-2 p-2 px-4 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-bold text-sm">
-                    <Eraser className="w-4 h-4" /> Purificar
+                    <Eraser className="w-4 h-4" /> Limpar Respostas
                   </button>
                 )}
                 {activeTopic.questions.length > 0 && activeSubject.source === 'gemini' && (
                   <button onClick={() => setRegenerateModalOpen(true)} className="flex-1 sm:flex-none flex justify-center items-center gap-2 p-2 px-4 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 rounded-lg transition-colors font-bold text-sm">
-                    <RotateCcw className="w-4 h-4" /> Refazer
+                    <RotateCcw className="w-4 h-4" /> Recriar
                   </button>
                 )}
                 {activeTopic.questions.length === 0 && activeSubject.source === 'gemini' && (
                   <button onClick={() => generateTopicBatch(activeTopic.id)} disabled={isBusy} className="w-full sm:w-auto bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex justify-center items-center gap-2">
-                    {isBusy ? <Spinner className="w-4 h-4 text-white" /> : <Flame className="w-5 h-5"/>} {isBusy ? 'Invocando...' : 'Invocar Provações'}
+                    {isBusy ? <Spinner className="w-4 h-4 text-white" /> : <Flame className="w-5 h-5"/>} {isBusy ? 'Consultando...' : 'Gerar Questões'}
                   </button>
                 )}
               </div>
@@ -1268,7 +1296,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             {isBusy && activeTopic.questions.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 animate-in zoom-in">
                 <Spinner className="w-12 h-12 text-yellow-600 mb-4" />
-                <p className="text-lg font-serif font-bold text-yellow-600">O Oráculo está forjando suas provações...</p>
+                <p className="text-lg font-serif font-bold text-yellow-600">O Oráculo está elaborando suas questões...</p>
               </div>
             )}
 
@@ -1285,7 +1313,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                      <p className="text-sm md:text-base mb-8 opacity-80 max-w-lg mx-auto">
                        Você demonstrou a sabedoria de Atena e a determinação de Hércules. O Oráculo está satisfeito com sua jornada e preparou a essência do conhecimento final para você.
                      </p>
-                     {!showSummary && <button onClick={() => setShowSummary(true)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold">Ver Consolidação</button>}
+                     {!showSummary && <button onClick={() => setShowSummary(true)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold">Ver Resumo Final</button>}
                      {showSummary && activeTopic.summary && (
                        <div className={`mt-8 text-left p-6 md:p-8 rounded-2xl border ${darkMode ? 'bg-gray-800 border-yellow-600' : 'bg-yellow-50 border-yellow-300'}`}>
                           <div className="text-base leading-relaxed font-medium">{formatText(activeTopic.summary, darkMode)}</div>
@@ -1301,18 +1329,18 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
         {/* VIEW: CREATOR (INVOCAR ASSUNTO GEMINI) */}
         {view === 'creator' && (
           <div className="animate-in slide-in-from-bottom max-w-2xl mx-auto">
-            <button onClick={abortCreation} className={`mb-6 font-bold flex items-center gap-2 transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/> Desistir da Jornada</button>
+            <button onClick={abortCreation} className={`mb-6 font-bold flex items-center gap-2 transition-colors ${darkMode ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/> Cancelar</button>
             {creatorStep === 1 ? (
               <div className="space-y-6">
                 <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3">
                   <Sparkles className="w-8 h-8" />
-                  Invocar Assunto (Gemini)
+                  Gerar Novo Assunto
                 </h2>
-                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Nome do Novo Panteão (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
+                <input type="text" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} placeholder="Título do Assunto (ex: Nefrologia)" className={`w-full p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} outline-none focus:ring-2 focus:ring-yellow-500`} />
                 
                 {/* Upload Section */}
                 <div className="relative">
-                  <div className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Textos Sagrados (Copie & Cole textos ou Oferende Arquivos PDF, DOCX, TXT)</div>
+                  <div className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Material de Referência (Cole textos ou envie PDFs, DOCX, TXT)</div>
                   
                   {uploadedFiles.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -1330,11 +1358,11 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     value={materialText} 
                     onChange={(e) => setMaterialText(e.target.value)} 
                     onPaste={handlePaste}
-                    placeholder="Insira o néctar ou suas anotações aqui..." 
+                    placeholder="Cole o conteúdo base, anotações ou transcrições aqui..." 
                     className={`w-full h-48 p-4 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'} resize-none outline-none focus:ring-2 focus:ring-yellow-500`} 
                   />
                   
-                  <button onClick={() => fileInputRef.current.click()} title="Oferendar arquivos (PDF, DOCX, TXT, MD)" className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 transition-colors">
+                  <button onClick={() => fileInputRef.current.click()} title="Enviar arquivos (PDF, DOCX, TXT, MD)" className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 transition-colors">
                     <FileUp className="w-5 h-5" />
                   </button>
                   <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx" />
@@ -1342,13 +1370,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
 
                 <button onClick={handleStartCreation} disabled={isBusy || isUploading || !newSubjectName} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy || isUploading ? <Spinner className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5" />} 
-                  {isBusy ? 'Consultando as Estrelas...' : (isUploading ? 'Decifrando Arquivos...' : 'Gerar Proposta de Sumário')}
+                  {isBusy ? 'Consultando o Oráculo...' : (isUploading ? 'Processando Arquivos...' : 'Gerar Estrutura de Estudos')}
                 </button>
               </div>
             ) : (
               <div className="space-y-6">
-                <h2 className="text-2xl font-serif font-bold text-yellow-600">O Mapa da Jornada</h2>
-                <p className="opacity-60 mb-6">Analise os caminhos propostos. Dialogue com o Oráculo abaixo para ajustar seu destino.</p>
+                <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura de Estudos Gerada</h2>
+                <p className="opacity-60 mb-6">Analise o índice sugerido. Solicite ajustes ao Oráculo se desejar.</p>
                 
                 <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm leading-relaxed overflow-y-auto whitespace-pre-wrap ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-200 text-gray-800'}`}>
                   {proposedSyllabus}
@@ -1358,7 +1386,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                   <textarea 
                     value={syllabusFeedback} 
                     onChange={(e) => setSyllabusFeedback(e.target.value)} 
-                    placeholder="Suplique aos deuses por mudanças na jornada..." 
+                    placeholder="Digite aqui se desejar mudar a quantidade de blocos, a ordem ou os temas..." 
                     className={`w-full h-24 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'}`} 
                   />
                   <button onClick={handleReviseSyllabus} disabled={!syllabusFeedback.trim() || isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 disabled:opacity-50">
@@ -1367,8 +1395,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 </div>
 
                 <div className="flex gap-4 mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
-                  <button onClick={() => setCreatorStep(1)} className={`flex-1 py-4 font-bold rounded-xl transition-colors ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}>Retornar</button>
-                  <button onClick={finalizeSubject} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-yellow-700 transition-colors">Selar os Pergaminhos</button>
+                  <button onClick={() => setCreatorStep(1)} className={`flex-1 py-4 font-bold rounded-xl transition-colors ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}>Voltar</button>
+                  <button onClick={finalizeSubject} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-yellow-700 transition-colors">Confirmar e Salvar Assunto</button>
                 </div>
               </div>
             )}
@@ -1380,11 +1408,11 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
           <div className="animate-in fade-in max-w-xl mx-auto space-y-8">
             <div className="flex items-center gap-4 mb-8">
               <button onClick={() => setView('library')} className={`p-2 rounded-full hover:scale-110 transition-transform ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`}><ArrowLeft className="w-5 h-5" /></button>
-              <h2 className="text-3xl font-serif font-bold text-yellow-600">Leis do Oráculo</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600">Configurações do Oráculo</h2>
             </div>
             
             <div className="col-span-2">
-              <label className="block text-xs font-bold uppercase mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave Divina (Gemini API Key)</label>
+              <label className="block text-xs font-bold uppercase mb-2 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/> Chave de API (Oráculo)</label>
               <input
                 type="password"
                 value={settings.apiKey}
@@ -1392,7 +1420,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 placeholder="Cole sua chave AI Studio secreta aqui..."
                 className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
               />
-              <p className="text-[11px] mt-2 opacity-60">Para invocar a IA em suas próprias terras (Vercel), os Deuses exigem um tributo. Obtenha sua chave gratuita em: aistudio.google.com/app/apikey. Ela repousa segura, apenas no cofre deste navegador.</p>
+              <p className="text-[11px] mt-2 opacity-60">Para utilizar a inteligência artificial diretamente no site, insira sua API Key gratuita do Google. Pegue a sua em: aistudio.google.com/app/apikey.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1444,7 +1472,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra (Diretrizes Adicionais)</label>
               <textarea value={settings.customPrompt} onChange={(e) => setSettings({...settings, customPrompt: e.target.value})} placeholder="Ex: Priorize exames laboratoriais na explicação..." className={`w-full h-32 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
             </div>
-            <button onClick={() => { saveSettingsGlobal(settings); setView('library'); }} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Gravar nas Pedras</button>
+            <button onClick={() => { saveSettingsGlobal(settings); setView('library'); }} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold shadow-md transition-colors">Salvar Configurações</button>
           </div>
         )}
       </main>
@@ -1464,8 +1492,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       {/* MODAIS GERAIS DE CONFIRMAÇÃO */}
       {deleteId && deleteId.type === 'subject' && (
         <GrecianModal 
-          title="Expurgar Pasta?" 
-          message="Esta ação queimará este registro para sempre na biblioteca." 
+          title="Expurgar Assunto?" 
+          message="Esta ação removerá permanentemente este assunto da sua biblioteca." 
           confirmText="Expurgar" 
           onConfirm={() => {
             removeSubjectState(deleteId.id);
@@ -1478,9 +1506,9 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
 
       {deleteId && deleteId.type === 'reset_topic' && (
         <GrecianModal 
-          title="Purificar Provações?" 
-          message="Deseja apagar todas as marcações para refazer este bloco?" 
-          confirmText="Expurgar Tudo" 
+          title="Limpar Progresso?" 
+          message="Deseja apagar todas as marcações de resposta para refazer as questões deste bloco?" 
+          confirmText="Limpar Tudo" 
           onConfirm={() => {
             resetAnswers();
             setDeleteId(null);
@@ -1498,8 +1526,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
                 <RotateCcw className="w-8 h-8 text-yellow-600" />
               </div>
-              <h3 className="text-2xl font-serif font-bold mb-2">Reinvocar Tópico</h3>
-              <p className="mb-6 opacity-70 text-sm">Cuidado: As provações atuais deste tópico serão varridas da história. Informe aos deuses se deseja um novo foco.</p>
+              <h3 className="text-2xl font-serif font-bold mb-2">Recriar Bloco</h3>
+              <p className="mb-6 opacity-70 text-sm">Cuidado: As questões atuais deste bloco serão perdidas e substituídas. Insira um foco abaixo caso deseje direcionar o Oráculo.</p>
               
               <textarea
                 value={regeneratePrompt}
@@ -1509,13 +1537,13 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
               />
               
               <div className="flex gap-4 w-full">
-                <button onClick={() => setRegenerateModalOpen(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}>Recuar</button>
+                <button onClick={() => setRegenerateModalOpen(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
                 <button onClick={() => {
                   setRegenerateModalOpen(false);
                   generateTopicBatch(activeTopic.id, regeneratePrompt);
                   setRegeneratePrompt('');
                 }} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center gap-2">
-                  <Sparkles className="w-4 h-4"/> Reinvocar
+                  <Sparkles className="w-4 h-4"/> Recriar
                 </button>
               </div>
             </div>
@@ -1526,8 +1554,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       {/* MODAL PARA RENOMEAR PASTA */}
       {editingSubjectId && (
         <GrecianModal 
-          title="Renomear Pergaminho" 
-          message="Insira um novo nome de registro para sua pasta:" 
+          title="Renomear Assunto" 
+          message="Insira um novo nome para esta pasta de assunto:" 
           confirmText="Renomear" 
           onConfirm={handleEditSubject} 
           onCancel={() => { setEditingSubjectId(null); setEditingSubjectName(''); }} 
@@ -1546,8 +1574,8 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
       {/* MODAL PARA RENOMEAR SUBPASTA (TÓPICO) */}
       {editingTopicId && (
         <GrecianModal 
-          title="Renomear Subpasta" 
-          message="Insira um novo nome para este bloco de provações:" 
+          title="Renomear Bloco" 
+          message="Insira um novo nome para este bloco:" 
           confirmText="Renomear" 
           onConfirm={handleEditTopic} 
           onCancel={() => { setEditingTopicId(null); setEditingTopicName(''); }} 
