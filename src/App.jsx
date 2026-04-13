@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 // --- Configuração Oficial do Firebase do Usuário ---
@@ -14,21 +14,21 @@ const firebaseConfig = {
   measurementId: "G-X7CEZMXVL1"
 };
 
-// Inicialização
-const app = initializeApp(firebaseConfig);
+// Inicialização Segura (Evita crash ao salvar/recarregar no Canvas)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- Ícones Temáticos (Grécia / Filosofia) ---
 const Landmark = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>);
 const Flame = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>);
-const ScrollText = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5"/><path d="M15 12h-5"/></svg>);
+const ScrollText = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5"/><path d="M15 12h-5"/></svg>);
 const Folder = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>);
 const CheckCircle2 = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>);
 const XCircle = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>);
 const BookOpen = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>);
 const ArrowLeft = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>);
-const SettingsIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+const SettingsIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
 const Trash2 = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>);
 const RotateCcw = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>);
 const Sun = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>);
@@ -44,6 +44,14 @@ const Key = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="2
 const LogOut = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
 const UserIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 const GoogleIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>);
+const Shield = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
+
+const Spinner = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{ animation: 'spin-animation 1s linear infinite', transformOrigin: 'center' }}>
+    <style>{`@keyframes spin-animation { 100% { transform: rotate(360deg); } }`}</style>
+    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+  </svg>
+);
 
 // --- API Gemini ---
 // O modelo agora aponta para a versão pública e estável do Gemini.
@@ -267,7 +275,16 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
 // --- APP PRINCIPAL ---
 
 export default function QuestionBankApp() {
-  const [darkMode, setDarkMode] = useState(() => JSON.parse(localStorage.getItem('qb_darkmode') || 'false'));
+  const isCanvasEnvironment = window.location.hostname.includes('scf.usercontent.goog') || window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1';
+
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const val = localStorage.getItem('qb_darkmode');
+      return val ? JSON.parse(val) : false;
+    } catch(e) {
+      return false;
+    }
+  });
   const mainBg = darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900";
   const headerBg = darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
   const titleColor = darkMode ? "text-yellow-500" : "text-yellow-700";
@@ -335,17 +352,32 @@ export default function QuestionBankApp() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
-        try {
-          const userDoc = await getDoc(doc(db, 'users', u.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUsername(data.username.toUpperCase());
-            setSettings(prev => ({ ...prev, ...data.settings, apiKey: data.apiKey }));
+        if (u.isAnonymous) {
+          const localUser = localStorage.getItem('qb_username');
+          if (localUser) {
+             setUsername(localUser.toUpperCase());
+             try {
+               const localSettings = localStorage.getItem(`qb_settings_${localUser}`);
+               if (localSettings) {
+                   setSettings({ ...defaultSettings, ...JSON.parse(localSettings) });
+               }
+             } catch(e) {}
           } else {
-            setLoginView('signup');
+             setLoginView('signup');
           }
-        } catch (e) {
-          console.error("Erro ao checar usuário no Firebase:", e);
+        } else {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', u.uid));
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              setUsername(data.username.toUpperCase());
+              setSettings(prev => ({ ...prev, ...data.settings, apiKey: data.apiKey }));
+            } else {
+              setLoginView('signup');
+            }
+          } catch (e) {
+            console.error("Erro ao checar usuário no Firebase:", e);
+          }
         }
       } else {
         setUser(null);
@@ -360,6 +392,27 @@ export default function QuestionBankApp() {
   // Sync Library
   useEffect(() => {
     if (!user || !username) return;
+
+    if (user.isAnonymous) {
+       let localLib = [];
+       try {
+         const stored = localStorage.getItem(`qb_lib_${username}`);
+         if (stored) localLib = JSON.parse(stored);
+       } catch(e) {}
+       
+       if (localLib.length === 0) {
+          setLibrary([{
+             id: 'imported-folder',
+             title: 'Pergaminhos Diversos',
+             fullSyllabus: 'Coleção de provações trazidas de outras dimensões.',
+             source: 'external',
+             topics: []
+          }]);
+       } else {
+          setLibrary(localLib);
+       }
+       return;
+    }
 
     const libRef = collection(db, 'users', user.uid, 'library');
     const unsubLib = onSnapshot(libRef, (snapshot) => {
@@ -395,22 +448,38 @@ export default function QuestionBankApp() {
     }
   };
 
+  const handleAnonymousLogin = async () => {
+    try {
+      await signInAnonymously(auth);
+    } catch (e) {
+      console.error("Erro no login anônimo:", e);
+      setErrorModal({ title: 'Erro de Autenticação', message: "Os deuses não permitiram sua entrada anônima. Verifique se o login Anônimo está ativado no Firebase.", isAlert: true });
+    }
+  };
+
   const handleCompleteRegistration = async () => {
     if(!signupUsername.trim() || !signupApiKey.trim() || !user) return;
     const cleanName = signupUsername.trim().toUpperCase();
     const newSettings = { ...defaultSettings };
     
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        username: cleanName,
-        apiKey: signupApiKey.trim(),
-        settings: newSettings
-      });
-      setUsername(cleanName);
-      setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
-    } catch(e) {
-      console.error(e);
-      setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao selar seu registro nos servidores.", isAlert: true });
+    if (user.isAnonymous) {
+       localStorage.setItem('qb_username', cleanName);
+       localStorage.setItem(`qb_settings_${cleanName}`, JSON.stringify({...newSettings, apiKey: signupApiKey.trim()}));
+       setUsername(cleanName);
+       setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
+    } else {
+       try {
+         await setDoc(doc(db, 'users', user.uid), {
+           username: cleanName,
+           apiKey: signupApiKey.trim(),
+           settings: newSettings
+         });
+         setUsername(cleanName);
+         setSettings({ ...newSettings, apiKey: signupApiKey.trim() });
+       } catch(e) {
+         console.error(e);
+         setErrorModal({ title: 'Erro ao Gravar', message: "Falha ao selar seu registro nos servidores.", isAlert: true });
+       }
     }
   };
 
@@ -421,39 +490,46 @@ export default function QuestionBankApp() {
     setView('library');
     setSignupUsername('');
     setSignupApiKey('');
+    localStorage.removeItem('qb_username');
   };
 
   // --- MUTATIONS ---
   const updateSubjectState = async (updatedSubject) => {
     setLibrary(prev => prev.map(s => s.id === updatedSubject.id ? updatedSubject : s));
-    if (user) {
+    if (user && !user.isAnonymous) {
       try {
         await setDoc(doc(db, 'users', user.uid, 'library', updatedSubject.id.toString()), updatedSubject);
       } catch(e) { console.error(e); }
+    } else if (user && user.isAnonymous) {
+       localStorage.setItem(`qb_lib_${username}`, JSON.stringify(library.map(s => s.id === updatedSubject.id ? updatedSubject : s)));
     }
   };
 
   const addSubjectState = async (newSubject) => {
     setLibrary(prev => [newSubject, ...prev]);
-    if (user) {
+    if (user && !user.isAnonymous) {
       try {
         await setDoc(doc(db, 'users', user.uid, 'library', newSubject.id.toString()), newSubject);
       } catch(e) { console.error(e); }
+    } else if (user && user.isAnonymous) {
+       localStorage.setItem(`qb_lib_${username}`, JSON.stringify([newSubject, ...library]));
     }
   };
 
   const removeSubjectState = async (subjId) => {
     setLibrary(prev => prev.filter(s => s.id !== subjId));
-    if (user) {
+    if (user && !user.isAnonymous) {
       try {
         await deleteDoc(doc(db, 'users', user.uid, 'library', subjId.toString()));
       } catch(e) { console.error(e); }
+    } else if (user && user.isAnonymous) {
+       localStorage.setItem(`qb_lib_${username}`, JSON.stringify(library.filter(s => s.id !== subjId)));
     }
   };
 
   const saveSettingsGlobal = async (newSettings) => {
     setSettings(newSettings);
-    if (user) {
+    if (user && !user.isAnonymous) {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           username: username,
@@ -466,6 +542,8 @@ export default function QuestionBankApp() {
           }
         }, { merge: true });
       } catch(e) { console.error(e); }
+    } else if (user && user.isAnonymous) {
+       localStorage.setItem(`qb_settings_${username}`, JSON.stringify(newSettings));
     }
   };
 
@@ -804,7 +882,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
   if (!authReady) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-900 text-yellow-500' : 'bg-gray-50 text-yellow-600'}`}>
-        <div className="w-12 h-12 border-4 border-current border-t-transparent rounded-full animate-spin"></div>
+        <Spinner className="w-12 h-12 text-current" />
       </div>
     );
   }
@@ -828,12 +906,31 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
 
           <div className="space-y-5">
             {loginView === 'login' ? (
-               <button 
-                onClick={handleGoogleLogin} 
-                className={`w-full py-4 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-3 border ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50'}`}
-              >
-                <GoogleIcon className="w-6 h-6" /> Entrar com Google
-              </button>
+              <div className="space-y-4">
+                 <button 
+                  onClick={handleGoogleLogin} 
+                  className={`w-full py-4 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-3 border ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50'}`}
+                >
+                  <GoogleIcon className="w-6 h-6" /> Entrar com Google
+                </button>
+
+                {isCanvasEnvironment && (
+                  <>
+                    <div className="relative flex py-2 items-center">
+                        <div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div>
+                        <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase tracking-widest font-bold">Ou (Para testes)</span>
+                        <div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div>
+                    </div>
+
+                    <button 
+                      onClick={handleAnonymousLogin} 
+                      className="w-full bg-stone-700 hover:bg-stone-800 text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex justify-center gap-2"
+                    >
+                      Entrar como Convidado (Canvas)
+                    </button>
+                  </>
+                )}
+              </div>
             ) : (
               <div className="animate-in fade-in slide-in-from-bottom-4 space-y-4">
                 <div>
@@ -1103,7 +1200,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 )}
                 {activeTopic.questions.length === 0 && activeSubject.source === 'gemini' && (
                   <button onClick={() => generateTopicBatch(activeTopic.id)} disabled={isBusy} className="w-full sm:w-auto bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex justify-center items-center gap-2">
-                    {isBusy ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <Flame className="w-5 h-5"/>} {isBusy ? 'Invocando...' : 'Invocar Provações'}
+                    {isBusy ? <Spinner className="w-4 h-4 text-white" /> : <Flame className="w-5 h-5"/>} {isBusy ? 'Invocando...' : 'Invocar Provações'}
                   </button>
                 )}
               </div>
@@ -1112,7 +1209,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
             {/* ESTADO DE CARREGAMENTO */}
             {isBusy && activeTopic.questions.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 animate-in zoom-in">
-                <div className="w-12 h-12 border-4 border-yellow-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <Spinner className="w-12 h-12 text-yellow-600 mb-4" />
                 <p className="text-lg font-serif font-bold text-yellow-600">O Oráculo está forjando suas provações...</p>
               </div>
             )}
@@ -1186,7 +1283,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                 </div>
 
                 <button onClick={handleStartCreation} disabled={isBusy || isUploading || !newSubjectName} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">
-                  {isBusy || isUploading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <Sparkles className="w-5 h-5" />} 
+                  {isBusy || isUploading ? <Spinner className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5" />} 
                   {isBusy ? 'Consultando as Estrelas...' : (isUploading ? 'Decifrando Arquivos...' : 'Gerar Proposta de Sumário')}
                 </button>
               </div>
@@ -1207,7 +1304,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
                     className={`w-full h-24 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200'}`} 
                   />
                   <button onClick={handleReviseSyllabus} disabled={!syllabusFeedback.trim() || isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg shadow-md hover:bg-yellow-700 disabled:opacity-50">
-                    {isBusy ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <Send className="w-5 h-5" />}
+                    {isBusy ? <Spinner className="w-5 h-5 text-white" /> : <Send className="w-5 h-5" />}
                   </button>
                 </div>
 
