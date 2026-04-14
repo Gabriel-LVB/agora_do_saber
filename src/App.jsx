@@ -282,7 +282,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode }) =
       </div>
       {isAnswered && <div className={`mt-6 p-4 md:p-5 ${expBoxBg} rounded-xl border animate-in fade-in`}>
         <h4 className="font-bold text-yellow-600 mb-3 flex items-center gap-2 uppercase text-sm"><BookOpen className="w-4 h-4" /> Sabedoria:</h4>
-        <div className="text-sm md:text-base">{formatText(question.explanation, darkMode)}</div>
+        <div className="text-base md:text-lg">{formatText(question.explanation, darkMode)}</div>
       </div>}
     </div>
   );
