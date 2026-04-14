@@ -1515,7 +1515,7 @@ Responda APENAS com o novo sumário ajustado, mantendo rigorosamente a estrutura
 
                 <div className="flex gap-4 mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
                   <button onClick={() => setCreatorStep(1)} className={`flex-1 py-4 font-bold rounded-xl transition-colors ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}>Voltar</button>
-                  <button onClick={finalizeSubject} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-yellow-700 transition-colors">Confirmar e Salvar Assunto</button>
+                  <button onClick={finalizeSubject} className="flex-[2] bg-yellow-600 text-white p-4 rounded-xl font-bold shadow-lg hover:bg-yellow-700 transition-colors">Confirmar e Salvar Assunto</button>
                 </div>
               </div>
             )}
