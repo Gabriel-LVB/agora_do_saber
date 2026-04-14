@@ -721,12 +721,12 @@ Para CADA UM desses ${s.numSubtopics} subtópicos, você DEVE gerar EXATAMENTE $
 O seu resultado final tem que ter EXATAMENTE um total de ${qCount} questões geradas. Sob nenhuma hipótese pare antes de completar as ${qCount} questões na tela.
 
 DIRETRIZES GERAIS (ESTUDO REVERSO):
-- Foco em aplicação de conhecimento e raciocínio clínico/básico estilo USMLE, Step 1, Step 2, NBME.
+- Foco em aplicação de conhecimento e raciocínio clínico/patológico/anatomico/farmacológico/etc estilo USMLE, Step 1, Step 2, NBME.
 - Enunciado claro, sem pegadinhas gramaticais. Melhor resposta única.
 - Alternativas homogêneas, plausíveis e com tamanho semelhante. OBRIGATÓRIO gerar EXATAMENTE ${numAlts} alternativas (de A até ${numAlts === 4 ? 'D' : 'E'}). 
 
 DIRETRIZES DA EXPLICAÇÃO (CONCISA E DIRETA):
-- A explicação deve servir como uma aula sobre o assunto.${tokenLimitInstruction}
+- A explicação deve servir como uma aula completa sobre o assunto, e deve servir para eu saber tudo que meus materiais dizem sobre ele.${tokenLimitInstruction}
 - É ESTRITAMENTE PROIBIDO se referir às letras das alternativas na explicação (ex: NUNCA diga "A alternativa A está errada..."). Em vez disso, cite o próprio termo (ex: "A Penicilina não é indicada porque...").
 - Explique o porquê da correta e dê os diferenciais que excluem as incorretas de forma unificada e ágil.
 
