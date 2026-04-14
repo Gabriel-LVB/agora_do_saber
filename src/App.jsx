@@ -743,7 +743,7 @@ Explicação:
 ### Resumo de Consolidação
 [Ao final de todas as ${qCount} questões, escreva um "Resumo de Consolidação" EXCLUSIVAMENTE em parágrafos de texto corrido. É PROIBIDO o uso de bullet points ou listas].
 
-${s.customPrompt ? `Contexto Extra do Usuário: ${s.customPrompt}` : ''}`;
+${s.customPrompt ? `Além disso, siga essas instruções: ${s.customPrompt}` : ''}`;
   };
 
   const copyPromptToClipboard = () => {
