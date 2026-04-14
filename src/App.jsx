@@ -731,7 +731,6 @@ DIRETRIZES DA EXPLICAÇÃO (CONCISA E DIRETA):
 - Explique o porquê da correta e dê os diferenciais que excluem as incorretas de forma unificada e ágil.
 
 TEMPLATE DE SAÍDA OBRIGATÓRIO:
-### Subtópico [X.Y] - [Nome do Subtópico]
 ## Questão [X.Y.Z]
 [Texto do Enunciado]
 ${alternativesTemplate}
