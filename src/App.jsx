@@ -262,7 +262,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Questão {question.id}</span>
-          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Não respondida</span>}
+          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onToggleFavorite} className={`p-1 rounded-full transition-colors ${isFavorite?'text-red-500':'text-gray-300 hover:text-red-400'}`}><Heart className="w-5 h-5" filled={isFavorite}/></button>
@@ -277,6 +277,11 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             if (isSelected && revealMode==='selected') cls += darkMode?'border-blue-500 bg-blue-900/20 text-blue-100':'border-blue-400 bg-blue-50 text-blue-900';
             else cls += darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-yellow-500':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400';
             if (revealMode==='selected') cls += ' cursor-pointer';
+          } else if (isSkipped) {
+            // Em branco: all neutral, correct gets a soft green border only
+            cls += 'cursor-default ';
+            if (opt.isCorrect) cls += darkMode?'border-green-700 bg-green-900/10 text-gray-300':'border-green-300 bg-green-50/50 text-gray-700';
+            else cls += darkMode?'border-gray-700 text-gray-500 opacity-50':'border-gray-100 text-gray-400 opacity-60';
           } else {
             cls += 'cursor-default ';
             if (opt.isCorrect) cls += darkMode?'border-green-500 bg-green-900/20 text-green-100':'border-green-500 bg-green-50 text-green-900';
@@ -284,10 +289,15 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             else cls += 'opacity-40';
           }
           const canClick = (!isAnswered && !isSkipped) || revealMode==='selected';
+          // Letter badge color
+          let letterBadge = darkMode?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600';
+          if (showResults && !isSkipped && opt.isCorrect) letterBadge = 'bg-green-500 text-white';
+          else if (showResults && !isSkipped && isSelected) letterBadge = 'bg-red-500 text-white';
+          else if (showResults && isSkipped && opt.isCorrect) letterBadge = darkMode?'bg-green-800 text-green-300':'bg-green-100 text-green-700';
+          else if (isSelected && revealMode==='selected') letterBadge = 'bg-blue-500 text-white';
           return (
             <button key={opt.letter} disabled={!canClick} onClick={()=>canClick&&onAnswer(opt.letter)} className={cls}>
-              <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm
-                ${showResults&&opt.isCorrect?'bg-green-500 text-white':(showResults&&isSelected?'bg-red-500 text-white':(isSelected&&revealMode==='selected'?'bg-blue-500 text-white':(darkMode?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600')))}`}>
+              <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
                 {opt.letter}
               </div>
               <div className="pt-1 flex-1 leading-snug text-sm md:text-base">{parseHtmlText(opt.text,darkMode)}</div>
@@ -302,7 +312,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             {isCorrect
               ? <span className="text-xs text-green-600 font-bold">✓ Correto</span>
               : isSkipped
-                ? <span className="text-xs text-gray-400 font-bold">— Não respondida</span>
+                ? <span className="text-xs text-gray-400 font-bold">— Em branco</span>
                 : <span className="text-xs text-red-500 font-bold">✗ Incorreto</span>
             }
           </div>
@@ -541,6 +551,8 @@ export default function QuestionBankApp() {
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(()=>{ try { return JSON.parse(localStorage.getItem('qb_dark')||'false'); } catch(e){return false;} });
+  const [menuOpen, setMenuOpen] = useState(false);   // hamburger
+  const [headerVisible, setHeaderVisible] = useState(true); // hide on scroll down
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
   const hdr   = darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200';
   const badge = darkMode?'bg-gray-700 text-gray-200':'bg-gray-100 text-gray-800';
@@ -638,6 +650,19 @@ export default function QuestionBankApp() {
     document.body.style.backgroundColor=darkMode?'#111827':'#fafaf9';
     localStorage.setItem('qb_dark',JSON.stringify(darkMode));
   },[darkMode]);
+
+  // Hide header on scroll down, show on scroll up (mobile UX)
+  useEffect(()=>{
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY && y > 60) setHeaderVisible(false);
+      else setHeaderVisible(true);
+      lastY = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Exam timer
   useEffect(()=>{
@@ -952,7 +977,6 @@ export default function QuestionBankApp() {
     setTimeout(()=>generateBatch(focusTopic.id, weakData),500);
   };
 
-  // Flashcard generation
   // Exam
   const startExam = (items,qCount,time) => {
     // Bug 6: include _subjectId and _topicId so favorites can be toggled during exam
@@ -1027,30 +1051,74 @@ export default function QuestionBankApp() {
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${bg}`}>
       {/* HEADER */}
-      <header className={`${hdr} border-b sticky top-0 z-20 p-4 shadow-sm`}>
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>setView('library')}>
+      <header className={`${hdr} border-b sticky top-0 z-20 shadow-sm transition-transform duration-300 ${headerVisible?'translate-y-0':'-translate-y-full'}`}>
+        <div className="max-w-5xl mx-auto flex items-center justify-between px-4 py-3">
+          {/* Logo */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setView('library');setMenuOpen(false);}}>
             <div className="bg-yellow-600 p-1.5 rounded-lg shadow-md"><Landmark className="w-4 h-4 text-white"/></div>
             <h1 className={`font-serif font-bold text-lg tracking-wide ${darkMode?'text-yellow-500':'text-yellow-700'}`}>ÁGORA DO SABER</h1>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`hidden sm:flex items-center gap-2 text-xs font-bold mr-2 opacity-50 border-r pr-3 ${darkMode?'border-gray-700':'border-gray-300'}`}><UserIcon className="w-3 h-3"/>{username}</span>
+
+          {/* Desktop nav buttons */}
+          <div className="hidden md:flex items-center gap-1.5">
+            <span className={`flex items-center gap-2 text-xs font-bold mr-2 opacity-50 border-r pr-3 ${darkMode?'border-gray-700':'border-gray-300'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
-              {icon:<SearchIcon className="w-4 h-4"/>,  action:()=>setSearchOpen(true),  title:'Buscar (/)'},
-              {icon:<Heart className="w-4 h-4"/>,        action:()=>setView('favorites'), title:'Favoritos'},
-              {icon:<BarChart2 className="w-4 h-4"/>,    action:()=>setView('stats'),     title:'Estatísticas'},
-              {icon:<CalendarCheck className="w-4 h-4"/>,action:startReview,              title:'Revisão', badge:dueCount},
-              {icon:<SettingsIcon className="w-4 h-4"/>, action:()=>setView('settings'),  title:'Configurações'},
+              {icon:<SearchIcon className="w-4 h-4"/>,   action:()=>setSearchOpen(true), title:'Buscar'},
+              {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
+              {icon:<BarChart2 className="w-4 h-4"/>,     action:()=>setView('stats'),     title:'Estatísticas'},
+              {icon:<CalendarCheck className="w-4 h-4"/>, action:startReview,              title:'Revisão', badge:dueCount},
+              {icon:<SettingsIcon className="w-4 h-4"/>,  action:()=>setView('settings'),  title:'Configurações'},
               {icon:darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>, action:()=>setDarkMode(!darkMode), title:'Tema'},
-              {icon:<LogOut className="w-4 h-4"/>,       action:handleLogout,             title:'Sair', danger:true},
+              {icon:<LogOut className="w-4 h-4"/>,        action:handleLogout,             title:'Sair', danger:true},
             ].map((btn,i)=>(
               <button key={i} onClick={btn.action} title={btn.title} className={`relative p-2 rounded-full transition-all hover:scale-110 ${btn.danger?(darkMode?'bg-gray-800 hover:bg-gray-700 text-red-400':'bg-gray-100 hover:bg-gray-200 text-red-500'):(darkMode?'bg-gray-800 hover:bg-gray-700 text-yellow-500':'bg-gray-100 hover:bg-gray-200 text-yellow-600')}`}>
                 {btn.icon}
-                {btn.badge>0&&<span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{btn.badge>9?'9+':btn.badge}</span>}
+                {(btn.badge||0)>0&&<span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{btn.badge>9?'9+':btn.badge}</span>}
               </button>
             ))}
           </div>
+
+          {/* Mobile right: theme + hamburger */}
+          <div className="flex md:hidden items-center gap-1">
+            {dueCount>0&&(
+              <button onClick={startReview} className={`relative p-2 rounded-full ${darkMode?'bg-gray-800 text-yellow-500':'bg-gray-100 text-yellow-600'}`}>
+                <CalendarCheck className="w-5 h-5"/>
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{dueCount>9?'9+':dueCount}</span>
+              </button>
+            )}
+            <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full ${darkMode?'bg-gray-800 text-yellow-500':'bg-gray-100 text-yellow-600'}`}>
+              {darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>}
+            </button>
+            <button onClick={()=>setMenuOpen(!menuOpen)} className={`p-2 rounded-full ${darkMode?'bg-gray-800 text-yellow-500':'bg-gray-100 text-yellow-600'}`} aria-label="Menu">
+              {menuOpen
+                ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+              }
+            </button>
+          </div>
         </div>
+
+        {/* Mobile dropdown menu */}
+        {menuOpen&&(
+          <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+            <div className="px-4 py-2 grid grid-cols-2 gap-1">
+              {[
+                {icon:<SearchIcon className="w-5 h-5"/>,   label:'Buscar',        action:()=>setSearchOpen(true)},
+                {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
+                {icon:<BarChart2 className="w-5 h-5"/>,     label:'Estatísticas',  action:()=>setView('stats')},
+                {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
+                {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
+                {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
+              ].map((item,i)=>(
+                <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-900/20':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
+                  {item.icon}{item.label}
+                </button>
+              ))}
+            </div>
+            <div className={`px-6 py-3 border-t text-xs font-bold opacity-40 ${darkMode?'border-gray-700':'border-gray-100'}`}>{username}</div>
+          </div>
+        )}
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
@@ -1059,7 +1127,7 @@ export default function QuestionBankApp() {
         {view==='library'&&(
           <div>
             <div className="mb-10 text-center">
-              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos em geometria</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
                 <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
@@ -1183,7 +1251,6 @@ export default function QuestionBankApp() {
                   <h2 className="text-2xl font-serif font-bold text-yellow-600">{activeTopic.title}</h2>
                   <button onClick={()=>{setEditingTopic(activeTopic.id);setEditingTopicName(activeTopic.title);}} className="p-1.5 rounded-full text-gray-400 hover:text-yellow-500"><EditIcon className="w-4 h-4"/></button>
                 </div>
-                <p className="text-xs opacity-30 mt-1">Teclas: A B C D E ou 1 2 3 4 5 para responder</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {activeTopic.questions.length>0&&(
@@ -1640,7 +1707,7 @@ export default function QuestionBankApp() {
                           <h4 className="font-bold mb-4 opacity-70">Correções:</h4>
                           {activeExam.questions.map((q,i)=>(
                             <QuestionCard key={i} question={q} index={i}
-                              selectedLetter={activeExam.answers[q.id]==='SKIPPED'?undefined:activeExam.answers[q.id]}
+                              selectedLetter={activeExam.answers[q.id]}
                               onAnswer={()=>{}} darkMode={darkMode}
                               isFavorite={isExamQuestionFav(q)} onToggleFavorite={()=>handleExamFavorite(q)}
                               apiKey={getKey()} oracleLength={settings.oracleLength} revealMode="revealed"/>
