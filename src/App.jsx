@@ -1059,7 +1059,7 @@ export default function QuestionBankApp() {
         {view==='library'&&(
           <div>
             <div className="mb-10 text-center">
-              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos  em geometria</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos em geometria</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
                 <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
