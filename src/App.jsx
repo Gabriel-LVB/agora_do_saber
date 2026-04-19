@@ -844,15 +844,24 @@ export default function QuestionBankApp() {
     const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{}}:t)};
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
+
+    // Build subtopics injection — use stored list if available, otherwise fall back to count-only
+    const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
+    const hasSubtopics = subtopicsArr.length > 0;
+    const subtopicsBlock = hasSubtopics
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (você DEVE cobrir EXATAMENTE estes, um subtópico por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão deve tratar de UM subtópico específico da lista acima. NÃO repita subtópicos. NÃO invente subtópicos que não estejam na lista. Total: EXATAMENTE ${subtopicsArr.length} questões (${settingsRef.current.qPerSub} por subtópico).`
+      : '';
+
     const ctx=cleared.sourceMaterials?`\n\nMATERIAIS:\n${cleared.sourceMaterials}`:'';
-    const PROMPT=getPrompt(true)+ctx+(addPrompt?`\n\nFoco: ${addPrompt}`:'');
+    const PROMPT=getPrompt(true)+ctx+subtopicsBlock+(addPrompt?`\n\nFoco adicional: ${addPrompt}`:'');
+
     const keys=[settingsRef.current.apiKey1||settingsRef.current.apiKey,settingsRef.current.apiKey2,settingsRef.current.apiKey3].filter(k=>k?.trim());
     let err=null,ok=false;
     for(let i=0;i<keys.length;i++){
       try{
         const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,keys[i],(acc,qc)=>setStreamCount(qc));
         const p=parseData(full);
-        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{}}:t)});
+        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics}:t)});
         await saveSettings({...settingsRef.current,activeKeyIndex:i+1});
         setShowSummary(false);ok=true;break;
       }catch(e){err=e;if(e.message!=='QUOTA_EXCEEDED')break;}
@@ -883,11 +892,33 @@ export default function QuestionBankApp() {
     finally{setIsBusy(false);}
   };
   const finalizeSub = async () => {
-    const lines=syllabus.split('\n').filter(l=>/T[óo]pico\s*\d+/i.test(l));
-    const topics=lines.map((t,i)=>({id:`t-${i}-${Date.now()}`,title:t.replace(/[*#]/g,'').trim(),questions:[],answers:{},summary:'',favorites:[],spacedReview:{}}));
-    const ns={id:Date.now(),title:newSubName,fullSyllabus:syllabus,source:'gemini',sourceMaterials:getMaterial(),topics};
-    await addSubject(ns);setLibFilter('gemini');setView('sub-library');setCreatorStep(1);
-    setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);
+    const lines = syllabus.split('\n');
+    // Identify which lines are topic headers
+    const topicLineIndices = lines.reduce((acc, l, i) => {
+      if (/T[óo]pico\s*\d+/i.test(l)) acc.push(i);
+      return acc;
+    }, []);
+
+    const topics = topicLineIndices.map((lineIdx, topicPos) => {
+      const title = lines[lineIdx].replace(/[*#]/g,'').trim();
+      // Collect subtopic lines: everything between this topic header and the next one
+      const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
+      const subtopics = lines
+        .slice(lineIdx + 1, nextTopicIdx)
+        .map(l => l.replace(/^[\s*#\-–]+/, '').trim())  // strip leading symbols/spaces
+        .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l));
+      return {
+        id: `t-${topicPos}-${Date.now()}`,
+        title,
+        subtopics,  // ← stored per topic
+        questions: [], answers: {}, summary: '', favorites: [], spacedReview: {},
+      };
+    });
+
+    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', sourceMaterials: getMaterial(), topics };
+    await addSubject(ns);
+    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1);
+    setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]);
   };
 
   // Paste import
@@ -1226,6 +1257,7 @@ export default function QuestionBankApp() {
                           <p className="text-xs opacity-50">{topic.questions?.length?`${Object.keys(topic.answers||{}).length}/${topic.questions.length}`:'Sem questões'}</p>
                           {due>0&&<span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 rounded-full font-bold">{due} revisar</span>}
                           {(topic.favorites||[]).length>0&&<span className="text-xs text-red-400">♥{topic.favorites.length}</span>}
+                          {(topic.subtopics?.length>0)&&<span className="text-xs text-blue-400 dark:text-blue-500" title={topic.subtopics.join('\n')}>📋 {topic.subtopics.length} subtópicos</span>}
                         </div>
                       </div>
                     </div>
@@ -1270,6 +1302,22 @@ export default function QuestionBankApp() {
                 )}
               </div>
             </div>
+
+            {/* Show subtopics panel when no questions yet and subtopics are stored */}
+            {!isBusy&&activeTopic.questions.length===0&&(activeTopic.subtopics?.length>0)&&(
+              <div className={`mb-6 p-4 rounded-xl border ${darkMode?'bg-blue-900/20 border-blue-700':'bg-blue-50 border-blue-200'}`}>
+                <p className={`text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2 ${darkMode?'text-blue-400':'text-blue-600'}`}>
+                  📋 Subtópicos salvos — o Oráculo cobrirá exatamente estes:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {activeTopic.subtopics.map((sub,i)=>(
+                    <div key={i} className={`text-sm px-3 py-1.5 rounded-lg ${darkMode?'bg-blue-900/30 text-blue-200':'bg-white text-blue-800'}`}>
+                      <span className="opacity-40 mr-2">{i+1}.</span>{sub}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {isBusy&&activeTopic.questions.length===0&&(
               <div className="flex flex-col items-center py-20">
