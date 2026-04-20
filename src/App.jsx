@@ -769,7 +769,48 @@ export default function QuestionBankApp() {
   const getPrompt = (forAPI=false) => {
     const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões. VOCÊ ESTÁ PROIBIDO DE PARAR A GERAÇÃO ANTES DE ATINGIR EXATAMENTE ${total} QUESTÕES. VERIFIQUE A CONTAGEM ANTES DE FINALIZAR.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+  };
+
+  const getExternalPrompt = () => {
+    const s = settingsRef.current;
+    const na = s.numAlternatives || 5;
+    const alts = na === 4 ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]' : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+    return `[INSTRUÇÕES PARA IA EXTERNA - ÁGORA DO SABER]
+
+*** PARTE 1: ESTRUTURAÇÃO ***
+Atue como o Arquiteto de Alexandria. Crie um sumário focado em [INSERIR TEMA AQUI].
+O sumário deve conter EXATAMENTE ${s.numTopics} Tópicos principais, e cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos.
+Apresente apenas o sumário com 'Tópico X' no início de cada linha principal.
+Ao final da estruturação, aguarde minhas sugestões de alterações ou minha confirmação. NÃO gere as questões ainda.
+
+*** PARTE 2: GERAÇÃO DE QUESTÕES ***
+Após eu confirmar o sumário, você iniciará a geração das questões, PROCESSANDO UM TÓPICO POR VEZ a cada comando meu de "Próximo Tópico".
+
+Para cada tópico, use as seguintes diretrizes:
+Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.
+${getDiffInst()}
+
+REGRA MANDATÓRIA: Crie EXATAMENTE ${s.qPerSub} questão(ões) para CADA subtópico do tópico atual.
+NÃO pare a geração até ter coberto absolutamente todos os subtópicos do bloco atual!
+
+DIRETRIZES:
+- Raciocínio clínico estilo USMLE/Residência brasileira
+- EXATAMENTE ${na} alternativas homogêneas e plausíveis
+- NUNCA cite letras na explicação, use termos médicos
+- Embaralhe as alternativas aleatoriamente
+- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante
+
+TEMPLATE DE SAÍDA OBRIGATÓRIO:
+## Questão [X.Y.Z]
+[Enunciado clínico]
+${alts}
+Alternativa correta: [Letra]
+Explicação:
+[Explicação sem citar letras]
+---
+
+${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -835,11 +876,14 @@ export default function QuestionBankApp() {
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
 
-    // Build subtopics injection — use stored list if available, otherwise fall back to count-only
     const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
     const hasSubtopics = subtopicsArr.length > 0;
+    
+    // Calcula exatamente quantas questões deveriam vir
+    const expectedTotal = hasSubtopics ? subtopicsArr.length * settingsRef.current.qPerSub : settingsRef.current.numSubtopics * settingsRef.current.qPerSub;
+
     const subtopicsBlock = hasSubtopics
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (você DEVE cobrir EXATAMENTE estes, um subtópico por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão deve tratar de UM subtópico específico da lista acima. NÃO repita subtópicos. NÃO invente subtópicos que não estejam na lista. Total: EXATAMENTE ${subtopicsArr.length} questões (${settingsRef.current.qPerSub} por subtópico).`
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (você DEVE cobrir EXATAMENTE estes, um subtópico por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão deve tratar de UM subtópico específico da lista acima. NÃO repita subtópicos. Total esperado: EXATAMENTE ${expectedTotal} questões. NÃO OMITA NENHUM SUBTÓPICO.`
       : '';
 
     const ctx=cleared.sourceMaterials?`\n\nMATERIAIS:\n${cleared.sourceMaterials}`:'';
@@ -853,7 +897,17 @@ export default function QuestionBankApp() {
         const p=parseData(full);
         await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics}:t)});
         await saveSettings({...settingsRef.current,activeKeyIndex:i+1});
-        ok=true;break;
+        ok=true;
+        
+        // VERIFICAÇÃO SE O GEMINI ESTÁ DE PUTARIA
+        if (p.questions.length < expectedTotal) {
+          setErrorModal({
+            title: 'O Gemini tá de putaria!',
+            message: `Solicitamos ${expectedTotal} questões, mas o servidor gerou apenas ${p.questions.length}. A API provavelmente cortou a resposta no meio. Tente novamente mais tarde, ou use o botão 'Copiar Prompt' na tela inicial para gerar em uma IA externa (como ChatGPT/Claude) e use o botão 'Importar'.`,
+            isAlert: true
+          });
+        }
+        break;
       }catch(e){err=e;if(e.message!=='QUOTA_EXCEEDED')break;}
     }
     clearInterval(mi_int);setLoadingMsg('');setStreamCount(0);
@@ -1153,7 +1207,7 @@ export default function QuestionBankApp() {
               ))}
             </div>
             <div className="mt-8 flex justify-center">
-              <button onClick={()=>{navigator.clipboard.writeText(getPrompt());setCopiedPrompt(true);setTimeout(()=>setCopiedPrompt(false),3000);}} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${darkMode?'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300':'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>
+              <button onClick={()=>{navigator.clipboard.writeText(getExternalPrompt());setCopiedPrompt(true);setTimeout(()=>setCopiedPrompt(false),3000);}} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${darkMode?'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300':'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>
                 {copiedPrompt?<CheckCircle2 className="w-5 h-5 text-yellow-500"/>:<Copy className="w-5 h-5"/>}{copiedPrompt?'Copiado!':'Copiar Prompt'}
               </button>
             </div>
