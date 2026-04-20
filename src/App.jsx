@@ -68,12 +68,12 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 const MAX_MATERIAL_CHARS = 180000;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const DIFFICULTY_CONFIG = {
-  easy:   { label:'🌱 Básico',        cls:'text-green-600',  bg:'bg-green-100 dark:bg-green-900/30',  selBg:'bg-green-500',   inst:'DIFICULDADE: Básica. Reconhecimento de conceitos fundamentais, definições e achados clássicos. Evite casos ambíguos.' },
+  easy:   { label:'🌱 Básico',      cls:'text-green-600',  bg:'bg-green-100 dark:bg-green-900/30',  selBg:'bg-green-500',  inst:'DIFICULDADE: Básica. Reconhecimento de conceitos fundamentais, definições e achados clássicos. Evite casos ambíguos.' },
   medium: { label:'⚡ Intermediário', cls:'text-yellow-600', bg:'bg-yellow-100 dark:bg-yellow-900/30', selBg:'bg-yellow-500',  inst:'DIFICULDADE: Intermediária. Casos clínicos realistas. Nível internato e residência médica.' },
-  hard:   { label:'🔥 Avançado',      cls:'text-red-600',    bg:'bg-red-100 dark:bg-red-900/30',       selBg:'bg-red-500',     inst:'DIFICULDADE: Avançada. Casos complexos, apresentações atípicas, comorbidades, diagnósticos diferenciais difíceis.' },
+  hard:   { label:'🔥 Avançado',      cls:'text-red-600',    bg:'bg-red-100 dark:bg-red-900/30',        selBg:'bg-red-500',     inst:'DIFICULDADE: Avançada. Casos complexos, apresentações atípicas, comorbidades, diagnósticos diferenciais difíceis.' },
 };
 const ORACLE_LENGTH = {
-  short:  { label:'⚡ Curta',   inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
+  short:  { label:'⚡ Curta',  inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
   medium: { label:'📝 Média',   inst:'Responda em 1 parágrafo objetivo e bem estruturado.' },
   long:   { label:'📚 Detalhada', inst:'Responda de forma completa e didática, com exemplos clínicos quando relevante.' },
 };
@@ -249,7 +249,6 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
 const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal' }) => {
   // revealMode: 'normal' (immediate), 'selected' (blind - no green/red), 'revealed' (blind - show results)
-  // Fix 3: treat 'SKIPPED' as answered-wrong (show correct answer but no wrong highlight)
   const isSkipped = selectedLetter === 'SKIPPED';
   const effectiveLetter = isSkipped ? null : selectedLetter;
   const isAnswered = effectiveLetter != null;
@@ -434,86 +433,77 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
   );
 };
 
-// ─── INSIGHTS MODAL ───────────────────────────────────────────────────────────
-// cachedText: saved insight string (skip API call if present)
-// onSave: callback(text) — called after generating to persist in DB
-const InsightsModal = ({ context, data, apiKey, darkMode, onClose, onCreateFocus, cachedText, onSave }) => {
-  const [text, setText] = useState(cachedText||'');
+// ─── BIZUÁRIO MODAL ───────────────────────────────────────────────────────────
+const BizuarioModal = ({ topicTitle, subjectTitle, apiKey, darkMode, onClose, cachedText, onSave }) => {
+  const [text, setText] = useState(cachedText || '');
   const [loading, setLoading] = useState(!cachedText);
-  const [phase, setPhase] = useState(cachedText?'done':'loading');
+  const [phase, setPhase] = useState(cachedText ? 'done' : 'loading');
   const wasCached = !!cachedText;
 
-  useEffect(()=>{
-    if (cachedText) return; // Bug 1: use cache, skip API
+  useEffect(() => {
+    if (cachedText) return;
     const run = async () => {
       try {
-        const sys = `Você é o Oráculo da Ágora do Saber, mentor clínico. Analise o desempenho e responda em português com seções claras. Use **negrito** para termos importantes. Seja conciso e objetivo — máximo 400 palavras no total.`;
-        const prompt = `Analise este desempenho e forneça insights acionáveis:
+        const sys = `Você é o Oráculo da Ágora do Saber — editor do melhor material de revisão médica do mundo, no estilo AnKing, First Aid e Mehlman. Escreva em português brasileiro. Seja absolutamente denso e high-yield: cada frase deve conter informação cobrada em prova. PROIBIDO fluff, introduções, conclusões ou frases de efeito. Use **negrito** para termos-chave, valores, critérios diagnósticos e mecanismos críticos.`;
 
-CONTEXTO: ${context}
+        const prompt = `Crie o BIZUÁRIO de "${topicTitle}"${subjectTitle ? ` (${subjectTitle})` : ''}.
 
-DADOS:
-${data}
+FORMATO OBRIGATÓRIO:
+- Parágrafos corridos, densos, sem listas com bullet
+- Cada parágrafo aborda um ângulo: fisiopatologia, apresentação clínica, diagnóstico, tratamento, diferencial — o que for high-yield para o tema
+- Máximo 500 palavras no total
+- Inclua valores numéricos, critérios e associações clássicas quando existirem
+- Escreva como quem está passando o bizu antes da prova, não como quem está explicando para um leigo
+- Se houver esquemas ou associações mnemônicas úteis (tipo "3 Ds de...", "pensar em X quando Y"), inclua-os naturalmente no texto`;
 
-💪 **PONTOS FORTES**
-(2-3 áreas onde o estudante se destaca)
-
-🔴 **ÁREAS CRÍTICAS**
-(2-3 pontos que precisam atenção urgente, com nomes dos tópicos)
-
-📚 **RECOMENDAÇÕES**
-(3 ações práticas e concretas)
-
-🎯 **FOCO AGORA**
-(1 tópico prioritário e por quê)`;
         const r = await callGemini(prompt, sys, apiKey);
+        
+        // Proteção contra resposta vazia (evita quebrar o Firebase)
+        if (!r) throw new Error("EMPTY_RESPONSE");
+
         setText(r);
         setPhase('done');
-        if (onSave) onSave(r); // Bug 1: persist
-      } catch(e) { setText('Não foi possível gerar insights agora. Verifique sua API Key.'); setPhase('done'); }
-      finally { setLoading(false); }
+        if (onSave) onSave(r);
+      } catch(e) {
+        setText('Não foi possível gerar o bizuário, provavelmente por erro no servidor do Gemini. Tente novamente mais tarde.');
+        setPhase('done');
+      } finally { setLoading(false); }
     };
     run();
-  },[]); // eslint-disable-line
+  }, []); // eslint-disable-line
 
   return (
-    // Bug 2: backdrop click closes modal
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
         className={`w-full max-w-2xl rounded-2xl border flex flex-col ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
         style={{maxHeight:'85vh'}}
-        onClick={e=>e.stopPropagation()} // Bug 2: don't close when clicking inside
+        onClick={e=>e.stopPropagation()}
       >
-        {/* Header */}
         <div className={`flex items-center justify-between p-5 border-b flex-shrink-0 ${darkMode?'border-gray-700':'border-gray-200'}`}>
           <h3 className="text-lg font-serif font-bold text-yellow-600 flex items-center gap-2">
             <BrainIcon className="w-5 h-5"/>
-            Insights do Oráculo
-            {wasCached && <span className={`text-xs font-normal px-2 py-0.5 rounded-full ml-1 ${darkMode?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>salvo</span>}
+            Bizuário — {topicTitle}
+            {wasCached && <span className={`text-xs font-normal px-2 py-0.5 rounded-full ml-1 ${darkMode?'bg-green-900/40 text-green-400':'bg-green-100 text-green-700'}`}>✓ salvo</span>}
           </h3>
-          {/* Bug 2: visible close button */}
           <button onClick={onClose} className={`p-2 rounded-full font-bold text-lg leading-none transition-colors ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
         </div>
 
-        {/* Bug 2: scrollable content area */}
         <div className="flex-1 overflow-y-auto p-5 min-h-0">
           {loading ? (
             <div className="flex flex-col items-center py-10">
               <Spinner className="w-10 h-10 text-yellow-600 mb-4"/>
-              <p className="text-yellow-600 font-serif font-bold">O Oráculo está analisando...</p>
+              <p className="text-yellow-600 font-serif font-bold">O Oráculo está destilando o bizu...</p>
             </div>
           ) : (
-            // Bug 2: use parseHtmlTextChat for proper line breaks + bold, not whitespace-pre-wrap
-            <div className={`text-base leading-relaxed space-y-1 ${darkMode?'text-gray-200':'text-gray-800'}`}>
+            <div className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>
               {parseHtmlTextChat(text, darkMode)}
             </div>
           )}
         </div>
 
-        {phase==='done' && (
-          <div className={`p-5 border-t flex-shrink-0 flex flex-col sm:flex-row gap-3 ${darkMode?'border-gray-700':'border-gray-200'}`}>
-            <button onClick={onCreateFocus} className="flex-1 flex items-center justify-center gap-2 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 text-sm"><Sparkles className="w-4 h-4"/>Criar Bateria Focada</button>
-            <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold text-sm ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Fechar</button>
+        {phase === 'done' && (
+          <div className={`p-4 border-t flex-shrink-0 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+            <button onClick={onClose} className={`w-full py-3 rounded-xl font-bold text-sm ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Fechar</button>
           </div>
         )}
       </div>
@@ -595,7 +585,7 @@ export default function QuestionBankApp() {
   const [loadingMsg, setLoadingMsg]   = useState('');
   const [streamCount, setStreamCount] = useState(0);
   const [deleteId, setDeleteId]       = useState(null);
-  const [showSummary, setShowSummary] = useState(false);
+
   const [errorModal, setErrorModal]   = useState(null);
   const [regenModal, setRegenModal]   = useState(false);
   const [regenPrompt, setRegenPrompt] = useState('');
@@ -634,8 +624,8 @@ export default function QuestionBankApp() {
   // Export
   const [exportModal, setExportModal]   = useState(null); // { topic, subject }
 
-  // Insights
-  const [insightsModal, setInsightsModal] = useState(null); // { context, data }
+  // Bizuário
+  const [bizuarioModal, setBizuarioModal] = useState(null); // { topicTitle, subjectTitle, cachedText, onSave }
 
   const fileInputRef  = useRef(null);
   const imageInputRef = useRef(null);
@@ -779,7 +769,7 @@ export default function QuestionBankApp() {
   const getPrompt = (forAPI=false) => {
     const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n### Resumo de Consolidação\n[Parágrafos corridos, mas com poucas palavras estilo mehlman, pathoma ou first aid. O intuito aqui é resumir o que tenho que saber pra cada questão mas em poucas palavras, como uma "cola". PROIBIDO bullet points]\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -829,7 +819,7 @@ export default function QuestionBankApp() {
   };
 
   // Bug 1: also clear cached insights — they're based on old answers and would be stale
-  const resetAnswers = async () => { await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},insights:null}:t)});setShowSummary(false); };
+  const resetAnswers = async () => { await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},bizuario:null}:t)}); };
   const resetOnlyWrong = async () => {
     const wrong=(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).map(q=>q.id);
     const na=Object.fromEntries(Object.entries(activeTopic.answers||{}).filter(([k])=>!wrong.includes(k)));
@@ -863,7 +853,7 @@ export default function QuestionBankApp() {
         const p=parseData(full);
         await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics}:t)});
         await saveSettings({...settingsRef.current,activeKeyIndex:i+1});
-        setShowSummary(false);ok=true;break;
+        ok=true;break;
       }catch(e){err=e;if(e.message!=='QUOTA_EXCEEDED')break;}
     }
     clearInterval(mi_int);setLoadingMsg('');setStreamCount(0);
@@ -971,39 +961,25 @@ export default function QuestionBankApp() {
     return {tQ,tA,tC,pct:tA>0?Math.round(tC/tA*100):0,bySubject,due:getDueReviews().length};
   };
 
-  // Insights — Bug 1: check cache first, save after generation
-  // Bug 7: accepts optional overrideData (e.g. from exam results) skipping topicData
-  const openInsights = (context, topicData, overrideData) => {
-    if(!checkKey())return;
-    let data = overrideData || '';
-    if (!overrideData) {
-      if (topicData) {
-        const {topic,subject} = topicData;
-        const qs=topic.questions||[];
-        const wrong=qs.filter(q=>{ const a=topic.answers?.[q.id]; return a&&a!==q.options.find(o=>o.isCorrect)?.letter; });
-        const correct=qs.filter(q=>topic.answers?.[q.id]===q.options.find(o=>o.isCorrect)?.letter);
-        data=`Tópico: ${topic.title}\nAssunto: ${subject?.title||''}\nTotal: ${qs.length} questões\nRespondidas: ${Object.keys(topic.answers||{}).length}\nCorretas: ${correct.length}\nErradas: ${wrong.length}\n\nQUESTÕES ERRADAS:\n${wrong.map(q=>`- ${q.statement.substring(0,100)}... | Explicação: ${q.explanation.substring(0,150)}...`).join('\n')}`;
-      } else {
-        const stats=getStats();
-        data=`Desempenho geral: ${stats.tC}/${stats.tA} corretas (${stats.pct}%)\n\nPOR TÓPICO:\n${Object.values(stats.bySubject).flatMap(s=>s.topics).sort((a,b)=>a.pct-b.pct).map(t=>`${t.subjectTitle} > ${t.title}: ${t.correct}/${t.answered} (${t.pct}%)`).join('\n')}`;
-      }
-    }
-    // Bug 1: pass cached insights (if topic-level) and a save callback
-    const cachedText = (topicData && !overrideData) ? topicData.topic.insights : null;
-    const onSave = (topicData && !overrideData)
-      ? (txt) => updateSubject({...topicData.subject, topics: topicData.subject.topics.map(t => t.id===topicData.topic.id ? {...t, insights: txt} : t)})
-      : null;
-    setInsightsModal({context, data, topicData, cachedText, onSave});
+  // Open Bizuário — cached in topic.bizuario
+  const openBizuario = (topic, subject) => {
+    if (!checkKey()) return;
+    const cachedText = topic.bizuario || null;
+    const onSave = (txt) => updateSubject({
+      ...subject,
+      topics: subject.topics.map(t => t.id === topic.id ? { ...t, bizuario: txt || null } : t)
+    });
+    setBizuarioModal({ topicTitle: topic.title, subjectTitle: subject?.title || '', cachedText, onSave });
   };
 
   const createFocusedBatch = async (topicData) => {
     if(!checkKey())return;
-    const weakData = topicData ? `Foco no tópico: ${topicData.topic.title}` : 'Foco nas áreas com menor desempenho identificadas nos insights';
+    const weakData = topicData ? `Foco no tópico: ${topicData.topic.title}` : 'Foco nas áreas com menor desempenho';
     const focusSubject = library.find(s=>s.title==='📌 Focos de Estudo') || {id:Date.now(),title:'📌 Focos de Estudo',source:'gemini',fullSyllabus:'Baterias focadas geradas por IA.',topics:[]};
-    const focusTopic = {id:`focus-${Date.now()}`,title:`Foco: ${topicData?.topic.title||new Date().toLocaleDateString()}`,questions:[],answers:{},summary:'',favorites:[],spacedReview:{}};
+    const focusTopic = {id:`focus-${Date.now()}`,title:`Foco: ${topicData?.topic.title||new Date().toLocaleDateString()}`,questions:[],answers:{},favorites:[],spacedReview:{}};
     const updated = {...focusSubject,topics:[...focusSubject.topics,focusTopic]};
     if(!library.find(s=>s.title==='📌 Focos de Estudo')) await addSubject(updated); else await updateSubject(updated);
-    setActiveSubjectId(updated.id); setActiveTopicId(focusTopic.id); setInsightsModal(null);
+    setActiveSubjectId(updated.id); setActiveTopicId(focusTopic.id); setBizuarioModal(null);
     setView('topic');
     setTimeout(()=>generateBatch(focusTopic.id, weakData),500);
   };
@@ -1094,7 +1070,7 @@ export default function QuestionBankApp() {
           <div className="hidden md:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 opacity-50 border-r pr-3 ${darkMode?'border-gray-700':'border-gray-300'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
-              {icon:<SearchIcon className="w-4 h-4"/>,   action:()=>setSearchOpen(true), title:'Buscar'},
+              {icon:<SearchIcon className="w-4 h-4"/>,    action:()=>setSearchOpen(true), title:'Buscar'},
               {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
               {icon:<BarChart2 className="w-4 h-4"/>,     action:()=>setView('stats'),     title:'Estatísticas'},
               {icon:<CalendarCheck className="w-4 h-4"/>, action:startReview,              title:'Revisão', badge:dueCount},
@@ -1139,7 +1115,7 @@ export default function QuestionBankApp() {
                 {icon:<BarChart2 className="w-5 h-5"/>,     label:'Estatísticas',  action:()=>setView('stats')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
-                {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
+                {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',      action:handleLogout, danger:true},
               ].map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-900/20':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
@@ -1239,7 +1215,7 @@ export default function QuestionBankApp() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={()=>openInsights(`Assunto: ${activeSubject.title}`,null)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${darkMode?'border-purple-700 text-purple-400 hover:bg-purple-900/20':'border-purple-300 text-purple-600 hover:bg-purple-50'}`}><BrainIcon className="w-4 h-4"/>Insights</button>
+                <button onClick={()=>openBizuario(activeSubject.topics[0]||{title:activeSubject.title,bizuario:null}, activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BrainIcon className="w-4 h-4"/>Bizuário</button>
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
               </div>
             </div>
@@ -1288,7 +1264,7 @@ export default function QuestionBankApp() {
                 {activeTopic.questions.length>0&&(
                   <>
                     <button onClick={()=>setExportModal({topic:activeTopic,subject:activeSubject})} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${darkMode?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Printer className="w-4 h-4"/>Exportar</button>
-                    <button onClick={()=>openInsights(`Tópico: ${activeTopic.title}`,{topic:activeTopic,subject:activeSubject})} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${activeTopic.insights?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-purple-700 text-purple-400 hover:bg-purple-900/20':'border-purple-300 text-purple-600 hover:bg-purple-50')}`}><BrainIcon className="w-4 h-4"/>{activeTopic.insights?'Insights ✓':'Insights'}</button>
+                    <button onClick={()=>openBizuario(activeTopic,activeSubject)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${activeTopic.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeTopic.bizuario?'Bizuário ✓':'Bizuário'}</button>
                     {wrongCount>0&&<button onClick={()=>setShowOnlyWrong(!showOnlyWrong)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${showOnlyWrong?(darkMode?'bg-red-900/30 text-red-400 border-red-700':'bg-red-50 text-red-600 border-red-300'):(darkMode?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}><FilterIcon className="w-4 h-4"/>{showOnlyWrong?`Erradas (${wrongCount})`:`Filtrar (${wrongCount})`}</button>}
                     {showOnlyWrong&&wrongCount>0&&<button onClick={resetOnlyWrong} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700"><RotateCcw className="w-4 h-4"/>Refazer</button>}
                     <button onClick={()=>setDeleteId({type:'reset',id:activeTopic.id})} className="flex items-center gap-1.5 px-3 py-2 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-bold"><Eraser className="w-4 h-4"/>Limpar</button>
@@ -1339,10 +1315,9 @@ export default function QuestionBankApp() {
                     <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Provações Concluídas!</h3>
                     <p className="opacity-70 mb-6">{activeTopic.questions.filter(q=>activeTopic.answers?.[q.id]===q.options.find(o=>o.isCorrect)?.letter).length}/{activeTopic.questions.length} corretas ({Math.round(activeTopic.questions.filter(q=>activeTopic.answers?.[q.id]===q.options.find(o=>o.isCorrect)?.letter).length/activeTopic.questions.length*100)}%)</p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <button onClick={()=>setShowSummary(!showSummary)} className="bg-yellow-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-yellow-700">{showSummary?'Ocultar':'Ver'} Resumo</button>
-                      <button onClick={()=>openInsights(`Tópico: ${activeTopic.title}`,{topic:activeTopic,subject:activeSubject})} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-purple-600 text-white hover:bg-purple-700"><BrainIcon className="w-5 h-5"/>Insights do Oráculo</button>
+                      <button onClick={()=>openBizuario(activeTopic,activeSubject)} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700"><BrainIcon className="w-5 h-5"/>{activeTopic.bizuario?'Bizuário ✓':'Bizuário'}</button>
                     </div>
-                    {showSummary&&activeTopic.summary&&<div className={`mt-8 text-left p-6 rounded-2xl border ${darkMode?'bg-gray-800 border-yellow-600':'bg-yellow-50 border-yellow-300'}`}><div className="text-base leading-relaxed">{parseHtmlText(activeTopic.summary,darkMode)}</div></div>}
+
                   </div>
                 )}
               </div>
@@ -1465,15 +1440,6 @@ export default function QuestionBankApp() {
                 {favItems.length>0&&(
                   <div className="flex flex-wrap gap-2">
                     <button onClick={()=>setExportModal({topic:favTopic,subject:null})} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${darkMode?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Printer className="w-4 h-4"/>Exportar</button>
-                    <button
-                      onClick={()=>{
-                        if(!checkKey())return;
-                        const wrong=favItems.filter(({topic,question})=>{ const a=topic.answers?.[question.id]; return a&&a!==question.options.find(o=>o.isCorrect)?.letter; });
-                        const data=`Questões Favoritas\nTotal: ${favItems.length} | Respondidas: ${totalAnswered} | Corretas: ${totalCorrect}\nErradas: ${wrong.map(({question})=>question.statement.substring(0,100)).join('\n')}`;
-                        setInsightsModal({context:'Questões Favoritas',data,topicData:null,cachedText:null,onSave:null});
-                      }}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${darkMode?'border-purple-700 text-purple-400 hover:bg-purple-900/20':'border-purple-300 text-purple-600 hover:bg-purple-50'}`}
-                    ><BrainIcon className="w-4 h-4"/>Insights</button>
                     <button onClick={handleFavResetAll} className="flex items-center gap-1.5 px-3 py-2 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-bold"><Eraser className="w-4 h-4"/>Limpar</button>
                   </div>
                 )}
@@ -1529,7 +1495,6 @@ export default function QuestionBankApp() {
               <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-6 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><TrendingUp className="w-8 h-8"/>Desempenho</h2>
-                <button onClick={()=>openInsights('Desempenho geral',null)} className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-purple-600 text-white hover:bg-purple-700"><BrainIcon className="w-4 h-4"/>Insights</button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {[{l:'Total',v:stats.tQ,c:'text-yellow-600'},{l:'Respondidas',v:stats.tA,c:'text-blue-600'},{l:'Corretas',v:stats.tC,c:'text-green-600'},{l:'Aproveitamento',v:`${stats.pct}%`,c:stats.pct>=70?'text-green-600':stats.pct>=50?'text-yellow-600':'text-red-600'}].map(x=>(
@@ -1577,7 +1542,7 @@ export default function QuestionBankApp() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className={`text-sm font-bold ${t.pct>=70?'text-green-600':t.pct>=50?'text-yellow-600':'text-red-500'}`}>{t.answered>0?`${t.pct}%`:'–'}</span>
-                                <button onClick={()=>{const s=library.find(x=>x.id===t.subjectId);const tp=s?.topics.find(x=>x.id===t.id);if(tp)openInsights(`Tópico: ${tp.title}`,{topic:tp,subject:s});}} title="Insights" className={`p-1.5 rounded-lg ${darkMode?'text-purple-400 hover:bg-purple-900/20':'text-purple-500 hover:bg-purple-50'}`}><BrainIcon className="w-4 h-4"/></button>
+                                <button onClick={()=>{const s=library.find(x=>x.id===t.subjectId);const tp=s?.topics.find(x=>x.id===t.id);if(tp&&s)openBizuario(tp,s);}} title="Bizuário" className={`p-1.5 rounded-lg ${(()=>{const s=library.find(x=>x.id===t.subjectId);return s?.topics.find(x=>x.id===t.id)?.bizuario;})()?(darkMode?'text-green-400 hover:bg-green-900/20':'text-green-600 hover:bg-green-50'):(darkMode?'text-yellow-500 hover:bg-yellow-900/20':'text-yellow-600 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/></button>
                               </div>
                             </div>
                           ))}
@@ -1744,11 +1709,6 @@ export default function QuestionBankApp() {
                           </div>
                         ))}
                       </div>
-                      {/* Bug 7: Insights button in exam results */}
-                      <button
-                        onClick={()=>openInsights('Resultado de Prova', null, examData)}
-                        className={`w-full mb-3 flex items-center justify-center gap-2 py-3 rounded-xl font-bold border ${darkMode?'border-purple-700 text-purple-400 hover:bg-purple-900/20':'border-purple-300 text-purple-600 hover:bg-purple-50'}`}
-                      ><BrainIcon className="w-5 h-5"/>Insights desta Prova</button>
                       {/* Show corrections in blind mode after finish */}
                       {activeExam.blindMode&&(
                         <div className="mb-4 text-left">
@@ -1873,7 +1833,7 @@ export default function QuestionBankApp() {
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}
 
       {/* ── INSIGHTS MODAL ── */}
-      {insightsModal&&<InsightsModal context={insightsModal.context} data={insightsModal.data} apiKey={getKey()} darkMode={darkMode} onClose={()=>setInsightsModal(null)} onCreateFocus={()=>createFocusedBatch(insightsModal.topicData)} cachedText={insightsModal.cachedText} onSave={insightsModal.onSave}/>}
+      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave}/>}
 
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
