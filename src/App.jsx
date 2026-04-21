@@ -1264,7 +1264,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
           <div>
             <div className="mb-10 text-center">
               <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
-              <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
+              <p className="opacity-60 mb-6">Feito por Trikas e Xavier - Olhamos o abismo.</p>
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
                 <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
                 <button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border ${darkMode?'bg-gray-800 text-white hover:bg-gray-700 border-gray-700':'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'}`}><Feather className="w-5 h-5 text-yellow-600"/>Importar</button>
