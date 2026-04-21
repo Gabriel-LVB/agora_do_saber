@@ -68,12 +68,12 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 const MAX_MATERIAL_CHARS = 180000;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const DIFFICULTY_CONFIG = {
-  easy:   { label:'🌱 Básico',      cls:'text-green-600',  bg:'bg-green-100 dark:bg-green-900/30',  selBg:'bg-green-500',  inst:'DIFICULDADE: Básica. Reconhecimento de conceitos fundamentais, definições e achados clássicos. Evite casos ambíguos.' },
+  easy:   { label:'🌱 Básico',        cls:'text-green-600',  bg:'bg-green-100 dark:bg-green-900/30',  selBg:'bg-green-500',   inst:'DIFICULDADE: Básica. Reconhecimento de conceitos fundamentais, definições e achados clássicos. Evite casos ambíguos.' },
   medium: { label:'⚡ Intermediário', cls:'text-yellow-600', bg:'bg-yellow-100 dark:bg-yellow-900/30', selBg:'bg-yellow-500',  inst:'DIFICULDADE: Intermediária. Casos clínicos realistas. Nível internato e residência médica.' },
-  hard:   { label:'🔥 Avançado',      cls:'text-red-600',    bg:'bg-red-100 dark:bg-red-900/30',        selBg:'bg-red-500',     inst:'DIFICULDADE: Avançada. Casos complexos, apresentações atípicas, comorbidades, diagnósticos diferenciais difíceis.' },
+  hard:   { label:'🔥 Avançado',      cls:'text-red-600',    bg:'bg-red-100 dark:bg-red-900/30',       selBg:'bg-red-500',     inst:'DIFICULDADE: Avançada. Casos complexos, apresentações atípicas, comorbidades, diagnósticos diferenciais difíceis.' },
 };
 const ORACLE_LENGTH = {
-  short:  { label:'⚡ Curta',  inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
+  short:  { label:'⚡ Curta',   inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
   medium: { label:'📝 Média',   inst:'Responda em 1 parágrafo objetivo e bem estruturado.' },
   long:   { label:'📚 Detalhada', inst:'Responda de forma completa e didática, com exemplos clínicos quando relevante.' },
 };
@@ -249,6 +249,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
 const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal' }) => {
   // revealMode: 'normal' (immediate), 'selected' (blind - no green/red), 'revealed' (blind - show results)
+  // Fix 3: treat 'SKIPPED' as answered-wrong (show correct answer but no wrong highlight)
   const isSkipped = selectedLetter === 'SKIPPED';
   const effectiveLetter = isSkipped ? null : selectedLetter;
   const isAnswered = effectiveLetter != null;
@@ -433,8 +434,12 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
   );
 };
 
+// ─── INSIGHTS MODAL ───────────────────────────────────────────────────────────
+// cachedText: saved insight string (skip API call if present)
+// onSave: callback(text) — called after generating to persist in DB
 // ─── BIZUÁRIO MODAL ───────────────────────────────────────────────────────────
-const BizuarioModal = ({ topicTitle, subjectTitle, apiKey, darkMode, onClose, cachedText, onSave }) => {
+// High-yield topic summary (AnKing/First Aid/Mehlman style), cached in topic.bizuario
+const BizuarioModal = ({ topicTitle, subjectTitle, apiKey, darkMode, onClose, cachedText, onSave, onRotateKey }) => {
   const [text, setText] = useState(cachedText || '');
   const [loading, setLoading] = useState(!cachedText);
   const [phase, setPhase] = useState(cachedText ? 'done' : 'loading');
@@ -457,15 +462,12 @@ FORMATO OBRIGATÓRIO:
 - Se houver esquemas ou associações mnemônicas úteis (tipo "3 Ds de...", "pensar em X quando Y"), inclua-os naturalmente no texto`;
 
         const r = await callGemini(prompt, sys, apiKey);
-        
-        // Proteção contra resposta vazia (evita quebrar o Firebase)
-        if (!r) throw new Error("EMPTY_RESPONSE");
-
         setText(r);
         setPhase('done');
         if (onSave) onSave(r);
+        if (onRotateKey) onRotateKey(); // rotate after use
       } catch(e) {
-        setText('Não foi possível gerar o bizuário, provavelmente por erro no servidor do Gemini. Tente novamente mais tarde.');
+        setText('Não foi possível gerar o bizuário agora. Verifique sua API Key.');
         setPhase('done');
       } finally { setLoading(false); }
     };
@@ -512,13 +514,55 @@ FORMATO OBRIGATÓRIO:
 };
 
 // ─── GRACIAN MODAL ────────────────────────────────────────────────────────────
-const GModal = ({ title, message, onConfirm, onCancel, confirmText='Confirmar', darkMode, children, isAlert=false, actionLabel, onAction }) => (
+// "L" hand in sign language — icon for error modals
+const LHandIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    {/* Palm */}
+    <rect x="8" y="9" width="5" height="10" rx="2.5"/>
+    {/* Index finger pointing up */}
+    <rect x="8" y="2" width="3" height="9" rx="1.5"/>
+    {/* Thumb pointing right */}
+    <rect x="8" y="13" width="9" height="3" rx="1.5"/>
+  </svg>
+);
+
+// Error configs per type — titles, messages, actions
+const ERROR_CONFIGS = {
+  QUOTA_EXCEEDED: {
+    title: 'Cota da Chave Excedida',
+    message: 'Esta chave API atingiu o limite de requisições gratuitas (20/dia). Você pode:\n• Aguardar a renovação (reseta à meia-noite)\n• Cadastrar outra chave gratuita nas Configurações\n• Usar uma chave diferente da conta Google',
+    link: { label: 'Criar nova chave gratuita', url: 'https://aistudio.google.com/app/apikey' },
+  },
+  API_KEY_INVALID: {
+    title: 'Chave API Inválida',
+    message: 'A chave cadastrada não foi aceita pelo Gemini. Verifique:\n• Se a chave foi copiada corretamente (sem espaços)\n• Se a chave é de um projeto ativo no Google AI Studio\n• Se a API Gemini está habilitada no projeto',
+    link: { label: 'Verificar minhas chaves', url: 'https://aistudio.google.com/app/apikey' },
+  },
+  API_KEY_MISSING: {
+    title: 'Nenhuma Chave Cadastrada',
+    message: 'Você ainda não cadastrou uma chave API do Gemini. A chave é gratuita e necessária para gerar questões.',
+    link: { label: 'Criar chave gratuita agora', url: 'https://aistudio.google.com/app/apikey' },
+  },
+  SERVER_OVERLOADED: {
+    title: 'Servidores do Gemini Sobrecarregados',
+    message: 'O Gemini está temporariamente indisponível (erro 503). Este problema é no lado do Google e se resolve sozinho em alguns minutos. Aguarde 2–5 minutos e tente novamente.',
+    link: { label: 'Ver status do Google AI', url: 'https://status.cloud.google.com' },
+  },
+  CONNECTION_ERROR: {
+    title: 'Falha de Conexão',
+    message: 'Não foi possível conectar ao Gemini. Verifique sua conexão com a internet e tente novamente.',
+    link: null,
+  },
+};
+
+const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMode, children, isAlert=false, actionLabel, onAction, link }) => (
   <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4">
     <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}>
       <div className="flex flex-col items-center text-center">
-        <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4"><Flame className="w-8 h-8 text-yellow-600"/></div>
-        <h3 className="text-2xl font-serif font-bold mb-2">{title}</h3>
-        <p className="mb-6 opacity-70 text-sm">{message}</p>
+        <div className={`p-4 rounded-full mb-4 ${darkMode?'bg-yellow-900/30':'bg-yellow-100'}`}><Flame className="w-8 h-8 text-yellow-600"/></div>
+        <h3 className="text-xl font-serif font-bold mb-3">{title}</h3>
+        <p className="mb-4 opacity-70 text-sm whitespace-pre-line leading-relaxed">{message}</p>
+        {link&&<a href={link.url} target="_blank" rel="noreferrer" className="mb-4 text-sm font-bold text-yellow-600 hover:underline flex items-center gap-1">{link.label} ↗</a>}
         {children}
         <div className="flex gap-3 w-full mt-2">
           {!isAlert&&<button onClick={onCancel} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>}
@@ -754,11 +798,38 @@ export default function QuestionBankApp() {
 
   // ── API Key helpers ────────────────────────────────────────────────────────
   const getKey = () => { const s=settingsRef.current; const k=s.activeKeyIndex===2?s.apiKey2:(s.activeKeyIndex===3?s.apiKey3:(s.apiKey1||s.apiKey)); return k||s.apiKey1||s.apiKey2||s.apiKey3||s.apiKey; };
-  const checkKey = () => { if (!getKey()?.trim()){setErrorModal({title:'Oráculo sem Voz',message:'Insira sua Gemini API Key nas Configurações.',isAlert:true});return false;} return true; };
-  const handleQuota = (retry) => {
-    const s=settingsRef.current; const valid=[s.apiKey1||s.apiKey,s.apiKey2,s.apiKey3].filter(k=>k?.trim());
-    if(valid.length>1) setErrorModal({title:"Cota Excedida",message:"Deseja usar a próxima chave?",isAlert:false,actionLabel:"Usar Próxima",onAction:async()=>{setErrorModal(null);const ni=(s.activeKeyIndex%3)+1;await saveSettings({...s,activeKeyIndex:ni});retry();}});
-    else setErrorModal({title:"Cota Excedida",message:"Gere outra chave em aistudio.google.com/app/apikey",isAlert:true});
+  const checkKey = () => { if (!getKey()?.trim()){showApiError('API_KEY_MISSING');return false;} return true; };
+
+  // Show error modal with full context for each API error type
+  const showApiError = (errCode, extra='') => {
+    const cfg = ERROR_CONFIGS[errCode] || { title:'Erro Desconhecido', message:extra||'Tente novamente.', link:null };
+    setErrorModal({ title:cfg.title, message:cfg.message+(extra?`\n${extra}`:''), link:cfg.link, isAlert:true });
+  };
+
+  // Build ordered key list starting from current active key
+  const getOrderedKeys = () => {
+    const s = settingsRef.current;
+    const slots = [
+      { n:1, k: s.apiKey1||s.apiKey },
+      { n:2, k: s.apiKey2 },
+      { n:3, k: s.apiKey3 },
+    ].filter(x => x.k?.trim());
+    const startIdx = Math.max(0, slots.findIndex(x => x.n === (s.activeKeyIndex||1)));
+    return [...slots.slice(startIdx), ...slots.slice(0, startIdx)];
+  };
+
+  // Advance to the next available key (called after every request, success or quota fail)
+  const rotateKey = async () => {
+    const s = settingsRef.current;
+    const slots = [
+      { n:1, k: s.apiKey1||s.apiKey },
+      { n:2, k: s.apiKey2 },
+      { n:3, k: s.apiKey3 },
+    ].filter(x => x.k?.trim());
+    if (slots.length <= 1) return;
+    const curIdx = slots.findIndex(x => x.n === (s.activeKeyIndex||1));
+    const nextN = slots[(curIdx + 1) % slots.length].n;
+    await saveSettings({ ...s, activeKeyIndex: nextN });
   };
 
   // ── Material helpers ───────────────────────────────────────────────────────
@@ -769,30 +840,25 @@ export default function QuestionBankApp() {
   const getPrompt = (forAPI=false) => {
     const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões. VOCÊ ESTÁ PROIBIDO DE PARAR A GERAÇÃO ANTES DE ATINGIR EXATAMENTE ${total} QUESTÕES. VERIFIQUE A CONTAGEM ANTES DE FINALIZAR.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
   };
 
+  // External prompt (for copying to ChatGPT / Claude / Gemini web)
   const getExternalPrompt = () => {
-    const s = settingsRef.current;
-    const na = s.numAlternatives || 5;
-    const alts = na === 4 ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]' : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+    const s=settingsRef.current; const na=s.numAlternatives||5;
+    const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
     return `[INSTRUÇÕES PARA IA EXTERNA - ÁGORA DO SABER]
 
 *** PARTE 1: ESTRUTURAÇÃO ***
-Atue como o Arquiteto de Alexandria. Crie um sumário focado em [INSERIR TEMA AQUI].
-O sumário deve conter EXATAMENTE ${s.numTopics} Tópicos principais, e cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos.
-Apresente apenas o sumário com 'Tópico X' no início de cada linha principal.
-Ao final da estruturação, aguarde minhas sugestões de alterações ou minha confirmação. NÃO gere as questões ainda.
+Atue como o Arquiteto de Alexandria. Crie um sumário focado em [INSERIR TEMA AQUI]. O sumário deve conter EXATAMENTE ${s.numTopics} Tópicos principais, e cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos. Apresente apenas o sumário com 'Tópico X' no início de cada linha principal. Ao final da estruturação, aguarde minhas sugestões de alterações ou minha confirmação. NÃO gere as questões ainda.
 
 *** PARTE 2: GERAÇÃO DE QUESTÕES ***
-Após eu confirmar o sumário, você iniciará a geração das questões, PROCESSANDO UM TÓPICO POR VEZ a cada comando meu de "Próximo Tópico".
+Após eu confirmar o sumário, você iniciará a geração das questões, PROCESSANDO UM TÓPICO POR VEZ a cada comando meu de "Próximo Tópico". Para cada tópico, use as seguintes diretrizes:
 
-Para cada tópico, use as seguintes diretrizes:
 Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.
 ${getDiffInst()}
 
-REGRA MANDATÓRIA: Crie EXATAMENTE ${s.qPerSub} questão(ões) para CADA subtópico do tópico atual.
-NÃO pare a geração até ter coberto absolutamente todos os subtópicos do bloco atual!
+REGRA MANDATÓRIA: Crie EXATAMENTE ${s.qPerSub} questão(ões) para CADA subtópico do tópico atual. NÃO pare a geração até ter coberto absolutamente todos os subtópicos do bloco atual! Se precisar continuar em outra mensagem, avise mas continue sem perder nenhum subtópico.
 
 DIRETRIZES:
 - Raciocínio clínico estilo USMLE/Residência brasileira
@@ -809,8 +875,7 @@ Alternativa correta: [Letra]
 Explicação:
 [Explicação sem citar letras]
 ---
-
-${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
+${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -876,47 +941,34 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
 
+    // Build subtopics injection
     const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
-    const hasSubtopics = subtopicsArr.length > 0;
-    
-    // Calcula exatamente quantas questões deveriam vir
-    const expectedTotal = hasSubtopics ? subtopicsArr.length * settingsRef.current.qPerSub : settingsRef.current.numSubtopics * settingsRef.current.qPerSub;
-
-    const subtopicsBlock = hasSubtopics
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (você DEVE cobrir EXATAMENTE estes, um subtópico por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão deve tratar de UM subtópico específico da lista acima. NÃO repita subtópicos. Total esperado: EXATAMENTE ${expectedTotal} questões. NÃO OMITA NENHUM SUBTÓPICO.`
+    const total = subtopicsArr.length > 0 ? subtopicsArr.length * settingsRef.current.qPerSub : settingsRef.current.numSubtopics * settingsRef.current.qPerSub;
+    const subtopicsBlock = subtopicsArr.length > 0
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, um por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão = 1 subtópico da lista. NÃO repita. NÃO invente. Total: EXATAMENTE ${total} questões.`
       : '';
 
     const ctx=cleared.sourceMaterials?`\n\nMATERIAIS:\n${cleared.sourceMaterials}`:'';
-    const PROMPT=getPrompt(true)+ctx+subtopicsBlock+(addPrompt?`\n\nFoco adicional: ${addPrompt}`:'');
+    const PROMPT=getPrompt(true)+ctx+subtopicsBlock+(addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')+
+      `\n\nATENÇÃO FINAL: Você DEVE gerar TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO resuma. NÃO pergunte. Gere questão por questão até o total de ${total}.`;
 
-    const keys=[settingsRef.current.apiKey1||settingsRef.current.apiKey,settingsRef.current.apiKey2,settingsRef.current.apiKey3].filter(k=>k?.trim());
-    let err=null,ok=false;
-    for(let i=0;i<keys.length;i++){
-      try{
-        const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,keys[i],(acc,qc)=>setStreamCount(qc));
+    const orderedKeys = getOrderedKeys();
+    let err=null, ok=false;
+    for (const {k} of orderedKeys) {
+      try {
+        const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc));
         const p=parseData(full);
         await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics}:t)});
-        await saveSettings({...settingsRef.current,activeKeyIndex:i+1});
-        ok=true;
-        
-        // VERIFICAÇÃO SE O GEMINI ESTÁ DE PUTARIA
-        if (p.questions.length < expectedTotal) {
-          setErrorModal({
-            title: 'O Gemini tá de putaria!',
-            message: `Solicitamos ${expectedTotal} questões, mas o servidor gerou apenas ${p.questions.length}. A API provavelmente cortou a resposta no meio. Tente novamente mais tarde, ou use o botão 'Copiar Prompt' na tela inicial para gerar em uma IA externa (como ChatGPT/Claude) e use o botão 'Importar'.`,
-            isAlert: true
-          });
-        }
-        break;
-      }catch(e){err=e;if(e.message!=='QUOTA_EXCEEDED')break;}
+        await rotateKey(); // Always rotate after success
+        ok=true; break;
+      } catch(e) {
+        err=e;
+        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; } // try next key
+        break; // other errors: stop
+      }
     }
     clearInterval(mi_int);setLoadingMsg('');setStreamCount(0);
-    if(!ok){
-      if(err?.message==='API_KEY_INVALID') setErrorModal({title:'Chave Inválida',message:'Chave não reconhecida.',isAlert:true});
-      else if(err?.message==='QUOTA_EXCEEDED') setErrorModal({title:'Cota Esgotada',message:'Todas as chaves atingiram o limite.',isAlert:true});
-      else if(err?.message==='SERVER_OVERLOADED') setErrorModal({title:'Servidores Sobrecarregados',message:'O Gemini está temporariamente indisponível. Aguarde alguns minutos.',isAlert:true});
-      else setErrorModal({title:'Falha',message:'Conexão interrompida. Tente novamente.',isAlert:true});
-    }
+    if(!ok) showApiError(err?.message||'CONNECTION_ERROR');
     setIsBusy(false);
   };
 
@@ -924,16 +976,37 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
   const startCreation = async () => {
     if(!checkKey())return;setIsBusy(true);
     const sys=`Você é o Arquiteto de Alexandria. Baseado em "${newSubName}" e materiais, crie sumário com EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos cada. Responda APENAS o sumário com 'Tópico X' no início de cada linha principal.`;
-    try{const r=await callGemini(`Materiais: ${getMaterial()}`,sys,getKey(),uploadedImages);setSyllabus(r);setCreatorStep(2);}
-    catch(e){if(e.message==='QUOTA_EXCEEDED')handleQuota(startCreation);else if(e.message==='SERVER_OVERLOADED')setErrorModal({title:'Servidores Sobrecarregados',message:'Aguarde e tente novamente.',isAlert:true});else setErrorModal({title:'Falha',message:'Conexão com IA falhou.',isAlert:true});}
-    finally{setIsBusy(false);}
+    const orderedKeys = getOrderedKeys();
+    let ok=false;
+    for (const {k} of orderedKeys) {
+      try {
+        const r=await callGemini(`Materiais: ${getMaterial()}`,sys,k,uploadedImages);
+        setSyllabus(r);setCreatorStep(2);
+        await rotateKey();
+        ok=true; break;
+      } catch(e) {
+        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        showApiError(e.message); break;
+      }
+    }
+    if (!ok && !errorModal) showApiError('QUOTA_EXCEEDED');
+    setIsBusy(false);
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
     const sys=`Arquiteto de Alexandria. Ajuste o sumário conforme o pedido, mantendo EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.\nAtual:\n${syllabus}\nPedido: "${syllabusFB}"\nResponda APENAS o novo sumário.`;
-    try{const r=await callGemini('Ajuste.',sys,getKey());setSyllabus(r);setSyllabusFB('');}
-    catch(e){if(e.message==='QUOTA_EXCEEDED')handleQuota(reviseSyllabus);}
-    finally{setIsBusy(false);}
+    const orderedKeys = getOrderedKeys();
+    for (const {k} of orderedKeys) {
+      try {
+        const r=await callGemini('Ajuste.',sys,k);
+        setSyllabus(r);setSyllabusFB('');
+        await rotateKey(); break;
+      } catch(e) {
+        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        showApiError(e.message); break;
+      }
+    }
+    setIsBusy(false);
   };
   const finalizeSub = async () => {
     const lines = syllabus.split('\n');
@@ -1016,12 +1089,14 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
   };
 
   // Open Bizuário — cached in topic.bizuario
+  // Bug 7: accepts optional overrideData (e.g. from exam results) skipping topicData
+  // Open Bizuário for a topic — cached in topic.bizuario, regenerated only if not cached
   const openBizuario = (topic, subject) => {
     if (!checkKey()) return;
     const cachedText = topic.bizuario || null;
     const onSave = (txt) => updateSubject({
       ...subject,
-      topics: subject.topics.map(t => t.id === topic.id ? { ...t, bizuario: txt || null } : t)
+      topics: subject.topics.map(t => t.id === topic.id ? { ...t, bizuario: txt } : t)
     });
     setBizuarioModal({ topicTitle: topic.title, subjectTitle: subject?.title || '', cachedText, onSave });
   };
@@ -1124,7 +1199,7 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
           <div className="hidden md:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 opacity-50 border-r pr-3 ${darkMode?'border-gray-700':'border-gray-300'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
-              {icon:<SearchIcon className="w-4 h-4"/>,    action:()=>setSearchOpen(true), title:'Buscar'},
+              {icon:<SearchIcon className="w-4 h-4"/>,   action:()=>setSearchOpen(true), title:'Buscar'},
               {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
               {icon:<BarChart2 className="w-4 h-4"/>,     action:()=>setView('stats'),     title:'Estatísticas'},
               {icon:<CalendarCheck className="w-4 h-4"/>, action:startReview,              title:'Revisão', badge:dueCount},
@@ -1169,7 +1244,7 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
                 {icon:<BarChart2 className="w-5 h-5"/>,     label:'Estatísticas',  action:()=>setView('stats')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
-                {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',      action:handleLogout, danger:true},
+                {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
               ].map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-900/20':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
@@ -1188,7 +1263,7 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
         {view==='library'&&(
           <div>
             <div className="mb-10 text-center">
-              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
+              <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
                 <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
@@ -1887,7 +1962,7 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}
 
       {/* ── INSIGHTS MODAL ── */}
-      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave}/>}
+      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
 
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
@@ -1908,7 +1983,7 @@ ${s.customPrompt ? `Instruções extras do usuário: ${s.customPrompt}` : ''}`;
       )}
 
       {/* ── STANDARD MODALS ── */}
-      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
+      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {editingSub&&<GModal title="Renomear" message="" confirmText="Renomear" onConfirm={async()=>{const s=library.find(x=>x.id===editingSub);if(s)await updateSubject({...s,title:editingSubName.trim()});setEditingSub(null);}} onCancel={()=>setEditingSub(null)} darkMode={darkMode}><input value={editingSubName} onChange={e=>setEditingSubName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}
