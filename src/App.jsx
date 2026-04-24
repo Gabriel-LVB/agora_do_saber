@@ -67,11 +67,12 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const MAX_MATERIAL_CHARS = 180000;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
-const DIFFICULTY_CONFIG = {
-  easy:   { label:'🌱 Básico',        cls:'text-green-600',  bg:'bg-green-100 dark:bg-green-900/30',  selBg:'bg-green-500',   inst:'DIFICULDADE: Básica. Reconhecimento de conceitos fundamentais, definições e achados clássicos. Evite casos ambíguos.' },
-  medium: { label:'⚡ Intermediário', cls:'text-yellow-600', bg:'bg-yellow-100 dark:bg-yellow-900/30', selBg:'bg-yellow-500',  inst:'DIFICULDADE: Intermediária. Casos clínicos realistas. Nível internato e residência médica.' },
-  hard:   { label:'🔥 Avançado',      cls:'text-red-600',    bg:'bg-red-100 dark:bg-red-900/30',       selBg:'bg-red-500',     inst:'DIFICULDADE: Avançada. Casos complexos, apresentações atípicas, comorbidades, diagnósticos diferenciais difíceis.' },
-};
+const FOCUS_AREAS = [
+  { id:'bases',          label:'🔬 Bases',          desc:'Anatomia, Fisiologia, Histologia, Bioquímica',         inst:'Priorize questões de anatomia, fisiologia, histologia e bioquímica fundamentais ao tema.' },
+  { id:'fisiopatologia', label:'⚙️ Fisiopatologia',  desc:'Mecanismos de doença, alterações fisiopatológicas',    inst:'Priorize questões sobre mecanismos de doença, fisiopatologia e alterações moleculares/celulares.' },
+  { id:'clinica',        label:'🩺 Clínica',         desc:'Semiologia, manobras, apresentações clínicas',         inst:'Priorize questões de semiologia, exame físico, manobras, apresentações clínicas e diagnóstico diferencial.' },
+  { id:'farmacologia',   label:'💊 Farmacologia',    desc:'Fármacos, mecanismos, doses, efeitos adversos',        inst:'Priorize questões de farmacologia: mecanismos de ação, indicações, efeitos adversos e interações.' },
+];
 const ORACLE_LENGTH = {
   short:  { label:'⚡ Curta',   inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
   medium: { label:'📝 Média',   inst:'Responda em 1 parágrafo objetivo e bem estruturado.' },
@@ -236,7 +237,18 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
             {loading && <div className="flex"><div className={`text-sm p-3 rounded-xl ${darkMode?'bg-gray-800 text-gray-400':'bg-white text-gray-500'}`}><Spinner className="w-4 h-4 inline mr-2"/>Pensando...</div></div>}
             <div ref={bottomRef}/>
           </div>
-          <div className={`flex gap-2 p-3 border-t ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
+          {/* Compact alternative explanation buttons */}
+          <div className={`flex items-center gap-1.5 px-3 pt-2 pb-1 border-t ${darkMode?'border-gray-700 bg-gray-800':'border-gray-100 bg-white'}`}>
+            <span className={`text-xs mr-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Explicar:</span>
+            {question.options.map(opt=>(
+              <button key={opt.letter}
+                onClick={()=>{ const msg=`Por que a alternativa ${opt.letter}) está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${question.explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callGemini(msg,sys,apiKey); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
+                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${opt.isCorrect?(darkMode?'bg-green-800 text-green-200 hover:bg-green-700':'bg-green-100 text-green-700 hover:bg-green-200'):(darkMode?'bg-gray-700 text-gray-300 hover:bg-gray-600':'bg-gray-100 text-gray-500 hover:bg-gray-200')}`}>
+                {opt.letter}
+              </button>
+            ))}
+          </div>
+          <div className={`flex gap-2 p-3 ${darkMode?'bg-gray-800':'bg-white'}`}>
             <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Digite sua dúvida..." className={`flex-1 text-sm p-2 rounded-lg outline-none ${darkMode?'bg-gray-700 text-white placeholder-gray-500':'bg-gray-50 text-gray-800'}`}/>
             <button onClick={send} disabled={!input.trim()||loading} className="p-2 bg-yellow-600 text-white rounded-lg disabled:opacity-40 hover:bg-yellow-700"><Send className="w-4 h-4"/></button>
           </div>
@@ -439,40 +451,70 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
 // onSave: callback(text) — called after generating to persist in DB
 // ─── BIZUÁRIO MODAL ───────────────────────────────────────────────────────────
 // High-yield topic summary (AnKing/First Aid/Mehlman style), cached in topic.bizuario
-const BizuarioModal = ({ topicTitle, subjectTitle, apiKey, darkMode, onClose, cachedText, onSave, onRotateKey }) => {
+const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], topicContexts=null, apiKey, darkMode, onClose, cachedText, onSave, onRotateKey }) => {
   const [text, setText] = useState(cachedText || '');
   const [loading, setLoading] = useState(!cachedText);
   const [phase, setPhase] = useState(cachedText ? 'done' : 'loading');
   const wasCached = !!cachedText;
 
-  useEffect(() => {
-    if (cachedText) return;
-    const run = async () => {
-      try {
-        const sys = `Você é o Oráculo da Ágora do Saber — editor do melhor material de revisão médica do mundo, no estilo AnKing, First Aid e Mehlman. Escreva em português brasileiro. Seja absolutamente denso e high-yield: cada frase deve conter informação cobrada em prova. PROIBIDO fluff, introduções, conclusões ou frases de efeito. Use **negrito** para termos-chave, valores, critérios diagnósticos e mecanismos críticos.`;
+  const generate = async () => {
+    setText(''); setLoading(true); setPhase('loading');
+    try {
+      const sys = `Você é o Oráculo da Ágora do Saber — editor do melhor material de revisão médica do mundo, no estilo AnKing, First Aid e Mehlman. Escreva em português brasileiro. Seja absolutamente denso e high-yield: cada frase deve conter informação cobrada em prova. PROIBIDO fluff, introduções, conclusões ou frases de efeito. Use **negrito** para termos-chave, valores, critérios diagnósticos e mecanismos críticos.`;
 
-        const prompt = `Crie o BIZUÁRIO de "${topicTitle}"${subjectTitle ? ` (${subjectTitle})` : ''}.
+      let contextBlock = '';
+
+      if (topicContexts && topicContexts.length > 0) {
+        // Subject-level bizuário — aggregate all topics
+        contextBlock = topicContexts.map(tc => {
+          if (tc.questions.length > 0) {
+            // Has questions — use them
+            const qLines = tc.questions.slice(0, 10).map((q, i) =>
+              `  ${i+1}. ${q.statement.substring(0,100).replace(/\n/g,' ')}...\n     ✓ ${q.options.find(o=>o.isCorrect)?.text||''} | ${q.explanation.substring(0,200).replace(/\n/g,' ')}...`
+            ).join('\n');
+            return `TÓPICO: ${tc.title}\n${qLines}`;
+          } else if (tc.subtopics.length > 0) {
+            // No questions — use subtopics list
+            return `TÓPICO: ${tc.title}\n  Subtópicos: ${tc.subtopics.join(', ')}`;
+          }
+          return `TÓPICO: ${tc.title}`;
+        }).join('\n\n');
+      } else if (questions.length > 0) {
+        // Single topic with questions
+        contextBlock = questions.slice(0, 15).map((q, i) =>
+          `${i+1}. ${q.statement.substring(0,120).replace(/\n/g,' ')}...\n   ✓ ${q.options.find(o=>o.isCorrect)?.text||''}\n   ${q.explanation.substring(0,300).replace(/\n/g,' ')}...`
+        ).join('\n\n');
+      } else if (subtopics.length > 0) {
+        // Single topic, no questions — use subtopics
+        contextBlock = `Subtópicos do tópico: ${subtopics.join(', ')}`;
+      }
+
+      const scope = topicContexts ? `da pasta "${topicTitle}" (${topicContexts.length} tópicos)` : `do tópico "${topicTitle}"${subjectTitle ? ` (${subjectTitle})` : ''}`;
+
+      const prompt = `Crie o BIZUÁRIO ${scope}.
+
+${contextBlock ? `CONTEÚDO BASE:\n${contextBlock}\n` : ''}
+OBJETIVO: Uma cola de revisão ultra-rápida. O estudante vai ler isso 2 minutos antes da prova.
 
 FORMATO OBRIGATÓRIO:
-- Parágrafos corridos, densos, sem listas com bullet
-- Cada parágrafo aborda um ângulo: fisiopatologia, apresentação clínica, diagnóstico, tratamento, diferencial — o que for high-yield para o tema
-- Máximo 500 palavras no total
-- Inclua valores numéricos, critérios e associações clássicas quando existirem
-- Escreva como quem está passando o bizu antes da prova, não como quem está explicando para um leigo
-- Se houver esquemas ou associações mnemônicas úteis (tipo "3 Ds de...", "pensar em X quando Y"), inclua-os naturalmente no texto`;
+- Parágrafos corridos, densos, sem bullet points
+- Baseie-se no conteúdo acima — cubra os mesmos conceitos de forma sintética
+- Destaque o que mais aparece nas questões e explicações
+- Valores numéricos, critérios diagnósticos, associações clássicas
+- Mnemônicos quando úteis ("3 Ds de...", "pensar em X quando Y")
+- ${topicContexts ? 'Máximo 600 palavras, abordando todos os tópicos' : 'Máximo 400 palavras — densidade máxima, zero enrolação'}`;
 
-        const r = await callGemini(prompt, sys, apiKey);
-        setText(r);
-        setPhase('done');
-        if (onSave) onSave(r);
-        if (onRotateKey) onRotateKey(); // rotate after use
-      } catch(e) {
-        setText('Não foi possível gerar o bizuário agora. Verifique sua API Key.');
-        setPhase('done');
-      } finally { setLoading(false); }
-    };
-    run();
-  }, []); // eslint-disable-line
+      const r = await callGemini(prompt, sys, apiKey);
+      setText(r); setPhase('done');
+      if (onSave) onSave(r);
+      if (onRotateKey) onRotateKey();
+    } catch(e) {
+      setText('Não foi possível gerar o bizuário agora. Verifique sua API Key.');
+      setPhase('done');
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (!cachedText) generate(); }, []); // eslint-disable-line
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
@@ -485,9 +527,18 @@ FORMATO OBRIGATÓRIO:
           <h3 className="text-lg font-serif font-bold text-yellow-600 flex items-center gap-2">
             <BrainIcon className="w-5 h-5"/>
             Bizuário — {topicTitle}
-            {wasCached && <span className={`text-xs font-normal px-2 py-0.5 rounded-full ml-1 ${darkMode?'bg-green-900/40 text-green-400':'bg-green-100 text-green-700'}`}>✓ salvo</span>}
+            {wasCached && !loading && <span className={`text-xs font-normal px-2 py-0.5 rounded-full ml-1 ${darkMode?'bg-green-900/40 text-green-400':'bg-green-100 text-green-700'}`}>✓ salvo</span>}
           </h3>
-          <button onClick={onClose} className={`p-2 rounded-full font-bold text-lg leading-none transition-colors ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+          <div className="flex items-center gap-2">
+            {/* Refazer button */}
+            {phase === 'done' && !loading && (
+              <button onClick={generate} title="Regenerar bizuário" className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${darkMode?'bg-gray-700 hover:bg-gray-600 text-gray-300':'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Refazer
+              </button>
+            )}
+            <button onClick={onClose} className={`p-2 rounded-full font-bold text-lg leading-none transition-colors ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 min-h-0">
@@ -495,6 +546,7 @@ FORMATO OBRIGATÓRIO:
             <div className="flex flex-col items-center py-10">
               <Spinner className="w-10 h-10 text-yellow-600 mb-4"/>
               <p className="text-yellow-600 font-serif font-bold">O Oráculo está destilando o bizu...</p>
+              {topicContexts && <p className="text-xs opacity-40 mt-2">{topicContexts.length} tópicos sendo processados</p>}
             </div>
           ) : (
             <div className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>
@@ -578,7 +630,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,difficulty:'medium',oracleLength:'medium' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium' };
 
 export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
@@ -616,6 +668,7 @@ export default function QuestionBankApp() {
   // ── Creator ───────────────────────────────────────────────────────────────
   const [creatorStep, setCreatorStep]   = useState(1);
   const [newSubName, setNewSubName]     = useState('');
+  const [focusAreas, setFocusAreas]     = useState([]); // selected focus area IDs for current creation
   const [materialText, setMaterialText] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -685,7 +738,23 @@ export default function QuestionBankApp() {
     localStorage.setItem('qb_dark',JSON.stringify(darkMode));
   },[darkMode]);
 
-  // Hide header on scroll down, show on scroll up (mobile UX)
+  // Android/browser back button — navigates within the app instead of leaving
+  useEffect(() => {
+    const handlePop = (e) => {
+      if (view === 'library') return; // allow leaving the site from home
+      e.preventDefault();
+      // Navigate back logically
+      if (view === 'topic')        { setView('subject'); return; }
+      if (view === 'subject')      { setView('sub-library'); return; }
+      if (view === 'sub-library')  { setView('library'); return; }
+      if (view === 'creator')      { setCreatorStep(1); setView('library'); return; }
+      setView('library');
+    };
+    // Push a state so back button fires popstate instead of leaving
+    if (view !== 'library') window.history.pushState({ view }, '');
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [view]); // eslint-disable-line
   useEffect(()=>{
     let lastY = window.scrollY;
     const onScroll = () => {
@@ -835,12 +904,18 @@ export default function QuestionBankApp() {
   // ── Material helpers ───────────────────────────────────────────────────────
   const getMaterial = () => { const c=materialText+'\n'+uploadedFiles.map(f=>`[${f.name}]\n${f.content}`).join('\n'); return c.length>MAX_MATERIAL_CHARS?c.substring(0,MAX_MATERIAL_CHARS)+'\n[TRUNCADO]':c; };
   const isBig = () => (materialText+uploadedFiles.map(f=>f.content).join('')).length>MAX_MATERIAL_CHARS;
-  const getDiffInst = () => DIFFICULTY_CONFIG[settingsRef.current.difficulty||'medium'].inst;
+  // Build focus instructions from stored focus area IDs on the subject
+  const getFocusInst = (areas=[]) => {
+    if (!areas || areas.length === 0) return '';
+    const insts = areas.map(id => FOCUS_AREAS.find(f=>f.id===id)?.inst).filter(Boolean);
+    return insts.length ? `ÊNFASES OBRIGATÓRIAS:\n${insts.map(i=>`- ${i}`).join('\n')}` : '';
+  };
 
-  const getPrompt = (forAPI=false) => {
+  const getPrompt = (forAPI=false, areas=[]) => {
     const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${getDiffInst()}\n\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+    const focusBlock = getFocusInst(areas);
+    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${focusBlock?focusBlock+'\n\n':''}\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questão(ões) cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
   };
 
   // External prompt (for copying to ChatGPT / Claude / Gemini web)
@@ -856,7 +931,7 @@ Atue como o Arquiteto de Alexandria. Crie um sumário focado em [INSERIR TEMA AQ
 Após eu confirmar o sumário, você iniciará a geração das questões, PROCESSANDO UM TÓPICO POR VEZ a cada comando meu de "Próximo Tópico". Para cada tópico, use as seguintes diretrizes:
 
 Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.
-${getDiffInst()}
+${getFocusInst([])}
 
 REGRA MANDATÓRIA: Crie EXATAMENTE ${s.qPerSub} questão(ões) para CADA subtópico do tópico atual. NÃO pare a geração até ter coberto absolutamente todos os subtópicos do bloco atual! Se precisar continuar em outra mensagem, avise mas continue sem perder nenhum subtópico.
 
@@ -949,7 +1024,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
       : '';
 
     const ctx=cleared.sourceMaterials?`\n\nMATERIAIS:\n${cleared.sourceMaterials}`:'';
-    const PROMPT=getPrompt(true)+ctx+subtopicsBlock+(addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')+
+    const PROMPT=getPrompt(true, cleared.focusAreas||[])+ctx+subtopicsBlock+(addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')+
       `\n\nATENÇÃO FINAL: Você DEVE gerar TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO resuma. NÃO pergunte. Gere questão por questão até o total de ${total}.`;
 
     const orderedKeys = getOrderedKeys();
@@ -1032,10 +1107,10 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
       };
     });
 
-    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', sourceMaterials: getMaterial(), topics };
+    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', sourceMaterials: getMaterial(), focusAreas, topics };
     await addSubject(ns);
     setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1);
-    setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]);
+    setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]); setFocusAreas([]);
   };
 
   // Paste import
@@ -1098,7 +1173,41 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
       ...subject,
       topics: subject.topics.map(t => t.id === topic.id ? { ...t, bizuario: txt } : t)
     });
-    setBizuarioModal({ topicTitle: topic.title, subjectTitle: subject?.title || '', cachedText, onSave });
+    setBizuarioModal({
+      topicTitle: topic.title,
+      subjectTitle: subject?.title || '',
+      questions: topic.questions || [],
+      subtopics: topic.subtopics || [],
+      cachedText,
+      onSave,
+      forceRegen: false,
+    });
+  };
+
+  // Bizuário for a full subject — aggregates all topics
+  const openBizuarioSubject = (subject) => {
+    if (!checkKey()) return;
+    const cachedText = subject.bizuario || null;
+    const onSave = (txt) => updateSubject({ ...subject, bizuario: txt });
+
+    // Build aggregated context: for topics with questions use them, for others use subtopics
+    const allQuestions = [];
+    const topicContexts = subject.topics.map(t => {
+      const qs = t.questions || [];
+      const subs = t.subtopics || [];
+      return { title: t.title, questions: qs, subtopics: subs };
+    });
+
+    setBizuarioModal({
+      topicTitle: subject.title,
+      subjectTitle: '',
+      questions: [],           // not used directly — topicContexts handles it
+      subtopics: [],
+      topicContexts,           // full subject mode
+      cachedText,
+      onSave,
+      forceRegen: false,
+    });
   };
 
   const createFocusedBatch = async (topicData) => {
@@ -1264,7 +1373,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
           <div>
             <div className="mb-10 text-center">
               <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
-              <p className="opacity-60 mb-6">Feito por Trikas e Xavier - Olhamos o abismo.</p>
+              <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
                 <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
                 <button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border ${darkMode?'bg-gray-800 text-white hover:bg-gray-700 border-gray-700':'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'}`}><Feather className="w-5 h-5 text-yellow-600"/>Importar</button>
@@ -1344,7 +1453,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={()=>openBizuario(activeSubject.topics[0]||{title:activeSubject.title,bizuario:null}, activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BrainIcon className="w-4 h-4"/>Bizuário</button>
+                <button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
               </div>
             </div>
@@ -1457,11 +1566,29 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
         {/* ── CREATOR ── */}
         {view==='creator'&&(
           <div className="max-w-2xl mx-auto">
-            <button onClick={()=>{setCreatorStep(1);setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            <button onClick={()=>{setCreatorStep(1);setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {creatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><Sparkles className="w-8 h-8"/>Novo Assunto</h2>
                 <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="Título (ex: Nefrologia)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+
+                {/* Focus areas multi-select */}
+                <div>
+                  <div className="text-xs font-bold uppercase mb-3 opacity-50">Ênfases das questões <span className="opacity-60 normal-case font-normal">(opcional — selecione uma ou mais)</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FOCUS_AREAS.map(area=>{
+                      const selected = focusAreas.includes(area.id);
+                      return (
+                        <button key={area.id} type="button"
+                          onClick={()=>setFocusAreas(p=>p.includes(area.id)?p.filter(x=>x!==area.id):[...p,area.id])}
+                          className={`text-left p-3 rounded-xl border-2 transition-all ${selected?'border-yellow-500 bg-yellow-600 text-white':(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-yellow-600':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400')}`}>
+                          <div className="font-bold text-sm">{area.label}</div>
+                          <div className={`text-xs mt-0.5 ${selected?'text-yellow-100 opacity-80':'opacity-40'}`}>{area.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="relative">
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base</div>
                   {uploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button onClick={()=>setUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
@@ -1892,18 +2019,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                 </div>
               );})}
             </div>
-            {/* Difficulty */}
-            <div>
-              <label className="block text-xs font-bold uppercase mb-3 opacity-50">Dificuldade</label>
-              <div className="grid grid-cols-3 gap-3">
-                {Object.entries(DIFFICULTY_CONFIG).map(([k,c])=>(
-                  <button key={k} onClick={()=>{const ns={...settings,difficulty:k};setSettings(ns);saveSettings(ns);}}
-                    className={`p-3 rounded-xl border-2 font-bold text-sm transition-all ${settings.difficulty===k?'border-transparent text-white '+(k==='easy'?'bg-green-500':k==='medium'?'bg-yellow-500':'bg-red-500'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
             {/* Oracle Length */}
             <div>
               <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><MessageCircle className="w-4 h-4"/>Resposta do Chat</label>
@@ -1962,7 +2077,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}
 
       {/* ── INSIGHTS MODAL ── */}
-      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
+      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
 
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
