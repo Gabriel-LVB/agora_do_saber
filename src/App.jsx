@@ -71,6 +71,9 @@ const GoogleIcon  = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" v
 const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{animation:'spin 1s linear infinite',transformOrigin:'center'}}><style>{`@keyframes spin{100%{transform:rotate(360deg)}}`}</style><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
+// Order of subjects following the course chronogram
+const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obstetricia','Pediatria','Reumatologia','Hematologia','Gastrologia','Hepatologia','Cardiologia','Endocrinologia','Pneumologia','Infectologia','Neurologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'];
+
 const MAX_MATERIAL_CHARS = 180000;
 const VIDEOAULAS_ALLOWED_EMAILS = [
   'lucasferreira.paz31@gmail.com',
@@ -81,6 +84,80 @@ const VIDEOAULAS_ALLOWED_EMAILS = [
   'gabrielvieiraxc12@gmail.com',
 ];
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
+// Extract unique ID from Bunny embed_url
+const getAulaId = (aula) => {
+  if (!aula) return null;
+  const m = (aula.embed_url||'').match(/\/embed\/\d+\/([a-f0-9\-]{30,})/i);
+  return m ? m[1] : (aula.embed_url || aula.path || '');
+};
+
+// Clean raw filenames like "VIDEOAULA_S19_MEDCURSO_GAS1_Acalasia" → "Acalasia"
+const cleanAulaTitle = (title) => {
+  if (!title) return '';
+  // Strip all-caps prefix codes + underscores: "VIDEOAULA_S19_MEDCURSO_GAS1_" → ""
+  let t = title
+    .replace(/^(?:VIDEOAULA|AULA[_ ]B[ÔO]NUS|AULABONUS)[_\s]+S?\d+_?(?:MEDCURSO_)?[A-Z0-9]+_?(?:BLOCO\d+_?)?/i, '')
+    .replace(/^S\d+_AULABONUS_[A-Z0-9]+_(?:BLOCO\d+_)?/i, '')
+    .replace(/_NOVO$|_SLIDE$/i, '')
+    .replace(/_/g, ' ')
+    .trim();
+  // Also strip trailing _NOVO etc that survived
+  t = t.replace(/\s*_?NOVO\s*$/i,'').replace(/\s*_?SLIDE\s*$/i,'').trim();
+  return t || title;
+};
+
+
+// Cronogram subtopic order — partial key match → sort index
+const SUBTOPIC_ORDER_MAP = {
+  // Nefrologia
+  'NEFRO 1':1,'NEFRO 2':2,'NEFRO 3':3,
+  // Cirurgia
+  'CIR 1':1,'CIR 2':2,'CIR 3':3,'CIR 4':4,
+  // Ginecologia
+  'GIN 1':1,'GIN 2':2,'GIN 3':3,'GIN 4':4,'GIN 5':5,'GIN 6':6,
+  // Preventiva
+  'PREV 1':1,'PREV 2':2,'PREV 3':3,'PREV 4':4,
+  // Obstetrícia
+  'OBS 1':1,'OBS 2':2,'OBS 3':3,'OBS 4':4,'OBS 5':5,
+  'Obstetricia BONUS':6,'BONUS':6,
+  // Pediatria
+  'PED 1':1,'PED 2':2,'PED 3':3,'PED 4':4,'PED 5':5,
+  // Reumatologia
+  'REU 1':1,'REU 2':2,
+  // Hematologia
+  'HEM 1':1,'HEM 2':2,
+  // Gastrologia
+  'GAS 1':1,'GAS 2':2,'GAS 3':3,
+  // Hepatologia
+  'HEP 1':1,'HEP 2':2,
+  // Cardiologia
+  'CAR 1':1,'CAR 2':2,'CAR 3':3,
+  // Endocrinologia
+  'ENDO 1':1,'ENDO 2':2,
+  // Pneumologia
+  'PNEUMO 1':1,'PNEUMO 2':2,
+  // Infectologia
+  'INFECTO 1':1,'INFECTO 2':2,'INFECTO 3':3,
+  // Neurologia (single subtopic)
+  'NEURO':1,
+  // Others (single subtopic)
+  'PSIQUIATRIA':1,'ORTOPEDIA':1,
+  // Derma
+  'DOENÇAS INFECTO':1,
+  // Oftalmo
+  'video aula':1,
+};
+
+const getSubtopicOrder = (key) => {
+  const upper = key.toUpperCase();
+  for (const [pattern, idx] of Object.entries(SUBTOPIC_ORDER_MAP)) {
+    if (upper.includes(pattern.toUpperCase())) return idx;
+  }
+  // fallback: extract first number
+  const m = key.match(/\d+/);
+  return m ? parseInt(m[0]) : 99;
+};
+
 const FOCUS_AREAS = [
   { id:'bases',          label:'🔬 Bases',          desc:'Anatomia, Fisiologia, Histologia, Bioquímica',         inst:'Priorize questões de anatomia, fisiologia, histologia e bioquímica fundamentais ao tema.' },
   { id:'fisiopatologia', label:'⚙️ Fisiopatologia',  desc:'Mecanismos de doença, alterações fisiopatológicas',    inst:'Priorize questões sobre mecanismos de doença, fisiopatologia e alterações moleculares/celulares.' },
@@ -851,9 +928,22 @@ export default function QuestionBankApp() {
   }, [view, user, videoaulasData]); // eslint-disable-line
 
   const markAulaWatched = async (bunnyId) => {
-    const u = { ...watchedAulas, [bunnyId]: true };
+    if (!bunnyId) return;
+    const already = !!watchedAulas[bunnyId];
+    const u = { ...watchedAulas };
+    if (already) { delete u[bunnyId]; } else { u[bunnyId] = true; }
     setWatchedAulas(u);
-    if (user && !user.isAnonymous) try { await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u, {merge:true}); } catch(e) {}
+    if (user && !user.isAnonymous) try {
+      // Use setDoc (not merge) to write the full clean object so deletes persist
+      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
+    } catch(e) {}
+  };
+
+  const resetWatchedProgress = async () => {
+    setWatchedAulas({});
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
+    } catch(e) {}
   };
 
   useEffect(()=>{
@@ -1497,7 +1587,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
         )}
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className={view==='videoaulas'?'':'max-w-5xl mx-auto px-4 py-8'}>
 
         {/* ── LIBRARY ── */}
         {view==='library'&&(
@@ -1915,15 +2005,63 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
             },
           };
           const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
-          const data = isDemo ? DEMO_DATA : videoaulasData;
-          const subjects = Object.keys(data);
+          const raw = isDemo ? DEMO_DATA : videoaulasData;
+
+          // Sort subjects by chronogram
+          const subjects = Object.keys(raw).sort((a,b) => {
+            const ai = SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
+            const bi = SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
+            return (ai===-1?99:ai) - (bi===-1?99:bi);
+          });
+
+          // Build merged + sorted data
+          // The JSON has pairs: "NEFRO 1 - Name" (main) + "NEFRO 1 - Name ⭐" (bonus)
+          // Merge them into one group, sort groups numerically, main aulas first then bonus
+          const data = {};
+          subjects.forEach(subj => {
+            const rawSubs = raw[subj];
+            // Group by base key (strip trailing ⭐ and whitespace)
+            const groups = {};
+            Object.entries(rawSubs).forEach(([key, aulas]) => {
+              const isBonus = /⭐/.test(key);
+              const baseKey = key.replace(/\s*⭐\s*$/, '').trim();
+              if (!groups[baseKey]) groups[baseKey] = { main: [], bonus: [] };
+              if (isBonus) {
+                groups[baseKey].bonus.push(...aulas);
+              } else {
+                groups[baseKey].main.push(...aulas);
+              }
+            });
+            // Sort groups: extract number from key (e.g. "NEFRO 1" → 1, "NEFRO 2" → 2)
+            const sortedKeys = Object.keys(groups).sort((a, b) => {
+              return getSubtopicOrder(a) - getSubtopicOrder(b);
+            });
+            data[subj] = {};
+            sortedKeys.forEach(key => {
+              // Sort: "Introdução (X)" first, then main in JSON order, then bonus
+              const isIntro = (a) => /^\d+\s*[-–]\s*Introdução\s*\(/i.test(a.title) || /^Introdução\s*\(/i.test(a.title);
+              const introMain = groups[key].main.filter(isIntro);
+              const otherMain = groups[key].main.filter(a => !isIntro(a));
+              data[subj][key] = [...introMain, ...otherMain, ...groups[key].bonus];
+            });
+          });
+
+          // Helper: get clean short display name for sidebar
+          const shortSubName = (key) => {
+            // Strip specialty code prefix: "NEFRO 1 - INTRODUÇÃO A NEFRO" → "Introdução à Nefro"
+            // Or shorten to reasonable length
+            const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,6}\s*\d+\s*[-–]\s*/, '').trim();
+            return clean.length > 32 ? clean.substring(0,31)+'…' : clean;
+          };
           const allAulas = Object.values(data).flatMap(s=>Object.values(s).flat());
-          const watchedCount = allAulas.filter(a=>watchedAulas[a.bunny_id]).length;
+          const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
           const effSubject  = activeSubjectVid  || subjects[0] || null;
-          const effSubtopic = activeSubtopicVid || (effSubject ? Object.keys(data[effSubject]||{})[0] : null);
+          // Strip trailing ⭐ in case old state has bonus subtopic key
+          const effSubtopicRaw = activeSubtopicVid || (effSubject ? Object.keys(data[effSubject]||{})[0] : null);
+          const effSubtopic = effSubtopicRaw?.replace(/\s*⭐\s*$/, '').trim() || null;
           const effAulas    = (effSubject&&effSubtopic) ? (data[effSubject]?.[effSubtopic]||[]) : [];
           const effAula     = activeAula || effAulas[0] || null;
-          const effIdx      = effAulas.findIndex(a=>a.bunny_id===effAula?.bunny_id);
+          const effIdx      = effAulas.findIndex(a=>getAulaId(a)===getAulaId(effAula));
           const prevAula    = effIdx>0 ? effAulas[effIdx-1] : null;
           const nextAula    = effIdx<effAulas.length-1 ? effAulas[effIdx+1] : null;
           const sideBorder  = dm?'border-gray-700':'border-gray-200';
@@ -1931,15 +2069,18 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
           const textMuted   = dm?'text-gray-400':'text-gray-500';
 
           return (
-            <div className={`flex -mx-4 -my-8 ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100vh - 62px)',overflow:'hidden'}}>
+            <div className={`flex w-full ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100vh - 62px)',overflow:'hidden'}}>
 
               {/* ══ SIDEBAR ══ */}
-              <div className={`w-56 xl:w-64 flex-shrink-0 border-r ${sideBg} ${sideBorder} hidden md:flex flex-col`} style={{height:'calc(100vh - 62px)'}}>
+              <div className={`w-64 xl:w-80 flex-shrink-0 border-r ${sideBg} ${sideBorder} hidden md:flex flex-col`} style={{height:'calc(100vh - 62px)'}}>
                 <div className={`px-4 py-3 border-b ${sideBorder} flex-shrink-0`}>
                   <div className="flex items-center gap-2 mb-2">
                     <button onClick={()=>setView('library')} className={`p-1 rounded ${dm?'hover:bg-gray-700 text-gray-500':'hover:bg-gray-100 text-gray-400'}`}><ArrowLeft className="w-4 h-4"/></button>
                     <span className="font-bold text-sm text-yellow-600 flex items-center gap-1.5"><VideoIcon className="w-4 h-4"/>Videoaulas</span>
                     {isDemo&&<span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto ${dm?'bg-yellow-900/40 text-yellow-500':'bg-yellow-100 text-yellow-600'}`}>DEMO</span>}
+                    {!isDemo&&Object.keys(watchedAulas).length>0&&(
+                      <button onClick={()=>{if(confirm('Resetar todo o progresso de aulas assistidas?')) resetWatchedProgress();}} title="Resetar progresso" className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded ${dm?'text-gray-500 hover:text-red-400':'text-gray-400 hover:text-red-500'}`}>resetar</button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`}><div className="h-full bg-yellow-500 transition-all" style={{width:`${allAulas.length?watchedCount/allAulas.length*100:0}%`}}/></div>
@@ -1950,14 +2091,14 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   {videoaulasLoading&&<div className="flex justify-center py-8"><Spinner className="w-6 h-6 text-yellow-600"/></div>}
                   {subjects.map(subject=>{
                     const sAulas=Object.values(data[subject]).flat();
-                    const sW=sAulas.filter(a=>watchedAulas[a.bunny_id]).length;
+                    const sW=sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
                     const isExp=expandedSubjectsVid[subject]??(subject===effSubject);
                     return (
                       <div key={subject} className={`border-b ${sideBorder}`}>
                         <button onClick={()=>{setExpandedSubjectsVid(p=>({...p,[subject]:!isExp}));setActiveSubjectVid(subject);}}
                           className={`w-full flex items-center justify-between px-3 py-2.5 text-left ${dm?'hover:bg-gray-700/60':'hover:bg-gray-50'}`}>
                           <div className="min-w-0 flex-1">
-                            <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject}</p>
+                            <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject.replace(/\s*⭐\s*/g,'').trim()}</p>
                             <p className={`text-[10px] mt-0.5 ${textMuted}`}>{sW}/{sAulas.length}</p>
                           </div>
                           {isExp?<ChevronDown className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>}
@@ -1966,20 +2107,20 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                           const isActSub=effSubject===subject&&effSubtopic===sub;
                           return (
                             <div key={sub}>
-                              <button onClick={()=>{setActiveSubjectVid(subject);setActiveSubtopicVid(sub);setActiveAula(aulas[0]||null);}}
+                              <button onClick={()=>{setActiveSubjectVid(subject);setActiveSubtopicVid(sub);setActiveAula(data[subject][sub]?.[0]||null);}}
                                 className={`w-full text-left px-3 py-1.5 pl-6 text-[11px] font-semibold transition-colors ${isActSub?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-400 hover:bg-gray-700/40':'text-gray-500 hover:bg-gray-50')}`}>
-                                {sub}
+                                {shortSubName(sub)}
                               </button>
                               {isActSub&&aulas.map((aula,ai)=>{
-                                const isAct=effAula?.bunny_id===aula.bunny_id;
-                                const watched=watchedAulas[aula.bunny_id];
+                                const isAct=getAulaId(effAula)===getAulaId(aula);
+                                const watched=watchedAulas[getAulaId(aula)];
                                 return (
-                                  <button key={aula.bunny_id} onClick={()=>setActiveAula(aula)}
+                                  <button key={getAulaId(aula)||aula.path} onClick={()=>setActiveAula(aula)}
                                     className={`w-full flex items-center gap-2 px-3 py-1.5 pl-9 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
                                     <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
-                                      {watched?<CheckIcon className="w-2 h-2"/>:<span className="text-[7px] font-bold">{ai+1}</span>}
+                                      {watched?<CheckIcon className="w-2 h-2"/>:<span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 inline-block"/>}
                                     </div>
-                                    <span className="text-[11px] truncate leading-tight">{aula.title}</span>
+                                    <span className="text-xs truncate leading-tight">{cleanAulaTitle(aula.title)}</span>
                                   </button>
                                 );
                               })}
@@ -2046,41 +2187,44 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                           </div>
                         </div>
                       ) : (
-                        <iframe key={effAula.bunny_id} src={`${effAula.embed_url}?autoplay=1`}
+                        <iframe key={getAulaId(effAula)||effAula.embed_url} src={`${effAula.embed_url}?responsive=true&preload=false&defaultQuality=720p&qualities=720p,480p`}
                           className="absolute inset-0 w-full h-full" style={{border:'none'}}
-                          allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen/>
+                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture" allowFullScreen/>
                       )}
                     </div>
 
                     {/* Info below player */}
-                    <div className={`px-5 py-4 max-w-5xl ${dm?'bg-gray-900':'bg-white'}`}>
+                    <div className={`px-5 lg:px-8 py-4 ${dm?'bg-gray-900':'bg-white'}`}>
                       <p className={`text-xs mb-2 flex items-center gap-1 flex-wrap ${textMuted}`}>
-                        <span>{effSubject}</span><ChevronRight className="w-3 h-3 opacity-40"/><span>{effSubtopic}</span><ChevronRight className="w-3 h-3 opacity-40"/>
-                        <span className={dm?'text-gray-200':'text-gray-700'}>{effAula.title}</span>
+                        <span>{effSubject?.replace(/\s*⭐\s*/g,'')}</span><ChevronRight className="w-3 h-3 opacity-40"/><span>{shortSubName(effSubtopic||'')}</span><ChevronRight className="w-3 h-3 opacity-40"/>
+                        <span className={dm?'text-gray-200':'text-gray-700'}>{cleanAulaTitle(effAula.title)}</span>
                       </p>
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                        <h2 className={`text-xl font-serif font-bold ${dm?'text-white':'text-gray-900'}`}>{effAula.title}</h2>
+                        <h2 className={`text-xl font-serif font-bold ${dm?'text-white':'text-gray-900'}`}>{cleanAulaTitle(effAula.title)}</h2>
                         <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={()=>!isDemo&&markAulaWatched(effAula.bunny_id)}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all ${watchedAulas[effAula.bunny_id]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
-                            <CheckIcon className="w-4 h-4"/>{watchedAulas[effAula.bunny_id]?'Assistida ✓':'Marcar assistida'}
-                          </button>
-                          <button onClick={()=>{setView('creator');setNewSubName(effAula.title);}}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white">
-                            <Sparkles className="w-4 h-4"/>Gerar Questões
+                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
+                            <CheckIcon className="w-4 h-4"/>
+                            {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
                           </button>
                         </div>
                       </div>
                       <div className="flex items-stretch gap-3 mb-4">
-                        <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
+                        <button onClick={()=>prevAula&&(setActiveAula(prevAula))} disabled={!prevAula}
                           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                           <SkipBack className="w-4 h-4 flex-shrink-0"/>
-                          <div className="text-left min-w-0"><p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Anterior</p><p className="truncate text-xs">{prevAula?.title||'—'}</p></div>
+                          <div className="text-left min-w-0">
+                            <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Anterior</p>
+                            <p className="truncate text-xs">{cleanAulaTitle(prevAula?.title||'—')}</p>
+                          </div>
                         </button>
-                        <div className={`flex items-center px-3 rounded-xl text-xs font-bold ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
-                        <button onClick={()=>nextAula&&setActiveAula(nextAula)} disabled={!nextAula}
+                        <div className={`flex items-center px-3 rounded-xl text-xs font-bold flex-shrink-0 ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
+                        <button onClick={()=>nextAula&&(setActiveAula(nextAula))} disabled={!nextAula}
                           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 justify-end text-right ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                          <div className="min-w-0"><p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p><p className="truncate text-xs">{nextAula?.title||'—'}</p></div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p>
+                            <p className="truncate text-xs">{cleanAulaTitle(nextAula?.title||'—')}</p>
+                          </div>
                           <SkipForward className="w-4 h-4 flex-shrink-0"/>
                         </button>
                       </div>
@@ -2088,10 +2232,10 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                       <div className={`md:hidden border-t pt-4 ${sideBorder}`}>
                         <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>{effSubtopic}</p>
                         {effAulas.map((aula,ai)=>(
-                          <button key={aula.bunny_id} onClick={()=>setActiveAula(aula)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border transition-colors ${effAula.bunny_id===aula.bunny_id?(dm?'border-yellow-700 bg-yellow-900/20':'border-yellow-400 bg-yellow-50'):(dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50')}`}>
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${watchedAulas[aula.bunny_id]?'bg-green-500 text-white':'border '+(dm?'border-gray-600 text-gray-400':'border-gray-300 text-gray-500')}`}>
-                              {watchedAulas[aula.bunny_id]?<CheckIcon className="w-3.5 h-3.5"/>:<span className="text-xs font-bold">{ai+1}</span>}
+                          <button key={getAulaId(aula)||aula.path} onClick={()=>setActiveAula(aula)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border transition-colors ${getAulaId(effAula)===getAulaId(aula)?(dm?'border-yellow-700 bg-yellow-900/20':'border-yellow-400 bg-yellow-50'):(dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50')}`}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${watchedAulas[getAulaId(aula)]?'bg-green-500 text-white':'border '+(dm?'border-gray-600 text-gray-400':'border-gray-300 text-gray-500')}`}>
+                              {watchedAulas[getAulaId(aula)]?<CheckIcon className="w-3.5 h-3.5"/>:null}
                             </div>
                             <span className="text-sm">{aula.title}</span>
                           </button>
