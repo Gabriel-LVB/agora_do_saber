@@ -60,12 +60,26 @@ const LayersIcon  = ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline po
 const PlusIcon    = ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
 const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
 const FlipIcon    = ic('<path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.7L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.3l3-2.3"/>');
-const StarIcon    = ic('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>');
+const PlayCircle  = ic('<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>');
+const PlayIcon    = ic('<polygon points="5 3 19 12 5 21 5 3"/>');
+const CheckIcon   = ic('<polyline points="20 6 9 17 4 12"/>');
+const VideoIcon   = ic('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>');
+const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>');
+const SkipBack    = ic('<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>');
+
 const GoogleIcon  = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>;
 const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{animation:'spin 1s linear infinite',transformOrigin:'center'}}><style>{`@keyframes spin{100%{transform:rotate(360deg)}}`}</style><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const MAX_MATERIAL_CHARS = 180000;
+const VIDEOAULAS_ALLOWED_EMAILS = [
+  'lucasferreira.paz31@gmail.com',
+  'ruanmotahz@gmail.com',
+  'caiolucca125@gmail.com',
+  'matheustene@gmail.com',
+  'lucasteles42@gmail.com',
+  'gabrielvieiraxc12@gmail.com',
+];
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const FOCUS_AREAS = [
   { id:'bases',          label:'🔬 Bases',          desc:'Anatomia, Fisiologia, Histologia, Bioquímica',         inst:'Priorize questões de anatomia, fisiologia, histologia e bioquímica fundamentais ao tema.' },
@@ -136,33 +150,115 @@ const extractDocxText = async (ab) => { const m = await loadScript('https://cdnj
 
 const parseData = (text) => {
   const norm = text.replace(/\r\n/g,'\n');
+
+  // Legacy summary
   let summary = '';
   const sm = norm.match(/(?:^|\n)(?:###|##|\*\*)?\s*Resumo(?: de Consolida[çc][aã]o)?\s*\n([\s\S]*)$/i);
   if (sm?.[1]) summary = sm[1].replace(/\n---.*/g,'').trim();
-  const blocks = norm.split(/(?=(?:^|\n)(?:\*\*|##)?\s*Quest[aã]o\s*\d)/i).filter(b=>b.trim());
+
   const questions = [];
-  blocks.forEach((block,idx)=>{
-    if (!block.match(/[Aa]lternativa\s+correta|[Gg]abarito|[Rr]esposta\s+correta/i)&&!block.match(/\nA\)/i)) return;
+
+  // Split by question headers — only at start of line
+  // Handles: "## Questão 1", "1)", "1.", "Questão 1", "Q1)"
+  const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o[ \t]*\d|(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t])/im)
+    .filter(b => b.trim());
+
+  let qCount = 0;
+
+  blocks.forEach((block) => {
+    if (!block.trim()) return;
+
+    // Must have lettered options on their own line
+    const hasOptions = /(?:^|\n)[ \t]*[A-Ea-e][ \t]*[).][ \t]*\S/.test(block);
+    if (!hasOptions) return;
+
     try {
-      const idM=block.match(/(?:\*\*|##)?\s*Quest[aã]o\s*([0-9.]+)/i);
-      const id=idM?idM[1]:`ID-${idx+1}`;
-      let stmt='';
-      const ssM=block.match(/(?:\*\*|##)?\s*Quest[aã]o.*?\n/i);
-      const foM=block.match(/\n\s*A\)/i);
-      if(ssM&&foM) stmt=block.substring(ssM.index+ssM[0].length,foM.index).trim();
-      const options=[];
-      const clM=block.match(/(?:[Aa]lternativa\s+correta|[Gg]abarito|[Rr]esposta\s+correta)\s*:/i);
-      if(foM&&clM){const os=block.substring(foM.index,clM.index);const re=/([A-E])\)\s*([\s\S]*?)(?=(?:\n\s*[A-E]\)|$))/gi;let m;while((m=re.exec(os))!==null){options.push({letter:m[1].toUpperCase(),text:m[2].replace(/\*\*/g,'').trim()});}}
-      const cM=block.match(/[Aa]lternativa\s+correta[:\s]*\*{0,2}\s*([A-E])/i)||block.match(/[Gg]abarito[:\s]*\*{0,2}\s*([A-E])/i)||block.match(/[Rr]esposta\s+correta[:\s]*\*{0,2}\s*([A-E])/i);
-      const correct=cM?cM[1].toUpperCase():null;
-      let exp='';
-      const eM=block.match(/(?:Corre[çc][aã]o aprofundada|Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento)\s*:/i);
-      if(eM){const s=eM.index+eM[0].length;let e=block.substring(s).search(/\n\s*(?:---|###\s*Resumo|(?:\*\*)?\s*Resumo)/i);exp=(e===-1?block.substring(s):block.substring(s,s+e)).trim().replace(/^\*\*/,'').trim();}
-      if(options.length>0&&correct){const ct=options.find(o=>o.letter===correct)?.text;const shuffled=[...options.map(o=>o.text)].sort(()=>Math.random()-.5);const final=shuffled.map((text,i)=>({letter:['A','B','C','D','E'][i],text,isCorrect:text===ct}));questions.push({id,statement:stmt,options:final,explanation:exp});}
-    } catch(e){}
+      // Question ID
+      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*([0-9.]+)/i) ||
+                  block.match(/(?:^|\n)[ \t]*(\d{1,2})[ \t]*[).]/m);
+      const id = idM ? idM[1] : `${++qCount}`;
+
+      // First option position
+      const firstOptMatch = block.match(/(?:^|\n)([ \t]*[Aa][ \t]*[).][ \t]*\S)/);
+      if (!firstOptMatch) return;
+      const firstOptIdx = block.indexOf(firstOptMatch[0]);
+
+      // Statement: text before first option
+      // Handle "1) Question text here" (inline) and multi-line statements
+      const inlineM = block.match(/(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t]*([^\n]{5,})/m);
+      const qHeaderM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[^\n]*\n/i);
+      let stmt = '';
+      if (inlineM && inlineM.index <= firstOptIdx) {
+        stmt = inlineM[1].trim();
+        // grab continuation lines
+        const contStart = block.indexOf(inlineM[0]) + inlineM[0].length;
+        if (contStart < firstOptIdx) stmt += ' ' + block.substring(contStart, firstOptIdx).trim();
+      } else if (qHeaderM) {
+        stmt = block.substring(qHeaderM.index + qHeaderM[0].length, firstOptIdx).trim();
+      } else {
+        stmt = block.substring(0, firstOptIdx).trim();
+      }
+      stmt = stmt.trim();
+      if (!stmt || stmt.length < 5) return;
+
+      // Answer marker
+      const ansM =
+        block.match(/(?:[Aa]lternativa[ \t]+correta|[Gg]abarito|[Rr]esposta(?:[ \t]+correta)?)[ \t]*[:\-][ \t]*\*{0,2}[ \t]*\(?([A-Ea-e])\)?/im);
+
+      let correct = null;
+      let optionsEnd = block.length;
+
+      if (ansM) {
+        correct = ansM[1].toUpperCase();
+        optionsEnd = ansM.index;
+      } else {
+        // Standalone line with ONLY a letter after options
+        const stM = block.match(/\n[ \t]*\(?([A-Ea-e])\)?[ \t]*(?:\n|$)/m);
+        if (stM && stM.index > firstOptIdx + 10) {
+          correct = stM[1].toUpperCase();
+          optionsEnd = stM.index;
+        }
+      }
+
+      // Parse options
+      const optText = block.substring(firstOptIdx, optionsEnd);
+      const options = [];
+      const optRe = /(?:^|\n)[ \t]*\(?([A-Ea-e])[ \t]*[).][ \t]*([\s\S]*?)(?=(?:\n[ \t]*\(?[A-Ea-e][ \t]*[).])|\n[ \t]*$|$)/gim;
+      let m;
+      while ((m = optRe.exec(optText)) !== null) {
+        const letter = m[1].toUpperCase();
+        const txt = m[2].replace(/\*\*/g,'').replace(/\n/g,' ').trim();
+        if (txt) options.push({ letter, txt });
+      }
+      if (options.length < 2) return;
+
+      // Explanation
+      let exp = '';
+      const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento)[ \t]*:([\s\S]*?)(?=\n[ \t]*(?:---|Quest[aã]o|\d{1,2}[ \t]*[).])  |$)/i);
+      if (expM) exp = expM[1].trim();
+      else if (ansM) {
+        const after = block.substring(ansM.index + ansM[0].length).trim();
+        if (after.length > 5) exp = after;
+      }
+
+      // Build final question
+      if (correct) {
+        const ctTxt = options.find(o => o.letter === correct)?.txt;
+        if (!ctTxt) return;
+        const shuffled = [...options.map(o => o.txt)].sort(() => Math.random() - 0.5);
+        const final = shuffled.map((t, i) => ({ letter: 'ABCDE'[i], text: t, isCorrect: t === ctTxt }));
+        questions.push({ id, statement: stmt, options: final, explanation: exp });
+      } else {
+        // No answer key — import without correct answer marked
+        const final = options.map((o, i) => ({ letter: 'ABCDE'[i], text: o.txt, isCorrect: false }));
+        questions.push({ id, statement: stmt, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)' });
+      }
+    } catch(e) {}
   });
-  return {questions,summary};
+
+  return { questions, summary };
 };
+
 
 // Parse HTML-like tags in explanation text from Gemini
 const parseHtmlText = (text, darkMode) => {
@@ -727,7 +823,39 @@ export default function QuestionBankApp() {
   const fileInputRef  = useRef(null);
   const imageInputRef = useRef(null);
 
-  // ── Effects ───────────────────────────────────────────────────────────────
+  // Videoaulas
+  const [videoaulasData, setVideoaulasData] = useState(null);  // JSON do Firestore
+  const [videoaulasLoading, setVideoaulasLoading] = useState(false);
+  const [activeSubjectVid, setActiveSubjectVid] = useState(null);
+  const [activeSubtopicVid, setActiveSubtopicVid] = useState(null);
+  const [activeAula, setActiveAula] = useState(null);
+  const [watchedAulas, setWatchedAulas] = useState({});  // { bunny_id: true }
+  const [expandedSubjectsVid, setExpandedSubjectsVid] = useState({});
+
+  // Load videoaulas JSON from Firestore on first visit
+  useEffect(() => {
+    if (view !== 'videoaulas' || !user || videoaulasData) return;
+    setVideoaulasLoading(true);
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'videoaulas', 'estrutura'));
+        if (snap.exists()) {
+          const d = snap.data().json;
+          setVideoaulasData(typeof d === 'string' ? JSON.parse(d) : d);
+        } else { setVideoaulasData({}); }
+        const ps = await getDoc(doc(db, 'users', user.uid, 'videoaulas_progress', 'watched'));
+        if (ps.exists()) setWatchedAulas(ps.data() || {});
+      } catch(e) { setVideoaulasData({}); }
+      finally { setVideoaulasLoading(false); }
+    })();
+  }, [view, user, videoaulasData]); // eslint-disable-line
+
+  const markAulaWatched = async (bunnyId) => {
+    const u = { ...watchedAulas, [bunnyId]: true };
+    setWatchedAulas(u);
+    if (user && !user.isAnonymous) try { await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u, {merge:true}); } catch(e) {}
+  };
+
   useEffect(()=>{
     document.title='Ágora do Saber';
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
@@ -1245,6 +1373,9 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
   // Helpers
   const subjectProgress = (s) => { const all=s.topics.flatMap(t=>t.questions||[]); const ans=s.topics.flatMap(t=>Object.keys(t.answers||{})).length; return all.length>0?Math.round(ans/all.length*100):0; };
   const dueCount = getDueReviews().length;
+  const canSeeVideoaulas = user?.email
+    ? VIDEOAULAS_ALLOWED_EMAILS.includes(user.email.toLowerCase())
+    : false;
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const formatDate = (ts) => { const d=new Date(ts); return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`; };
@@ -1380,7 +1511,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                 <button onClick={()=>setExamSetup({})} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border ${darkMode?'bg-gray-800 text-white hover:bg-gray-700 border-gray-700':'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'}`}><Zap className="w-5 h-5 text-yellow-600"/>Modo Prova</button>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className={`grid grid-cols-1 gap-6 ${canSeeVideoaulas?'md:grid-cols-3':'md:grid-cols-2'}`}>
               {[{f:'gemini',icon:<Landmark className="w-12 h-12 text-yellow-600"/>,title:'Acervo do Oráculo',desc:'Assuntos gerados via Gemini'},{f:'external',icon:<FolderIcon className="w-12 h-12 text-yellow-600"/>,title:'Acervo Externo',desc:'Questões importadas'}].map(item=>(
                 <div key={item.f} onClick={()=>{setLibFilter(item.f);setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform">{item.icon}</div>
@@ -1389,6 +1520,14 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{library.filter(s=>s.source===item.f).length} Pastas</div>
                 </div>
               ))}
+              {canSeeVideoaulas&&(
+                <div onClick={()=>setView('videoaulas')} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
+                  <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><VideoIcon className="w-12 h-12 text-yellow-600"/></div>
+                  <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Videoaulas</h3>
+                  <p className="text-sm opacity-60">Aulas em vídeo do curso</p>
+                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>Acesso restrito</div>
+                </div>
+              )}
             </div>
             <div className="mt-8 flex justify-center">
               <button onClick={()=>{navigator.clipboard.writeText(getExternalPrompt());setCopiedPrompt(true);setTimeout(()=>setCopiedPrompt(false),3000);}} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${darkMode?'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300':'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>
@@ -1739,6 +1878,229 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   ))}
                 </div>
               ))}
+            </div>
+          );
+        })()}
+
+        {/* ── VIDEOAULAS ── */}
+        {view==='videoaulas'&&(()=>{
+          const dm = darkMode;
+          const DEMO_DATA = {
+            "Cardiologia": {
+              "CARDIO 01 — SCA": [
+                {bunny_id:"d1",title:"Fisiopatologia da SCA",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d2",title:"IAM com Supra de ST",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d3",title:"IAM sem Supra e Angina Instável",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d4",title:"Tratamento da SCA",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+              ],
+              "CARDIO 02 — IC": [
+                {bunny_id:"d5",title:"Fisiopatologia da IC",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d6",title:"Diagnóstico e Estadiamento",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d7",title:"Tratamento Farmacológico",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+              ],
+              "CARDIO 03 — Valvulopatias": [
+                {bunny_id:"d8",title:"Estenose Aórtica",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d9",title:"Insuficiência Mitral",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+              ],
+            },
+            "Reumatologia": {
+              "REU 01 — Artrite": [
+                {bunny_id:"d10",title:"Artrite Reumatoide",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d11",title:"Espondiloartrites",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+              ],
+              "REU 02 — Cristais": [
+                {bunny_id:"d12",title:"Gota e Hiperuricemia",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+                {bunny_id:"d13",title:"Pseudogota",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
+              ],
+            },
+          };
+          const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
+          const data = isDemo ? DEMO_DATA : videoaulasData;
+          const subjects = Object.keys(data);
+          const allAulas = Object.values(data).flatMap(s=>Object.values(s).flat());
+          const watchedCount = allAulas.filter(a=>watchedAulas[a.bunny_id]).length;
+          const effSubject  = activeSubjectVid  || subjects[0] || null;
+          const effSubtopic = activeSubtopicVid || (effSubject ? Object.keys(data[effSubject]||{})[0] : null);
+          const effAulas    = (effSubject&&effSubtopic) ? (data[effSubject]?.[effSubtopic]||[]) : [];
+          const effAula     = activeAula || effAulas[0] || null;
+          const effIdx      = effAulas.findIndex(a=>a.bunny_id===effAula?.bunny_id);
+          const prevAula    = effIdx>0 ? effAulas[effIdx-1] : null;
+          const nextAula    = effIdx<effAulas.length-1 ? effAulas[effIdx+1] : null;
+          const sideBorder  = dm?'border-gray-700':'border-gray-200';
+          const sideBg      = dm?'bg-gray-800/50':'bg-white';
+          const textMuted   = dm?'text-gray-400':'text-gray-500';
+
+          return (
+            <div className={`flex -mx-4 -my-8 ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100vh - 62px)',overflow:'hidden'}}>
+
+              {/* ══ SIDEBAR ══ */}
+              <div className={`w-56 xl:w-64 flex-shrink-0 border-r ${sideBg} ${sideBorder} hidden md:flex flex-col`} style={{height:'calc(100vh - 62px)'}}>
+                <div className={`px-4 py-3 border-b ${sideBorder} flex-shrink-0`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <button onClick={()=>setView('library')} className={`p-1 rounded ${dm?'hover:bg-gray-700 text-gray-500':'hover:bg-gray-100 text-gray-400'}`}><ArrowLeft className="w-4 h-4"/></button>
+                    <span className="font-bold text-sm text-yellow-600 flex items-center gap-1.5"><VideoIcon className="w-4 h-4"/>Videoaulas</span>
+                    {isDemo&&<span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto ${dm?'bg-yellow-900/40 text-yellow-500':'bg-yellow-100 text-yellow-600'}`}>DEMO</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`}><div className="h-full bg-yellow-500 transition-all" style={{width:`${allAulas.length?watchedCount/allAulas.length*100:0}%`}}/></div>
+                    <span className={`text-[10px] font-bold ${textMuted}`}>{watchedCount}/{allAulas.length}</span>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {videoaulasLoading&&<div className="flex justify-center py-8"><Spinner className="w-6 h-6 text-yellow-600"/></div>}
+                  {subjects.map(subject=>{
+                    const sAulas=Object.values(data[subject]).flat();
+                    const sW=sAulas.filter(a=>watchedAulas[a.bunny_id]).length;
+                    const isExp=expandedSubjectsVid[subject]??(subject===effSubject);
+                    return (
+                      <div key={subject} className={`border-b ${sideBorder}`}>
+                        <button onClick={()=>{setExpandedSubjectsVid(p=>({...p,[subject]:!isExp}));setActiveSubjectVid(subject);}}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 text-left ${dm?'hover:bg-gray-700/60':'hover:bg-gray-50'}`}>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject}</p>
+                            <p className={`text-[10px] mt-0.5 ${textMuted}`}>{sW}/{sAulas.length}</p>
+                          </div>
+                          {isExp?<ChevronDown className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>}
+                        </button>
+                        {isExp&&Object.entries(data[subject]).map(([sub,aulas])=>{
+                          const isActSub=effSubject===subject&&effSubtopic===sub;
+                          return (
+                            <div key={sub}>
+                              <button onClick={()=>{setActiveSubjectVid(subject);setActiveSubtopicVid(sub);setActiveAula(aulas[0]||null);}}
+                                className={`w-full text-left px-3 py-1.5 pl-6 text-[11px] font-semibold transition-colors ${isActSub?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-400 hover:bg-gray-700/40':'text-gray-500 hover:bg-gray-50')}`}>
+                                {sub}
+                              </button>
+                              {isActSub&&aulas.map((aula,ai)=>{
+                                const isAct=effAula?.bunny_id===aula.bunny_id;
+                                const watched=watchedAulas[aula.bunny_id];
+                                return (
+                                  <button key={aula.bunny_id} onClick={()=>setActiveAula(aula)}
+                                    className={`w-full flex items-center gap-2 px-3 py-1.5 pl-9 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
+                                    <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
+                                      {watched?<CheckIcon className="w-2 h-2"/>:<span className="text-[7px] font-bold">{ai+1}</span>}
+                                    </div>
+                                    <span className="text-[11px] truncate leading-tight">{aula.title}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ══ MAIN ══ */}
+              <div className="flex-1 overflow-y-auto" style={{height:'calc(100vh - 62px)'}}>
+                <div className="flex items-center gap-2 p-3 md:hidden border-b" style={{borderColor:dm?'#374151':'#e5e7eb'}}>
+                  <button onClick={()=>setView('library')} className={`p-1.5 rounded ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
+                  <span className="text-sm font-bold text-yellow-600">Videoaulas</span>
+                </div>
+
+                {!effAula ? (
+                  <div className="flex flex-col items-center justify-center h-64 opacity-30">
+                    <VideoIcon className="w-12 h-12 mb-3 text-gray-400"/>
+                    <p className="font-serif font-bold text-gray-400">Selecione uma aula</p>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Player — full width, black bg */}
+                    <div className="relative w-full bg-black" style={{aspectRatio:'16/9',maxHeight:'72vh'}}>
+                      {isDemo ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center" style={{background:'#0d0d0d'}}>
+                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 border-2 ${dm?'border-yellow-600 bg-yellow-900/30':'border-yellow-500 bg-yellow-50'}`}>
+                            <PlayIcon className="w-7 h-7 text-yellow-500 ml-0.5"/>
+                          </div>
+                          <p className="text-white font-bold text-lg">{effAula.title}</p>
+                          <p className="text-gray-500 text-sm mt-1">Player Bunny Stream</p>
+                          {/* Fake controls overlay */}
+                          <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-10" style={{background:'linear-gradient(transparent,rgba(0,0,0,0.88))'}}>
+                            <div className="mb-2">
+                              <div className="h-1 bg-gray-600/60 rounded-full cursor-pointer hover:h-1.5 transition-all"><div className="h-full bg-yellow-500 rounded-full" style={{width:'34%'}}/></div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <button className="text-white/70 hover:text-white"><SkipBack className="w-4 h-4"/></button>
+                                <button className="text-white/70 hover:text-white"><PlayIcon className="w-5 h-5"/></button>
+                                <button className="text-white/70 hover:text-white"><SkipForward className="w-4 h-4"/></button>
+                                <span className="text-xs text-gray-400 font-mono tabular-nums">14:22 / 42:00</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {/* Speed — bottom right, dropdown on hover */}
+                                <div className="relative group">
+                                  <button className="text-xs text-white bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded font-bold transition-colors">1×</button>
+                                  <div className="absolute bottom-9 right-0 bg-gray-900/95 border border-gray-700 rounded-xl overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto shadow-xl z-20 min-w-[72px]">
+                                    {['0.5','0.75','1','1.25','1.5','2'].map(s=>(
+                                      <div key={s} className={`px-4 py-2 text-xs cursor-pointer hover:bg-white/10 text-center font-medium ${s==='1'?'text-yellow-400 font-bold':'text-gray-200'}`}>{s}×</div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {/* Fullscreen */}
+                                <button className="text-white/70 hover:text-white">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <iframe key={effAula.bunny_id} src={`${effAula.embed_url}?autoplay=1`}
+                          className="absolute inset-0 w-full h-full" style={{border:'none'}}
+                          allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen/>
+                      )}
+                    </div>
+
+                    {/* Info below player */}
+                    <div className={`px-5 py-4 max-w-5xl ${dm?'bg-gray-900':'bg-white'}`}>
+                      <p className={`text-xs mb-2 flex items-center gap-1 flex-wrap ${textMuted}`}>
+                        <span>{effSubject}</span><ChevronRight className="w-3 h-3 opacity-40"/><span>{effSubtopic}</span><ChevronRight className="w-3 h-3 opacity-40"/>
+                        <span className={dm?'text-gray-200':'text-gray-700'}>{effAula.title}</span>
+                      </p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h2 className={`text-xl font-serif font-bold ${dm?'text-white':'text-gray-900'}`}>{effAula.title}</h2>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={()=>!isDemo&&markAulaWatched(effAula.bunny_id)}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all ${watchedAulas[effAula.bunny_id]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
+                            <CheckIcon className="w-4 h-4"/>{watchedAulas[effAula.bunny_id]?'Assistida ✓':'Marcar assistida'}
+                          </button>
+                          <button onClick={()=>{setView('creator');setNewSubName(effAula.title);}}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white">
+                            <Sparkles className="w-4 h-4"/>Gerar Questões
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-stretch gap-3 mb-4">
+                        <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+                          <SkipBack className="w-4 h-4 flex-shrink-0"/>
+                          <div className="text-left min-w-0"><p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Anterior</p><p className="truncate text-xs">{prevAula?.title||'—'}</p></div>
+                        </button>
+                        <div className={`flex items-center px-3 rounded-xl text-xs font-bold ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
+                        <button onClick={()=>nextAula&&setActiveAula(nextAula)} disabled={!nextAula}
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 justify-end text-right ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+                          <div className="min-w-0"><p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p><p className="truncate text-xs">{nextAula?.title||'—'}</p></div>
+                          <SkipForward className="w-4 h-4 flex-shrink-0"/>
+                        </button>
+                      </div>
+                      {/* Mobile aula list */}
+                      <div className={`md:hidden border-t pt-4 ${sideBorder}`}>
+                        <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>{effSubtopic}</p>
+                        {effAulas.map((aula,ai)=>(
+                          <button key={aula.bunny_id} onClick={()=>setActiveAula(aula)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border transition-colors ${effAula.bunny_id===aula.bunny_id?(dm?'border-yellow-700 bg-yellow-900/20':'border-yellow-400 bg-yellow-50'):(dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50')}`}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${watchedAulas[aula.bunny_id]?'bg-green-500 text-white':'border '+(dm?'border-gray-600 text-gray-400':'border-gray-300 text-gray-500')}`}>
+                              {watchedAulas[aula.bunny_id]?<CheckIcon className="w-3.5 h-3.5"/>:<span className="text-xs font-bold">{ai+1}</span>}
+                            </div>
+                            <span className="text-sm">{aula.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()}
