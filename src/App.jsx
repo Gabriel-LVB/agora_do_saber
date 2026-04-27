@@ -908,6 +908,7 @@ export default function QuestionBankApp() {
   const [activeAula, setActiveAula] = useState(null);
   const [watchedAulas, setWatchedAulas] = useState({});  // { bunny_id: true }
   const [expandedSubjectsVid, setExpandedSubjectsVid] = useState({});
+  const [mobileNavOpen, setMobileNavOpen] = useState(false); // subject/subtopic picker on mobile
 
   // Load videoaulas JSON from Firestore on first visit
   useEffect(() => {
@@ -2135,9 +2136,13 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
 
               {/* ══ MAIN ══ */}
               <div className="flex-1 overflow-y-auto" style={{height:'calc(100vh - 62px)'}}>
-                <div className="flex items-center gap-2 p-3 md:hidden border-b" style={{borderColor:dm?'#374151':'#e5e7eb'}}>
-                  <button onClick={()=>setView('library')} className={`p-1.5 rounded ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
-                  <span className="text-sm font-bold text-yellow-600">Videoaulas</span>
+                {/* Mobile back bar */}
+                <div className={`flex items-center gap-2 px-3 py-2.5 md:hidden border-b flex-shrink-0 ${sideBorder} ${dm?'bg-gray-800':'bg-white'}`}>
+                  <button onClick={()=>setView('library')} className={`p-1.5 rounded-lg ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
+                  <span className="text-sm font-bold text-yellow-600 flex-1 truncate">
+                    {effAula ? cleanAulaTitle(effAula.title) : 'Videoaulas'}
+                  </span>
+                  {effAula&&<span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>{effIdx+1}/{effAulas.length}</span>}
                 </div>
 
                 {!effAula ? (
@@ -2147,41 +2152,31 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   </div>
                 ) : (
                   <div>
-                    {/* Player — full width, black bg */}
-                    <div className="relative w-full bg-black" style={{aspectRatio:'16/9',maxHeight:'72vh'}}>
+                    {/* Player */}
+                    <div className="relative w-full bg-black" style={{aspectRatio:'16/9',maxHeight:'70vh'}}>
                       {isDemo ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center" style={{background:'#0d0d0d'}}>
                           <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 border-2 ${dm?'border-yellow-600 bg-yellow-900/30':'border-yellow-500 bg-yellow-50'}`}>
                             <PlayIcon className="w-7 h-7 text-yellow-500 ml-0.5"/>
                           </div>
-                          <p className="text-white font-bold text-lg">{effAula.title}</p>
+                          <p className="text-white font-bold text-lg px-4 text-center">{cleanAulaTitle(effAula.title)}</p>
                           <p className="text-gray-500 text-sm mt-1">Player Bunny Stream</p>
-                          {/* Fake controls overlay */}
                           <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-10" style={{background:'linear-gradient(transparent,rgba(0,0,0,0.88))'}}>
-                            <div className="mb-2">
-                              <div className="h-1 bg-gray-600/60 rounded-full cursor-pointer hover:h-1.5 transition-all"><div className="h-full bg-yellow-500 rounded-full" style={{width:'34%'}}/></div>
-                            </div>
+                            <div className="mb-2"><div className="h-1 bg-gray-600/60 rounded-full"><div className="h-full bg-yellow-500 rounded-full" style={{width:'34%'}}/></div></div>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <button className="text-white/70 hover:text-white"><SkipBack className="w-4 h-4"/></button>
-                                <button className="text-white/70 hover:text-white"><PlayIcon className="w-5 h-5"/></button>
-                                <button className="text-white/70 hover:text-white"><SkipForward className="w-4 h-4"/></button>
-                                <span className="text-xs text-gray-400 font-mono tabular-nums">14:22 / 42:00</span>
+                                <button className="text-white/70"><SkipBack className="w-4 h-4"/></button>
+                                <button className="text-white/70"><PlayIcon className="w-5 h-5"/></button>
+                                <button className="text-white/70"><SkipForward className="w-4 h-4"/></button>
+                                <span className="text-xs text-gray-400 font-mono">14:22 / 42:00</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                {/* Speed — bottom right, dropdown on hover */}
-                                <div className="relative group">
-                                  <button className="text-xs text-white bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded font-bold transition-colors">1×</button>
-                                  <div className="absolute bottom-9 right-0 bg-gray-900/95 border border-gray-700 rounded-xl overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto shadow-xl z-20 min-w-[72px]">
-                                    {['0.5','0.75','1','1.25','1.5','2'].map(s=>(
-                                      <div key={s} className={`px-4 py-2 text-xs cursor-pointer hover:bg-white/10 text-center font-medium ${s==='1'?'text-yellow-400 font-bold':'text-gray-200'}`}>{s}×</div>
-                                    ))}
-                                  </div>
+                              <div className="relative group">
+                                <button className="text-xs text-white bg-white/15 px-2.5 py-1 rounded font-bold">1x</button>
+                                <div className="absolute bottom-9 right-0 bg-gray-900/95 border border-gray-700 rounded-xl overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto shadow-xl z-20" style={{minWidth:'72px'}}>
+                                  {['0.5','0.75','1','1.25','1.5','2'].map(s=>(
+                                    <div key={s} className={`px-4 py-2 text-xs cursor-pointer hover:bg-white/10 text-center font-medium ${s==='1'?'text-yellow-400 font-bold':'text-gray-200'}`}>{s}x</div>
+                                  ))}
                                 </div>
-                                {/* Fullscreen */}
-                                <button className="text-white/70 hover:text-white">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-                                </button>
                               </div>
                             </div>
                           </div>
@@ -2193,53 +2188,155 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                       )}
                     </div>
 
-                    {/* Info below player */}
-                    <div className={`px-5 lg:px-8 py-4 ${dm?'bg-gray-900':'bg-white'}`}>
-                      <p className={`text-xs mb-2 flex items-center gap-1 flex-wrap ${textMuted}`}>
-                        <span>{effSubject?.replace(/\s*⭐\s*/g,'')}</span><ChevronRight className="w-3 h-3 opacity-40"/><span>{shortSubName(effSubtopic||'')}</span><ChevronRight className="w-3 h-3 opacity-40"/>
-                        <span className={dm?'text-gray-200':'text-gray-700'}>{cleanAulaTitle(effAula.title)}</span>
-                      </p>
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                        <h2 className={`text-xl font-serif font-bold ${dm?'text-white':'text-gray-900'}`}>{cleanAulaTitle(effAula.title)}</h2>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
-                            <CheckIcon className="w-4 h-4"/>
-                            {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex items-stretch gap-3 mb-4">
-                        <button onClick={()=>prevAula&&(setActiveAula(prevAula))} disabled={!prevAula}
-                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+                    <div className={`${dm?'bg-gray-900':'bg-white'}`}>
+                      {/* MOBILE: prev / next row */}
+                      <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
+                        <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
+                          className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
                           <SkipBack className="w-4 h-4 flex-shrink-0"/>
-                          <div className="text-left min-w-0">
-                            <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Anterior</p>
-                            <p className="truncate text-xs">{cleanAulaTitle(prevAula?.title||'—')}</p>
+                          <div className="min-w-0 text-left">
+                            <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Anterior</p>
+                            <p className="truncate">{prevAula?cleanAulaTitle(prevAula.title):'—'}</p>
                           </div>
                         </button>
-                        <div className={`flex items-center px-3 rounded-xl text-xs font-bold flex-shrink-0 ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
-                        <button onClick={()=>nextAula&&(setActiveAula(nextAula))} disabled={!nextAula}
-                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 justify-end text-right ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                          <div className="min-w-0">
-                            <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p>
-                            <p className="truncate text-xs">{cleanAulaTitle(nextAula?.title||'—')}</p>
+                        <button onClick={()=>nextAula&&setActiveAula(nextAula)} disabled={!nextAula}
+                          className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 justify-end text-right ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
+                          <div className="min-w-0 text-right">
+                            <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Próxima</p>
+                            <p className="truncate">{nextAula?cleanAulaTitle(nextAula.title):'—'}</p>
                           </div>
                           <SkipForward className="w-4 h-4 flex-shrink-0"/>
                         </button>
                       </div>
-                      {/* Mobile aula list */}
-                      <div className={`md:hidden border-t pt-4 ${sideBorder}`}>
-                        <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>{effSubtopic}</p>
-                        {effAulas.map((aula,ai)=>(
-                          <button key={getAulaId(aula)||aula.path} onClick={()=>setActiveAula(aula)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border transition-colors ${getAulaId(effAula)===getAulaId(aula)?(dm?'border-yellow-700 bg-yellow-900/20':'border-yellow-400 bg-yellow-50'):(dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50')}`}>
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${watchedAulas[getAulaId(aula)]?'bg-green-500 text-white':'border '+(dm?'border-gray-600 text-gray-400':'border-gray-300 text-gray-500')}`}>
-                              {watchedAulas[getAulaId(aula)]?<CheckIcon className="w-3.5 h-3.5"/>:null}
+                      {/* MOBILE: subject/topic picker + mark watched */}
+                      <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
+                        <button onClick={()=>setMobileNavOpen(true)}
+                          className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-2.5 rounded-xl border text-xs font-semibold ${dm?'border-gray-700 text-gray-300':'border-gray-200 text-gray-600'}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
+                          <span className="truncate">{effSubject?.replace(/\s*⭐\s*/g,'')} — {shortSubName(effSubtopic||'')}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="ml-auto flex-shrink-0 opacity-40"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
+                          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400':'border-green-400 text-green-700'))}`}>
+                          <CheckIcon className="w-4 h-4"/>
+                          {watchedAulas[getAulaId(effAula)]?'✓':'Assistida'}
+                        </button>
+                      </div>
+
+                      {/* MOBILE: scrollable aula list */}
+                      <div className={`md:hidden border-b ${sideBorder} overflow-y-auto`} style={{maxHeight:'38vh'}}>
+                        <div className={`px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider sticky top-0 ${dm?'bg-gray-900 text-gray-500':'bg-white text-gray-400'}`}>{shortSubName(effSubtopic||'')}</div>
+                        {effAulas.map((aula)=>{
+                          const id = getAulaId(aula);
+                          const isAct = id===getAulaId(effAula);
+                          const watched = watchedAulas[id];
+                          return (
+                            <button key={id||aula.path} onClick={()=>setActiveAula(aula)}
+                              className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b transition-colors ${isAct?(dm?'bg-yellow-900/25':'bg-yellow-50'):(dm?'hover:bg-gray-800':'hover:bg-gray-50')} ${dm?'border-gray-700/40':'border-gray-100'}`}>
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':(isAct?'bg-yellow-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300'))}`}>
+                                {watched?<CheckIcon className="w-3 h-3"/>:isAct?<PlayIcon className="w-2.5 h-2.5" style={{marginLeft:'1px'}}/>:null}
+                              </div>
+                              <span className={`text-sm truncate ${isAct?'font-semibold '+(dm?'text-yellow-300':'text-yellow-700'):(watched?'text-gray-400':(dm?'text-gray-300':'text-gray-700'))}`}>
+                                {cleanAulaTitle(aula.title)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* MOBILE BOTTOM SHEET: subject / subtopic picker */}
+                      {mobileNavOpen&&(
+                        <div className="fixed inset-0 z-[300] md:hidden" onClick={()=>setMobileNavOpen(false)}>
+                          <div className="absolute inset-0 bg-black/60"/>
+                          <div className={`absolute bottom-0 left-0 right-0 rounded-t-2xl overflow-hidden ${dm?'bg-gray-800':'bg-white'}`}
+                            onClick={e=>e.stopPropagation()}>
+                            {/* Handle */}
+                            <div className="flex justify-center pt-3 pb-1">
+                              <div className={`w-10 h-1 rounded-full ${dm?'bg-gray-600':'bg-gray-300'}`}/>
                             </div>
-                            <span className="text-sm">{aula.title}</span>
+                            {/* Header */}
+                            <div className={`flex items-center justify-between px-4 py-3 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
+                              <span className="font-bold text-sm text-yellow-600">Navegar</span>
+                              <button onClick={()=>setMobileNavOpen(false)} className={`text-lg leading-none font-bold ${dm?'text-gray-400':'text-gray-400'}`}>✕</button>
+                            </div>
+                            {/* Scrollable list */}
+                            <div className="overflow-y-auto" style={{maxHeight:'65vh'}}>
+                              {subjects.map(subj=>{
+                                const sAulas = Object.values(data[subj]).flat();
+                                const sW = sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                const isExpS = expandedSubjectsVid[subj]??(subj===effSubject);
+                                return (
+                                  <div key={subj} className={`border-b ${dm?'border-gray-700/60':'border-gray-100'}`}>
+                                    <button onClick={()=>setExpandedSubjectsVid(p=>({...p,[subj]:!isExpS}))}
+                                      className={`w-full flex items-center justify-between px-4 py-3 text-left ${dm?'hover:bg-gray-700':'hover:bg-gray-50'}`}>
+                                      <div className="flex-1 min-w-0">
+                                        <p className={`text-sm font-bold truncate ${subj===effSubject?'text-yellow-500':''}`}>{subj.replace(/\s*⭐\s*/g,'')}</p>
+                                        <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{sW}/{sAulas.length} assistidas</p>
+                                      </div>
+                                      <ChevronDown className={`w-4 h-4 opacity-30 ml-2 transition-transform ${isExpS?'':'rotate-180'}`}/>
+                                    </button>
+                                    {isExpS&&Object.keys(data[subj]).map(sub=>{
+                                      const isActSub = subj===effSubject && sub===effSubtopic;
+                                      const subAulas = data[subj][sub];
+                                      const subW = subAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                      return (
+                                        <button key={sub} onClick={()=>{
+                                          setActiveSubjectVid(subj);
+                                          setActiveSubtopicVid(sub);
+                                          setActiveAula(data[subj][sub][0]||null);
+                                          setMobileNavOpen(false);
+                                        }} className={`w-full flex items-center justify-between px-4 py-2.5 pl-8 text-left border-t ${dm?'border-gray-700/40 hover:bg-gray-700':'border-gray-50 hover:bg-gray-50'} ${isActSub?(dm?'bg-yellow-900/30':'bg-yellow-50'):''}`}>
+                                          <div className="flex-1 min-w-0">
+                                            <p className={`text-sm truncate ${isActSub?'font-bold '+(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-300':'text-gray-700')}`}>{shortSubName(sub)}</p>
+                                          </div>
+                                          <span className={`text-xs flex-shrink-0 ml-2 ${dm?'text-gray-500':'text-gray-400'}`}>{subW}/{subAulas.length}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* DESKTOP info block */}
+                      <div className="hidden md:block px-6 lg:px-8 py-4">
+                        <p className={`text-xs mb-2 flex items-center gap-1 flex-wrap ${textMuted}`}>
+                          <span>{effSubject?.replace(/\s*⭐\s*/g,'')}</span>
+                          <ChevronRight className="w-3 h-3 opacity-40"/>
+                          <span>{shortSubName(effSubtopic||'')}</span>
+                          <ChevronRight className="w-3 h-3 opacity-40"/>
+                          <span className={dm?'text-gray-200':'text-gray-700'}>{cleanAulaTitle(effAula.title)}</span>
+                        </p>
+                        <div className="flex items-center justify-between gap-3 mb-4">
+                          <h2 className={`text-xl font-serif font-bold truncate ${dm?'text-white':'text-gray-900'}`}>{cleanAulaTitle(effAula.title)}</h2>
+                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
+                            <CheckIcon className="w-4 h-4"/>
+                            {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
                           </button>
-                        ))}
+                        </div>
+                        <div className="flex items-stretch gap-3">
+                          <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+                            <SkipBack className="w-4 h-4 flex-shrink-0"/>
+                            <div className="text-left min-w-0">
+                              <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Anterior</p>
+                              <p className="truncate text-xs">{cleanAulaTitle(prevAula?.title||'—')}</p>
+                            </div>
+                          </button>
+                          <div className={`flex items-center px-3 rounded-xl text-xs font-bold flex-shrink-0 ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
+                          <button onClick={()=>nextAula&&setActiveAula(nextAula)} disabled={!nextAula}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 justify-end text-right ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+                            <div className="min-w-0">
+                              <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p>
+                              <p className="truncate text-xs">{cleanAulaTitle(nextAula?.title||'—')}</p>
+                            </div>
+                            <SkipForward className="w-4 h-4 flex-shrink-0"/>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2248,7 +2345,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
             </div>
           );
         })()}
-
         {/* ── STATS ── */}
         {view==='stats'&&(()=>{
           const stats=getStats();
