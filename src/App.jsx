@@ -82,6 +82,8 @@ const VIDEOAULAS_ALLOWED_EMAILS = [
   'matheustene@gmail.com',
   'lucasteles42@gmail.com',
   'gabrielvieiraxc12@gmail.com',
+  'Robertroblles@gmail.com',
+  'alicyafranca@alu.ufc.br',
 ];
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 // Extract unique ID from Bunny embed_url
