@@ -1117,6 +1117,7 @@ export default function QuestionBankApp() {
   const [vqLoading, setVqLoading]   = useState(false);
   const [vqGenModal, setVqGenModal] = useState(null);
   const [vqActiveBlock, setVqActiveBlock] = useState(null);
+  const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
   const [vqExpandedTopic, setVqExpandedTopic] = useState({});
 
@@ -2715,7 +2716,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                                 const qAns=Object.values(d?.blocks||{}).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0);
                                 const qPct=qTotal>0?Math.round(qAns/qTotal*100):0;
                                 return (
-                                  <button key={id} onClick={()=>{setVqSubject(subj);setVqAula(aula);setVqActiveBlock(null);setView('videoquestions');}}
+                                  <button key={id} onClick={()=>{setVqSubject(subj);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');}}
                                     className={`w-full flex items-center gap-3 px-4 py-3 border-b text-left last:border-0 transition-colors ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
                                     <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-xs font-bold ${qPct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
                                       {qPct===100?<CheckIcon className="w-4 h-4"/>:`${qPct}%`}
@@ -3363,94 +3364,236 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
             const durationSecs = vqAula.duration_seconds || 0;
             const suggestedQ = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
 
+            // ── VIEW COMPLETA DE UM BLOCO ── igual à view topic normal
+            if(vqActiveBlockView) {
+              const { blockId } = vqActiveBlockView;
+              const block = blocks[blockId] || {};
+              const qs = block.questions || [];
+              const ans = block.answers || {};
+              const correct = qs.filter(q=>ans[q.id]===q.options?.find(o=>o.isCorrect)?.letter).length;
+              const answered = Object.keys(ans).length;
+              const pct = answered>0?Math.round(correct/answered*100):0;
+              const allDone = qs.length>0 && answered===qs.length;
+
+              // helpers de exportação — montar topic sintético igual ao topic normal
+              const syntheticTopic = {
+                title: `${vqAula.title} — ${block.title||`Bloco ${blockId.replace('block','')}`}`,
+                questions: qs,
+              };
+
+              const handleVqAnswer = async (qId, letter) => {
+                const newAns = {...ans, [qId]: letter};
+                const updBlocks = {...blocks, [blockId]: {...block, answers: newAns}};
+                await saveVqBlock(aulaId, {...aulaData, blocks: updBlocks});
+              };
+
+              const handleVqReset = async () => {
+                const updBlocks = {...blocks, [blockId]: {...block, answers: {}}};
+                await saveVqBlock(aulaId, {...aulaData, blocks: updBlocks});
+              };
+
+              const wrongIds = qs.filter(q=>ans[q.id]&&ans[q.id]!==q.options?.find(o=>o.isCorrect)?.letter).map(q=>q.id);
+              const [showWrong, setShowWrongLocal] = vqActiveBlockView.showWrong
+                ? [true, ()=>setVqActiveBlockView(p=>({...p,showWrong:false}))]
+                : [false, ()=>setVqActiveBlockView(p=>({...p,showWrong:true}))];
+              const displayQs = showWrong ? qs.filter(q=>wrongIds.includes(q.id)) : qs;
+
+              return (
+                <div className="max-w-3xl mx-auto">
+                  {/* Header igual ao topic */}
+                  <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b pb-6 ${dm?'border-gray-700':'border-gray-200'}`}>
+                    <div>
+                      <button onClick={()=>setVqActiveBlockView(null)}
+                        className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                        <ArrowLeft className="w-4 h-4"/>{vqAula.title}
+                      </button>
+                      <h2 className="text-2xl font-serif font-bold text-yellow-600">
+                        {block.title||`Bloco ${blockId.replace('block','')}`}
+                      </h2>
+                      {answered>0&&<p className="text-sm opacity-60 mt-1">{correct}/{answered} corretas ({pct}%)</p>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {qs.length>0&&(
+                        <>
+                          <button onClick={()=>setExportModal({topic:syntheticTopic,subject:null})}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                            <Printer className="w-4 h-4"/>Exportar
+                          </button>
+                          {wrongIds.length>0&&(
+                            <button onClick={setShowWrongLocal}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${showWrong?(dm?'bg-red-900/30 text-red-400 border-red-700':'bg-red-50 text-red-600 border-red-300'):(dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                              <FilterIcon className="w-4 h-4"/>{showWrong?`Erradas (${wrongIds.length})`:`Filtrar (${wrongIds.length})`}
+                            </button>
+                          )}
+                          <button onClick={handleVqReset}
+                            className="flex items-center gap-1.5 px-3 py-2 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-bold">
+                            <Eraser className="w-4 h-4"/>Limpar
+                          </button>
+                          <button onClick={()=>generateVqBlock(aulaId,blockId)}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold ${dm?'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50':'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`}>
+                            <RotateCcw className="w-4 h-4"/>Recriar
+                          </button>
+                        </>
+                      )}
+                      {qs.length===0&&!block.generating&&(
+                        <button onClick={()=>generateVqBlock(aulaId,blockId)} disabled={vqLoading}
+                          className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
+                          {vqLoading?<Spinner className="w-4 h-4 text-white"/>:<Sparkles className="w-5 h-5"/>}
+                          {vqLoading?'Gerando...':'Gerar Questões'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Gerando */}
+                  {block.generating&&qs.length===0&&(
+                    <div className="flex flex-col items-center py-20">
+                      <Spinner className="w-12 h-12 text-yellow-600 mb-4"/>
+                      <p className="text-lg font-serif font-bold text-yellow-600">Gerando questões...</p>
+                      {streamCount>0&&<p className="text-sm text-green-600 mt-2 font-bold animate-pulse">✓ {streamCount} questão(ões) gerada(s)...</p>}
+                    </div>
+                  )}
+
+                  {/* Questões */}
+                  {!block.generating&&(
+                    <div>
+                      {showWrong&&displayQs.length===0&&(
+                        <div className="text-center py-16 opacity-60">
+                          <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-4"/>
+                          <p className="font-bold text-lg">Nenhum erro encontrado!</p>
+                        </div>
+                      )}
+                      {displayQs.map((q,i)=>(
+                        <QuestionCard key={i} question={q} index={i}
+                          selectedLetter={ans[q.id]}
+                          onAnswer={l=>handleVqAnswer(q.id,l)}
+                          darkMode={darkMode} isFavorite={false} onToggleFavorite={()=>{}}
+                          apiKey={getKey()} oracleLength={settings.oracleLength}/>
+                      ))}
+                      {/* Conclusão */}
+                      {allDone&&!showWrong&&(
+                        <div className="text-center py-10">
+                          <Award className="w-16 h-16 mx-auto text-yellow-500 mb-4"/>
+                          <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Bloco Concluído!</h3>
+                          <p className="opacity-70 mb-6">{correct}/{qs.length} corretas ({Math.round(correct/qs.length*100)}%)</p>
+                          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            {wrongIds.length>0&&(
+                              <button onClick={setShowWrongLocal} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border border-red-400 text-red-500 hover:bg-red-50`}>
+                                <FilterIcon className="w-4 h-4"/>Revisar Erros ({wrongIds.length})
+                              </button>
+                            )}
+                            <button onClick={()=>setVqActiveBlockView(null)}
+                              className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700">
+                              <ArrowLeft className="w-4 h-4"/>Ver Blocos
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // ── LISTA DE BLOCOS DA AULA ──
             return (
               <div className="max-w-3xl mx-auto">
                 {/* Breadcrumb */}
-                <div className={`flex items-center gap-2 mb-6 text-sm flex-wrap`}>
-                  <button onClick={()=>{setVqAula(null);setVqActiveBlock(null);}} className={`font-bold flex items-center gap-1 ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>{vqSubject}</button>
+                <div className="flex items-center gap-2 mb-6 text-sm flex-wrap">
+                  <button onClick={()=>{setVqAula(null);setVqActiveBlockView(null);}}
+                    className={`font-bold flex items-center gap-1 ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                    <ArrowLeft className="w-4 h-4"/>{vqSubject}
+                  </button>
                   <span className="opacity-30">/</span>
-                  <span className="opacity-50">{shortTopicName(vqTopic)}</span>
+                  <span className="opacity-50 text-xs">{shortTopicName(vqTopic)}</span>
                   <span className="opacity-30">/</span>
                   <span className={`font-bold ${dm?'text-yellow-400':'text-yellow-700'}`}>{vqAula.title}</span>
                 </div>
 
-                <div className="flex items-start justify-between mb-6 gap-4">
+                <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 pb-6 border-b ${dm?'border-gray-700':'border-gray-200'}`}>
                   <div>
                     <h2 className="text-2xl font-serif font-bold text-yellow-600">{vqAula.title}</h2>
-                    {vqAula.duration_formatted && <p className="text-sm opacity-50 mt-1">⏱ {vqAula.duration_formatted}</p>}
+                    {vqAula.duration_formatted&&<p className="text-sm opacity-50 mt-1">⏱ {vqAula.duration_formatted}</p>}
                   </div>
-                  {!hasSetup && (
-                    <button
-                      onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})}
-                      className="flex-shrink-0 flex items-center gap-2 px-5 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
-                      <Sparkles className="w-4 h-4"/>Gerar Questões
-                    </button>
-                  )}
+                  <div className="flex gap-2 flex-shrink-0">
+                    {hasSetup&&(
+                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ,reset:true})}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                        <RotateCcw className="w-4 h-4"/>Regenerar
+                      </button>
+                    )}
+                    {!hasSetup&&(
+                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
+                        <Sparkles className="w-4 h-4"/>Gerar Questões
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Sem setup ainda */}
-                {!hasSetup && blockList.length===0 && (
+                {/* Vazio */}
+                {!hasSetup&&blockList.length===0&&(
                   <div className={`flex flex-col items-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
                     <GraduationCap className={`w-16 h-16 mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
                     <p className="font-serif font-bold text-lg opacity-50 mb-2">Nenhuma questão ainda</p>
                     <p className="text-sm opacity-40 mb-6 text-center max-w-xs">Clique em "Gerar Questões" para o Oráculo criar uma bateria baseada nesta aula.</p>
-                    <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})} className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
+                    <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})}
+                      className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
                       <Sparkles className="w-5 h-5"/>Gerar Questões
                     </button>
                   </div>
                 )}
 
-                {/* Blocos gerados */}
-                {blockList.length>0 && (
+                {/* Cards de bloco — cada um abre a view completa */}
+                {blockList.length>0&&(
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-bold uppercase opacity-40">{blockList.length} bloco(s) • {aulaQCount(vqAula)} questão(ões)</p>
-                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ,reset:true})} className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${dm?'bg-gray-700 hover:bg-gray-600 text-gray-300':'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
-                        <RotateCcw className="w-3 h-3"/>Regenerar
-                      </button>
-                    </div>
+                    <p className="text-xs font-bold uppercase opacity-40 mb-1">{blockList.length} bloco(s) · {aulaQCount(vqAula)} questão(ões)</p>
                     {blockList.map(([blockId, block])=>{
                       const qs = block.questions||[];
                       const ans = block.answers||{};
+                      const answered = Object.keys(ans).length;
                       const correct = qs.filter(q=>ans[q.id]===q.options?.find(o=>o.isCorrect)?.letter).length;
-                      const pct = Object.keys(ans).length>0?Math.round(correct/Object.keys(ans).length*100):null;
-                      const isActive = vqActiveBlock===blockId;
+                      const pct = answered>0?Math.round(correct/answered*100):null;
+                      const allDone = qs.length>0&&answered===qs.length;
+                      const blockNum = blockId.replace('block','');
+
                       return (
-                        <div key={blockId} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                          <button onClick={()=>setVqActiveBlock(isActive?null:blockId)} className="w-full p-5 flex items-center justify-between text-left">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold font-serif ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>{blockId.replace('block','')}</div>
-                              <div>
-                                <p className="font-bold">{block.title||`Bloco ${blockId.replace('block','')}`}</p>
-                                <p className="text-xs opacity-40 mt-0.5">{qs.length} questão(ões){block.generating?' • gerando...':''}</p>
+                        <div key={blockId} className={`rounded-2xl border overflow-hidden transition-all ${dm?'bg-gray-800 border-gray-700 hover:border-gray-600':'bg-white border-gray-200 hover:border-gray-300'}`}>
+                          <button
+                            onClick={()=>{
+                              if(qs.length>0) setVqActiveBlockView({blockId,showWrong:false});
+                              else generateVqBlock(aulaId,blockId);
+                            }}
+                            disabled={block.generating}
+                            className="w-full p-5 flex items-center gap-4 text-left">
+                            {/* Número / progresso */}
+                            <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-bold font-serif text-lg ${allDone?'bg-green-500 text-white':pct!==null?(dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                              {allDone?<CheckIcon className="w-6 h-6"/>:blockNum}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold truncate">{block.title||`Bloco ${blockNum}`}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                {block.generating?(
+                                  <span className="text-xs text-yellow-600 font-bold animate-pulse flex items-center gap-1">
+                                    <Spinner className="w-3 h-3"/>Gerando{streamCount>0?` (${streamCount}q)`:'...'}
+                                  </span>
+                                ):qs.length>0?(
+                                  <>
+                                    <div className={`h-1.5 rounded-full overflow-hidden flex-1 max-w-24 ${dm?'bg-gray-700':'bg-gray-100'}`}>
+                                      <div className={`h-full rounded-full ${allDone?'bg-green-500':'bg-yellow-500'}`} style={{width:`${Math.round(answered/qs.length*100)}%`}}/>
+                                    </div>
+                                    <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{answered}/{qs.length} respondidas</span>
+                                    {pct!==null&&<span className={`text-xs font-bold ml-1 ${pct>=70?'text-green-600':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</span>}
+                                  </>
+                                ):(
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${dm?'bg-yellow-900/40 text-yellow-500':'bg-yellow-100 text-yellow-700'}`}>
+                                    Toque para gerar
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              {pct!==null&&<span className={`text-sm font-bold ${pct>=70?'text-green-600':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</span>}
-                              {qs.length===0&&!block.generating&&(
-                                <button onClick={e=>{e.stopPropagation();generateVqBlock(aulaId,blockId);}} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
-                                  <Sparkles className="w-3 h-3"/>Gerar
-                                </button>
-                              )}
-                              {block.generating&&<div className="flex items-center gap-1.5"><Spinner className="w-4 h-4 text-yellow-600"/>{streamCount>0&&<span className="text-xs text-green-600 font-bold animate-pulse">{streamCount}q</span>}</div>}
-                              {isActive?<ChevronDown className="w-4 h-4 opacity-30"/>:<ChevronRight className="w-4 h-4 opacity-30"/>}
-                            </div>
+                            <ChevronRight className={`w-5 h-5 flex-shrink-0 ${dm?'text-gray-600':'text-gray-300'}`}/>
                           </button>
-                          {isActive&&qs.length>0&&(
-                            <div className={`border-t px-4 pb-4 ${dm?'border-gray-700':'border-gray-200'}`}>
-                              {qs.map((q,i)=>(
-                                <QuestionCard key={i} question={q} index={i}
-                                  selectedLetter={ans[q.id]}
-                                  onAnswer={async(l)=>{
-                                    const newAns={...ans,[q.id]:l};
-                                    const updBlocks={...blocks,[blockId]:{...block,answers:newAns}};
-                                    await saveVqBlock(aulaId,{...aulaData,blocks:updBlocks});
-                                  }}
-                                  darkMode={darkMode} isFavorite={false} onToggleFavorite={()=>{}}
-                                  apiKey={getKey()} oracleLength={settings.oracleLength}/>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -3520,7 +3663,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             const hasSetup = !!vqBlocks[aulaDocId(aula)]?.meta?.totalQuestions;
                             return (
                               <button key={ai}
-                                onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);}}
+                                onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);}}
                                 className={`w-full flex items-center justify-between px-5 py-3 border-t text-left transition-colors ${dm?'border-gray-700/50 hover:bg-gray-700':'border-gray-50 hover:bg-gray-50'}`}>
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${dm?'bg-gray-700':'bg-gray-100'}`}>
