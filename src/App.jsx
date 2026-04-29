@@ -874,8 +874,6 @@ export default function QuestionBankApp() {
 
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
-  const [searchQuery, setSearchQuery]   = useState('');
-  const [searchOpen, setSearchOpen]     = useState(false);
 
   // Exam
   const [examSetup, setExamSetup]       = useState(null);
@@ -884,11 +882,6 @@ export default function QuestionBankApp() {
   const [examQCount, setExamQCount]     = useState(30);
   const [examTopics, setExamTopics]     = useState([]);
   const [examBlind, setExamBlind]       = useState(false); // show corrections after finish
-
-  // Review
-  const [reviewQs, setReviewQs]         = useState([]);
-  const [reviewAns, setReviewAns]       = useState({});
-  const [reviewSchedule, setReviewSchedule] = useState(false); // show schedule
 
   // Stats
   const [statsExpanded, setStatsExpanded] = useState({});
@@ -1006,8 +999,6 @@ export default function QuestionBankApp() {
   useEffect(()=>{
     const handleKey = (e) => {
       if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
-      // Search shortcut
-      if (e.key==='/'&&!searchOpen) { e.preventDefault(); setSearchOpen(true); return; }
       if (view!=='topic'||!activeTopic) return;
       const unanswered = displayedQs.find(q=>!activeTopic.answers?.[q.id]);
       if (!unanswered) return;
@@ -1357,17 +1348,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
     library.forEach(s=>s.topics.forEach(t=>{Object.entries(t.spacedReview||{}).forEach(([qId,r])=>{if(r.dueDate>now&&r.dueDate<=week){const q=(t.questions||[]).find(x=>x.id===qId);if(q)items.push({subjectTitle:s.title,topicTitle:t.title,question:q,dueDate:r.dueDate});}});}));
     return items.sort((a,b)=>a.dueDate-b.dueDate);
   };
-  const startReview = () => { const d=getDueReviews();if(!d.length){setErrorModal({title:'Sem Revisões',message:'Nenhuma questão programada para hoje!',isAlert:true});return;}setReviewQs(d);setReviewAns({});setReviewSchedule(false);setView('review'); };
-  const handleReviewAns = async (qId,letter,topicId,subjectId) => {
-    setReviewAns(p=>({...p,[qId]:letter}));
-    const s=library.find(x=>x.id===subjectId); const t=s?.topics.find(x=>x.id===topicId); if(!t)return;
-    const q=t.questions.find(x=>x.id===qId); const ok=q?.options.find(o=>o.isCorrect)?.letter===letter;
-    const now=Date.now(); const sr={...(t.spacedReview||{})};
-    if(!ok) sr[qId]={...sr[qId],dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
-    else{const ni=Math.min((sr[qId]?.interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
-    await updateSubject({...s,topics:s.topics.map(x=>x.id===topicId?{...x,spacedReview:sr}:x)});
-  };
-
   // Statistics
   const getStats = () => {
     let tQ=0,tA=0,tC=0; const bySubject={};
@@ -1452,20 +1432,8 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
     setView('exam');
   };
 
-  // Search
-  const getSearchResults = (q) => {
-    if(!q.trim()||q.length<2)return[];
-    const ql=q.toLowerCase();const res=[];
-    library.forEach(s=>s.topics.forEach(t=>(t.questions||[]).forEach(q=>{
-      if(q.statement.toLowerCase().includes(ql)||q.explanation.toLowerCase().includes(ql)||q.options.some(o=>o.text.toLowerCase().includes(ql)))
-        res.push({subject:s,topic:t,question:q});
-    })));
-    return res;
-  };
-
   // Helpers
   const subjectProgress = (s) => { const all=s.topics.flatMap(t=>t.questions||[]); const ans=s.topics.flatMap(t=>Object.keys(t.answers||{})).length; return all.length>0?Math.round(ans/all.length*100):0; };
-  const dueCount = getDueReviews().length;
   const canSeeVideoaulas = user?.email
     ? VIDEOAULAS_ALLOWED_EMAILS.includes(user.email.toLowerCase())
     : false;
@@ -1532,10 +1500,8 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
           <div className="hidden md:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 opacity-50 border-r pr-3 ${darkMode?'border-gray-700':'border-gray-300'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
-              {icon:<SearchIcon className="w-4 h-4"/>,   action:()=>setSearchOpen(true), title:'Buscar'},
               {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
               {icon:<BarChart2 className="w-4 h-4"/>,     action:()=>setView('stats'),     title:'Estatísticas'},
-              {icon:<CalendarCheck className="w-4 h-4"/>, action:startReview,              title:'Revisão', badge:dueCount},
               {icon:<SettingsIcon className="w-4 h-4"/>,  action:()=>setView('settings'),  title:'Configurações'},
               {icon:darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>, action:()=>setDarkMode(!darkMode), title:'Tema'},
               {icon:<LogOut className="w-4 h-4"/>,        action:handleLogout,             title:'Sair', danger:true},
@@ -1549,12 +1515,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
 
           {/* Mobile right: theme + hamburger */}
           <div className="flex md:hidden items-center gap-1">
-            {dueCount>0&&(
-              <button onClick={startReview} className={`relative p-2 rounded-full ${darkMode?'bg-gray-800 text-yellow-500':'bg-gray-100 text-yellow-600'}`}>
-                <CalendarCheck className="w-5 h-5"/>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{dueCount>9?'9+':dueCount}</span>
-              </button>
-            )}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full ${darkMode?'bg-gray-800 text-yellow-500':'bg-gray-100 text-yellow-600'}`}>
               {darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>}
             </button>
@@ -1572,7 +1532,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
           <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
             <div className="px-4 py-2 grid grid-cols-2 gap-1">
               {[
-                {icon:<SearchIcon className="w-5 h-5"/>,   label:'Buscar',        action:()=>setSearchOpen(true)},
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<BarChart2 className="w-5 h-5"/>,     label:'Estatísticas',  action:()=>setView('stats')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
@@ -1834,6 +1793,33 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   <input type="file" ref={imageInputRef} onChange={handleImageUpload} multiple className="hidden" accept="image/*"/>
                 </div>
                 {isBig()&&<div className={`text-xs p-3 rounded-lg flex gap-2 ${darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'}`}>⚠️ Material extenso — os primeiros ~45k tokens serão usados.</div>}
+
+                {/* Parâmetros de geração */}
+                <div>
+                  <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros de Geração</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:20},{l:'Questões/Subtópico',k:'qPerSub',mn:1,mx:5}].map(f=>(
+                      <div key={f.k}>
+                        <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
+                        <input type="number" min={f.mn} max={f.mx} value={settings[f.k]}
+                          onChange={e=>setSettings({...settings,[f.k]:e.target.value})}
+                          onBlur={()=>{let v=parseInt(settings[f.k]);if(isNaN(v)||v<f.mn)v=f.mn;if(v>f.mx)v=f.mx;const ns={...settings,[f.k]:v};setSettings(ns);saveSettings(ns);}}
+                          className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      </div>
+                    ))}
+                    <div>
+                      <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
+                      <select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}>
+                        <option value={4}>4 (A-D)</option>
+                        <option value={5}>5 (A-E)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className={`text-xs mt-2 opacity-40`}>
+                    Total estimado: {(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões
+                  </p>
+                </div>
+
                 <button onClick={startCreation} disabled={isBusy||isUploading||!newSubName} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura')}
                 </button>
@@ -2361,12 +2347,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   <div key={x.l} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border text-center`}><div className={`text-3xl font-bold ${x.c}`}>{x.v}</div><div className="text-xs opacity-50 uppercase mt-1">{x.l}</div></div>
                 ))}
               </div>
-              {stats.due>0&&(
-                <div className={`mb-6 p-4 rounded-xl border flex items-center justify-between ${darkMode?'bg-orange-900/20 border-orange-700':'bg-orange-50 border-orange-200'}`}>
-                  <div className="flex items-center gap-3"><CalendarCheck className="w-5 h-5 text-orange-600"/><span className="font-bold text-orange-600">{stats.due} questão(ões) para revisão hoje</span></div>
-                  <button onClick={startReview} className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-600">Revisar</button>
-                </div>
-              )}
               {/* Collapsible folders */}
               <div className="space-y-3">
                 {Object.values(stats.bySubject).filter(s=>s.total>0).map(subj=>{
@@ -2417,52 +2397,6 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
           );
         })()}
 
-        {/* ── REVIEW ── */}
-        {view==='review'&&(
-          <div>
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-2 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-                <h2 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><CalendarCheck className="w-7 h-7"/>Revisão Espaçada</h2>
-              </div>
-              <button onClick={()=>setReviewSchedule(!reviewSchedule)} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${reviewSchedule?(darkMode?'border-yellow-600 bg-yellow-900/20 text-yellow-400':'border-yellow-400 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 text-gray-400':'border-gray-200 text-gray-600')}`}><Clock className="w-4 h-4"/>Próximas</button>
-            </div>
-            {reviewSchedule?(
-              <div>
-                <h3 className="font-bold text-lg mb-4 opacity-70">Próximas 7 Dias</h3>
-                {getUpcomingReviews().length===0?<p className="opacity-40 text-center py-8">Nenhuma revisão agendada para os próximos 7 dias.</p>:(
-                  <div className="space-y-2">
-                    {getUpcomingReviews().map((item,i)=>(
-                      <div key={i} className={`p-4 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-sm font-medium line-clamp-1">{item.question.statement.substring(0,80)}...</p>
-                            <p className="text-xs opacity-40 mt-1">{item.subjectTitle} › {item.topicTitle}</p>
-                          </div>
-                          <span className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ml-3 ${daysUntil(item.dueDate)===0?'bg-red-100 text-red-700':daysUntil(item.dueDate)<=2?'bg-orange-100 text-orange-700':'bg-gray-100 text-gray-600'}`}>{formatDate(item.dueDate)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ):(
-              <div>
-                <p className="text-sm opacity-60 mb-6">{reviewQs.length} questões para hoje • {Object.keys(reviewAns).length} respondidas</p>
-                {reviewQs.map((item,i)=>(
-                  <QuestionCard key={i} question={item.question} index={i} selectedLetter={reviewAns[item.question.id]} onAnswer={l=>handleReviewAns(item.question.id,l,item.topicId,item.subjectId)} darkMode={darkMode} isFavorite={false} onToggleFavorite={()=>{}} apiKey={getKey()} oracleLength={settings.oracleLength}/>
-                ))}
-                {Object.keys(reviewAns).length===reviewQs.length&&reviewQs.length>0&&(
-                  <div className="text-center py-10">
-                    <Award className="w-16 h-16 mx-auto text-yellow-500 mb-4"/>
-                    <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Revisão Concluída!</h3>
-                    <button onClick={()=>setView('library')} className="mt-4 bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-700">Voltar</button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ── EXAM SETUP MODAL ── */}
         {examSetup!==null&&(
@@ -2635,47 +2569,13 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                 ))}
               </div>
             </div>
-            {/* Numbers */}
-            <div className="grid grid-cols-2 gap-4">
-              {[{l:'Tópicos (1-10)',k:'numTopics',mn:1,mx:10},{l:'Subtópicos (1-20)',k:'numSubtopics',mn:1,mx:20},{l:'Questões/Subtópico (1-5)',k:'qPerSub',mn:1,mx:5}].map(f=>(
-                <div key={f.k}><label className="block text-xs font-bold uppercase mb-2 opacity-50">{f.l}</label><input type="number" min={f.mn} max={f.mx} value={settings[f.k]} onChange={e=>setSettings({...settings,[f.k]:e.target.value})} onBlur={()=>{let v=parseInt(settings[f.k]);if(isNaN(v)||v<f.mn)v=f.mn;if(v>f.mx)v=f.mx;const ns={...settings,[f.k]:v};setSettings(ns);saveSettings(ns);}} className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/></div>
-              ))}
-              <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas</label><select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}><option value={4}>4 (A-D)</option><option value={5}>5 (A-E)</option></select></div>
-            </div>
             <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra</label><textarea value={settings.customPrompt} onChange={e=>setSettings({...settings,customPrompt:e.target.value})} onBlur={()=>saveSettings(settings)} placeholder="Instruções adicionais para o Oráculo..." className={`w-full h-28 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/></div>
             <button onClick={()=>{saveSettings(settings);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold">Salvar</button>
           </div>
         )}
       </main>
 
-      {/* ── SEARCH OVERLAY ── */}
-      {searchOpen&&(
-        <div className="fixed inset-0 z-[200] flex items-start justify-center bg-black/70 p-4 pt-20">
-          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-            <div className={`flex items-center gap-3 p-4 border-b ${darkMode?'border-gray-700':'border-gray-200'}`}>
-              <SearchIcon className="w-5 h-5 opacity-40"/>
-              <input autoFocus type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Buscar em toda a biblioteca..." className={`flex-1 outline-none text-base ${darkMode?'bg-transparent text-white':'text-gray-900'}`}/>
-              <button onClick={()=>{setSearchOpen(false);setSearchQuery('');}} className="opacity-40 hover:opacity-100 text-lg font-bold">×</button>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto">
-              {searchQuery.length<2?<p className="text-center py-10 opacity-40 text-sm">Digite ao menos 2 caracteres...</p>:(()=>{
-                const r=getSearchResults(searchQuery);
-                return r.length===0?<p className="text-center py-10 opacity-40 text-sm">Nenhum resultado para "{searchQuery}"</p>:(
-                  <div>
-                    <p className={`text-xs font-bold uppercase px-4 py-2 opacity-40 border-b ${darkMode?'border-gray-700':''}`}>{r.length} resultado(s)</p>
-                    {r.map(({subject,topic,question},i)=>(
-                      <div key={i} onClick={()=>{setSearchOpen(false);setSearchQuery('');setActiveSubjectId(subject.id);setActiveTopicId(topic.id);setShowOnlyWrong(false);setView('topic');}} className={`p-4 border-b cursor-pointer ${darkMode?'border-gray-700 hover:bg-gray-700':'border-gray-100 hover:bg-gray-50'}`}>
-                        <p className="text-xs opacity-40 mb-1">{subject.title} › {topic.title}</p>
-                        <p className="text-sm line-clamp-2">{question.statement.substring(0,150)}...</p>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* ── EXPORT MODAL ── */}
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}
