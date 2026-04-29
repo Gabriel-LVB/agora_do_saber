@@ -1110,19 +1110,26 @@ export default function QuestionBankApp() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false); // subject/subtopic picker on mobile
 
   // Questões do Curso (videoaulas)
-  const [vqSubject, setVqSubject]   = useState(null);  // assunto ativo na aba de questões
-  const [vqTopic, setVqTopic]       = useState(null);  // tópico ativo
-  const [vqAula, setVqAula]         = useState(null);  // aula ativa
-  const [vqBlocks, setVqBlocks]     = useState({});    // { aulaId: { meta, blocks: {blockId: {questions,answers,...}} } }
+  const [vqSubject, setVqSubject]   = useState(null);
+  const [vqTopic, setVqTopic]       = useState(null);
+  const [vqAula, setVqAula]         = useState(null);
+  const [vqBlocks, setVqBlocks]     = useState({});
   const [vqLoading, setVqLoading]   = useState(false);
-  const [vqGenModal, setVqGenModal] = useState(null);  // modal de config de geração
-  const [vqActiveBlock, setVqActiveBlock] = useState(null); // bloco sendo visto/gerado
+  const [vqGenModal, setVqGenModal] = useState(null);
+  const [vqActiveBlock, setVqActiveBlock] = useState(null);
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
   const [vqExpandedTopic, setVqExpandedTopic] = useState({});
 
+  // Portal do Curso — aba ativa e cronograma
+  const [cursoTab, setCursoTab]           = useState('videoaulas'); // 'videoaulas'|'questoes'|'cronograma'
+  const [cronograma, setCronograma]       = useState(null);   // array de 46 semanas
+  const [cronLoading, setCronLoading]     = useState(false);
+  const [curWeek, setCurWeek]             = useState(null);   // semana selecionada no cronograma
+  const [cronStartDate, setCronStartDate] = useState(null);   // data de início do curso (salva no Firestore)
+
   // Load videoaulas: monta estrutura a partir da coleção lessons (embed_urls sempre corretos)
   useEffect(() => {
-    if (!['videoaulas','videoquestions'].includes(view) || !user || videoaulasData) return;
+    if (!['videoaulas','videoquestions','curso'].includes(view) || !user || videoaulasData) return;
     setVideoaulasLoading(true);
     (async () => {
       try {
@@ -1187,7 +1194,44 @@ export default function QuestionBankApp() {
     } catch(e) {}
   };
 
-  // Load vqBlocks from Firestore when entering videoquestions view
+  // Load cronograma from Firestore
+  useEffect(() => {
+    if (view !== 'curso' || !user || cronograma) return;
+    setCronLoading(true);
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, 'cronograma'));
+        const weeks = [];
+        snap.forEach(d => weeks.push(d.data()));
+        weeks.sort((a,b) => a.week - b.week);
+        setCronograma(weeks);
+        // Carregar data de início salva pelo usuário
+        const prefSnap = await getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'));
+        if (prefSnap.exists()) {
+          const prefs = prefSnap.data();
+          if (prefs.startDate) setCronStartDate(prefs.startDate);
+        }
+      } catch(e) { setCronograma([]); }
+      finally { setCronLoading(false); }
+    })();
+  }, [view, user, cronograma]); // eslint-disable-line
+
+  const saveCronStartDate = async (dateStr) => {
+    setCronStartDate(dateStr);
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { startDate: dateStr }, { merge: true });
+    } catch(e) {}
+  };
+
+  // Calcula semana atual baseada na data de início
+  const getCurrentWeek = () => {
+    if (!cronStartDate) return null;
+    const start = new Date(cronStartDate);
+    const now = new Date();
+    const diffMs = now - start;
+    if (diffMs < 0) return 1;
+    return Math.min(46, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
+  };
   useEffect(() => {
     if (view !== 'videoquestions' || !user || user.isAnonymous) return;
     (async () => {
@@ -2056,7 +2100,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
         )}
       </header>
 
-      <main className={view==='videoaulas'?'':'max-w-5xl mx-auto px-4 py-8'}>
+      <main className={view==='videoaulas'||view==='curso'?'':'max-w-5xl mx-auto px-4 py-8'}>
 
         {/* ── LIBRARY ── */}
         {view==='library'&&(
@@ -2080,18 +2124,10 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                 </div>
               ))}
               {canSeeVideoaulas&&(
-                <div onClick={()=>setView('videoaulas')} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
-                  <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><VideoIcon className="w-12 h-12 text-yellow-600"/></div>
-                  <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Videoaulas</h3>
-                  <p className="text-sm opacity-60">Aulas em vídeo do curso</p>
-                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>Acesso restrito</div>
-                </div>
-              )}
-              {canSeeVideoaulas&&(
-                <div onClick={()=>setView('videoquestions')} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
+                <div onClick={()=>setView('curso')} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><GraduationCap className="w-12 h-12 text-yellow-600"/></div>
-                  <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Questões do Curso</h3>
-                  <p className="text-sm opacity-60">Questões geradas das aulas</p>
+                  <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Portal do Curso</h3>
+                  <p className="text-sm opacity-60">Videoaulas, questões e cronograma</p>
                   <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>Acesso restrito</div>
                 </div>
               )}
@@ -2476,6 +2512,236 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           );
         })()}
 
+        {/* ── PORTAL DO CURSO ── wrapper com 3 abas ── */}
+        {view==='curso'&&canSeeVideoaulas&&(()=>{
+          const dm = darkMode;
+          const tabs = [
+            {id:'videoaulas',   label:'Videoaulas',    icon:<VideoIcon className="w-4 h-4"/>},
+            {id:'questoes',     label:'Questões',      icon:<GraduationCap className="w-4 h-4"/>},
+            {id:'cronograma',   label:'Cronograma',    icon:<CalendarCheck className="w-4 h-4"/>},
+          ];
+          return (
+            <div className="flex flex-col" style={{minHeight:'calc(100vh - 62px)'}}>
+              {/* Tab bar */}
+              <div className={`flex items-center border-b flex-shrink-0 ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                <button onClick={()=>setView('library')} className={`p-3 pl-4 ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>
+                  <ArrowLeft className="w-4 h-4"/>
+                </button>
+                <div className="flex flex-1">
+                  {tabs.map(tab=>(
+                    <button key={tab.id} onClick={()=>setCursoTab(tab.id)}
+                      className={`flex items-center gap-2 px-5 py-3.5 text-sm font-bold border-b-2 transition-colors ${cursoTab===tab.id
+                        ? 'border-yellow-500 text-yellow-600'
+                        : `border-transparent ${dm?'text-gray-400 hover:text-gray-200':'text-gray-500 hover:text-gray-700'}`}`}>
+                      {tab.icon}{tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Content — full height */}
+              <div className="flex-1 overflow-hidden">
+                {cursoTab==='videoaulas'&&(()=>{
+                  // ── VIDEOAULAS (inline, sem header próprio) ──────────────────
+                  const isDemo = !videoaulasData||Object.keys(videoaulasData).length===0;
+                  const raw = isDemo?{}:videoaulasData;
+                  const subjects=Object.keys(raw).sort((a,b)=>{
+                    const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
+                    const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
+                    return (ai===-1?99:ai)-(bi===-1?99:bi);
+                  });
+                  const data={};
+                  subjects.forEach(subj=>{
+                    const rawT=raw[subj];
+                    const sortedT=Object.keys(rawT).sort((a,b)=>getSubtopicOrder(a)-getSubtopicOrder(b));
+                    data[subj]={};
+                    sortedT.forEach(topic=>{
+                      const cats=rawT[topic];
+                      if(Array.isArray(cats)){data[subj][topic]={main:cats,bonus:[]};}
+                      else if(cats&&typeof cats==='object'){
+                        const isNewFmt='Aulas Principais'in cats||'Bônus'in cats;
+                        if(isNewFmt){data[subj][topic]={main:cats['Aulas Principais']||[],bonus:cats['Bônus']||[]};}
+                        else{
+                          const merged={main:[],bonus:[]};
+                          Object.entries(cats).forEach(([k,v])=>{if(Array.isArray(v)){if(/⭐/.test(k))merged.bonus.push(...v);else merged.main.push(...v);}});
+                          data[subj][topic]=merged;
+                        }
+                      }else{data[subj][topic]={main:[],bonus:[]};}
+                    });
+                  });
+                  // reusar toda a lógica já existente da view videoaulas, mas renderizada dentro da aba
+                  // Para não duplicar ~400 linhas, redireciona para a view completa
+                  return (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center py-12">
+                        <VideoIcon className={`w-12 h-12 mx-auto mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
+                        <p className="font-serif font-bold text-lg opacity-50 mb-4">Abrir player de videoaulas</p>
+                        <button onClick={()=>setView('videoaulas')} className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold mx-auto">
+                          <PlayIcon className="w-4 h-4"/>Acessar Videoaulas
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {cursoTab==='questoes'&&(()=>{
+                  // Redirecionar para a view dedicada de questões
+                  return (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center py-12">
+                        <GraduationCap className={`w-12 h-12 mx-auto mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
+                        <p className="font-serif font-bold text-lg opacity-50 mb-4">Questões geradas das videoaulas</p>
+                        <button onClick={()=>setView('videoquestions')} className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold mx-auto">
+                          <GraduationCap className="w-4 h-4"/>Acessar Questões do Curso
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {cursoTab==='cronograma'&&(()=>{
+                  const dm = darkMode;
+                  const currentWeek = getCurrentWeek();
+                  const activeWeek = curWeek ?? currentWeek ?? 1;
+                  const weekData = cronograma?.find(w=>w.week===activeWeek);
+
+                  // Calcular progresso de aulas assistidas por topic
+                  const watchedByTopic = {};
+                  if(videoaulasData){
+                    Object.values(videoaulasData).forEach(topics=>
+                      Object.entries(topics).forEach(([topic,cats])=>{
+                        const all=[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])];
+                        const watched=all.filter(a=>watchedAulas[getAulaId(a)]).length;
+                        watchedByTopic[topic]={watched,total:all.length};
+                      })
+                    );
+                  }
+
+                  return (
+                    <div className={`flex h-full ${dm?'bg-gray-900':'bg-gray-50'}`} style={{height:'calc(100vh - 62px - 48px)'}}>
+                      {/* Sidebar — lista de semanas */}
+                      <div className={`w-52 xl:w-64 flex-shrink-0 border-r overflow-y-auto ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                        {/* Data de início */}
+                        <div className={`p-3 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
+                          <p className={`text-[10px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Início do curso</p>
+                          <input type="date" value={cronStartDate||''} onChange={e=>saveCronStartDate(e.target.value)}
+                            className={`w-full p-1.5 rounded-lg border text-xs outline-none focus:ring-1 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/>
+                          {currentWeek&&<p className={`text-[10px] mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>📍 Semana atual: {currentWeek}</p>}
+                        </div>
+                        {/* Lista de semanas */}
+                        {cronLoading&&<div className="flex justify-center py-6"><Spinner className="w-5 h-5 text-yellow-600"/></div>}
+                        {(cronograma||[]).map(week=>{
+                          const isActive=week.week===activeWeek;
+                          const isCurrent=week.week===currentWeek;
+                          return (
+                            <button key={week.week} onClick={()=>setCurWeek(week.week)}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-left border-b transition-colors ${dm?'border-gray-700/50':'border-gray-50'} ${isActive?(dm?'bg-yellow-900/30':'bg-yellow-50'):(dm?'hover:bg-gray-800':'hover:bg-gray-50')}`}>
+                              <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${isActive?'bg-yellow-600 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 border border-yellow-600':'bg-yellow-100 text-yellow-700 border border-yellow-400'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                                {week.week}
+                              </div>
+                              <div className="min-w-0">
+                                <p className={`text-xs font-bold truncate ${isActive?(dm?'text-yellow-300':'text-yellow-700'):(dm?'text-gray-300':'text-gray-700')}`}>
+                                  {week.entries.map(e=>e.subject).filter((s,i,arr)=>arr.indexOf(s)===i).join(' + ')}
+                                </p>
+                                <p className={`text-[10px] truncate ${dm?'text-gray-500':'text-gray-400'}`}>
+                                  {week.entries[0]?.label}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Main — detalhe da semana */}
+                      <div className="flex-1 overflow-y-auto p-6">
+                        {!weekData&&!cronLoading&&(
+                          <div className="flex flex-col items-center justify-center h-full opacity-40">
+                            <CalendarCheck className="w-12 h-12 mb-3"/>
+                            <p className="font-bold">Selecione uma semana</p>
+                          </div>
+                        )}
+                        {weekData&&(
+                          <div className="max-w-2xl">
+                            <div className="flex items-center gap-3 mb-6">
+                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-serif font-bold text-lg flex-shrink-0 ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>
+                                {weekData.week}
+                              </div>
+                              <div>
+                                <h2 className="text-xl font-serif font-bold text-yellow-600">Semana {weekData.week}</h2>
+                                {weekData.week===currentWeek&&<span className={`text-xs font-bold px-2 py-0.5 rounded-full ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>📍 Semana atual</span>}
+                              </div>
+                            </div>
+
+                            <div className="space-y-4">
+                              {/* Deduplicar por subject+topic */}
+                              {Array.from(new Map(weekData.entries.map(e=>[`${e.subject}::${e.topic}`,e])).values()).map(entry=>{
+                                const prog=watchedByTopic[entry.topic];
+                                const pct=prog?.total>0?Math.round(prog.watched/prog.total*100):0;
+                                // Aulas do tópico
+                                const topicAulas=videoaulasData
+                                  ?Object.values(videoaulasData[entry.subject]?.[entry.topic]||{}).flat().filter(Array.isArray).flat()
+                                  :[];
+                                // Novo formato
+                                const cats = videoaulasData?.[entry.subject]?.[entry.topic];
+                                const mainAulas = cats?.['Aulas Principais']||[];
+                                const bonusAulas = cats?.['Bônus']||[];
+                                const allAulas = [...mainAulas,...bonusAulas];
+                                const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                const totalCount = allAulas.length;
+
+                                return (
+                                  <div key={`${entry.subject}::${entry.topic}`} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                                    {/* Header */}
+                                    <div className="p-4 pb-3">
+                                      <div className="flex items-start justify-between gap-3 mb-2">
+                                        <div>
+                                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full mr-2 ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>{entry.subject}</span>
+                                          <p className="font-bold mt-1.5">{entry.label}</p>
+                                          <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{entry.topic}</p>
+                                        </div>
+                                        <button onClick={()=>{
+                                          setView('videoaulas');
+                                          setActiveSubjectVid(entry.subject);
+                                          setActiveSubtopicVid(`${entry.topic}::main`);
+                                          setActiveAula(null);
+                                        }} className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                          <PlayIcon className="w-3 h-3"/>Assistir
+                                        </button>
+                                      </div>
+                                      {/* Barra de progresso */}
+                                      {totalCount>0&&(
+                                        <div className="mt-2">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className={`text-[10px] ${dm?'text-gray-500':'text-gray-400'}`}>{watchedCount}/{totalCount} aulas assistidas</span>
+                                            <span className={`text-[10px] font-bold ${pct===100?'text-green-500':dm?'text-gray-400':'text-gray-500'}`}>{pct}%</span>
+                                          </div>
+                                          <div className={`h-1.5 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`}>
+                                            <div className={`h-full rounded-full transition-all ${pct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${pct}%`}}/>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* Conteúdo do tópico detalhado no cronograma */}
+                                    {weekData.entries.filter(e2=>e2.subject===entry.subject&&e2.topic===entry.topic).length>1&&(
+                                      <div className={`px-4 pb-3 border-t ${dm?'border-gray-700':'border-gray-100'}`}>
+                                        <p className={`text-[10px] font-bold uppercase mt-2 mb-1 ${dm?'text-gray-500':'text-gray-400'}`}>Conteúdo desta semana</p>
+                                        {weekData.entries.filter(e2=>e2.subject===entry.subject&&e2.topic===entry.topic).map((e2,i)=>(
+                                          <p key={i} className={`text-xs py-0.5 ${dm?'text-gray-300':'text-gray-600'}`}>• {e2.label}</p>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── VIDEOAULAS ── */}
         {view==='videoaulas'&&(()=>{
           const dm = darkMode;
@@ -2740,7 +3006,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           src={effAula.embed_url}
                           className="absolute inset-0 w-full h-full"
                           style={{border:'none'}}
-                          allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;fullscreen"
+                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
                           allowFullScreen
                         />
                       ) : (
@@ -2894,6 +3160,19 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                               setVqGenModal({aula:effAula, aulaId, suggestedQ:10, subject:effSubject, topic:effTopic});
                             }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
                               <GraduationCap className="w-4 h-4"/>Questões
+                            </button>
+                            <button onClick={async()=>{
+                              try {
+                                const docId=(effAula.title||'').replace(/\//g,'-');
+                                const snap=await getDoc(doc(db,'lessons',docId));
+                                const transcript=snap.exists()?snap.data().transcript:'';
+                                if(!transcript){alert('Transcrição não disponível para esta aula.');return;}
+                                const blob=new Blob([`${effAula.title}\n${'='.repeat(effAula.title.length)}\n\n${transcript}`],{type:'text/plain;charset=utf-8'});
+                                const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+                                a.download=`${effAula.title.substring(0,60).replace(/[^a-zA-Z0-9\s\-]/g,'')}.txt`;a.click();
+                              } catch(e){alert('Erro ao exportar transcrição.');}
+                            }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-gray-600 text-gray-400 hover:bg-gray-700':'border-gray-200 text-gray-500 hover:bg-gray-50'}`} title="Exportar transcrição">
+                              <DownloadIcon className="w-4 h-4"/>
                             </button>
                             <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
                               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
@@ -3082,7 +3361,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           // LIST VIEW: navegação por assunto → tópico → aula
           return (
             <div className="max-w-3xl mx-auto">
-              <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-6 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
+              <button onClick={()=>setView('curso')} className={`flex items-center gap-2 mb-6 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Portal do Curso</button>
               <div className="flex items-center gap-3 mb-8">
                 <GraduationCap className="w-8 h-8 text-yellow-600"/>
                 <h2 className="text-3xl font-serif font-bold text-yellow-600">Questões do Curso</h2>
