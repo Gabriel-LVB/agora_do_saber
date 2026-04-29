@@ -1120,20 +1120,50 @@ export default function QuestionBankApp() {
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
   const [vqExpandedTopic, setVqExpandedTopic] = useState({});
 
-  // Load videoaulas JSON from Firestore on first visit
+  // Load videoaulas: monta estrutura a partir da coleção lessons (embed_urls sempre corretos)
   useEffect(() => {
-    if (view !== 'videoaulas' || !user || videoaulasData) return;
+    if (!['videoaulas','videoquestions'].includes(view) || !user || videoaulasData) return;
     setVideoaulasLoading(true);
     (async () => {
       try {
-        const snap = await getDoc(doc(db, 'videoaulas', 'estrutura'));
-        if (snap.exists()) {
-          const d = snap.data().json;
-          setVideoaulasData(typeof d === 'string' ? JSON.parse(d) : d);
-        } else { setVideoaulasData({}); }
+        // Carregar todos os documentos da coleção lessons
+        const snap = await getDocs(collection(db, 'lessons'));
+        if (!snap.empty) {
+          // Montar estrutura: { subject: { topic: { "Aulas Principais": [], "Bônus": [] } } }
+          const built = {};
+          snap.forEach(d => {
+            const data = d.data();
+            const subj  = data.subject;
+            const topic = data.topic;
+            const isBonus = !!data.is_bonus;
+            if (!subj || !topic) return;
+            if (!built[subj]) built[subj] = {};
+            if (!built[subj][topic]) built[subj][topic] = { 'Aulas Principais': [], 'Bônus': [] };
+            const aula = {
+              title:             data.title,
+              embed_url:         data.embed_url,
+              bunny_id:          data.bunny_id,
+              duration_seconds:  data.duration_seconds  || 0,
+              duration_formatted:data.duration_formatted || '',
+            };
+            if (isBonus) built[subj][topic]['Bônus'].push(aula);
+            else         built[subj][topic]['Aulas Principais'].push(aula);
+          });
+          // Ordenar aulas dentro de cada categoria pelo título
+          Object.values(built).forEach(topics =>
+            Object.values(topics).forEach(cats =>
+              Object.values(cats).forEach(arr =>
+                arr.sort((a,b) => a.title.localeCompare(b.title, 'pt'))
+              )
+            )
+          );
+          setVideoaulasData(built);
+        } else {
+          setVideoaulasData({});
+        }
         const ps = await getDoc(doc(db, 'users', user.uid, 'videoaulas_progress', 'watched'));
         if (ps.exists()) setWatchedAulas(ps.data() || {});
-      } catch(e) { setVideoaulasData({}); }
+      } catch(e) { console.error(e); setVideoaulasData({}); }
       finally { setVideoaulasLoading(false); }
     })();
   }, [view, user, videoaulasData]); // eslint-disable-line
@@ -2483,57 +2513,57 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
           const raw = isDemo ? DEMO_DATA : videoaulasData;
 
-          // NEW FORMAT: Assunto → Tópico → { "Aulas Principais": [], "Bônus": [] }
-          // Flatten into: data[subj][topic] = [ ...aulas_principais, ...bonus ]
-          // Sort subjects by chronogram, topics by their numeric prefix
+          // Parser universal: Assunto → Tópico → { main:[], bonus:[] }
+          // Suporta: novo formato { "Aulas Principais":[], "Bônus":[] }
+          //          formato antigo: { "TOPICO ⭐":[], "TOPICO":[] } ou array direto
           const subjects = Object.keys(raw).sort((a,b) => {
             const ai = SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
             const bi = SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
             return (ai===-1?99:ai) - (bi===-1?99:bi);
           });
 
+          // data[subj][topic] = { main: [], bonus: [] }
           const data = {};
           subjects.forEach(subj => {
             const rawTopics = raw[subj];
-            const sortedTopics = Object.keys(rawTopics).sort((a,b) => getSubtopicOrder(a) - getSubtopicOrder(b));
-            data[subj] = {};
-            sortedTopics.forEach(topic => {
-              const cats = rawTopics[topic];
-              if (Array.isArray(cats)) {
-                // Formato antigo: valor já é array de aulas
-                data[subj][topic] = cats;
-              } else if (cats && typeof cats === 'object') {
-                // Novo formato: { "Aulas Principais": [], "Bônus": [] }
-                // Ou qualquer outro objeto — pega todos os arrays dentro dele
-                const main = cats['Aulas Principais'] || [];
-                const bonus = cats['Bônus'] || [];
-                if (main.length > 0 || bonus.length > 0) {
-                  data[subj][topic] = [...main, ...bonus];
-                } else {
-                  // Fallback: concatenar todos os arrays encontrados no objeto
-                  const allArrays = Object.values(cats).filter(Array.isArray).flat();
-                  data[subj][topic] = allArrays;
-                }
-              } else {
-                data[subj][topic] = [];
+            // Agrupar chaves ⭐ com suas bases (formato antigo do Firestore)
+            // Ex: "NEFRO 1" + "NEFRO 1 ⭐" → um único tópico "NEFRO 1"
+            const mergedTopics = {};
+            Object.entries(rawTopics).forEach(([key, val]) => {
+              const isBonus = /⭐/.test(key);
+              const baseKey = key.replace(/\s*⭐\s*$/, '').trim();
+              if (!mergedTopics[baseKey]) mergedTopics[baseKey] = { main:[], bonus:[] };
+              if (Array.isArray(val)) {
+                // Formato antigo: array direto
+                if (isBonus) mergedTopics[baseKey].bonus.push(...val);
+                else         mergedTopics[baseKey].main.push(...val);
+              } else if (val && typeof val === 'object') {
+                // Novo formato: { "Aulas Principais":[], "Bônus":[] }
+                mergedTopics[baseKey].main.push(...(val['Aulas Principais'] || []));
+                mergedTopics[baseKey].bonus.push(...(val['Bônus'] || []));
               }
             });
+            const sortedKeys = Object.keys(mergedTopics).sort((a,b)=>getSubtopicOrder(a)-getSubtopicOrder(b));
+            data[subj] = {};
+            sortedKeys.forEach(k => { data[subj][k] = mergedTopics[k]; });
           });
 
-          // Helper: short display name for sidebar (strip specialty code prefix)
-          const shortSubName = (key) => {
-            // "GIN 6 - IST" → "IST", "REU 1 - GOTA E FEBRE REUMÁTICA" → "Gota e Febre Reumática"
+          // Helper: nome curto do tópico para sidebar
+          const shortTopicName = (key) => {
             const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i, '').trim();
-            const titled = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
-            return titled.length > 32 ? titled.substring(0,31)+'…' : (titled || key);
+            const t = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+            return t.length > 28 ? t.substring(0,27)+'…' : (t || key);
           };
-          const allAulas = Object.values(data).flatMap(s=>Object.values(s).flat());
+
+          // allAulas = todas as aulas flat (main + bonus) para contagem de progresso
+          const allAulas = Object.values(data).flatMap(s=>Object.values(s).flatMap(t=>[...t.main,...t.bonus]));
           const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
-          const effSubject  = activeSubjectVid  || subjects[0] || null;
-          // Strip trailing ⭐ in case old state has bonus subtopic key
-          const effSubtopicRaw = activeSubtopicVid || (effSubject ? Object.keys(data[effSubject]||{})[0] : null);
-          const effSubtopic = effSubtopicRaw?.replace(/\s*⭐\s*$/, '').trim() || null;
-          const effAulas    = (effSubject&&effSubtopic) ? (data[effSubject]?.[effSubtopic]||[]) : [];
+
+          // Estado ativo: subject + topic + categoria ('main'|'bonus')
+          const effSubject  = activeSubjectVid || subjects[0] || null;
+          const effTopic    = activeSubtopicVid?.split('::')[0] || (effSubject ? Object.keys(data[effSubject]||{})[0] : null);
+          const effCat      = activeSubtopicVid?.split('::')[1] || 'main';
+          const effAulas    = (effSubject && effTopic) ? (data[effSubject]?.[effTopic]?.[effCat] || []) : [];
           const effAula     = activeAula || effAulas[0] || null;
           const effIdx      = effAulas.findIndex(a=>getAulaId(a)===getAulaId(effAula));
           const prevAula    = effIdx>0 ? effAulas[effIdx-1] : null;
@@ -2541,6 +2571,13 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           const sideBorder  = dm?'border-gray-700':'border-gray-200';
           const sideBg      = dm?'bg-gray-800/50':'bg-white';
           const textMuted   = dm?'text-gray-400':'text-gray-500';
+
+          // Helper para setar tópico+cat ao mesmo tempo
+          const setTopicCat = (subject, topic, cat) => {
+            setActiveSubjectVid(subject);
+            setActiveSubtopicVid(`${topic}::${cat}`);
+            setActiveAula(data[subject]?.[topic]?.[cat]?.[0] || null);
+          };
 
           return (
             <div className={`flex w-full ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100vh - 62px)',overflow:'hidden'}}>
@@ -2564,40 +2601,83 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                 <div className="flex-1 overflow-y-auto">
                   {videoaulasLoading&&<div className="flex justify-center py-8"><Spinner className="w-6 h-6 text-yellow-600"/></div>}
                   {subjects.map(subject=>{
-                    const sAulas=Object.values(data[subject]).flat();
+                    const sAulas=Object.values(data[subject]).flatMap(t=>[...t.main,...t.bonus]);
                     const sW=sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
                     const isExp=expandedSubjectsVid[subject]??(subject===effSubject);
                     return (
                       <div key={subject} className={`border-b ${sideBorder}`}>
+                        {/* Assunto */}
                         <button onClick={()=>{setExpandedSubjectsVid(p=>({...p,[subject]:!isExp}));setActiveSubjectVid(subject);}}
                           className={`w-full flex items-center justify-between px-3 py-2.5 text-left ${dm?'hover:bg-gray-700/60':'hover:bg-gray-50'}`}>
                           <div className="min-w-0 flex-1">
-                            <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject.replace(/\s*⭐\s*/g,'').trim()}</p>
+                            <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject}</p>
                             <p className={`text-[10px] mt-0.5 ${textMuted}`}>{sW}/{sAulas.length}</p>
                           </div>
                           {isExp?<ChevronDown className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>}
                         </button>
-                        {isExp&&Object.entries(data[subject]).map(([sub,aulas])=>{
-                          const isActSub=effSubject===subject&&effSubtopic===sub;
+                        {isExp&&Object.entries(data[subject]).map(([topic,{main,bonus}])=>{
+                          const topicAulas=[...main,...bonus];
+                          const topicW=topicAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                          const isTopicExp=expandedSubjectsVid[`${subject}::${topic}`]??(effSubject===subject&&effTopic===topic);
                           return (
-                            <div key={sub}>
-                              <button onClick={()=>{setActiveSubjectVid(subject);setActiveSubtopicVid(sub);setActiveAula(data[subject][sub]?.[0]||null);}}
-                                className={`w-full text-left px-3 py-1.5 pl-6 text-[11px] font-semibold transition-colors ${isActSub?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-400 hover:bg-gray-700/40':'text-gray-500 hover:bg-gray-50')}`}>
-                                {shortSubName(sub)}
+                            <div key={topic}>
+                              {/* Tópico */}
+                              <button onClick={()=>setExpandedSubjectsVid(p=>({...p,[`${subject}::${topic}`]:!isTopicExp}))}
+                                className={`w-full flex items-center justify-between px-3 py-1.5 pl-5 text-left ${dm?'hover:bg-gray-700/40 text-gray-300':'hover:bg-gray-50 text-gray-600'} ${effSubject===subject&&effTopic===topic?(dm?'text-yellow-400':'text-yellow-700'):''}`}>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[11px] font-semibold truncate">{shortTopicName(topic)}</p>
+                                  <p className={`text-[9px] ${textMuted}`}>{topicW}/{topicAulas.length}</p>
+                                </div>
+                                {isTopicExp?<ChevronDown className="w-3 h-3 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 flex-shrink-0"/>}
                               </button>
-                              {isActSub&&aulas.map((aula,ai)=>{
-                                const isAct=getAulaId(effAula)===getAulaId(aula);
-                                const watched=watchedAulas[getAulaId(aula)];
-                                return (
-                                  <button key={getAulaId(aula)||aula.path} onClick={()=>setActiveAula(aula)}
-                                    className={`w-full flex items-center gap-2 px-3 py-1.5 pl-9 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
-                                    <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
-                                      {watched?<CheckIcon className="w-2 h-2"/>:<span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 inline-block"/>}
+                              {isTopicExp&&(
+                                <div>
+                                  {/* Categoria: Aulas */}
+                                  {main.length>0&&(
+                                    <div>
+                                      <button onClick={()=>setTopicCat(subject,topic,'main')}
+                                        className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='main'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
+                                        📖 Aulas ({main.length})
+                                      </button>
+                                      {effSubject===subject&&effTopic===topic&&effCat==='main'&&main.map((aula,ai)=>{
+                                        const isAct=getAulaId(effAula)===getAulaId(aula);
+                                        const watched=watchedAulas[getAulaId(aula)];
+                                        return (
+                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAula(aula)}
+                                            className={`w-full flex items-center gap-2 px-3 py-1.5 pl-10 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
+                                            <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
+                                              {watched&&<CheckIcon className="w-2 h-2"/>}
+                                            </div>
+                                            <span className="text-[11px] truncate leading-tight">{cleanAulaTitle(aula.title)}</span>
+                                          </button>
+                                        );
+                                      })}
                                     </div>
-                                    <span className="text-xs truncate leading-tight">{cleanAulaTitle(aula.title)}</span>
-                                  </button>
-                                );
-                              })}
+                                  )}
+                                  {/* Categoria: Bônus */}
+                                  {bonus.length>0&&(
+                                    <div>
+                                      <button onClick={()=>setTopicCat(subject,topic,'bonus')}
+                                        className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='bonus'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
+                                        ⭐ Bônus ({bonus.length})
+                                      </button>
+                                      {effSubject===subject&&effTopic===topic&&effCat==='bonus'&&bonus.map((aula,ai)=>{
+                                        const isAct=getAulaId(effAula)===getAulaId(aula);
+                                        const watched=watchedAulas[getAulaId(aula)];
+                                        return (
+                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAula(aula)}
+                                            className={`w-full flex items-center gap-2 px-3 py-1.5 pl-10 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
+                                            <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
+                                              {watched&&<CheckIcon className="w-2 h-2"/>}
+                                            </div>
+                                            <span className="text-[11px] truncate leading-tight">{cleanAulaTitle(aula.title)}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -2660,7 +2740,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           src={effAula.embed_url}
                           className="absolute inset-0 w-full h-full"
                           style={{border:'none'}}
-                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture"
+                          allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;fullscreen"
                           allowFullScreen
                         />
                       ) : (
@@ -2695,14 +2775,12 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                         <button onClick={()=>setMobileNavOpen(true)}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-2.5 rounded-xl border text-xs font-semibold ${dm?'border-gray-700 text-gray-300':'border-gray-200 text-gray-600'}`}>
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
-                          <span className="truncate">{effSubject?.replace(/\s*⭐\s*/g,'')} — {shortSubName(effSubtopic||'')}</span>
+                          <span className="truncate">{effSubject} — {shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="ml-auto flex-shrink-0 opacity-40"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
                         <button onClick={()=>{
                           const aulaId = aulaDocId(effAula);
-                          const durationSecs = effAula.duration_seconds||0;
-                          const suggestedQ = durationSecs>0?Math.ceil(durationSecs/120):10;
-                          setVqGenModal({aula:effAula,aulaId,suggestedQ,subject:effSubject,topic:effSubtopic});
+                          setVqGenModal({aula:effAula,aulaId,suggestedQ:10,subject:effSubject,topic:effTopic});
                         }} className={`flex items-center gap-1 px-3 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 border transition-all ${dm?'border-yellow-700 text-yellow-400':'border-yellow-400 text-yellow-700'}`}>
                           <GraduationCap className="w-4 h-4"/>
                         </button>
@@ -2715,7 +2793,9 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
                       {/* MOBILE: scrollable aula list */}
                       <div className={`md:hidden border-b ${sideBorder} overflow-y-auto`} style={{maxHeight:'38vh'}}>
-                        <div className={`px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider sticky top-0 ${dm?'bg-gray-900 text-gray-500':'bg-white text-gray-400'}`}>{shortSubName(effSubtopic||'')}</div>
+                        <div className={`px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider sticky top-0 ${dm?'bg-gray-900 text-gray-500':'bg-white text-gray-400'}`}>
+                          {shortTopicName(effTopic||'')} {effCat==='bonus'?'— Bônus':'— Aulas'}
+                        </div>
                         {effAulas.map((aula)=>{
                           const id = getAulaId(aula);
                           const isAct = id===getAulaId(effAula);
@@ -2734,53 +2814,56 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                         })}
                       </div>
 
-                      {/* MOBILE BOTTOM SHEET: subject / subtopic picker */}
+                      {/* MOBILE BOTTOM SHEET: 3 níveis */}
                       {mobileNavOpen&&(
                         <div className="fixed inset-0 z-[300] md:hidden" onClick={()=>setMobileNavOpen(false)}>
                           <div className="absolute inset-0 bg-black/60"/>
                           <div className={`absolute bottom-0 left-0 right-0 rounded-t-2xl overflow-hidden ${dm?'bg-gray-800':'bg-white'}`}
                             onClick={e=>e.stopPropagation()}>
-                            {/* Handle */}
                             <div className="flex justify-center pt-3 pb-1">
                               <div className={`w-10 h-1 rounded-full ${dm?'bg-gray-600':'bg-gray-300'}`}/>
                             </div>
-                            {/* Header */}
                             <div className={`flex items-center justify-between px-4 py-3 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
                               <span className="font-bold text-sm text-yellow-600">Navegar</span>
                               <button onClick={()=>setMobileNavOpen(false)} className={`text-lg leading-none font-bold ${dm?'text-gray-400':'text-gray-400'}`}>✕</button>
                             </div>
-                            {/* Scrollable list */}
                             <div className="overflow-y-auto" style={{maxHeight:'65vh'}}>
                               {subjects.map(subj=>{
-                                const sAulas = Object.values(data[subj]).flat();
-                                const sW = sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
-                                const isExpS = expandedSubjectsVid[subj]??(subj===effSubject);
+                                const sAulas=Object.values(data[subj]).flatMap(t=>[...t.main,...t.bonus]);
+                                const sW=sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                const isExpS=expandedSubjectsVid[subj]??(subj===effSubject);
                                 return (
                                   <div key={subj} className={`border-b ${dm?'border-gray-700/60':'border-gray-100'}`}>
                                     <button onClick={()=>setExpandedSubjectsVid(p=>({...p,[subj]:!isExpS}))}
                                       className={`w-full flex items-center justify-between px-4 py-3 text-left ${dm?'hover:bg-gray-700':'hover:bg-gray-50'}`}>
                                       <div className="flex-1 min-w-0">
-                                        <p className={`text-sm font-bold truncate ${subj===effSubject?'text-yellow-500':''}`}>{subj.replace(/\s*⭐\s*/g,'')}</p>
+                                        <p className={`text-sm font-bold truncate ${subj===effSubject?'text-yellow-500':''}`}>{subj}</p>
                                         <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{sW}/{sAulas.length} assistidas</p>
                                       </div>
                                       <ChevronDown className={`w-4 h-4 opacity-30 ml-2 transition-transform ${isExpS?'':'rotate-180'}`}/>
                                     </button>
-                                    {isExpS&&Object.keys(data[subj]).map(sub=>{
-                                      const isActSub = subj===effSubject && sub===effSubtopic;
-                                      const subAulas = data[subj][sub];
-                                      const subW = subAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                    {isExpS&&Object.entries(data[subj]).map(([topic,{main,bonus}])=>{
+                                      const isActT=subj===effSubject&&topic===effTopic;
+                                      const topicAulas=[...main,...bonus];
+                                      const tW=topicAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
                                       return (
-                                        <button key={sub} onClick={()=>{
-                                          setActiveSubjectVid(subj);
-                                          setActiveSubtopicVid(sub);
-                                          setActiveAula(data[subj][sub][0]||null);
-                                          setMobileNavOpen(false);
-                                        }} className={`w-full flex items-center justify-between px-4 py-2.5 pl-8 text-left border-t ${dm?'border-gray-700/40 hover:bg-gray-700':'border-gray-50 hover:bg-gray-50'} ${isActSub?(dm?'bg-yellow-900/30':'bg-yellow-50'):''}`}>
-                                          <div className="flex-1 min-w-0">
-                                            <p className={`text-sm truncate ${isActSub?'font-bold '+(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-300':'text-gray-700')}`}>{shortSubName(sub)}</p>
+                                        <div key={topic} className={`border-t ${dm?'border-gray-700/40':'border-gray-50'}`}>
+                                          <div className={`px-4 py-2 pl-7 text-xs font-bold ${isActT?(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-400':'text-gray-500')}`}>
+                                            {shortTopicName(topic)} <span className="opacity-40 font-normal">({tW}/{topicAulas.length})</span>
                                           </div>
-                                          <span className={`text-xs flex-shrink-0 ml-2 ${dm?'text-gray-500':'text-gray-400'}`}>{subW}/{subAulas.length}</span>
-                                        </button>
+                                          {main.length>0&&(
+                                            <button onClick={()=>{setTopicCat(subj,topic,'main');setMobileNavOpen(false);}}
+                                              className={`w-full flex items-center justify-between px-4 py-2 pl-10 text-left ${isActT&&effCat==='main'?(dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
+                                              <span className="text-xs">📖 Aulas ({main.length})</span>
+                                            </button>
+                                          )}
+                                          {bonus.length>0&&(
+                                            <button onClick={()=>{setTopicCat(subj,topic,'bonus');setMobileNavOpen(false);}}
+                                              className={`w-full flex items-center justify-between px-4 py-2 pl-10 text-left ${isActT&&effCat==='bonus'?(dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
+                                              <span className="text-xs">⭐ Bônus ({bonus.length})</span>
+                                            </button>
+                                          )}
+                                        </div>
                                       );
                                     })}
                                   </div>
@@ -2794,9 +2877,9 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                       {/* DESKTOP info block */}
                       <div className="hidden md:block px-6 lg:px-8 py-4">
                         <p className={`text-xs mb-2 flex items-center gap-1 flex-wrap ${textMuted}`}>
-                          <span>{effSubject?.replace(/\s*⭐\s*/g,'')}</span>
+                          <span>{effSubject}</span>
                           <ChevronRight className="w-3 h-3 opacity-40"/>
-                          <span>{shortSubName(effSubtopic||'')}</span>
+                          <span>{shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
                           <ChevronRight className="w-3 h-3 opacity-40"/>
                           <span className={dm?'text-gray-200':'text-gray-700'}>{cleanAulaTitle(effAula.title)}</span>
                         </p>
@@ -2808,9 +2891,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             )}
                             <button onClick={()=>{
                               const aulaId = aulaDocId(effAula);
-                              const durationSecs = effAula.duration_seconds || 0;
-                              const suggestedQ = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
-                              setVqGenModal({aula:effAula, aulaId, suggestedQ, subject:effSubject, topic:effSubtopic});
+                              setVqGenModal({aula:effAula, aulaId, suggestedQ:10, subject:effSubject, topic:effTopic});
                             }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
                               <GraduationCap className="w-4 h-4"/>Questões
                             </button>
