@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
@@ -62,6 +62,8 @@ const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><po
 const FlipIcon    = ic('<path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.7L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.3l3-2.3"/>');
 const PlayCircle  = ic('<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>');
 const PlayIcon    = ic('<polygon points="5 3 19 12 5 21 5 3"/>');
+const GraduationCap = ic('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>');
+const ListChecks  = ic('<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>');
 const CheckIcon   = ic('<polyline points="20 6 9 17 4 12"/>');
 const VideoIcon   = ic('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>');
 const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>');
@@ -371,6 +373,208 @@ const parseHtmlTextChat = (text, darkMode) => {
   });
 };
 
+
+// ─── VQ GEN MODAL ─────────────────────────────────────────────────────────────
+// Modal de configuração de geração de questões para uma videoaula
+const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading }) => {
+  const dm = darkMode;
+
+  // Busca duration da coleção lessons ao montar
+  const [lessonMeta, setLessonMeta]   = useState(null);   // { duration_seconds, duration_formatted }
+  const [metaLoading, setMetaLoading] = useState(true);
+
+  // Valores calculados após ter a duração real
+  const durationSecs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
+  const durationFmt  = lessonMeta?.duration_formatted || aula.duration_formatted || '';
+  const calculatedQ  = durationSecs > 0 ? Math.ceil(durationSecs / 120) : (suggestedQ || 10);
+
+  const [totalQ,      setTotalQ]      = useState(suggestedQ || 10); // valor provisório até busca
+  const [qPerBlock,   setQPerBlock]   = useState(Math.min(20, suggestedQ || 10));
+  const [numBlocks,   setNumBlocks]   = useState(Math.ceil((suggestedQ || 10) / Math.min(20, suggestedQ || 10)));
+  const [numAlts,     setNumAlts]     = useState(5);
+  const [extraPrompt, setExtraPrompt] = useState('');
+  const [initialized, setInitialized] = useState(false);
+
+  // Busca metadados da aula no Firestore (coleção lessons)
+  useEffect(() => {
+    const fetch = async () => {
+      setMetaLoading(true);
+      try {
+        const docId = (aula.title || '').replace(/\//g, '-');
+        const snap = await getDoc(doc(db, 'lessons', docId));
+        if (snap.exists()) {
+          const d = snap.data();
+          setLessonMeta({ duration_seconds: d.duration_seconds, duration_formatted: d.duration_formatted });
+        }
+      } catch(e) {}
+      finally { setMetaLoading(false); }
+    };
+    fetch();
+  }, [aula.title]); // eslint-disable-line
+
+  // Quando a duração chegar, recalcula e inicializa os campos (só uma vez)
+  useEffect(() => {
+    if (metaLoading || initialized) return;
+    const secs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
+    const q = secs > 0 ? Math.ceil(secs / 120) : (suggestedQ || 10);
+    const perB = Math.min(20, q);
+    const blks = Math.ceil(q / perB);
+    setTotalQ(q);
+    setQPerBlock(perB);
+    setNumBlocks(blks);
+    setInitialized(true);
+  }, [metaLoading, initialized]); // eslint-disable-line
+
+  const handleTotalChange = (v) => {
+    const t = Math.max(1, Math.min(120, parseInt(v)||1));
+    setTotalQ(t);
+    const perB = Math.min(20, qPerBlock);
+    setQPerBlock(perB);
+    setNumBlocks(Math.ceil(t / perB));
+  };
+  const handlePerBlockChange = (v) => {
+    const p = Math.max(1, Math.min(20, parseInt(v)||1));
+    setQPerBlock(p);
+    setNumBlocks(Math.ceil(totalQ / p));
+  };
+  const handleBlocksChange = (v) => {
+    const b = Math.max(1, Math.min(20, parseInt(v)||1));
+    setNumBlocks(b);
+    setQPerBlock(Math.ceil(totalQ / b));
+  };
+
+  return (
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+      <div
+        className={`w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
+        onClick={e=>e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`flex items-center justify-between px-6 py-5 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
+          <div>
+            <h3 className="text-lg font-serif font-bold text-yellow-600 flex items-center gap-2">
+              <GraduationCap className="w-5 h-5"/>Gerar Questões da Aula
+            </h3>
+            <p className={`text-sm mt-0.5 truncate max-w-xs ${dm?'text-gray-400':'text-gray-500'}`}>{aula.title}</p>
+          </div>
+          <button onClick={onClose} className={`p-2 rounded-full ${dm?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Duração + sugestão */}
+          <div className={`flex items-center gap-3 p-3 rounded-xl ${dm?'bg-gray-800':'bg-gray-50'}`}>
+            <Clock className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+            {metaLoading ? (
+              <div className="flex items-center gap-2">
+                <Spinner className="w-4 h-4 text-yellow-600"/>
+                <span className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>Calculando duração...</span>
+              </div>
+            ) : durationSecs > 0 ? (
+              <div>
+                <p className="text-sm font-bold">Duração: {durationFmt}</p>
+                <p className={`text-xs mt-0.5 ${dm?'text-gray-400':'text-gray-500'}`}>
+                  Sugestão: {calculatedQ} questões ({Math.ceil(durationSecs/60)} min ÷ 2 min por questão)
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>Duração não disponível — ajuste manualmente</p>
+              </div>
+            )}
+          </div>
+
+          {/* Configuração numérica */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">Total</label>
+              <input
+                type="number" min="1" max="120" value={totalQ}
+                onChange={e=>handleTotalChange(e.target.value)}
+                className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}
+              />
+              <p className="text-[10px] text-center mt-1 opacity-40">questões</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">Por bloco <span className="normal-case font-normal">(máx 20)</span></label>
+              <input
+                type="number" min="1" max="20" value={qPerBlock}
+                onChange={e=>handlePerBlockChange(e.target.value)}
+                className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}
+              />
+              <p className="text-[10px] text-center mt-1 opacity-40">questões</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">Blocos</label>
+              <input
+                type="number" min="1" max="20" value={numBlocks}
+                onChange={e=>handleBlocksChange(e.target.value)}
+                className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}
+              />
+              <p className="text-[10px] text-center mt-1 opacity-40">blocos</p>
+            </div>
+          </div>
+
+          {/* Resumo visual */}
+          <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40':'bg-yellow-50 border border-yellow-200'}`}>
+            <Sparkles className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+            <span className={dm?'text-yellow-300':'text-yellow-800'}>
+              <strong>{numBlocks}</strong> bloco(s) × <strong>{qPerBlock}</strong> questões = <strong>{totalQ}</strong> questões no total
+            </span>
+          </div>
+
+          {/* Alternativas */}
+          <div>
+            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas por questão</label>
+            <div className="flex gap-3">
+              {[4,5].map(n=>(
+                <button key={n} onClick={()=>setNumAlts(n)}
+                  className={`flex-1 py-2.5 rounded-xl border-2 font-bold text-sm transition-all ${numAlts===n?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
+                  {n} alt. (A–{'ABCDE'[n-1]})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Prompt extra */}
+          <div>
+            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Instruções Extras <span className="normal-case font-normal opacity-70">(opcional)</span></label>
+            <textarea
+              value={extraPrompt} onChange={e=>setExtraPrompt(e.target.value)}
+              placeholder="Ex: Foque em farmacologia e diagnóstico. Priorize o que o professor marcou como mais importante..."
+              className={`w-full h-20 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}
+            />
+          </div>
+
+          {isReset&&(
+            <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-red-900/20 border border-red-800/40 text-red-400':'bg-red-50 border border-red-200 text-red-700'}`}>
+              <RotateCcw className="w-4 h-4 flex-shrink-0"/>
+              Os blocos e questões anteriores desta aula serão substituídos.
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
+            Cancelar
+          </button>
+          <button
+            disabled={loading || metaLoading}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta})}
+            className="flex-[2] py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading
+              ? <><Spinner className="w-4 h-4 text-white"/>Gerando sumário...</>
+              : metaLoading
+                ? <><Spinner className="w-4 h-4 text-white"/>Carregando...</>
+                : <><Sparkles className="w-4 h-4"/>Confirmar e Gerar</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
   const [open, setOpen] = useState(false);
@@ -905,6 +1109,17 @@ export default function QuestionBankApp() {
   const [expandedSubjectsVid, setExpandedSubjectsVid] = useState({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false); // subject/subtopic picker on mobile
 
+  // Questões do Curso (videoaulas)
+  const [vqSubject, setVqSubject]   = useState(null);  // assunto ativo na aba de questões
+  const [vqTopic, setVqTopic]       = useState(null);  // tópico ativo
+  const [vqAula, setVqAula]         = useState(null);  // aula ativa
+  const [vqBlocks, setVqBlocks]     = useState({});    // { aulaId: { meta, blocks: {blockId: {questions,answers,...}} } }
+  const [vqLoading, setVqLoading]   = useState(false);
+  const [vqGenModal, setVqGenModal] = useState(null);  // modal de config de geração
+  const [vqActiveBlock, setVqActiveBlock] = useState(null); // bloco sendo visto/gerado
+  const [vqExpandedSubj, setVqExpandedSubj] = useState({});
+  const [vqExpandedTopic, setVqExpandedTopic] = useState({});
+
   // Load videoaulas JSON from Firestore on first visit
   useEffect(() => {
     if (view !== 'videoaulas' || !user || videoaulasData) return;
@@ -941,6 +1156,35 @@ export default function QuestionBankApp() {
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
     } catch(e) {}
   };
+
+  // Load vqBlocks from Firestore when entering videoquestions view
+  useEffect(() => {
+    if (view !== 'videoquestions' || !user || user.isAnonymous) return;
+    (async () => {
+      setVqLoading(true);
+      try {
+        const snap = await getDocs(collection(db, 'users', user.uid, 'vq_blocks'));
+        const loaded = {};
+        snap.forEach(d => { loaded[d.id] = d.data(); });
+        setVqBlocks(loaded);
+      } catch(e) {}
+      finally { setVqLoading(false); }
+    })();
+  }, [view, user]); // eslint-disable-line
+
+  // Save a single aula's vqBlock data to Firestore
+  const saveVqBlock = async (aulaId, data) => {
+    const updated = { ...vqBlocks, [aulaId]: data };
+    setVqBlocks(updated);
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), data);
+    } catch(e) {}
+  };
+
+  // Build a safe Firestore document ID from aula title
+  const aulaDocId = (aula) => (aula.title || aula.bunny_id || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_À-ÿ ]/g, '').trim().substring(0, 100) || aula.bunny_id;
+
+
 
   useEffect(()=>{
     document.title='Ágora do Saber';
@@ -1177,6 +1421,239 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
     const files=Array.from(e.target.files||[]);if(!files.length)return;
     for(const f of files){if(!f.type.startsWith('image/'))continue;const b64=await new Promise(r=>{const fr=new FileReader();fr.onload=ev=>r(ev.target.result.split(',')[1]);fr.readAsDataURL(f);});setUploadedImages(p=>[...p,{name:f.name,base64:b64,mimeType:f.type,preview:URL.createObjectURL(f)}]);}
     if(imageInputRef.current) imageInputRef.current.value='';
+  };
+
+  // ── Geração de questões de videoaulas ──────────────────────────────────────
+  // Busca transcrição do Firestore (coleção lessons, id = título da aula)
+  const fetchTranscript = async (aula) => {
+    try {
+      // O ID do doc é o título exato, com barras substituídas por hífen
+      const docId = (aula.title||'').replace(/\//g,'-');
+      const snap = await getDoc(doc(db,'lessons',docId));
+      if (snap.exists()) return snap.data();
+      // fallback: busca pelo bunny_id se não achar pelo título
+      return null;
+    } catch(e) { return null; }
+  };
+
+  // Gera o sumário silencioso para uma aula e salva os blocos vazios no Firestore
+  // cfg = { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, subject, topic, numAlternatives }
+  const generateVqSyllabus = async (cfg) => {
+    if(!checkKey()) return;
+    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5 } = cfg;
+    setVqLoading(true);
+
+    // 1. Buscar transcrição
+    const lessonData = await fetchTranscript(aula);
+    const transcript = lessonData?.transcript || '';
+    const durationSecs = lessonData?.duration_seconds || aula.duration_seconds || 0;
+
+    // 2. Dividir transcrição em fatias para cada bloco
+    // Estratégia: dividir proporcionalmente por caracteres
+    const transcriptSlices = [];
+    if (transcript && numBlocks > 1) {
+      const chunkSize = Math.ceil(transcript.length / numBlocks);
+      // Quebrar em parágrafos/sentenças para não cortar no meio de palavras
+      for (let i = 0; i < numBlocks; i++) {
+        const start = i * chunkSize;
+        const end = Math.min((i+1)*chunkSize, transcript.length);
+        // Ajusta início para não cortar no meio de palavra
+        const slice = transcript.substring(start, end);
+        transcriptSlices.push(slice);
+      }
+    } else if (transcript) {
+      transcriptSlices.push(transcript);
+    }
+
+    // 3. Chamar Gemini para gerar sumário com subtópicos por bloco
+    const na = numAlternatives;
+    const alts = na===4?'A) B) C) D)':'A) B) C) D) E)';
+
+    const summaryPrompt = `Você é o Arquiteto de Alexandria. Analise a transcrição da aula "${aula.title}" e crie um sumário estruturado para geração de questões.
+
+ESTRUTURA NECESSÁRIA: ${numBlocks} bloco(s), com EXATAMENTE ${qPerBlock} subtópico(s) por bloco (cada subtópico gerará 1 questão).
+
+${extraPrompt?`INSTRUÇÕES ADICIONAIS DO PROFESSOR:\n${extraPrompt}\n\n`:''}REGRAS:
+- Cada subtópico deve ser um tema específico e testável clinicamente
+- Os blocos devem cobrir a aula em ordem cronológica
+- Subtópicos devem ser diretos (ex: "Diagnóstico diferencial de dor torácica", "Mecanismo de ação dos betabloqueadores")
+- NÃO inclua explicações, apenas liste os subtópicos
+
+FORMATO DE SAÍDA OBRIGATÓRIO (siga exatamente):
+## Bloco 1: [Título do bloco]
+- [Subtópico 1.1]
+- [Subtópico 1.2]
+...
+## Bloco 2: [Título do bloco]
+- [Subtópico 2.1]
+...
+
+TRANSCRIÇÃO DA AULA (use para definir os subtópicos):
+${transcript ? transcript.substring(0, 25000) : '[Sem transcrição disponível — crie subtópicos baseados no título da aula: '+aula.title+']'}`;
+
+    const orderedKeys = getOrderedKeys();
+    let summaryText = null;
+
+    for (const {k} of orderedKeys) {
+      try {
+        summaryText = await callGemini('Gere o sumário.', summaryPrompt, k);
+        await rotateKey();
+        break;
+      } catch(e) {
+        if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
+        showApiError(e.message); setVqLoading(false); return;
+      }
+    }
+    if (!summaryText) { showApiError('CONNECTION_ERROR'); setVqLoading(false); return; }
+
+    // 4. Parsear o sumário em blocos
+    const blockRegex = /##\s*Bloco\s*(\d+)[:\s]*([^\n]*)\n([\s\S]*?)(?=##\s*Bloco|\s*$)/gi;
+    const parsedBlocks = {};
+    let match;
+    let blockIndex = 0;
+
+    while ((match = blockRegex.exec(summaryText)) !== null) {
+      const blockNum = match[1];
+      const blockTitle = match[2].trim();
+      const subtopicsRaw = match[3];
+      const subtopics = subtopicsRaw
+        .split('\n')
+        .map(l => l.replace(/^[\s\-\*•]+/,'').trim())
+        .filter(l => l.length > 3);
+
+      const blockId = `block${blockNum.padStart(2,'0')}`;
+      parsedBlocks[blockId] = {
+        title: blockTitle || `Bloco ${blockNum}`,
+        subtopics,
+        transcriptSlice: transcriptSlices[blockIndex] || '',
+        questions: [],
+        answers: {},
+        generating: false,
+      };
+      blockIndex++;
+    }
+
+    // Fallback: se o parser não pegou nada, cria blocos vazios
+    if (Object.keys(parsedBlocks).length === 0) {
+      for (let i = 1; i <= numBlocks; i++) {
+        const blockId = `block${String(i).padStart(2,'0')}`;
+        parsedBlocks[blockId] = {
+          title: `Bloco ${i}`,
+          subtopics: [],
+          transcriptSlice: transcriptSlices[i-1] || '',
+          questions: [],
+          answers: {},
+          generating: false,
+        };
+      }
+    }
+
+    // 5. Salvar no Firestore e redirecionar
+    const aulaData = {
+      meta: {
+        totalQuestions: totalQ,
+        numBlocks,
+        qPerBlock,
+        numAlternatives: na,
+        aulaTitle: aula.title,
+        subject: cfg.subject || '',
+        topic: cfg.topic || '',
+        createdAt: Date.now(),
+      },
+      blocks: parsedBlocks,
+    };
+
+    await saveVqBlock(aulaId, aulaData);
+
+    // 6. Navegar para a aba de questões desta aula
+    setVqSubject(cfg.subject || null);
+    setVqTopic(cfg.topic || null);
+    setVqAula(aula);
+    setVqActiveBlock(null);
+    setVqLoading(false);
+    setVqGenModal(null);
+    setView('videoquestions');
+  };
+
+  // Gera as questões de um bloco específico usando transcrição parcial
+  const generateVqBlock = async (aulaId, blockId) => {
+    if(!checkKey()) return;
+    const aulaData = vqBlocks[aulaId];
+    if(!aulaData) return;
+    const block = aulaData.blocks?.[blockId];
+    if(!block) return;
+    const meta = aulaData.meta || {};
+    const na = meta.numAlternatives || settings.numAlternatives || 5;
+    const alts = na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+
+    // Marcar como gerando
+    const updBlocks = {...aulaData.blocks,[blockId]:{...block,generating:true}};
+    await saveVqBlock(aulaId,{...aulaData,blocks:updBlocks});
+    setStreamCount(0);
+
+    const subtopicsArr = block.subtopics||[];
+    const transcriptSlice = block.transcriptSlice||'';
+    const total = subtopicsArr.length||meta.qPerBlock||5;
+
+    const PROMPT = `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade baseadas EXCLUSIVAMENTE no conteúdo da transcrição fornecida.
+
+REGRA CRÍTICA: Use a transcrição como base absoluta. Siga o que o professor enfatizou. Não invente conteúdo fora da transcrição.
+
+SUBTÓPICOS OBRIGATÓRIOS (cubra EXATAMENTE estes, 1 questão por subtópico):
+${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}
+
+Total: EXATAMENTE ${total} questões.
+
+DIRETRIZES:
+- Raciocínio clínico estilo USMLE/Residência brasileira
+- EXATAMENTE ${na} alternativas homogêneas e plausíveis
+- NUNCA cite letras na explicação, use termos médicos
+- Embaralhe as alternativas aleatoriamente
+- Explicação: densa, didática, com mecanismo fisiopatológico quando relevante
+
+TEMPLATE:
+## Questão [N]
+[Enunciado clínico]
+${alts}
+Alternativa correta: [Letra]
+Explicação:
+[Explicação]
+---
+
+TRANSCRIÇÃO DO BLOCO (base para as questões):
+${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]'}`;
+
+    const orderedKeys = getOrderedKeys();
+    let ok = false, err = null;
+
+    for (const {k} of orderedKeys) {
+      try {
+        const full = await callGeminiStream(
+          `Gere as questões do bloco "${block.title}" — ${meta.aulaTitle}`,
+          PROMPT, k,
+          (acc,qc)=>setStreamCount(qc)
+        );
+        const parsed = parseData(full);
+        const finalBlocks = {
+          ...aulaData.blocks,
+          [blockId]: { ...block, generating:false, questions:parsed.questions, answers:{} }
+        };
+        await saveVqBlock(aulaId, {...aulaData, blocks:finalBlocks});
+        await rotateKey();
+        ok = true; break;
+      } catch(e) {
+        err = e;
+        if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
+        break;
+      }
+    }
+    setStreamCount(0);
+    if(!ok) {
+      // Desmarcar generating em caso de erro
+      const errBlocks = {...aulaData.blocks,[blockId]:{...block,generating:false}};
+      await saveVqBlock(aulaId,{...aulaData,blocks:errBlocks});
+      showApiError(err?.message||'CONNECTION_ERROR');
+    }
   };
 
   const handleAnswer = async (qId, letter) => {
@@ -1580,6 +2057,14 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                   <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>Acesso restrito</div>
                 </div>
               )}
+              {canSeeVideoaulas&&(
+                <div onClick={()=>setView('videoquestions')} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
+                  <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><GraduationCap className="w-12 h-12 text-yellow-600"/></div>
+                  <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Questões do Curso</h3>
+                  <p className="text-sm opacity-60">Questões geradas das aulas</p>
+                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>Acesso restrito</div>
+                </div>
+              )}
             </div>
             <div className="mt-8 flex justify-center">
               <button onClick={()=>{navigator.clipboard.writeText(getExternalPrompt());setCopiedPrompt(true);setTimeout(()=>setCopiedPrompt(false),3000);}} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${darkMode?'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300':'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>
@@ -1964,83 +2449,83 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
         {/* ── VIDEOAULAS ── */}
         {view==='videoaulas'&&(()=>{
           const dm = darkMode;
+          // DEMO_DATA usa o novo formato: Assunto → Tópico → { "Aulas Principais": [], "Bônus": [] }
           const DEMO_DATA = {
-            "Cardiologia": {
-              "CARDIO 01 — SCA": [
-                {bunny_id:"d1",title:"Fisiopatologia da SCA",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d2",title:"IAM com Supra de ST",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d3",title:"IAM sem Supra e Angina Instável",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d4",title:"Tratamento da SCA",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-              ],
-              "CARDIO 02 — IC": [
-                {bunny_id:"d5",title:"Fisiopatologia da IC",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d6",title:"Diagnóstico e Estadiamento",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d7",title:"Tratamento Farmacológico",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-              ],
-              "CARDIO 03 — Valvulopatias": [
-                {bunny_id:"d8",title:"Estenose Aórtica",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d9",title:"Insuficiência Mitral",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-              ],
+            "Ginecologia": {
+              "GIN 6 - IST": {
+                "Aulas Principais": [
+                  {title:"02 - Introdução (GIN 6)",embed_url:"https://iframe.mediadelivery.net/embed/649407/fd56f7e5-8e2f-4f25-a45d-1c7a4f2a0b08",bunny_id:"fd56f7e5-8e2f-4f25-a45d-1c7a4f2a0b08"},
+                  {title:"03 - Violência Sexual",embed_url:"https://iframe.mediadelivery.net/embed/649407/fd7c6bf6-558c-4be9-8178-7a2beeb778cc",bunny_id:"fd7c6bf6-558c-4be9-8178-7a2beeb778cc"},
+                ],
+                "Bônus": [
+                  {title:"06 - Bônus - HIV e Gestação",embed_url:"https://iframe.mediadelivery.net/embed/649407/7c36c74d-d714-434d-bd9f-4ef095d2ace6",bunny_id:"7c36c74d-d714-434d-bd9f-4ef095d2ace6"},
+                ]
+              },
+              "GIN 2 - SANGRAMENTO UTERINO ANORMAL": {
+                "Aulas Principais": [
+                  {title:"02 - Pólipos",embed_url:"https://iframe.mediadelivery.net/embed/649407/62e67657-9e68-49cd-8fb7-e4ad577ab3c8",bunny_id:"62e67657-9e68-49cd-8fb7-e4ad577ab3c8"},
+                  {title:"03 - Sangramento Uterino Anormal",embed_url:"https://iframe.mediadelivery.net/embed/649407/88576d68-a31f-4d9e-af08-453a88e02cee",bunny_id:"88576d68-a31f-4d9e-af08-453a88e02cee"},
+                ],
+                "Bônus": [
+                  {title:"04 - Bônus - Infertilidade",embed_url:"https://iframe.mediadelivery.net/embed/649407/153044db-1a93-4bd5-b9e3-0a8301489002",bunny_id:"153044db-1a93-4bd5-b9e3-0a8301489002"},
+                ]
+              },
             },
             "Reumatologia": {
-              "REU 01 — Artrite": [
-                {bunny_id:"d10",title:"Artrite Reumatoide",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d11",title:"Espondiloartrites",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-              ],
-              "REU 02 — Cristais": [
-                {bunny_id:"d12",title:"Gota e Hiperuricemia",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-                {bunny_id:"d13",title:"Pseudogota",embed_url:"https://iframe.mediadelivery.net/embed/0/0",has_transcript:false},
-              ],
+              "REU 1 - GOTA E FEBRE REUMÁTICA": {
+                "Aulas Principais": [
+                  {title:"01 - Artrite Reumatoide",embed_url:"https://iframe.mediadelivery.net/embed/649407/2b5e6a59-509e-488c-b0ee-bb9cd5c00a2f",bunny_id:"2b5e6a59-509e-488c-b0ee-bb9cd5c00a2f"},
+                ],
+                "Bônus": []
+              },
             },
           };
           const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
           const raw = isDemo ? DEMO_DATA : videoaulasData;
 
-          // Sort subjects by chronogram
+          // NEW FORMAT: Assunto → Tópico → { "Aulas Principais": [], "Bônus": [] }
+          // Flatten into: data[subj][topic] = [ ...aulas_principais, ...bonus ]
+          // Sort subjects by chronogram, topics by their numeric prefix
           const subjects = Object.keys(raw).sort((a,b) => {
             const ai = SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
             const bi = SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
             return (ai===-1?99:ai) - (bi===-1?99:bi);
           });
 
-          // Build merged + sorted data
-          // The JSON has pairs: "NEFRO 1 - Name" (main) + "NEFRO 1 - Name ⭐" (bonus)
-          // Merge them into one group, sort groups numerically, main aulas first then bonus
           const data = {};
           subjects.forEach(subj => {
-            const rawSubs = raw[subj];
-            // Group by base key (strip trailing ⭐ and whitespace)
-            const groups = {};
-            Object.entries(rawSubs).forEach(([key, aulas]) => {
-              const isBonus = /⭐/.test(key);
-              const baseKey = key.replace(/\s*⭐\s*$/, '').trim();
-              if (!groups[baseKey]) groups[baseKey] = { main: [], bonus: [] };
-              if (isBonus) {
-                groups[baseKey].bonus.push(...aulas);
-              } else {
-                groups[baseKey].main.push(...aulas);
-              }
-            });
-            // Sort groups: extract number from key (e.g. "NEFRO 1" → 1, "NEFRO 2" → 2)
-            const sortedKeys = Object.keys(groups).sort((a, b) => {
-              return getSubtopicOrder(a) - getSubtopicOrder(b);
-            });
+            const rawTopics = raw[subj];
+            const sortedTopics = Object.keys(rawTopics).sort((a,b) => getSubtopicOrder(a) - getSubtopicOrder(b));
             data[subj] = {};
-            sortedKeys.forEach(key => {
-              // Sort: "Introdução (X)" first, then main in JSON order, then bonus
-              const isIntro = (a) => /^\d+\s*[-–]\s*Introdução\s*\(/i.test(a.title) || /^Introdução\s*\(/i.test(a.title);
-              const introMain = groups[key].main.filter(isIntro);
-              const otherMain = groups[key].main.filter(a => !isIntro(a));
-              data[subj][key] = [...introMain, ...otherMain, ...groups[key].bonus];
+            sortedTopics.forEach(topic => {
+              const cats = rawTopics[topic];
+              if (Array.isArray(cats)) {
+                // Formato antigo: valor já é array de aulas
+                data[subj][topic] = cats;
+              } else if (cats && typeof cats === 'object') {
+                // Novo formato: { "Aulas Principais": [], "Bônus": [] }
+                // Ou qualquer outro objeto — pega todos os arrays dentro dele
+                const main = cats['Aulas Principais'] || [];
+                const bonus = cats['Bônus'] || [];
+                if (main.length > 0 || bonus.length > 0) {
+                  data[subj][topic] = [...main, ...bonus];
+                } else {
+                  // Fallback: concatenar todos os arrays encontrados no objeto
+                  const allArrays = Object.values(cats).filter(Array.isArray).flat();
+                  data[subj][topic] = allArrays;
+                }
+              } else {
+                data[subj][topic] = [];
+              }
             });
           });
 
-          // Helper: get clean short display name for sidebar
+          // Helper: short display name for sidebar (strip specialty code prefix)
           const shortSubName = (key) => {
-            // Strip specialty code prefix: "NEFRO 1 - INTRODUÇÃO A NEFRO" → "Introdução à Nefro"
-            // Or shorten to reasonable length
-            const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,6}\s*\d+\s*[-–]\s*/, '').trim();
-            return clean.length > 32 ? clean.substring(0,31)+'…' : clean;
+            // "GIN 6 - IST" → "IST", "REU 1 - GOTA E FEBRE REUMÁTICA" → "Gota e Febre Reumática"
+            const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i, '').trim();
+            const titled = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+            return titled.length > 32 ? titled.substring(0,31)+'…' : (titled || key);
           };
           const allAulas = Object.values(data).flatMap(s=>Object.values(s).flat());
           const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
@@ -2169,10 +2654,19 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                             </div>
                           </div>
                         </div>
+                      ) : effAula?.embed_url ? (
+                        <iframe
+                          key={getAulaId(effAula)||effAula.embed_url}
+                          src={effAula.embed_url}
+                          className="absolute inset-0 w-full h-full"
+                          style={{border:'none'}}
+                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture"
+                          allowFullScreen
+                        />
                       ) : (
-                        <iframe key={getAulaId(effAula)||effAula.embed_url} src={`${effAula.embed_url}?responsive=true&preload=false&defaultQuality=720p&qualities=720p,480p`}
-                          className="absolute inset-0 w-full h-full" style={{border:'none'}}
-                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture" allowFullScreen/>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <p className="text-white opacity-40 text-sm">Vídeo não disponível</p>
+                        </div>
                       )}
                     </div>
 
@@ -2196,13 +2690,21 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                           <SkipForward className="w-4 h-4 flex-shrink-0"/>
                         </button>
                       </div>
-                      {/* MOBILE: subject/topic picker + mark watched */}
+                      {/* MOBILE: subject/topic picker + mark watched + questões */}
                       <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
                         <button onClick={()=>setMobileNavOpen(true)}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-2.5 rounded-xl border text-xs font-semibold ${dm?'border-gray-700 text-gray-300':'border-gray-200 text-gray-600'}`}>
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
                           <span className="truncate">{effSubject?.replace(/\s*⭐\s*/g,'')} — {shortSubName(effSubtopic||'')}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="ml-auto flex-shrink-0 opacity-40"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <button onClick={()=>{
+                          const aulaId = aulaDocId(effAula);
+                          const durationSecs = effAula.duration_seconds||0;
+                          const suggestedQ = durationSecs>0?Math.ceil(durationSecs/120):10;
+                          setVqGenModal({aula:effAula,aulaId,suggestedQ,subject:effSubject,topic:effSubtopic});
+                        }} className={`flex items-center gap-1 px-3 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 border transition-all ${dm?'border-yellow-700 text-yellow-400':'border-yellow-400 text-yellow-700'}`}>
+                          <GraduationCap className="w-4 h-4"/>
                         </button>
                         <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
                           className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400':'border-green-400 text-green-700'))}`}>
@@ -2300,11 +2802,24 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
                         </p>
                         <div className="flex items-center justify-between gap-3 mb-4">
                           <h2 className={`text-xl font-serif font-bold truncate ${dm?'text-white':'text-gray-900'}`}>{cleanAulaTitle(effAula.title)}</h2>
-                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
-                            <CheckIcon className="w-4 h-4"/>
-                            {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
-                          </button>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {effAula.duration_formatted&&(
+                              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>⏱ {effAula.duration_formatted}</span>
+                            )}
+                            <button onClick={()=>{
+                              const aulaId = aulaDocId(effAula);
+                              const durationSecs = effAula.duration_seconds || 0;
+                              const suggestedQ = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
+                              setVqGenModal({aula:effAula, aulaId, suggestedQ, subject:effSubject, topic:effSubtopic});
+                            }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                              <GraduationCap className="w-4 h-4"/>Questões
+                            </button>
+                            <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
+                              <CheckIcon className="w-4 h-4"/>
+                              {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
+                            </button>
+                          </div>
                         </div>
                         <div className="flex items-stretch gap-3">
                           <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
@@ -2333,6 +2848,245 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
             </div>
           );
         })()}
+        {/* ── QUESTÕES DO CURSO ── */}
+        {view==='videoquestions'&&canSeeVideoaulas&&(()=>{
+          const dm = darkMode;
+          // Reusar o mesmo data/subjects do parser de videoaulas
+          const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
+          const raw = isDemo ? {} : videoaulasData;
+          const subjects = Object.keys(raw).sort((a,b)=>{
+            const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
+            const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
+            return (ai===-1?99:ai)-(bi===-1?99:bi);
+          });
+          const data = {};
+          subjects.forEach(subj=>{
+            const rawTopics = raw[subj];
+            const sortedTopics = Object.keys(rawTopics).sort((a,b)=>getSubtopicOrder(a)-getSubtopicOrder(b));
+            data[subj]={};
+            sortedTopics.forEach(topic=>{
+              const cats=rawTopics[topic];
+              if(Array.isArray(cats)){data[subj][topic]=cats;}
+              else if(cats&&typeof cats==='object'){
+                const main=cats['Aulas Principais']||[];
+                const bonus=cats['Bônus']||[];
+                if(main.length>0||bonus.length>0){data[subj][topic]=[...main,...bonus];}
+                else{data[subj][topic]=Object.values(cats).filter(Array.isArray).flat();}
+              } else {data[subj][topic]=[];}
+            });
+          });
+
+          const shortTopicName = (key) => {
+            const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
+            const t = clean.charAt(0).toUpperCase()+clean.slice(1).toLowerCase();
+            return t.length>36?t.substring(0,35)+'…':(t||key);
+          };
+
+          // Count total questions for an aula
+          const aulaQCount = (aula) => {
+            const id = aulaDocId(aula);
+            const d = vqBlocks[id];
+            if(!d?.blocks) return 0;
+            return Object.values(d.blocks).reduce((acc,b)=>acc+(b.questions?.length||0),0);
+          };
+
+          // DETAIL VIEW: aula selecionada — mostra blocos
+          if(vqAula && vqSubject && vqTopic) {
+            const aulaId = aulaDocId(vqAula);
+            const aulaData = vqBlocks[aulaId] || {};
+            const blocks = aulaData.blocks || {};
+            const meta = aulaData.meta || {};
+            const blockList = Object.entries(blocks).sort((a,b)=>a[0].localeCompare(b[0]));
+            const hasSetup = !!meta.totalQuestions;
+            const durationSecs = vqAula.duration_seconds || 0;
+            const suggestedQ = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
+
+            return (
+              <div className="max-w-3xl mx-auto">
+                {/* Breadcrumb */}
+                <div className={`flex items-center gap-2 mb-6 text-sm flex-wrap`}>
+                  <button onClick={()=>{setVqAula(null);setVqActiveBlock(null);}} className={`font-bold flex items-center gap-1 ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>{vqSubject}</button>
+                  <span className="opacity-30">/</span>
+                  <span className="opacity-50">{shortTopicName(vqTopic)}</span>
+                  <span className="opacity-30">/</span>
+                  <span className={`font-bold ${dm?'text-yellow-400':'text-yellow-700'}`}>{vqAula.title}</span>
+                </div>
+
+                <div className="flex items-start justify-between mb-6 gap-4">
+                  <div>
+                    <h2 className="text-2xl font-serif font-bold text-yellow-600">{vqAula.title}</h2>
+                    {vqAula.duration_formatted && <p className="text-sm opacity-50 mt-1">⏱ {vqAula.duration_formatted}</p>}
+                  </div>
+                  {!hasSetup && (
+                    <button
+                      onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})}
+                      className="flex-shrink-0 flex items-center gap-2 px-5 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
+                      <Sparkles className="w-4 h-4"/>Gerar Questões
+                    </button>
+                  )}
+                </div>
+
+                {/* Sem setup ainda */}
+                {!hasSetup && blockList.length===0 && (
+                  <div className={`flex flex-col items-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
+                    <GraduationCap className={`w-16 h-16 mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
+                    <p className="font-serif font-bold text-lg opacity-50 mb-2">Nenhuma questão ainda</p>
+                    <p className="text-sm opacity-40 mb-6 text-center max-w-xs">Clique em "Gerar Questões" para o Oráculo criar uma bateria baseada nesta aula.</p>
+                    <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})} className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
+                      <Sparkles className="w-5 h-5"/>Gerar Questões
+                    </button>
+                  </div>
+                )}
+
+                {/* Blocos gerados */}
+                {blockList.length>0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold uppercase opacity-40">{blockList.length} bloco(s) • {aulaQCount(vqAula)} questão(ões)</p>
+                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ,reset:true})} className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${dm?'bg-gray-700 hover:bg-gray-600 text-gray-300':'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                        <RotateCcw className="w-3 h-3"/>Regenerar
+                      </button>
+                    </div>
+                    {blockList.map(([blockId, block])=>{
+                      const qs = block.questions||[];
+                      const ans = block.answers||{};
+                      const correct = qs.filter(q=>ans[q.id]===q.options?.find(o=>o.isCorrect)?.letter).length;
+                      const pct = Object.keys(ans).length>0?Math.round(correct/Object.keys(ans).length*100):null;
+                      const isActive = vqActiveBlock===blockId;
+                      return (
+                        <div key={blockId} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                          <button onClick={()=>setVqActiveBlock(isActive?null:blockId)} className="w-full p-5 flex items-center justify-between text-left">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold font-serif ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>{blockId.replace('block','')}</div>
+                              <div>
+                                <p className="font-bold">{block.title||`Bloco ${blockId.replace('block','')}`}</p>
+                                <p className="text-xs opacity-40 mt-0.5">{qs.length} questão(ões){block.generating?' • gerando...':''}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {pct!==null&&<span className={`text-sm font-bold ${pct>=70?'text-green-600':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</span>}
+                              {qs.length===0&&!block.generating&&(
+                                <button onClick={e=>{e.stopPropagation();generateVqBlock(aulaId,blockId);}} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
+                                  <Sparkles className="w-3 h-3"/>Gerar
+                                </button>
+                              )}
+                              {block.generating&&<div className="flex items-center gap-1.5"><Spinner className="w-4 h-4 text-yellow-600"/>{streamCount>0&&<span className="text-xs text-green-600 font-bold animate-pulse">{streamCount}q</span>}</div>}
+                              {isActive?<ChevronDown className="w-4 h-4 opacity-30"/>:<ChevronRight className="w-4 h-4 opacity-30"/>}
+                            </div>
+                          </button>
+                          {isActive&&qs.length>0&&(
+                            <div className={`border-t px-4 pb-4 ${dm?'border-gray-700':'border-gray-200'}`}>
+                              {qs.map((q,i)=>(
+                                <QuestionCard key={i} question={q} index={i}
+                                  selectedLetter={ans[q.id]}
+                                  onAnswer={async(l)=>{
+                                    const newAns={...ans,[q.id]:l};
+                                    const updBlocks={...blocks,[blockId]:{...block,answers:newAns}};
+                                    await saveVqBlock(aulaId,{...aulaData,blocks:updBlocks});
+                                  }}
+                                  darkMode={darkMode} isFavorite={false} onToggleFavorite={()=>{}}
+                                  apiKey={getKey()} oracleLength={settings.oracleLength}/>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // LIST VIEW: navegação por assunto → tópico → aula
+          return (
+            <div className="max-w-3xl mx-auto">
+              <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-6 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
+              <div className="flex items-center gap-3 mb-8">
+                <GraduationCap className="w-8 h-8 text-yellow-600"/>
+                <h2 className="text-3xl font-serif font-bold text-yellow-600">Questões do Curso</h2>
+              </div>
+
+              {vqLoading&&<div className="flex justify-center py-16"><Spinner className="w-10 h-10 text-yellow-600"/></div>}
+
+              {!vqLoading&&subjects.length===0&&(
+                <div className="text-center py-16 opacity-50">
+                  <GraduationCap className="w-16 h-16 mx-auto mb-4"/>
+                  <p className="font-bold text-lg">Nenhum conteúdo disponível</p>
+                  <p className="text-sm mt-2">Acesse as Videoaulas para que o conteúdo apareça aqui.</p>
+                </div>
+              )}
+
+              {!vqLoading&&subjects.map(subj=>{
+                const isExp = vqExpandedSubj[subj]??true;
+                const topics = data[subj]||{};
+                const totalAulas = Object.values(topics).flat().length;
+                const totalQs = Object.values(topics).flat().reduce((acc,a)=>acc+aulaQCount(a),0);
+                return (
+                  <div key={subj} className={`mb-3 rounded-2xl border overflow-hidden ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                    {/* Assunto header */}
+                    <button onClick={()=>setVqExpandedSubj(p=>({...p,[subj]:!isExp}))} className="w-full p-5 flex items-center justify-between text-left hover:opacity-80 transition-opacity">
+                      <div className="flex items-center gap-3">
+                        <FolderIcon className="w-5 h-5 text-yellow-600"/>
+                        <div>
+                          <p className="font-bold">{subj}</p>
+                          <p className="text-xs opacity-40 mt-0.5">{totalAulas} aulas{totalQs>0?` • ${totalQs} questões`:''}</p>
+                        </div>
+                      </div>
+                      {isExp?<ChevronDown className="w-4 h-4 opacity-30"/>:<ChevronRight className="w-4 h-4 opacity-30"/>}
+                    </button>
+
+                    {isExp&&Object.entries(topics).map(([topic, aulas])=>{
+                      const tExp = vqExpandedTopic[`${subj}/${topic}`]??false;
+                      const topicQs = aulas.reduce((acc,a)=>acc+aulaQCount(a),0);
+                      return (
+                        <div key={topic} className={`border-t ${dm?'border-gray-700':'border-gray-100'}`}>
+                          {/* Tópico header */}
+                          <button onClick={()=>setVqExpandedTopic(p=>({...p,[`${subj}/${topic}`]:!tExp}))} className={`w-full flex items-center justify-between px-5 py-3 text-left ${dm?'hover:bg-gray-700':'hover:bg-gray-50'}`}>
+                            <div className="flex items-center gap-3">
+                              <LayersIcon className="w-4 h-4 text-yellow-600 opacity-70"/>
+                              <div>
+                                <p className="text-sm font-bold">{shortTopicName(topic)}</p>
+                                <p className="text-xs opacity-40">{aulas.length} aulas{topicQs>0?` • ${topicQs} questões`:''}</p>
+                              </div>
+                            </div>
+                            {tExp?<ChevronDown className="w-3.5 h-3.5 opacity-30"/>:<ChevronRight className="w-3.5 h-3.5 opacity-30"/>}
+                          </button>
+
+                          {tExp&&aulas.map((aula,ai)=>{
+                            const qCount = aulaQCount(aula);
+                            const hasSetup = !!vqBlocks[aulaDocId(aula)]?.meta?.totalQuestions;
+                            return (
+                              <button key={ai}
+                                onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);}}
+                                className={`w-full flex items-center justify-between px-5 py-3 border-t text-left transition-colors ${dm?'border-gray-700/50 hover:bg-gray-700':'border-gray-50 hover:bg-gray-50'}`}>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${dm?'bg-gray-700':'bg-gray-100'}`}>
+                                    {qCount>0?<CheckIcon className="w-4 h-4 text-green-500"/>:<PlayIcon className="w-3 h-3 opacity-30" style={{marginLeft:'1px'}}/>}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className={`text-sm font-medium truncate ${dm?'text-gray-200':'text-gray-800'}`}>{aula.title}</p>
+                                    {aula.duration_formatted&&<p className="text-xs opacity-40">⏱ {aula.duration_formatted}</p>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                  {qCount>0&&<span className={`text-xs font-bold px-2 py-0.5 rounded-full ${dm?'bg-green-900/40 text-green-400':'bg-green-100 text-green-700'}`}>{qCount}q</span>}
+                                  {!hasSetup&&<span className={`text-xs font-bold px-2 py-0.5 rounded-full ${dm?'bg-yellow-900/40 text-yellow-500':'bg-yellow-100 text-yellow-700'}`}>Gerar</span>}
+                                  <ChevronRight className="w-3.5 h-3.5 opacity-30"/>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* ── STATS ── */}
         {view==='stats'&&(()=>{
           const stats=getStats();
@@ -2576,6 +3330,20 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
       </main>
 
 
+
+      {vqGenModal&&<VqGenModal
+        key={vqGenModal.aulaId}
+        aula={vqGenModal.aula}
+        aulaId={vqGenModal.aulaId}
+        suggestedQ={vqGenModal.suggestedQ}
+        subject={vqGenModal.subject}
+        topic={vqGenModal.topic}
+        isReset={!!vqGenModal.reset}
+        darkMode={darkMode}
+        onClose={()=>setVqGenModal(null)}
+        onConfirm={(cfg)=>generateVqSyllabus({...cfg,aula:vqGenModal.aula,aulaId:vqGenModal.aulaId,subject:vqGenModal.subject,topic:vqGenModal.topic})}
+        loading={vqLoading}
+      />}
 
       {/* ── EXPORT MODAL ── */}
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}
