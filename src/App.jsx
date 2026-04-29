@@ -2512,228 +2512,330 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           );
         })()}
 
-        {/* ── PORTAL DO CURSO ── wrapper com 3 abas ── */}
+        {/* ── PORTAL DO CURSO ── */}
         {view==='curso'&&canSeeVideoaulas&&(()=>{
           const dm = darkMode;
+          const currentWeek = getCurrentWeek();
+          const activeWeek = curWeek ?? currentWeek ?? 1;
+          const weekData = cronograma?.find(w=>w.week===activeWeek);
+
+          // Progresso por tópico
+          const watchedByTopic = {};
+          if(videoaulasData){
+            Object.values(videoaulasData).forEach(topics=>
+              Object.entries(topics).forEach(([topic,cats])=>{
+                const all=[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])];
+                const watched=all.filter(a=>watchedAulas[getAulaId(a)]).length;
+                watchedByTopic[topic]={watched,total:all.length};
+              })
+            );
+          }
+
+          // Total geral de progresso
+          const totalWatched = Object.values(watchedByTopic).reduce((a,b)=>a+b.watched,0);
+          const totalAulas   = Object.values(watchedByTopic).reduce((a,b)=>a+b.total,0);
+          const globalPct    = totalAulas>0?Math.round(totalWatched/totalAulas*100):0;
+
           const tabs = [
-            {id:'videoaulas',   label:'Videoaulas',    icon:<VideoIcon className="w-4 h-4"/>},
-            {id:'questoes',     label:'Questões',      icon:<GraduationCap className="w-4 h-4"/>},
-            {id:'cronograma',   label:'Cronograma',    icon:<CalendarCheck className="w-4 h-4"/>},
+            {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
+            {id:'questoes',   label:'Questões',     icon:<GraduationCap className="w-4 h-4"/>},
+            {id:'cronograma', label:'Cronograma',   icon:<CalendarCheck className="w-4 h-4"/>},
           ];
+
           return (
-            <div className="flex flex-col" style={{minHeight:'calc(100vh - 62px)'}}>
-              {/* Tab bar */}
-              <div className={`flex items-center border-b flex-shrink-0 ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
-                <button onClick={()=>setView('library')} className={`p-3 pl-4 ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>
-                  <ArrowLeft className="w-4 h-4"/>
-                </button>
-                <div className="flex flex-1">
-                  {tabs.map(tab=>(
-                    <button key={tab.id} onClick={()=>setCursoTab(tab.id)}
-                      className={`flex items-center gap-2 px-5 py-3.5 text-sm font-bold border-b-2 transition-colors ${cursoTab===tab.id
-                        ? 'border-yellow-500 text-yellow-600'
-                        : `border-transparent ${dm?'text-gray-400 hover:text-gray-200':'text-gray-500 hover:text-gray-700'}`}`}>
-                      {tab.icon}{tab.label}
-                    </button>
-                  ))}
+            <div className={`min-h-screen ${dm?'bg-gray-950':'bg-gray-50'}`}>
+
+              {/* ── HERO HEADER ── */}
+              <div className={`relative overflow-hidden ${dm?'bg-gray-900':'bg-white'} border-b ${dm?'border-gray-800':'border-gray-100'}`}>
+                <div className="max-w-5xl mx-auto px-4 pt-6 pb-0">
+                  <div className="flex items-start justify-between gap-4 mb-5">
+                    <div>
+                      <button onClick={()=>setView('library')} className={`flex items-center gap-1.5 text-xs font-bold mb-3 transition-colors ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>
+                        <ArrowLeft className="w-3 h-3"/>Início
+                      </button>
+                      <h1 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Portal do Curso</h1>
+                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>MedCurso 2024 · 46 semanas</p>
+                    </div>
+                    {/* Progresso global */}
+                    <div className={`flex-shrink-0 text-right`}>
+                      <div className={`text-3xl font-bold font-serif ${globalPct===100?'text-green-500':'text-yellow-600'}`}>{globalPct}<span className="text-lg">%</span></div>
+                      <div className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{totalWatched}/{totalAulas} aulas</div>
+                      {currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek} de 46</div>}
+                    </div>
+                  </div>
+                  {/* Barra de progresso global */}
+                  <div className={`h-1 w-full rounded-full overflow-hidden mb-0 ${dm?'bg-gray-800':'bg-gray-100'}`}>
+                    <div className={`h-full rounded-full transition-all duration-700 ${globalPct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${globalPct}%`}}/>
+                  </div>
+                  {/* Tabs */}
+                  <div className="flex mt-1 -mb-px">
+                    {tabs.map(tab=>(
+                      <button key={tab.id} onClick={()=>setCursoTab(tab.id)}
+                        className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${cursoTab===tab.id
+                          ?'border-yellow-500 text-yellow-600'
+                          :`border-transparent ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-700'}`}`}>
+                        {tab.icon}
+                        <span className="hidden sm:inline">{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              {/* Content — full height */}
-              <div className="flex-1 overflow-hidden">
+
+              {/* ── TAB CONTENT ── */}
+              <div className="max-w-5xl mx-auto px-4 py-6">
+
+                {/* ── ABA VIDEOAULAS ── */}
                 {cursoTab==='videoaulas'&&(()=>{
-                  // ── VIDEOAULAS (inline, sem header próprio) ──────────────────
-                  const isDemo = !videoaulasData||Object.keys(videoaulasData).length===0;
-                  const raw = isDemo?{}:videoaulasData;
-                  const subjects=Object.keys(raw).sort((a,b)=>{
+                  if(videoaulasLoading) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
+                  if(!videoaulasData||Object.keys(videoaulasData).length===0) return (
+                    <div className={`text-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
+                      <VideoIcon className={`w-12 h-12 mx-auto mb-3 ${dm?'text-gray-600':'text-gray-300'}`}/>
+                      <p className={`font-bold ${dm?'text-gray-400':'text-gray-500'}`}>Carregando videoaulas...</p>
+                    </div>
+                  );
+                  const subjects = Object.keys(videoaulasData).sort((a,b)=>{
                     const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
                     const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
                     return (ai===-1?99:ai)-(bi===-1?99:bi);
                   });
-                  const data={};
-                  subjects.forEach(subj=>{
-                    const rawT=raw[subj];
-                    const sortedT=Object.keys(rawT).sort((a,b)=>getSubtopicOrder(a)-getSubtopicOrder(b));
-                    data[subj]={};
-                    sortedT.forEach(topic=>{
-                      const cats=rawT[topic];
-                      if(Array.isArray(cats)){data[subj][topic]={main:cats,bonus:[]};}
-                      else if(cats&&typeof cats==='object'){
-                        const isNewFmt='Aulas Principais'in cats||'Bônus'in cats;
-                        if(isNewFmt){data[subj][topic]={main:cats['Aulas Principais']||[],bonus:cats['Bônus']||[]};}
-                        else{
-                          const merged={main:[],bonus:[]};
-                          Object.entries(cats).forEach(([k,v])=>{if(Array.isArray(v)){if(/⭐/.test(k))merged.bonus.push(...v);else merged.main.push(...v);}});
-                          data[subj][topic]=merged;
-                        }
-                      }else{data[subj][topic]={main:[],bonus:[]};}
-                    });
-                  });
-                  // reusar toda a lógica já existente da view videoaulas, mas renderizada dentro da aba
-                  // Para não duplicar ~400 linhas, redireciona para a view completa
                   return (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center py-12">
-                        <VideoIcon className={`w-12 h-12 mx-auto mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
-                        <p className="font-serif font-bold text-lg opacity-50 mb-4">Abrir player de videoaulas</p>
-                        <button onClick={()=>setView('videoaulas')} className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold mx-auto">
-                          <PlayIcon className="w-4 h-4"/>Acessar Videoaulas
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-                {cursoTab==='questoes'&&(()=>{
-                  // Redirecionar para a view dedicada de questões
-                  return (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center py-12">
-                        <GraduationCap className={`w-12 h-12 mx-auto mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
-                        <p className="font-serif font-bold text-lg opacity-50 mb-4">Questões geradas das videoaulas</p>
-                        <button onClick={()=>setView('videoquestions')} className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold mx-auto">
-                          <GraduationCap className="w-4 h-4"/>Acessar Questões do Curso
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-                {cursoTab==='cronograma'&&(()=>{
-                  const dm = darkMode;
-                  const currentWeek = getCurrentWeek();
-                  const activeWeek = curWeek ?? currentWeek ?? 1;
-                  const weekData = cronograma?.find(w=>w.week===activeWeek);
-
-                  // Calcular progresso de aulas assistidas por topic
-                  const watchedByTopic = {};
-                  if(videoaulasData){
-                    Object.values(videoaulasData).forEach(topics=>
-                      Object.entries(topics).forEach(([topic,cats])=>{
-                        const all=[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])];
-                        const watched=all.filter(a=>watchedAulas[getAulaId(a)]).length;
-                        watchedByTopic[topic]={watched,total:all.length};
-                      })
-                    );
-                  }
-
-                  return (
-                    <div className={`flex h-full ${dm?'bg-gray-900':'bg-gray-50'}`} style={{height:'calc(100vh - 62px - 48px)'}}>
-                      {/* Sidebar — lista de semanas */}
-                      <div className={`w-52 xl:w-64 flex-shrink-0 border-r overflow-y-auto ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
-                        {/* Data de início */}
-                        <div className={`p-3 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
-                          <p className={`text-[10px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Início do curso</p>
-                          <input type="date" value={cronStartDate||''} onChange={e=>saveCronStartDate(e.target.value)}
-                            className={`w-full p-1.5 rounded-lg border text-xs outline-none focus:ring-1 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/>
-                          {currentWeek&&<p className={`text-[10px] mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>📍 Semana atual: {currentWeek}</p>}
-                        </div>
-                        {/* Lista de semanas */}
-                        {cronLoading&&<div className="flex justify-center py-6"><Spinner className="w-5 h-5 text-yellow-600"/></div>}
-                        {(cronograma||[]).map(week=>{
-                          const isActive=week.week===activeWeek;
-                          const isCurrent=week.week===currentWeek;
-                          return (
-                            <button key={week.week} onClick={()=>setCurWeek(week.week)}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-left border-b transition-colors ${dm?'border-gray-700/50':'border-gray-50'} ${isActive?(dm?'bg-yellow-900/30':'bg-yellow-50'):(dm?'hover:bg-gray-800':'hover:bg-gray-50')}`}>
-                              <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${isActive?'bg-yellow-600 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 border border-yellow-600':'bg-yellow-100 text-yellow-700 border border-yellow-400'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                                {week.week}
+                    <div className="space-y-3">
+                      {subjects.map(subj=>{
+                        const topics = videoaulasData[subj];
+                        const allAulas = Object.values(topics).flatMap(cats=>[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])]);
+                        const watched  = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                        const pct = allAulas.length>0?Math.round(watched/allAulas.length*100):0;
+                        const isExp = vqExpandedSubj[subj]??false;
+                        return (
+                          <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            {/* Assunto header */}
+                            <button onClick={()=>setVqExpandedSubj(p=>({...p,[subj]:!isExp}))}
+                              className={`w-full flex items-center gap-4 p-4 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                              <div className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-sm ${pct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-yellow-400':'bg-yellow-100 text-yellow-700')}`}>
+                                {pct===100?<CheckIcon className="w-5 h-5"/>:`${pct}%`}
                               </div>
-                              <div className="min-w-0">
-                                <p className={`text-xs font-bold truncate ${isActive?(dm?'text-yellow-300':'text-yellow-700'):(dm?'text-gray-300':'text-gray-700')}`}>
-                                  {week.entries.map(e=>e.subject).filter((s,i,arr)=>arr.indexOf(s)===i).join(' + ')}
-                                </p>
-                                <p className={`text-[10px] truncate ${dm?'text-gray-500':'text-gray-400'}`}>
-                                  {week.entries[0]?.label}
-                                </p>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold truncate">{subj}</p>
+                                <div className={`flex items-center gap-2 mt-1`}>
+                                  <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`} style={{maxWidth:'120px'}}>
+                                    <div className={`h-full rounded-full ${pct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${pct}%`}}/>
+                                  </div>
+                                  <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{watched}/{allAulas.length}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button onClick={e=>{e.stopPropagation();setActiveSubjectVid(subj);setActiveSubtopicVid(null);setActiveAula(null);setView('videoaulas');}}
+                                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${dm?'border-gray-700 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                  <PlayIcon className="w-3 h-3"/>Ver
+                                </button>
+                                {isExp?<ChevronDown className="w-4 h-4 opacity-40"/>:<ChevronRight className="w-4 h-4 opacity-40"/>}
                               </div>
                             </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Main — detalhe da semana */}
-                      <div className="flex-1 overflow-y-auto p-6">
-                        {!weekData&&!cronLoading&&(
-                          <div className="flex flex-col items-center justify-center h-full opacity-40">
-                            <CalendarCheck className="w-12 h-12 mb-3"/>
-                            <p className="font-bold">Selecione uma semana</p>
+                            {/* Tópicos expandidos */}
+                            {isExp&&(
+                              <div className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
+                                {Object.entries(topics).sort(([a],[b])=>getSubtopicOrder(a)-getSubtopicOrder(b)).map(([topic,cats])=>{
+                                  const tMain=cats['Aulas Principais']||[];
+                                  const tBonus=cats['Bônus']||[];
+                                  const tAll=[...tMain,...tBonus];
+                                  const tW=tAll.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                  const tPct=tAll.length>0?Math.round(tW/tAll.length*100):0;
+                                  const shortT=topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
+                                  return (
+                                    <button key={topic}
+                                      onClick={()=>{setActiveSubjectVid(subj);setActiveSubtopicVid(`${topic}::main`);setActiveAula(null);setView('videoaulas');}}
+                                      className={`w-full flex items-center gap-3 px-4 py-3 border-b text-left transition-colors last:border-0 ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
+                                      <div className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${tPct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                                        {tPct===100?<CheckIcon className="w-3.5 h-3.5"/>:`${tPct}%`}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className={`text-sm font-medium truncate ${dm?'text-gray-300':'text-gray-700'}`}>{shortT||topic}</p>
+                                        <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>{tW}/{tAll.length} aulas{tBonus.length>0?` · ${tBonus.length} bônus`:''}</p>
+                                      </div>
+                                      <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {weekData&&(
-                          <div className="max-w-2xl">
-                            <div className="flex items-center gap-3 mb-6">
-                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-serif font-bold text-lg flex-shrink-0 ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>
-                                {weekData.week}
-                              </div>
-                              <div>
-                                <h2 className="text-xl font-serif font-bold text-yellow-600">Semana {weekData.week}</h2>
-                                {weekData.week===currentWeek&&<span className={`text-xs font-bold px-2 py-0.5 rounded-full ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>📍 Semana atual</span>}
-                              </div>
-                            </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
-                            <div className="space-y-4">
-                              {/* Deduplicar por subject+topic */}
-                              {Array.from(new Map(weekData.entries.map(e=>[`${e.subject}::${e.topic}`,e])).values()).map(entry=>{
-                                const prog=watchedByTopic[entry.topic];
-                                const pct=prog?.total>0?Math.round(prog.watched/prog.total*100):0;
-                                // Aulas do tópico
-                                const topicAulas=videoaulasData
-                                  ?Object.values(videoaulasData[entry.subject]?.[entry.topic]||{}).flat().filter(Array.isArray).flat()
-                                  :[];
-                                // Novo formato
-                                const cats = videoaulasData?.[entry.subject]?.[entry.topic];
-                                const mainAulas = cats?.['Aulas Principais']||[];
-                                const bonusAulas = cats?.['Bônus']||[];
-                                const allAulas = [...mainAulas,...bonusAulas];
-                                const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
-                                const totalCount = allAulas.length;
+                {/* ── ABA QUESTÕES ── */}
+                {cursoTab==='questoes'&&(()=>{
+                  // Reusar os dados de vqBlocks para mostrar progresso por aula
+                  const subjects = videoaulasData?Object.keys(videoaulasData).sort((a,b)=>{
+                    const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
+                    const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
+                    return (ai===-1?99:ai)-(bi===-1?99:bi);
+                  }):[];
 
+                  if(!videoaulasData) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
+
+                  const totalQs = Object.values(vqBlocks).reduce((acc,d)=>acc+Object.values(d.blocks||{}).reduce((a,b)=>a+(b.questions?.length||0),0),0);
+                  const totalAns = Object.values(vqBlocks).reduce((acc,d)=>acc+Object.values(d.blocks||{}).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0),0);
+
+                  return (
+                    <div>
+                      {/* Resumo */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                        {[
+                          {l:'Questões geradas', v:totalQs, c:'text-yellow-600'},
+                          {l:'Respondidas',      v:totalAns, c:'text-blue-500'},
+                          {l:'Aulas com questões', v:Object.keys(vqBlocks).length, c:'text-green-500'},
+                        ].map(x=>(
+                          <div key={x.l} className={`rounded-2xl border p-4 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <div className={`text-2xl font-bold font-serif ${x.c}`}>{x.v}</div>
+                            <div className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{x.l}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Lista de assuntos com aulas que têm questões */}
+                      <div className="space-y-3">
+                        {subjects.map(subj=>{
+                          const topics=videoaulasData[subj];
+                          const aulasList=Object.values(topics).flatMap(cats=>[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])]);
+                          const aulasComQ=aulasList.filter(a=>vqBlocks[aulaDocId(a)]?.meta?.totalQuestions);
+                          if(aulasComQ.length===0) return null;
+                          return (
+                            <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                              <div className={`px-4 py-3 border-b flex items-center justify-between ${dm?'border-gray-800':'border-gray-100'}`}>
+                                <p className="font-bold text-sm">{subj}</p>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>{aulasComQ.length} aulas</span>
+                              </div>
+                              {aulasComQ.map(aula=>{
+                                const id=aulaDocId(aula);
+                                const d=vqBlocks[id];
+                                const qTotal=Object.values(d?.blocks||{}).reduce((a,b)=>a+(b.questions?.length||0),0);
+                                const qAns=Object.values(d?.blocks||{}).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0);
+                                const qPct=qTotal>0?Math.round(qAns/qTotal*100):0;
                                 return (
-                                  <div key={`${entry.subject}::${entry.topic}`} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                                    {/* Header */}
-                                    <div className="p-4 pb-3">
-                                      <div className="flex items-start justify-between gap-3 mb-2">
-                                        <div>
-                                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full mr-2 ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>{entry.subject}</span>
-                                          <p className="font-bold mt-1.5">{entry.label}</p>
-                                          <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{entry.topic}</p>
-                                        </div>
-                                        <button onClick={()=>{
-                                          setView('videoaulas');
-                                          setActiveSubjectVid(entry.subject);
-                                          setActiveSubtopicVid(`${entry.topic}::main`);
-                                          setActiveAula(null);
-                                        }} className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                                          <PlayIcon className="w-3 h-3"/>Assistir
-                                        </button>
-                                      </div>
-                                      {/* Barra de progresso */}
-                                      {totalCount>0&&(
-                                        <div className="mt-2">
-                                          <div className="flex items-center justify-between mb-1">
-                                            <span className={`text-[10px] ${dm?'text-gray-500':'text-gray-400'}`}>{watchedCount}/{totalCount} aulas assistidas</span>
-                                            <span className={`text-[10px] font-bold ${pct===100?'text-green-500':dm?'text-gray-400':'text-gray-500'}`}>{pct}%</span>
-                                          </div>
-                                          <div className={`h-1.5 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`}>
-                                            <div className={`h-full rounded-full transition-all ${pct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${pct}%`}}/>
-                                          </div>
-                                        </div>
-                                      )}
+                                  <button key={id} onClick={()=>{setVqSubject(subj);setVqAula(aula);setVqActiveBlock(null);setView('videoquestions');}}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 border-b text-left last:border-0 transition-colors ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
+                                    <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-xs font-bold ${qPct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                                      {qPct===100?<CheckIcon className="w-4 h-4"/>:`${qPct}%`}
                                     </div>
-                                    {/* Conteúdo do tópico detalhado no cronograma */}
-                                    {weekData.entries.filter(e2=>e2.subject===entry.subject&&e2.topic===entry.topic).length>1&&(
-                                      <div className={`px-4 pb-3 border-t ${dm?'border-gray-700':'border-gray-100'}`}>
-                                        <p className={`text-[10px] font-bold uppercase mt-2 mb-1 ${dm?'text-gray-500':'text-gray-400'}`}>Conteúdo desta semana</p>
-                                        {weekData.entries.filter(e2=>e2.subject===entry.subject&&e2.topic===entry.topic).map((e2,i)=>(
-                                          <p key={i} className={`text-xs py-0.5 ${dm?'text-gray-300':'text-gray-600'}`}>• {e2.label}</p>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`text-sm font-medium truncate ${dm?'text-gray-300':'text-gray-700'}`}>{cleanAulaTitle(aula.title)}</p>
+                                      <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>{qAns}/{qTotal} respondidas · {Object.keys(d?.blocks||{}).length} bloco(s)</p>
+                                    </div>
+                                    <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
+                                  </button>
                                 );
                               })}
                             </div>
+                          );
+                        }).filter(Boolean)}
+                        {Object.keys(vqBlocks).length===0&&(
+                          <div className={`text-center py-16 rounded-2xl border-2 border-dashed ${dm?'border-gray-800':'border-gray-200'}`}>
+                            <GraduationCap className={`w-12 h-12 mx-auto mb-3 ${dm?'text-gray-700':'text-gray-200'}`}/>
+                            <p className={`font-bold mb-1 ${dm?'text-gray-400':'text-gray-500'}`}>Nenhuma questão gerada ainda</p>
+                            <p className={`text-sm ${dm?'text-gray-600':'text-gray-400'}`}>Abra uma videoaula e clique em "Questões" para começar.</p>
                           </div>
                         )}
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── ABA CRONOGRAMA ── */}
+                {cursoTab==='cronograma'&&(()=>{
+                  // Config de data de início
+                  const hasStart = !!cronStartDate;
+                  return (
+                    <div>
+                      {/* Configuração de data */}
+                      <div className={`rounded-2xl border p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                        <CalendarCheck className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5 sm:mt-0"/>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm">Data de início do curso</p>
+                          <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
+                            {hasStart?`Semana atual calculada automaticamente: Semana ${currentWeek??'—'} de 46`:'Defina a data para calcular sua semana atual automaticamente.'}
+                          </p>
+                        </div>
+                        <input type="date" value={cronStartDate||''} onChange={e=>saveCronStartDate(e.target.value)}
+                          className={`flex-shrink-0 p-2.5 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-medium ${dm?'bg-gray-800 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                      </div>
+
+                      {cronLoading&&<div className="flex justify-center py-16"><Spinner className="w-8 h-8 text-yellow-600"/></div>}
+
+                      {/* Grade de semanas */}
+                      {!cronLoading&&(
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {(cronograma||[]).map(week=>{
+                            const isActive = week.week===activeWeek;
+                            const isCurrent = week.week===currentWeek;
+                            const isPast = currentWeek!==null&&week.week<currentWeek;
+                            // Calcular progresso da semana
+                            const weekTopics=[...new Set(week.entries.map(e=>e.topic))];
+                            const weekWatched=weekTopics.reduce((acc,t)=>acc+(watchedByTopic[t]?.watched||0),0);
+                            const weekTotal=weekTopics.reduce((acc,t)=>acc+(watchedByTopic[t]?.total||0),0);
+                            const weekPct=weekTotal>0?Math.round(weekWatched/weekTotal*100):0;
+                            const weekSubjects=[...new Set(week.entries.map(e=>e.subject))];
+
+                            if(isActive){
+                              // Card expandido para semana ativa
+                              return (
+                                <div key={week.week} className={`sm:col-span-2 lg:col-span-3 rounded-2xl border-2 border-yellow-500 overflow-hidden ${dm?'bg-gray-900':'bg-white'}`}>
+                                  <div className="p-4 pb-3">
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="w-10 h-10 rounded-xl bg-yellow-600 text-white flex items-center justify-center font-bold font-serif text-lg flex-shrink-0">
+                                        {week.week}
+                                      </div>
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <h3 className="font-bold text-yellow-600">Semana {week.week}</h3>
+                                          {isCurrent&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-500 text-white">📍 Esta semana</span>}
+                                        </div>
+                                        <p className={`text-xs mt-0.5 ${dm?'text-gray-400':'text-gray-500'}`}>{weekSubjects.join(' · ')}</p>
+                                      </div>
+                                      <div className="text-right flex-shrink-0">
+                                        <div className={`text-xl font-bold font-serif ${weekPct===100?'text-green-500':'text-yellow-600'}`}>{weekPct}%</div>
+                                        <div className={`text-[10px] ${dm?'text-gray-500':'text-gray-400'}`}>{weekWatched}/{weekTotal}</div>
+                                      </div>
+                                    </div>
+                                    <div className={`h-1.5 rounded-full overflow-hidden mb-3 ${dm?'bg-gray-800':'bg-gray-100'}`}>
+                                      <div className={`h-full rounded-full transition-all ${weekPct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${weekPct}%`}}/>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {week.entries.map((entry,i)=>(
+                                        <button key={i} onClick={()=>{setActiveSubjectVid(entry.subject);setActiveSubtopicVid(`${entry.topic}::main`);setActiveAula(null);setView('videoaulas');}}
+                                          className={`flex items-center gap-2 p-3 rounded-xl text-left transition-colors ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-50 hover:bg-gray-100'}`}>
+                                          <PlayIcon className="w-3 h-3 text-yellow-600 flex-shrink-0"/>
+                                          <div className="min-w-0">
+                                            <p className={`text-xs font-bold truncate ${dm?'text-gray-200':'text-gray-700'}`}>{entry.label}</p>
+                                            <p className={`text-[10px] truncate ${dm?'text-gray-500':'text-gray-400'}`}>{entry.subject}</p>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Cards normais
+                            return (
+                              <button key={week.week} onClick={()=>setCurWeek(week.week)}
+                                className={`rounded-2xl border p-4 text-left transition-all hover:border-yellow-400 ${isCurrent?'border-yellow-400':(dm?'border-gray-800':'border-gray-200')} ${dm?'bg-gray-900 hover:bg-gray-800':'bg-white hover:bg-gray-50'}`}>
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${weekPct===100?'bg-green-500 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 ring-1 ring-yellow-500':'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400'):(isPast?(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500'):(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'))}`}>
+                                    {weekPct===100?<CheckIcon className="w-3.5 h-3.5"/>:week.week}
+                                  </div>
+                                  <span className={`text-[10px] font-bold ${weekPct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{weekPct}%</span>
+                                </div>
+                                <p className={`text-xs font-bold truncate mb-0.5 ${dm?'text-gray-300':'text-gray-700'}`}>{weekSubjects.join(' + ')}</p>
+                                <p className={`text-[10px] truncate ${dm?'text-gray-600':'text-gray-400'}`}>{week.entries[0]?.label}{week.entries.length>1?` +${week.entries.length-1}`:''}</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
