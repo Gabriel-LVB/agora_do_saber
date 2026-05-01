@@ -1259,10 +1259,23 @@ export default function QuestionBankApp() {
     } catch(e) {}
   };
 
-  // Build a stable Firestore document ID from aula — usa bunny_id se disponível (mais estável)
+  // Build stable Firestore document ID — tenta bunny_id primeiro, depois título sanitizado (legacy)
   const aulaDocId = (aula) => {
-    if (aula?.bunny_id) return aula.bunny_id;
-    return (aula?.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100) || 'unknown';
+    if (!aula) return 'unknown';
+    if (aula.bunny_id) return aula.bunny_id;
+    return (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100) || 'unknown';
+  };
+
+  // Dado um aula, retorna a chave que de fato existe em vqBlocks (bunny_id ou título legacy)
+  const aulaVqKey = (aula) => {
+    if (!aula) return null;
+    if (aula.bunny_id && vqBlocks[aula.bunny_id]) return aula.bunny_id;
+    const titleKey = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100);
+    if (vqBlocks[titleKey]) return titleKey;
+    // Tentativa extra: título sem caracteres especiais com espaços (formato mais antigo)
+    const titleKeyOld = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_ ]/g, '').trim().substring(0, 100);
+    if (vqBlocks[titleKeyOld]) return titleKeyOld;
+    return aula.bunny_id || titleKey;
   };
 
 
@@ -1550,27 +1563,31 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
     const na = numAlternatives;
     const alts = na===4?'A) B) C) D)':'A) B) C) D) E)';
 
-    const summaryPrompt = `Você é o Arquiteto de Alexandria. Analise a transcrição da aula "${aula.title}" e crie um sumário estruturado para geração de questões.
+    const summaryPrompt = `Você é um professor de medicina especialista em criar avaliações. Analise a transcrição da aula "${aula.title}" e defina os subtópicos que serão cobertos nas questões.
 
-ESTRUTURA NECESSÁRIA: ${numBlocks} bloco(s), com EXATAMENTE ${qPerBlock} subtópico(s) por bloco (cada subtópico gerará 1 questão).
+OBJETIVO: Cada subtópico deve ser um conceito médico concreto e testável — algo que o aluno precisa saber, não algo sobre a aula em si.
 
-${extraPrompt?`INSTRUÇÕES ADICIONAIS DO PROFESSOR:\n${extraPrompt}\n\n`:''}REGRAS:
-- Cada subtópico deve ser um tema específico e testável clinicamente
+ESTRUTURA: ${numBlocks} bloco(s), cada um com EXATAMENTE ${qPerBlock} subtópico(s).
+
+REGRAS ABSOLUTAS:
+- Subtópicos devem ser conceitos médicos específicos (fisiopatologia, critérios diagnósticos, tratamento, conduta, mecanismo de ação, classificação, complicações, etc.)
+- NUNCA use subtópicos como "Importância do tema", "O que o professor disse sobre X", "Introdução ao assunto" — isso não testa conhecimento médico
+- Cada subtópico deve ser suficientemente específico para gerar 1 questão de múltipla escolha desafiadora
 - Os blocos devem cobrir a aula em ordem cronológica
-- Subtópicos devem ser diretos (ex: "Diagnóstico diferencial de dor torácica", "Mecanismo de ação dos betabloqueadores")
-- NÃO inclua explicações, apenas liste os subtópicos
+- Bons exemplos: "Critérios diagnósticos de Lúpus pelo SLICC 2012", "Mecanismo de ação dos inibidores de ECA na IC", "Estadiamento TNM do câncer gástrico", "Diferença entre nefrite lúpica proliferativa e membranosa"
+- Maus exemplos: "Por que esse tema é importante", "Introdução à nefrologia", "O professor explica o conceito de X"
 
-FORMATO DE SAÍDA OBRIGATÓRIO (siga exatamente):
-## Bloco 1: [Título do bloco]
-- [Subtópico 1.1]
-- [Subtópico 1.2]
+${extraPrompt?`FOCO ADICIONAL SOLICITADO:\n${extraPrompt}\n\n`:''}FORMATO DE SAÍDA (siga exatamente):
+## Bloco 1: [Título temático do bloco]
+- [Conceito médico testável 1]
+- [Conceito médico testável 2]
 ...
-## Bloco 2: [Título do bloco]
-- [Subtópico 2.1]
+## Bloco 2: [Título temático do bloco]
+- [Conceito médico testável 1]
 ...
 
-TRANSCRIÇÃO DA AULA (use para definir os subtópicos):
-${transcript ? transcript.substring(0, 25000) : '[Sem transcrição disponível — crie subtópicos baseados no título da aula: '+aula.title+']'}`;
+TRANSCRIÇÃO DA AULA:
+${transcript ? transcript.substring(0, 25000) : '[Sem transcrição — crie subtópicos com base no título: '+aula.title+']'}`;
 
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
@@ -1676,32 +1693,44 @@ ${transcript ? transcript.substring(0, 25000) : '[Sem transcrição disponível 
     const transcriptSlice = block.transcriptSlice||'';
     const total = subtopicsArr.length||meta.qPerBlock||5;
 
-    const PROMPT = `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade baseadas EXCLUSIVAMENTE no conteúdo da transcrição fornecida.
+    const PROMPT = `Você é um professor de medicina criando uma prova para testar se o aluno realmente aprendeu o conteúdo da aula. As questões devem ser difíceis o suficiente para distinguir quem estudou de quem não estudou.
 
-REGRA CRÍTICA: Use a transcrição como base absoluta. Siga o que o professor enfatizou. Não invente conteúdo fora da transcrição.
+AULA: "${meta.aulaTitle}"
+BLOCO: "${block.title}"
 
-SUBTÓPICOS OBRIGATÓRIOS (cubra EXATAMENTE estes, 1 questão por subtópico):
+SUBTÓPICOS A COBRIR (1 questão por subtópico, nesta ordem):
 ${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}
 
-Total: EXATAMENTE ${total} questões.
+REGRAS ABSOLUTAS DE QUALIDADE:
+1. NUNCA pergunte sobre a aula em si ("O professor afirmou que...", "Segundo a aula...", "Por que é importante estudar...")
+2. Teste CONHECIMENTO MÉDICO REAL: fisiopatologia, diagnóstico, conduta, mecanismo, classificação, dose, complicação
+3. Enunciados clínicos: use casos clínicos breves (paciente com X apresenta Y, qual a conduta?) ou perguntas diretas sobre conceitos
+4. Alternativas homogêneas: todas devem parecer plausíveis para quem não estudou bem
+5. A alternativa correta deve ser inequívoca baseada no conteúdo da transcrição
+6. Explicação: explique POR QUE a correta está certa E por que as principais incorretas estão erradas — didática, com mecanismo fisiopatológico quando relevante
+7. NUNCA cite letras na explicação (diga "hipotensão ortostática" em vez de "a alternativa B")
+8. Embaralhe as alternativas — a correta não deve seguir padrão de posição
 
-DIRETRIZES:
-- Raciocínio clínico estilo USMLE/Residência brasileira
-- EXATAMENTE ${na} alternativas homogêneas e plausíveis
-- NUNCA cite letras na explicação, use termos médicos
-- Embaralhe as alternativas aleatoriamente
-- Explicação: densa, didática, com mecanismo fisiopatológico quando relevante
+EXEMPLOS DE BOAS QUESTÕES (use como modelo):
+✓ "Paciente de 45 anos com insuficiência renal crônica e K+ = 6,8 mEq/L. Qual o mecanismo pelo qual o kayexalate reduz a hipercalemia?"
+✓ "Qual das seguintes condições NÃO faz parte dos critérios SLICC 2012 para diagnóstico de LES?"
+✓ "Homem de 60 anos, hipertenso, com dispneia progressiva e B3 ao exame. O ecocardiograma mostra FE = 35%. Qual o mecanismo pelo qual o carvedilol melhora o prognóstico?"
 
-TEMPLATE:
+EXEMPLOS DE QUESTÕES PROIBIDAS:
+✗ "Por que o professor considera a nefrologia uma especialidade importante?"
+✗ "Segundo a aula, qual o principal objetivo do tratamento?"
+✗ "O que foi dito sobre a fisiopatologia da doença?"
+
+FORMATO (siga exatamente, ${total} questões):
 ## Questão [N]
-[Enunciado clínico]
+[Enunciado — caso clínico ou pergunta direta sobre conceito médico]
 ${alts}
 Alternativa correta: [Letra]
 Explicação:
-[Explicação]
+[Explicação didática: por que a correta está certa, por que as distratoras estão erradas, mecanismo fisiopatológico]
 ---
 
-TRANSCRIÇÃO DO BLOCO (base para as questões):
+TRANSCRIÇÃO DO BLOCO (base de conteúdo — extraia os fatos médicos concretos):
 ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]'}`;
 
     const orderedKeys = getOrderedKeys();
@@ -2675,77 +2704,105 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
                 {/* ── ABA QUESTÕES ── */}
                 {cursoTab==='questoes'&&(()=>{
-                  // Reusar os dados de vqBlocks para mostrar progresso por aula
-                  const subjects = videoaulasData?Object.keys(videoaulasData).sort((a,b)=>{
+                  if(!videoaulasData) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
+
+                  const extractAulas = (cats) => {
+                    if (!cats) return [];
+                    if (Array.isArray(cats)) return cats;
+                    const main = cats['Aulas Principais'] || [];
+                    const bonus = cats['Bônus'] || [];
+                    if (main.length || bonus.length) return [...main, ...bonus];
+                    return Object.values(cats).filter(Array.isArray).flat();
+                  };
+
+                  const subjects = Object.keys(videoaulasData).sort((a,b)=>{
                     const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
                     const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
                     return (ai===-1?99:ai)-(bi===-1?99:bi);
-                  }):[];
-
-                  if(!videoaulasData) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
-
-                  const totalQs = Object.values(vqBlocks).reduce((acc,d)=>acc+Object.values(d.blocks||{}).reduce((a,b)=>a+(b.questions?.length||0),0),0);
-                  const totalAns = Object.values(vqBlocks).reduce((acc,d)=>acc+Object.values(d.blocks||{}).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0),0);
+                  });
 
                   return (
-                    <div>
-                      {/* Resumo */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-                        {[
-                          {l:'Questões geradas', v:totalQs, c:'text-yellow-600'},
-                          {l:'Respondidas',      v:totalAns, c:'text-blue-500'},
-                          {l:'Aulas com questões', v:Object.keys(vqBlocks).length, c:'text-green-500'},
-                        ].map(x=>(
-                          <div key={x.l} className={`rounded-2xl border p-4 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                            <div className={`text-2xl font-bold font-serif ${x.c}`}>{x.v}</div>
-                            <div className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{x.l}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {/* Lista de assuntos com aulas que têm questões */}
-                      <div className="space-y-3">
-                        {subjects.map(subj=>{
-                          const topics=videoaulasData[subj];
-                          const aulasList=Object.values(topics).flatMap(cats=>[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])]);
-                          const aulasComQ=aulasList.filter(a=>vqBlocks[aulaDocId(a)]?.meta?.totalQuestions);
-                          if(aulasComQ.length===0) return null;
-                          return (
-                            <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                              <div className={`px-4 py-3 border-b flex items-center justify-between ${dm?'border-gray-800':'border-gray-100'}`}>
-                                <p className="font-bold text-sm">{subj}</p>
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>{aulasComQ.length} aulas</span>
+                    <div className="space-y-2">
+                      {subjects.map(subj => {
+                        const topics = videoaulasData[subj] || {};
+                        const allAulas = Object.values(topics).flatMap(extractAulas);
+                        if (!allAulas.length) return null;
+                        const isExpSubj = vqExpandedSubj[subj] ?? false;
+                        const subjQs = allAulas.reduce((acc,a)=>{
+                          const d=vqBlocks[aulaVqKey(a)];
+                          return acc+(d?.blocks?Object.values(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
+                        },0);
+
+                        return (
+                          <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            {/* Assunto */}
+                            <button onClick={()=>setVqExpandedSubj(p=>({...p,[subj]:!isExpSubj}))}
+                              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                              <FolderIcon className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold">{subj}</p>
+                                <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
+                                  {allAulas.length} aulas{subjQs>0?` · ${subjQs} questões`:''}</p>
                               </div>
-                              {aulasComQ.map(aula=>{
-                                const id=aulaDocId(aula);
-                                const d=vqBlocks[id];
-                                const qTotal=Object.values(d?.blocks||{}).reduce((a,b)=>a+(b.questions?.length||0),0);
-                                const qAns=Object.values(d?.blocks||{}).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0);
-                                const qPct=qTotal>0?Math.round(qAns/qTotal*100):0;
-                                return (
-                                  <button key={id} onClick={()=>{setVqSubject(subj);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');}}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 border-b text-left last:border-0 transition-colors ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
-                                    <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-xs font-bold ${qPct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                                      {qPct===100?<CheckIcon className="w-4 h-4"/>:`${qPct}%`}
-                                    </div>
+                              {isExpSubj?<ChevronDown className="w-4 h-4 opacity-40 flex-shrink-0"/>:<ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0"/>}
+                            </button>
+
+                            {/* Tópicos */}
+                            {isExpSubj&&Object.entries(topics).map(([topic, cats])=>{
+                              const topicAulas = extractAulas(cats);
+                              if (!topicAulas.length) return null;
+                              const shortT = topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
+                              const topicKey = `q_${subj}_${topic}`;
+                              const isExpTopic = vqExpandedTopic[topicKey] ?? false;
+                              const topicQs = topicAulas.reduce((acc,a)=>{
+                                const d=vqBlocks[aulaVqKey(a)];
+                                return acc+(d?.blocks?Object.values(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
+                              },0);
+
+                              return (
+                                <div key={topic} className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
+                                  <button onClick={()=>setVqExpandedTopic(p=>({...p,[topicKey]:!isExpTopic}))}
+                                    className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                                    <LayersIcon className="w-4 h-4 text-yellow-600 opacity-70 flex-shrink-0"/>
                                     <div className="flex-1 min-w-0">
-                                      <p className={`text-sm font-medium truncate ${dm?'text-gray-300':'text-gray-700'}`}>{cleanAulaTitle(aula.title)}</p>
-                                      <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>{qAns}/{qTotal} respondidas · {Object.keys(d?.blocks||{}).length} bloco(s)</p>
+                                      <p className={`text-sm font-bold truncate ${dm?'text-gray-300':'text-gray-700'}`}>{shortT||topic}</p>
+                                      <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
+                                        {topicAulas.length} aulas{topicQs>0?` · ${topicQs} questões`:''}</p>
                                     </div>
-                                    <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
+                                    {isExpTopic?<ChevronDown className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>}
                                   </button>
-                                );
-                              })}
-                            </div>
-                          );
-                        }).filter(Boolean)}
-                        {Object.keys(vqBlocks).length===0&&(
-                          <div className={`text-center py-16 rounded-2xl border-2 border-dashed ${dm?'border-gray-800':'border-gray-200'}`}>
-                            <GraduationCap className={`w-12 h-12 mx-auto mb-3 ${dm?'text-gray-700':'text-gray-200'}`}/>
-                            <p className={`font-bold mb-1 ${dm?'text-gray-400':'text-gray-500'}`}>Nenhuma questão gerada ainda</p>
-                            <p className={`text-sm ${dm?'text-gray-600':'text-gray-400'}`}>Abra uma videoaula e clique em "Questões" para começar.</p>
+
+                                  {/* Aulas */}
+                                  {isExpTopic&&topicAulas.map((aula,ai)=>{
+                                    const key = aulaVqKey(aula);
+                                    const d = vqBlocks[key];
+                                    const qTotal = d?.blocks?Object.values(d.blocks).reduce((a,b)=>a+(b.questions?.length||0),0):0;
+                                    const qAns   = d?.blocks?Object.values(d.blocks).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0):0;
+                                    const qPct   = qTotal>0?Math.round(qAns/qTotal*100):null;
+                                    const hasQ   = qTotal > 0;
+                                    return (
+                                      <button key={ai}
+                                        onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');}}
+                                        className={`w-full flex items-center gap-3 px-5 py-3 border-t text-left transition-colors ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
+                                        <div className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${qPct===100?'bg-green-500 text-white':hasQ?(dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-800 text-gray-600':'bg-gray-100 text-gray-400')}`}>
+                                          {qPct===100?<CheckIcon className="w-3.5 h-3.5"/>:hasQ?`${qPct}%`:<Sparkles className="w-3 h-3"/>}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className={`text-sm truncate ${dm?'text-gray-300':'text-gray-700'}`}>{cleanAulaTitle(aula.title)}</p>
+                                          <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
+                                            {hasQ?`${qAns}/${qTotal} respondidas · ${Object.keys(d?.blocks||{}).length} bloco(s)`:'Sem questões'}
+                                          </p>
+                                        </div>
+                                        <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
                           </div>
-                        )}
-                      </div>
+                        );
+                      }).filter(Boolean)}
                     </div>
                   );
                 })()}
@@ -3353,7 +3410,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
           // Count total questions for an aula
           const aulaQCount = (aula) => {
-            const id = aulaDocId(aula);
+            const id = aulaVqKey(aula);
             const d = vqBlocks[id];
             if(!d?.blocks) return 0;
             return Object.values(d.blocks).reduce((acc,b)=>acc+(b.questions?.length||0),0);
@@ -3361,7 +3418,8 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
           // DETAIL VIEW: aula selecionada — mostra blocos
           if(vqAula && vqSubject && vqTopic) {
-            const aulaId = aulaDocId(vqAula);
+            const aulaId = aulaVqKey(vqAula);   // chave de leitura (pode ser legada)
+            const aulaIdNew = aulaDocId(vqAula); // chave de escrita (sempre bunny_id)
             const aulaData = vqBlocks[aulaId] || {};
             const blocks = aulaData.blocks || {};
             const meta = aulaData.meta || {};
@@ -3390,12 +3448,12 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
               const handleVqAnswer = async (qId, letter) => {
                 const newAns = {...ans, [qId]: letter};
                 const updBlocks = {...blocks, [blockId]: {...block, answers: newAns}};
-                await saveVqBlock(aulaId, {...aulaData, blocks: updBlocks});
+                await saveVqBlock(aulaIdNew, {...aulaData, blocks: updBlocks});
               };
 
               const handleVqReset = async () => {
                 const updBlocks = {...blocks, [blockId]: {...block, answers: {}}};
-                await saveVqBlock(aulaId, {...aulaData, blocks: updBlocks});
+                await saveVqBlock(aulaIdNew, {...aulaData, blocks: updBlocks});
               };
 
               const wrongIds = qs.filter(q=>ans[q.id]&&ans[q.id]!==q.options?.find(o=>o.isCorrect)?.letter).map(q=>q.id);
@@ -3435,14 +3493,14 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             className="flex items-center gap-1.5 px-3 py-2 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-bold">
                             <Eraser className="w-4 h-4"/>Limpar
                           </button>
-                          <button onClick={()=>generateVqBlock(aulaId,blockId)}
+                          <button onClick={()=>generateVqBlock(aulaIdNew,blockId)}
                             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold ${dm?'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50':'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`}>
                             <RotateCcw className="w-4 h-4"/>Recriar
                           </button>
                         </>
                       )}
                       {qs.length===0&&!block.generating&&(
-                        <button onClick={()=>generateVqBlock(aulaId,blockId)} disabled={vqLoading}
+                        <button onClick={()=>generateVqBlock(aulaIdNew,blockId)} disabled={vqLoading}
                           className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
                           {vqLoading?<Spinner className="w-4 h-4 text-white"/>:<Sparkles className="w-5 h-5"/>}
                           {vqLoading?'Gerando...':'Gerar Questões'}
@@ -3523,13 +3581,13 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
                     {hasSetup&&(
-                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ,reset:true})}
+                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId:aulaIdNew,suggestedQ,reset:true})}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                         <RotateCcw className="w-4 h-4"/>Regenerar
                       </button>
                     )}
                     {!hasSetup&&(
-                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})}
+                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId:aulaIdNew,suggestedQ})}
                         className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
                         <Sparkles className="w-4 h-4"/>Gerar Questões
                       </button>
@@ -3543,14 +3601,14 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                     <GraduationCap className={`w-16 h-16 mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
                     <p className="font-serif font-bold text-lg opacity-50 mb-2">Nenhuma questão ainda</p>
                     <p className="text-sm opacity-40 mb-6 text-center max-w-xs">Clique em "Gerar Questões" para o Oráculo criar uma bateria baseada nesta aula.</p>
-                    <button onClick={()=>setVqGenModal({aula:vqAula,aulaId,suggestedQ})}
+                    <button onClick={()=>setVqGenModal({aula:vqAula,aulaId:aulaIdNew,suggestedQ})}
                       className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
                       <Sparkles className="w-5 h-5"/>Gerar Questões
                     </button>
                   </div>
                 )}
 
-                {/* Cards de bloco — cada um abre a view completa */}
+                {/* Cards de bloco */}
                 {blockList.length>0&&(
                   <div className="space-y-3">
                     <p className="text-xs font-bold uppercase opacity-40 mb-1">{blockList.length} bloco(s) · {aulaQCount(vqAula)} questão(ões)</p>
@@ -3568,7 +3626,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           <button
                             onClick={()=>{
                               if(qs.length>0) setVqActiveBlockView({blockId,showWrong:false});
-                              else generateVqBlock(aulaId,blockId);
+                              else generateVqBlock(aulaIdNew,blockId);
                             }}
                             disabled={block.generating}
                             className="w-full p-5 flex items-center gap-4 text-left">
@@ -3666,7 +3724,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
                           {tExp&&aulas.map((aula,ai)=>{
                             const qCount = aulaQCount(aula);
-                            const hasSetup = !!vqBlocks[aulaDocId(aula)]?.meta?.totalQuestions;
+                            const hasSetup = !!vqBlocks[aulaVqKey(aula)]?.meta?.totalQuestions;
                             return (
                               <button key={ai}
                                 onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);}}
