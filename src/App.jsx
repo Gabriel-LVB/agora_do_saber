@@ -357,7 +357,13 @@ const parseHtmlText     = (text) => renderRichText(text, false);
 const parseHtmlTextChat = (text) => renderRichText(text, true);
 
 
-// ─── VIDEOAULAS PARSER ────────────────────────────────────────────────────────
+// Retorna os valores de blocks como array seguro, independente do formato salvo
+const blockValues = (blocks) => {
+  if (!blocks) return [];
+  if (Array.isArray(blocks)) return blocks;
+  if (typeof blocks === 'object') return Object.values(blocks);
+  return [];
+};
 // Converte o raw do Firestore (qualquer formato) para estrutura canônica:
 // { [subject]: { [topic]: { main: Aula[], bonus: Aula[] } } }
 const parseVideoaulasData = (raw) => {
@@ -2765,7 +2771,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                         const isExpSubj = vqExpandedSubj[subj] ?? false;
                         const subjQs = allAulas.reduce((acc,a)=>{
                           const d=vqBlocks[aulaVqKey(a)];
-                          return acc+(d?.blocks?Object.values(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
+                          return acc+(d?.blocks?blockValues(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
                         },0);
 
                         return (
@@ -2791,7 +2797,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                               const isExpTopic = vqExpandedTopic[topicKey] ?? false;
                               const topicQs = topicAulas.reduce((acc,a)=>{
                                 const d=vqBlocks[aulaVqKey(a)];
-                                return acc+(d?.blocks?Object.values(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
+                                return acc+(d?.blocks?blockValues(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
                               },0);
 
                               return (
@@ -2811,8 +2817,8 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                                   {isExpTopic&&topicAulas.map((aula,ai)=>{
                                     const key = aulaVqKey(aula);
                                     const d = vqBlocks[key];
-                                    const qTotal = d?.blocks?Object.values(d.blocks).reduce((a,b)=>a+(b.questions?.length||0),0):0;
-                                    const qAns   = d?.blocks?Object.values(d.blocks).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0):0;
+                                    const qTotal = d?.blocks?blockValues(d.blocks).reduce((a,b)=>a+(b.questions?.length||0),0):0;
+                                    const qAns   = d?.blocks?blockValues(d.blocks).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0):0;
                                     const qPct   = qTotal>0?Math.round(qAns/qTotal*100):null;
                                     const hasQ   = qTotal > 0;
                                     return (
@@ -3388,15 +3394,17 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
             const id = aulaVqKey(aula);
             const d = vqBlocks[id];
             if(!d?.blocks) return 0;
-            return Object.values(d.blocks).reduce((acc,b)=>acc+(b.questions?.length||0),0);
+            return blockValues(d.blocks).reduce((acc,b)=>acc+(b.questions?.length||0),0);
           };
 
           // DETAIL VIEW: aula selecionada — mostra blocos
           if(vqAula && vqSubject && vqTopic) {
-            const aulaId    = aulaVqKey(vqAula);   // chave de leitura — encontra bunny_id ou legado
-            const aulaIdNew = aulaDocId(vqAula);   // chave de escrita — sempre bunny_id
+            const aulaId    = aulaVqKey(vqAula);
+            const aulaIdNew = aulaDocId(vqAula);
             const aulaData  = vqBlocks[aulaId] || {};
-            const blocks    = aulaData.blocks || {};
+            // blocks pode vir como array do Firestore em edge cases — normalizar para objeto
+            const rawBlocks = aulaData.blocks || {};
+            const blocks    = Array.isArray(rawBlocks) ? {} : rawBlocks;
             const meta      = aulaData.meta || {};
             const blockList = Object.entries(blocks).sort((a,b)=>a[0].localeCompare(b[0]));
             const hasSetup  = aulaHasVqData(vqAula); // usa busca em todos os formatos de chave
