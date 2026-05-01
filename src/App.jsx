@@ -47,7 +47,6 @@ const UserIcon    = ic('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><ci
 const Heart       = ({ className, filled }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={filled?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>;
 const Clock       = ic('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>');
 const TrendingUp  = ic('<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>');
-const SearchIcon  = ic('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>');
 const Printer     = ic('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>');
 const MessageCircle=ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>');
 const Zap         = ic('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>');
@@ -59,11 +58,8 @@ const BrainIcon   = ic('<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.
 const LayersIcon  = ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>');
 const PlusIcon    = ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
 const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
-const FlipIcon    = ic('<path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.7L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.3l3-2.3"/>');
-const PlayCircle  = ic('<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>');
 const PlayIcon    = ic('<polygon points="5 3 19 12 5 21 5 3"/>');
 const GraduationCap = ic('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>');
-const ListChecks  = ic('<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>');
 const CheckIcon   = ic('<polyline points="20 6 9 17 4 12"/>');
 const VideoIcon   = ic('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>');
 const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>');
@@ -86,6 +82,7 @@ const VIDEOAULAS_ALLOWED_EMAILS = [
   'gabrielvieiraxc12@gmail.com',
   'Robertroblles@gmail.com',
   'alicyafranca@alu.ufc.br',
+  'thiago985522553@gmail.com',
 ];
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 // Extract unique ID from Bunny embed_url
@@ -341,40 +338,90 @@ const parseData = (text) => {
 };
 
 
-// Parse HTML-like tags in explanation text from Gemini
-const parseHtmlText = (text, darkMode) => {
+// Render rich text: bold (**text** or <b>), italic (<i>), line breaks
+// multiline=true handles \n as <br> (for chat messages)
+const renderRichText = (text, multiline = false) => {
   if (!text) return null;
-  // Handle **bold**, <b>bold</b>, <i>italic</i>, <br>
-  const parts = text.split(/(\*\*.*?\*\*|<b>.*?<\/b>|<i>.*?<\/i>|<br\s*\/?>)/g);
-  return <React.Fragment>{parts.map((p,i)=>{
-    if (p.startsWith('**')&&p.endsWith('**')) return <strong key={i} className="font-bold">{p.slice(2,-2)}</strong>;
-    if (p.startsWith('<b>')&&p.endsWith('</b>')) return <strong key={i} className="font-bold">{p.slice(3,-4)}</strong>;
-    if (p.startsWith('<i>')&&p.endsWith('</i>')) return <em key={i}>{p.slice(3,-4)}</em>;
-    if (p.match(/^<br\s*\/?>$/)) return <br key={i}/>;
-    return <span key={i}>{p}</span>;
-  })}</React.Fragment>;
+  const renderLine = (line, li) => {
+    const parts = line.split(/(\*\*.*?\*\*|<b>.*?<\/b>|<i>.*?<\/i>|<br\s*\/?>)/g);
+    return parts.map((p, pi) => {
+      if (p.startsWith('**') && p.endsWith('**')) return <strong key={pi} className="font-bold">{p.slice(2,-2)}</strong>;
+      if (p.startsWith('<b>') && p.endsWith('</b>')) return <strong key={pi} className="font-bold">{p.slice(3,-4)}</strong>;
+      if (p.startsWith('<i>') && p.endsWith('</i>')) return <em key={pi}>{p.slice(3,-4)}</em>;
+      if (p.match(/^<br\s*\/?>$/)) return <br key={pi}/>;
+      return <span key={pi}>{p}</span>;
+    });
+  };
+  if (!multiline) return <React.Fragment>{renderLine(text, 0)}</React.Fragment>;
+  const lines = text.split('\n');
+  return lines.map((line, li) => (
+    <React.Fragment key={li}>
+      {renderLine(line, li)}
+      {li < lines.length - 1 && <br/>}
+    </React.Fragment>
+  ));
 };
 
-// Full markdown parser for chat messages (handles newlines + bold)
-const parseHtmlTextChat = (text, darkMode) => {
-  if (!text) return null;
-  return text.split('\n').map((line, li, arr) => {
-    const parts = line.split(/(\*\*.*?\*\*|<b>.*?<\/b>)/g);
-    return (
-      <React.Fragment key={li}>
-        {parts.map((p,pi)=>{
-          if (p.startsWith('**')&&p.endsWith('**')) return <strong key={pi} className="font-bold">{p.slice(2,-2)}</strong>;
-          if (p.startsWith('<b>')&&p.endsWith('</b>')) return <strong key={pi} className="font-bold">{p.slice(3,-4)}</strong>;
-          return <span key={pi}>{p}</span>;
-        })}
-        {li < arr.length-1 && <br/>}
-      </React.Fragment>
-    );
+// Aliases para compatibilidade
+const parseHtmlText     = (text) => renderRichText(text, false);
+const parseHtmlTextChat = (text) => renderRichText(text, true);
+
+
+// ─── VIDEOAULAS PARSER ────────────────────────────────────────────────────────
+// Converte o raw do Firestore (qualquer formato) para estrutura canônica:
+// { [subject]: { [topic]: { main: Aula[], bonus: Aula[] } } }
+const parseVideoaulasData = (raw) => {
+  if (!raw || !Object.keys(raw).length) return {};
+  const result = {};
+  Object.entries(raw).forEach(([subj, rawTopics]) => {
+    const sortedTopics = Object.keys(rawTopics).sort((a, b) => getSubtopicOrder(a) - getSubtopicOrder(b));
+    result[subj] = {};
+    // Primeiro passo: agrupar chaves com ⭐ na sua base (formato antigo do Firestore)
+    const merged = {};
+    sortedTopics.forEach(key => {
+      const val = rawTopics[key];
+      const isBonus = /⭐/.test(key);
+      const baseKey = key.replace(/\s*⭐\s*$/, '').trim();
+      if (!merged[baseKey]) merged[baseKey] = { main: [], bonus: [] };
+      if (Array.isArray(val)) {
+        if (isBonus) merged[baseKey].bonus.push(...val);
+        else         merged[baseKey].main.push(...val);
+      } else if (val && typeof val === 'object') {
+        merged[baseKey].main.push(...(val['Aulas Principais'] || []));
+        merged[baseKey].bonus.push(...(val['Bônus'] || []));
+      }
+    });
+    // Ordenar keys mescladas
+    const sortedMerged = Object.keys(merged).sort((a, b) => getSubtopicOrder(a) - getSubtopicOrder(b));
+    sortedMerged.forEach(k => { result[subj][k] = merged[k]; });
   });
+  return result;
 };
 
+// Extrai array flat de aulas de qualquer formato de cats
+const extractAulas = (cats) => {
+  if (!cats) return [];
+  if (Array.isArray(cats)) return cats;
+  const main = cats['Aulas Principais'] || cats.main || [];
+  const bonus = cats['Bônus'] || cats.bonus || [];
+  if (main.length || bonus.length) return [...main, ...bonus];
+  return Object.values(cats).filter(Array.isArray).flat();
+};
 
-// ─── VQ GEN MODAL ─────────────────────────────────────────────────────────────
+// Sort subjects by course chronogram order
+const sortSubjects = (subjects) =>
+  [...subjects].sort((a, b) => {
+    const ai = SUBJECT_ORDER.findIndex(s => a.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(a.toLowerCase()));
+    const bi = SUBJECT_ORDER.findIndex(s => b.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(b.toLowerCase()));
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+// Short display name for a topic key: "GIN 6 - IST" → "Ist"
+const shortTopicName = (key) => {
+  const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i, '').trim();
+  const t = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+  return t.length > 32 ? t.substring(0, 31) + '…' : (t || key);
+};
 // Modal de configuração de geração de questões para uma videoaula
 const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading }) => {
   const dm = darkMode;
@@ -946,19 +993,6 @@ FORMATO OBRIGATÓRIO:
   );
 };
 
-// ─── GRACIAN MODAL ────────────────────────────────────────────────────────────
-// "L" hand in sign language — icon for error modals
-const LHandIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={className}>
-    {/* Palm */}
-    <rect x="8" y="9" width="5" height="10" rx="2.5"/>
-    {/* Index finger pointing up */}
-    <rect x="8" y="2" width="3" height="9" rx="1.5"/>
-    {/* Thumb pointing right */}
-    <rect x="8" y="13" width="9" height="3" rx="1.5"/>
-  </svg>
-);
-
 // Error configs per type — titles, messages, actions
 const ERROR_CONFIGS = {
   QUOTA_EXCEEDED: {
@@ -1008,8 +1042,6 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
   </div>
 );
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════════
 const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium' };
 
@@ -1924,17 +1956,9 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
     setPasteText('');setPasteTopic('');setActiveTopicId(nt.id);setView('topic');
   };
 
-  // Spaced review
-  const getDueReviews = () => {
-    const now=Date.now(); const due=[];
-    library.forEach(s=>s.topics.forEach(t=>{Object.entries(t.spacedReview||{}).forEach(([qId,r])=>{if(r.dueDate<=now){const q=(t.questions||[]).find(x=>x.id===qId);if(q)due.push({subject:s,topic:t,question:q,review:r,topicId:t.id,subjectId:s.id});}});}));
-    return due;
-  };
-  const getUpcomingReviews = () => {
-    const now=Date.now(); const week=now+7*86400000; const items=[];
-    library.forEach(s=>s.topics.forEach(t=>{Object.entries(t.spacedReview||{}).forEach(([qId,r])=>{if(r.dueDate>now&&r.dueDate<=week){const q=(t.questions||[]).find(x=>x.id===qId);if(q)items.push({subjectTitle:s.title,topicTitle:t.title,question:q,dueDate:r.dueDate});}});}));
-    return items.sort((a,b)=>a.dueDate-b.dueDate);
-  };
+  // Spaced review — kept for legacy data compatibility but not shown in UI
+  const getDueReviews = () => [];
+
   // Statistics
   const getStats = () => {
     let tQ=0,tA=0,tC=0; const bySubject={};
@@ -2026,8 +2050,6 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
     : false;
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-  const formatDate = (ts) => { const d=new Date(ts); return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`; };
-  const daysUntil = (ts) => Math.max(0,Math.ceil((ts-Date.now())/86400000));
 
   // ── AUTH ──────────────────────────────────────────────────────────────────
   const handleGoogleLogin = async () => { try{await signInWithPopup(auth,new GoogleAuthProvider());}catch(e){setErrorModal({title:'Erro',message:'Login falhou.',isAlert:true});} };
@@ -2560,7 +2582,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           if(videoaulasData){
             Object.values(videoaulasData).forEach(topics=>
               Object.entries(topics).forEach(([topic,cats])=>{
-                const all=[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])];
+                const all=extractAulas(cats);
                 const watched=all.filter(a=>watchedAulas[getAulaId(a)]).length;
                 watchedByTopic[topic]={watched,total:all.length};
               })
@@ -2630,16 +2652,13 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                       <p className={`font-bold ${dm?'text-gray-400':'text-gray-500'}`}>Carregando videoaulas...</p>
                     </div>
                   );
-                  const subjects = Object.keys(videoaulasData).sort((a,b)=>{
-                    const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
-                    const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
-                    return (ai===-1?99:ai)-(bi===-1?99:bi);
-                  });
+                  const parsedData = parseVideoaulasData(videoaulasData);
+                  const subjects   = sortSubjects(Object.keys(parsedData));
                   return (
                     <div className="space-y-3">
                       {subjects.map(subj=>{
-                        const topics = videoaulasData[subj];
-                        const allAulas = Object.values(topics).flatMap(cats=>[...(cats['Aulas Principais']||[]),...(cats['Bônus']||[])]);
+                        const topics  = parsedData[subj];
+                        const allAulas = Object.values(topics).flatMap(t=>[...t.main,...t.bonus]);
                         const watched  = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
                         const pct = allAulas.length>0?Math.round(watched/allAulas.length*100):0;
                         const isExp = vqExpandedSubj[subj]??false;
@@ -2671,10 +2690,8 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             {/* Tópicos expandidos */}
                             {isExp&&(
                               <div className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
-                                {Object.entries(topics).sort(([a],[b])=>getSubtopicOrder(a)-getSubtopicOrder(b)).map(([topic,cats])=>{
-                                  const tMain=cats['Aulas Principais']||[];
-                                  const tBonus=cats['Bônus']||[];
-                                  const tAll=[...tMain,...tBonus];
+                                {Object.entries(topics).map(([topic,{main,bonus}])=>{
+                                  const tAll=[...main,...bonus];
                                   const tW=tAll.filter(a=>watchedAulas[getAulaId(a)]).length;
                                   const tPct=tAll.length>0?Math.round(tW/tAll.length*100):0;
                                   const shortT=topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
@@ -2706,26 +2723,14 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                 {cursoTab==='questoes'&&(()=>{
                   if(!videoaulasData) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
 
-                  const extractAulas = (cats) => {
-                    if (!cats) return [];
-                    if (Array.isArray(cats)) return cats;
-                    const main = cats['Aulas Principais'] || [];
-                    const bonus = cats['Bônus'] || [];
-                    if (main.length || bonus.length) return [...main, ...bonus];
-                    return Object.values(cats).filter(Array.isArray).flat();
-                  };
-
-                  const subjects = Object.keys(videoaulasData).sort((a,b)=>{
-                    const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
-                    const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
-                    return (ai===-1?99:ai)-(bi===-1?99:bi);
-                  });
+                  const parsedData = parseVideoaulasData(videoaulasData);
+                  const subjects   = sortSubjects(Object.keys(parsedData));
 
                   return (
                     <div className="space-y-2">
                       {subjects.map(subj => {
-                        const topics = videoaulasData[subj] || {};
-                        const allAulas = Object.values(topics).flatMap(extractAulas);
+                        const topics   = parsedData[subj] || {};
+                        const allAulas = Object.values(topics).flatMap(t=>[...t.main,...t.bonus]);
                         if (!allAulas.length) return null;
                         const isExpSubj = vqExpandedSubj[subj] ?? false;
                         const subjQs = allAulas.reduce((acc,a)=>{
@@ -2748,8 +2753,8 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             </button>
 
                             {/* Tópicos */}
-                            {isExpSubj&&Object.entries(topics).map(([topic, cats])=>{
-                              const topicAulas = extractAulas(cats);
+                            {isExpSubj&&Object.entries(topics).map(([topic, {main,bonus}])=>{
+                              const topicAulas = [...main,...bonus];
                               if (!topicAulas.length) return null;
                               const shortT = topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
                               const topicKey = `q_${subj}_${topic}`;
@@ -2945,47 +2950,9 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
           const raw = isDemo ? DEMO_DATA : videoaulasData;
 
-          // Parser universal: Assunto → Tópico → { main:[], bonus:[] }
-          // Suporta: novo formato { "Aulas Principais":[], "Bônus":[] }
-          //          formato antigo: { "TOPICO ⭐":[], "TOPICO":[] } ou array direto
-          const subjects = Object.keys(raw).sort((a,b) => {
-            const ai = SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
-            const bi = SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
-            return (ai===-1?99:ai) - (bi===-1?99:bi);
-          });
-
-          // data[subj][topic] = { main: [], bonus: [] }
-          const data = {};
-          subjects.forEach(subj => {
-            const rawTopics = raw[subj];
-            // Agrupar chaves ⭐ com suas bases (formato antigo do Firestore)
-            // Ex: "NEFRO 1" + "NEFRO 1 ⭐" → um único tópico "NEFRO 1"
-            const mergedTopics = {};
-            Object.entries(rawTopics).forEach(([key, val]) => {
-              const isBonus = /⭐/.test(key);
-              const baseKey = key.replace(/\s*⭐\s*$/, '').trim();
-              if (!mergedTopics[baseKey]) mergedTopics[baseKey] = { main:[], bonus:[] };
-              if (Array.isArray(val)) {
-                // Formato antigo: array direto
-                if (isBonus) mergedTopics[baseKey].bonus.push(...val);
-                else         mergedTopics[baseKey].main.push(...val);
-              } else if (val && typeof val === 'object') {
-                // Novo formato: { "Aulas Principais":[], "Bônus":[] }
-                mergedTopics[baseKey].main.push(...(val['Aulas Principais'] || []));
-                mergedTopics[baseKey].bonus.push(...(val['Bônus'] || []));
-              }
-            });
-            const sortedKeys = Object.keys(mergedTopics).sort((a,b)=>getSubtopicOrder(a)-getSubtopicOrder(b));
-            data[subj] = {};
-            sortedKeys.forEach(k => { data[subj][k] = mergedTopics[k]; });
-          });
-
-          // Helper: nome curto do tópico para sidebar
-          const shortTopicName = (key) => {
-            const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i, '').trim();
-            const t = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
-            return t.length > 28 ? t.substring(0,27)+'…' : (t || key);
-          };
+          // Usar o helper global parseVideoaulasData → { [subj]: { [topic]: { main, bonus } } }
+          const data     = parseVideoaulasData(raw);
+          const subjects = sortSubjects(Object.keys(data));
 
           // allAulas = todas as aulas flat (main + bonus) para contagem de progresso
           const allAulas = Object.values(data).flatMap(s=>Object.values(s).flatMap(t=>[...t.main,...t.bonus]));
@@ -3377,36 +3344,8 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
         {/* ── QUESTÕES DO CURSO ── */}
         {view==='videoquestions'&&canSeeVideoaulas&&(()=>{
           const dm = darkMode;
-          // Reusar o mesmo data/subjects do parser de videoaulas
-          const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
-          const raw = isDemo ? {} : videoaulasData;
-          const subjects = Object.keys(raw).sort((a,b)=>{
-            const ai=SUBJECT_ORDER.findIndex(s=>a.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(a.toLowerCase()));
-            const bi=SUBJECT_ORDER.findIndex(s=>b.toLowerCase().includes(s.toLowerCase())||s.toLowerCase().includes(b.toLowerCase()));
-            return (ai===-1?99:ai)-(bi===-1?99:bi);
-          });
-          const data = {};
-          subjects.forEach(subj=>{
-            const rawTopics = raw[subj];
-            const sortedTopics = Object.keys(rawTopics).sort((a,b)=>getSubtopicOrder(a)-getSubtopicOrder(b));
-            data[subj]={};
-            sortedTopics.forEach(topic=>{
-              const cats=rawTopics[topic];
-              if(Array.isArray(cats)){data[subj][topic]=cats;}
-              else if(cats&&typeof cats==='object'){
-                const main=cats['Aulas Principais']||[];
-                const bonus=cats['Bônus']||[];
-                if(main.length>0||bonus.length>0){data[subj][topic]=[...main,...bonus];}
-                else{data[subj][topic]=Object.values(cats).filter(Array.isArray).flat();}
-              } else {data[subj][topic]=[];}
-            });
-          });
-
-          const shortTopicName = (key) => {
-            const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
-            const t = clean.charAt(0).toUpperCase()+clean.slice(1).toLowerCase();
-            return t.length>36?t.substring(0,35)+'…':(t||key);
-          };
+          const data     = parseVideoaulasData(videoaulasData || {});
+          const subjects = sortSubjects(Object.keys(data));
 
           // Count total questions for an aula
           const aulaQCount = (aula) => {
