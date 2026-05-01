@@ -73,16 +73,7 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obstetricia','Pediatria','Reumatologia','Hematologia','Gastrologia','Hepatologia','Cardiologia','Endocrinologia','Pneumologia','Infectologia','Neurologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'];
 
 const MAX_MATERIAL_CHARS = 180000;
-const VIDEOAULAS_ALLOWED_EMAILS = [
-  'lucasferreira.paz31@gmail.com',
-  'caiolucca125@gmail.com',
-  'matheustene@gmail.com',
-  'lucasteles42@gmail.com',
-  'gabrielvieiraxc12@gmail.com',
-  'Robertroblles@gmail.com',
-  'alicyafranca@alu.ufc.br',
-  'thiago985522553@gmail.com',
-];
+const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 // Extract unique ID from Bunny embed_url
 const getAulaId = (aula) => {
@@ -1112,6 +1103,10 @@ export default function QuestionBankApp() {
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
 
+  // Whitelist de videoaulas — carregada do Firestore
+  const [allowedEmails, setAllowedEmails]       = useState([]);
+  const [newWhitelistEmail, setNewWhitelistEmail] = useState('');
+
   // Exam
   const [examSetup, setExamSetup]       = useState(null);
   const [activeExam, setActiveExam]     = useState(null);
@@ -1412,6 +1407,12 @@ export default function QuestionBankApp() {
         }
       } else { setUser(null);setUsername(null);setLoginView('login'); }
       setAuthReady(true);
+      // Carregar whitelist de videoaulas do Firestore (público, qualquer usuário pode ler)
+      try {
+        const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
+        if (wSnap.exists()) setAllowedEmails(wSnap.data().emails || []);
+        else setAllowedEmails([ADMIN_EMAIL]); // fallback: só o admin
+      } catch(e) { setAllowedEmails([ADMIN_EMAIL]); }
     });
     return ()=>unsub();
   },[]);
@@ -2058,11 +2059,25 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
     setView('exam');
   };
 
+  const saveWhitelist = async (emails) => {
+    setAllowedEmails(emails);
+    try { await setDoc(doc(db,'config','videoaulas_whitelist'),{emails}); } catch(e) {}
+  };
+  const addToWhitelist = async () => {
+    const email = newWhitelistEmail.trim().toLowerCase();
+    if (!email || allowedEmails.map(e=>e.toLowerCase()).includes(email)) return;
+    await saveWhitelist([...allowedEmails, email]);
+    setNewWhitelistEmail('');
+  };
+  const removeFromWhitelist = async (email) => {
+    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return; // nunca remover o admin
+    await saveWhitelist(allowedEmails.filter(e=>e.toLowerCase()!==email.toLowerCase()));
+  };
+
   // Helpers
   const subjectProgress = (s) => { const all=s.topics.flatMap(t=>t.questions||[]); const ans=s.topics.flatMap(t=>Object.keys(t.answers||{})).length; return all.length>0?Math.round(ans/all.length*100):0; };
-  const canSeeVideoaulas = user?.email
-    ? VIDEOAULAS_ALLOWED_EMAILS.includes(user.email.toLowerCase())
-    : false;
+  const isAdmin         = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
@@ -3947,6 +3962,41 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
               </div>
             </div>
             <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra</label><textarea value={settings.customPrompt} onChange={e=>setSettings({...settings,customPrompt:e.target.value})} onBlur={()=>saveSettings(settings)} placeholder="Instruções adicionais para o Oráculo..." className={`w-full h-28 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/></div>
+
+            {/* ── ADMIN: Whitelist de Videoaulas ── */}
+            {isAdmin&&(
+              <div className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-yellow-900/40':'bg-yellow-50 border-yellow-200'}`}>
+                <label className="block text-xs font-bold uppercase mb-4 flex items-center gap-2 text-yellow-600">
+                  <Sparkles className="w-4 h-4"/>Acesso às Videoaulas
+                </label>
+                <div className="space-y-2 mb-4">
+                  {allowedEmails.map(email=>(
+                    <div key={email} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl ${darkMode?'bg-gray-700':'bg-white'} border ${darkMode?'border-gray-600':'border-gray-200'}`}>
+                      <span className="text-sm font-medium truncate">{email}</span>
+                      {email.toLowerCase()===ADMIN_EMAIL.toLowerCase()
+                        ? <span className="text-xs font-bold text-yellow-600 flex-shrink-0">admin</span>
+                        : <button onClick={()=>removeFromWhitelist(email)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
+                      }
+                    </div>
+                  ))}
+                  {allowedEmails.length===0&&<p className="text-sm opacity-40 text-center py-2">Nenhum email cadastrado</p>}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="email" value={newWhitelistEmail}
+                    onChange={e=>setNewWhitelistEmail(e.target.value)}
+                    onKeyDown={e=>e.key==='Enter'&&addToWhitelist()}
+                    placeholder="novo@email.com"
+                    className={`flex-1 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-white border-gray-200'}`}
+                  />
+                  <button onClick={addToWhitelist} disabled={!newWhitelistEmail.trim()}
+                    className="px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold disabled:opacity-40">
+                    <PlusIcon className="w-4 h-4"/>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button onClick={()=>{saveSettings(settings);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold">Salvar</button>
           </div>
         )}
