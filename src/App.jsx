@@ -1262,9 +1262,9 @@ export default function QuestionBankApp() {
     if (diffMs < 0) return 1;
     return Math.min(46, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
   };
-  // Load vqBlocks when entering videoquestions or curso — sempre recarrega do Firestore
+  // Load vqBlocks when entering videoquestions, curso ou videoaulas — sempre recarrega do Firestore
   useEffect(() => {
-    if (!['videoquestions','curso'].includes(view) || !user || user.isAnonymous) return;
+    if (!['videoquestions','curso','videoaulas'].includes(view) || !user || user.isAnonymous) return;
     (async () => {
       setVqLoading(true);
       try {
@@ -3208,9 +3208,12 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="ml-auto flex-shrink-0 opacity-40"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
                         <button onClick={()=>{
-                          const aulaId = aulaDocId(effAula);
-                          setVqGenModal({aula:effAula,aulaId,suggestedQ:10,subject:effSubject,topic:effTopic});
-                        }} className={`flex items-center gap-1 px-3 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 border transition-all ${dm?'border-yellow-700 text-yellow-400':'border-yellow-400 text-yellow-700'}`}>
+                          if(aulaHasVqData(effAula)){
+                            setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
+                          } else {
+                            setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic});
+                          }
+                        }} className={`flex items-center gap-1 px-3 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 border transition-all ${aulaHasVqData(effAula)?(dm?'border-green-700 text-green-400':'border-green-500 text-green-700'):(dm?'border-yellow-700 text-yellow-400':'border-yellow-400 text-yellow-700')}`}>
                           <GraduationCap className="w-4 h-4"/>
                         </button>
                         <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
@@ -3319,10 +3322,13 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>⏱ {effAula.duration_formatted}</span>
                             )}
                             <button onClick={()=>{
-                              const aulaId = aulaDocId(effAula);
-                              setVqGenModal({aula:effAula, aulaId, suggestedQ:10, subject:effSubject, topic:effTopic});
-                            }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
-                              <GraduationCap className="w-4 h-4"/>Questões
+                              if(aulaHasVqData(effAula)){
+                                setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
+                              } else {
+                                setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic});
+                              }
+                            }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${aulaHasVqData(effAula)?(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-500 text-green-700 hover:bg-green-50'):(dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}>
+                              <GraduationCap className="w-4 h-4"/>{aulaHasVqData(effAula)?'Ver Questões':'Questões'}
                             </button>
                             <button onClick={async()=>{
                               try {
