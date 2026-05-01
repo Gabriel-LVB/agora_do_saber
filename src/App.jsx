@@ -84,7 +84,7 @@ const VIDEOAULAS_ALLOWED_EMAILS = [
   'matheustene@gmail.com',
   'lucasteles42@gmail.com',
   'gabrielvieiraxc12@gmail.com',
-  'robertroblles@gmail.com',
+  'Robertroblles@gmail.com',
   'alicyafranca@alu.ufc.br',
 ];
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
@@ -380,13 +380,14 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const dm = darkMode;
 
   // Busca duration da coleção lessons ao montar
-  const [lessonMeta, setLessonMeta]   = useState(null);   // { duration_seconds, duration_formatted }
+  const [lessonMeta, setLessonMeta]   = useState(null);
   const [metaLoading, setMetaLoading] = useState(true);
 
-  // Valores calculados após ter a duração real
   const durationSecs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
   const durationFmt  = lessonMeta?.duration_formatted || aula.duration_formatted || '';
-  const calculatedQ  = durationSecs > 0 ? Math.ceil(durationSecs / 120) : (suggestedQ || 10);
+  // Arredonda para a dezena mais próxima (mínimo 10)
+  const roundToTen = (n) => Math.max(10, Math.round(n / 10) * 10);
+  const calculatedQ  = durationSecs > 0 ? roundToTen(Math.ceil(durationSecs / 120)) : (suggestedQ || 10);
 
   const [totalQ,      setTotalQ]      = useState(suggestedQ || 10); // valor provisório até busca
   const [qPerBlock,   setQPerBlock]   = useState(Math.min(20, suggestedQ || 10));
@@ -416,7 +417,8 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   useEffect(() => {
     if (metaLoading || initialized) return;
     const secs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
-    const q = secs > 0 ? Math.ceil(secs / 120) : (suggestedQ || 10);
+    const raw = secs > 0 ? Math.ceil(secs / 120) : (suggestedQ || 10);
+    const q = Math.max(10, Math.round(raw / 10) * 10); // dezena mais próxima
     const perB = Math.min(20, q);
     const blks = Math.ceil(q / perB);
     setTotalQ(q);
@@ -473,7 +475,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
               <div>
                 <p className="text-sm font-bold">Duração: {durationFmt}</p>
                 <p className={`text-xs mt-0.5 ${dm?'text-gray-400':'text-gray-500'}`}>
-                  Sugestão: {calculatedQ} questões ({Math.ceil(durationSecs/60)} min ÷ 2 min por questão)
+                  Sugestão: {calculatedQ} questões ({Math.ceil(durationSecs/60)} min ÷ 2, arredondado para dezena)
                 </p>
               </div>
             ) : (
@@ -1233,8 +1235,9 @@ export default function QuestionBankApp() {
     if (diffMs < 0) return 1;
     return Math.min(46, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
   };
+  // Load vqBlocks when entering videoquestions or curso — sempre recarrega do Firestore
   useEffect(() => {
-    if (view !== 'videoquestions' || !user || user.isAnonymous) return;
+    if (!['videoquestions','curso'].includes(view) || !user || user.isAnonymous) return;
     (async () => {
       setVqLoading(true);
       try {
@@ -1242,10 +1245,10 @@ export default function QuestionBankApp() {
         const loaded = {};
         snap.forEach(d => { loaded[d.id] = d.data(); });
         setVqBlocks(loaded);
-      } catch(e) {}
+      } catch(e) { console.error('vqBlocks load error:', e); }
       finally { setVqLoading(false); }
     })();
-  }, [view, user]); // eslint-disable-line
+  }, [view, user]); // eslint-disable-line — recarrega toda vez que muda de view
 
   // Save a single aula's vqBlock data to Firestore
   const saveVqBlock = async (aulaId, data) => {
@@ -1256,8 +1259,11 @@ export default function QuestionBankApp() {
     } catch(e) {}
   };
 
-  // Build a safe Firestore document ID from aula title
-  const aulaDocId = (aula) => (aula.title || aula.bunny_id || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_À-ÿ ]/g, '').trim().substring(0, 100) || aula.bunny_id;
+  // Build a stable Firestore document ID from aula — usa bunny_id se disponível (mais estável)
+  const aulaDocId = (aula) => {
+    if (aula?.bunny_id) return aula.bunny_id;
+    return (aula?.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100) || 'unknown';
+  };
 
 
 
