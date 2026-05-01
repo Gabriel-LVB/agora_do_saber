@@ -75,7 +75,6 @@ const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obste
 const MAX_MATERIAL_CHARS = 180000;
 const VIDEOAULAS_ALLOWED_EMAILS = [
   'lucasferreira.paz31@gmail.com',
-  'ruanmotahz@gmail.com',
   'caiolucca125@gmail.com',
   'matheustene@gmail.com',
   'lucasteles42@gmail.com',
@@ -1148,7 +1147,8 @@ export default function QuestionBankApp() {
   const [vqTopic, setVqTopic]       = useState(null);
   const [vqAula, setVqAula]         = useState(null);
   const [vqBlocks, setVqBlocks]     = useState({});
-  const [vqLoading, setVqLoading]   = useState(false);
+  const [vqLoading, setVqLoading]   = useState(false);   // carregamento do Firestore
+  const [vqSyllabusLoading, setVqSyllabusLoading] = useState(false); // geração do sumário
   const [vqGenModal, setVqGenModal] = useState(null);
   const [vqActiveBlock, setVqActiveBlock] = useState(null);
   const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
@@ -1299,15 +1299,30 @@ export default function QuestionBankApp() {
   };
 
   // Dado um aula, retorna a chave que de fato existe em vqBlocks (bunny_id ou título legacy)
+  // Sempre retorna UMA chave determinística — nunca null para aulas válidas
   const aulaVqKey = (aula) => {
     if (!aula) return null;
+    // 1. bunny_id exato
     if (aula.bunny_id && vqBlocks[aula.bunny_id]) return aula.bunny_id;
+    // 2. título sanitizado sem espaços
     const titleKey = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100);
     if (vqBlocks[titleKey]) return titleKey;
-    // Tentativa extra: título sem caracteres especiais com espaços (formato mais antigo)
+    // 3. título sanitizado com espaços (formato mais antigo)
     const titleKeyOld = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_ ]/g, '').trim().substring(0, 100);
     if (vqBlocks[titleKeyOld]) return titleKeyOld;
-    return aula.bunny_id || titleKey;
+    // 4. fallback preferencial — bunny_id é o formato novo padrão de escrita
+    return aula.bunny_id || titleKey || 'unknown';
+  };
+
+  // Verifica se uma aula tem dados em vqBlocks (independente do formato da chave)
+  const aulaHasVqData = (aula) => {
+    if (!aula) return false;
+    if (aula.bunny_id && vqBlocks[aula.bunny_id]?.meta?.totalQuestions) return true;
+    const titleKey = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100);
+    if (vqBlocks[titleKey]?.meta?.totalQuestions) return true;
+    const titleKeyOld = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_ ]/g, '').trim().substring(0, 100);
+    if (vqBlocks[titleKeyOld]?.meta?.totalQuestions) return true;
+    return false;
   };
 
 
@@ -1567,7 +1582,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
   const generateVqSyllabus = async (cfg) => {
     if(!checkKey()) return;
     const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5 } = cfg;
-    setVqLoading(true);
+    setVqSyllabusLoading(true);
 
     // 1. Buscar transcrição
     const lessonData = await fetchTranscript(aula);
@@ -1631,10 +1646,10 @@ ${transcript ? transcript.substring(0, 25000) : '[Sem transcrição — crie sub
         break;
       } catch(e) {
         if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
-        showApiError(e.message); setVqLoading(false); return;
+        showApiError(e.message); setVqSyllabusLoading(false); return;
       }
     }
-    if (!summaryText) { showApiError('CONNECTION_ERROR'); setVqLoading(false); return; }
+    if (!summaryText) { showApiError('CONNECTION_ERROR'); setVqSyllabusLoading(false); return; }
 
     // 4. Parsear o sumário em blocos
     const blockRegex = /##\s*Bloco\s*(\d+)[:\s]*([^\n]*)\n([\s\S]*?)(?=##\s*Bloco|\s*$)/gi;
@@ -1700,7 +1715,7 @@ ${transcript ? transcript.substring(0, 25000) : '[Sem transcrição — crie sub
     setVqTopic(cfg.topic || null);
     setVqAula(aula);
     setVqActiveBlock(null);
-    setVqLoading(false);
+    setVqSyllabusLoading(false);
     setVqGenModal(null);
     setView('videoquestions');
   };
@@ -2704,7 +2719,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p className={`text-sm font-medium truncate ${dm?'text-gray-300':'text-gray-700'}`}>{shortT||topic}</p>
-                                        <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>{tW}/{tAll.length} aulas{tBonus.length>0?` · ${tBonus.length} bônus`:''}</p>
+                                        <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>{tW}/{tAll.length} aulas{bonus.length>0?` · ${bonus.length} bônus`:''}</p>
                                       </div>
                                       <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
                                     </button>
@@ -3357,15 +3372,15 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
           // DETAIL VIEW: aula selecionada — mostra blocos
           if(vqAula && vqSubject && vqTopic) {
-            const aulaId = aulaVqKey(vqAula);   // chave de leitura (pode ser legada)
-            const aulaIdNew = aulaDocId(vqAula); // chave de escrita (sempre bunny_id)
-            const aulaData = vqBlocks[aulaId] || {};
-            const blocks = aulaData.blocks || {};
-            const meta = aulaData.meta || {};
+            const aulaId    = aulaVqKey(vqAula);   // chave de leitura — encontra bunny_id ou legado
+            const aulaIdNew = aulaDocId(vqAula);   // chave de escrita — sempre bunny_id
+            const aulaData  = vqBlocks[aulaId] || {};
+            const blocks    = aulaData.blocks || {};
+            const meta      = aulaData.meta || {};
             const blockList = Object.entries(blocks).sort((a,b)=>a[0].localeCompare(b[0]));
-            const hasSetup = !!meta.totalQuestions;
+            const hasSetup  = aulaHasVqData(vqAula); // usa busca em todos os formatos de chave
             const durationSecs = vqAula.duration_seconds || 0;
-            const suggestedQ = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
+            const suggestedQ   = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
 
             // ── VIEW COMPLETA DE UM BLOCO ── igual à view topic normal
             if(vqActiveBlockView) {
@@ -3663,7 +3678,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
 
                           {tExp&&aulas.map((aula,ai)=>{
                             const qCount = aulaQCount(aula);
-                            const hasSetup = !!vqBlocks[aulaVqKey(aula)]?.meta?.totalQuestions;
+                            const hasSetup = aulaHasVqData(aula);
                             return (
                               <button key={ai}
                                 onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);}}
@@ -3950,7 +3965,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
         darkMode={darkMode}
         onClose={()=>setVqGenModal(null)}
         onConfirm={(cfg)=>generateVqSyllabus({...cfg,aula:vqGenModal.aula,aulaId:vqGenModal.aulaId,subject:vqGenModal.subject,topic:vqGenModal.topic})}
-        loading={vqLoading}
+        loading={vqSyllabusLoading}
       />}
 
       {/* ── EXPORT MODAL ── */}
