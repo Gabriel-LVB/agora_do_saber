@@ -1701,20 +1701,7 @@ export default function QuestionBankApp() {
   const getPrompt = (forAPI=false, areas=[]) => {
     const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    const extraAlt=na===4?'':'E) [Alt]';
     const focusBlock=getFocusInst(areas);
-
-    const fromFirestore = fillPrompt('oracle_main', {
-      FOCUS_BLOCK: focusBlock,
-      TOTAL: total,
-      NUM_SUBTOPICS: s.numSubtopics,
-      Q_PER_SUB: s.qPerSub,
-      EXTRA_ALT: na===5?'E) [Alt]':'',
-      CUSTOM_PROMPT: s.customPrompt?`Instruções extras: ${s.customPrompt}`:'',
-    });
-    if (fromFirestore) return fromFirestore;
-
-    // Fallback local
     const styleInst = {
       clinical: 'Use EXCLUSIVAMENTE enunciados com casos clínicos (paciente com X apresenta Y, qual a conduta/diagnóstico?).',
       direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos (sem caso clínico — pergunte diretamente sobre mecanismos, critérios, classificações, doses).',
@@ -1726,20 +1713,6 @@ export default function QuestionBankApp() {
   const getExternalPrompt = () => {
     const s=settingsRef.current; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-
-    // Tenta montar a partir dos prompts do Firestore
-    const p1 = fillPrompt('oracle_syllabus', {
-      SUBJECT: '[INSERIR TEMA AQUI]', NUM_TOPICS: s.numTopics, NUM_SUBTOPICS: s.numSubtopics,
-    });
-    const p2 = fillPrompt('oracle_main', {
-      FOCUS_BLOCK: getFocusInst([]), TOTAL: s.numSubtopics*s.qPerSub,
-      NUM_SUBTOPICS: s.numSubtopics, Q_PER_SUB: s.qPerSub,
-      EXTRA_ALT: na===5?'E) [Alt]':'',
-      CUSTOM_PROMPT: s.customPrompt?`Instruções extras: ${s.customPrompt}`:'',
-    });
-    if (p1 && p2) return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]\n\n*** PARTE 1: ESTRUTURAÇÃO ***\n${p1}\n\nAo finalizar, aguarde minha confirmação. NÃO gere questões ainda.\n\n*** PARTE 2: GERAÇÃO (um tópico por vez ao comando "Próximo Tópico") ***\n${p2}`;
-
-    // Fallback local
     return `[INSTRUÇÕES PARA IA EXTERNA]\n\n*** PARTE 1 ***\nCrie um sumário sobre [TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.\n\n*** PARTE 2 ***\nPara cada tópico: ${s.numSubtopics} subtópicos × ${s.qPerSub} questão = ${s.numSubtopics*s.qPerSub} questões.\n\nFORMATO:\n## Questão [X.Y.Z]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---`;
   };
 
@@ -1803,13 +1776,7 @@ export default function QuestionBankApp() {
     const na = numAlternatives;
     const alts = na===4?'A) B) C) D)':'A) B) C) D) E)';
 
-    const summaryPrompt = fillPrompt('vq_syllabus', {
-      AULA_TITLE: aula.title,
-      NUM_BLOCKS: numBlocks,
-      Q_PER_BLOCK: qPerBlock,
-      EXTRA_PROMPT: extraPrompt ? `FOCO ADICIONAL: ${extraPrompt}` : '',
-      TRANSCRIPT: transcript ? transcript.substring(0, 25000) : `[Sem transcrição — use o título: ${aula.title}]`,
-    }) || `Defina subtópicos testáveis para "${aula.title}": ${numBlocks} bloco(s) × ${qPerBlock} subtópico(s). Formato: ## Bloco N: [Título]\n- [Subtópico]\n...`;
+    const summaryPrompt = `Você é um especialista em criar avaliações médicas. Analise a aula "${aula.title}" e defina os subtópicos testáveis para ${numBlocks} bloco(s) de questões, com ${qPerBlock} subtópico(s) por bloco.\n\nCada subtópico deve ser um conceito médico concreto e testável (diagnóstico, fisiopatologia, tratamento, critérios, mecanismo).\n${extraPrompt?`\nFOCO ADICIONAL: ${extraPrompt}\n`:''}\nFORMATO OBRIGATÓRIO:\n## Bloco 1: [Título temático]\n- [Subtópico testável]\n- [Subtópico testável]\n...\n## Bloco 2: [Título temático]\n- [Subtópico testável]\n...\n\nTRANSCRIÇÃO:\n${transcript ? transcript.substring(0, 25000) : `[Sem transcrição — use o título: ${aula.title}]`}`;
 
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
@@ -1922,15 +1889,7 @@ export default function QuestionBankApp() {
       mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos.',
     }[meta.questionStyle||'mixed'];
 
-    const PROMPT = fillPrompt('vq_block', {
-      AULA_TITLE: meta.aulaTitle,
-      BLOCK_TITLE: block.title,
-      SUBTOPICS: subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n'),
-      TOTAL: total,
-      EXTRA_ALT: na===5?'E) [Alt]':'',
-      QUESTION_STYLE: qStyleInst,
-      TRANSCRIPT: transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]',
-    }) || `Crie ${total} questões sobre "${block.title}" (${meta.aulaTitle}).\n${qStyleInst}\nSubtópicos:\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nFORMATO:\n## Questão [N]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---`;
+    const PROMPT = `Você é um professor de medicina criando questões de prova sobre "${block.title}" da aula "${meta.aulaTitle}".\n\n${qStyleInst}\n\nSUBTÓPICOS (1 questão por subtópico, nesta ordem):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nTOTAL: EXATAMENTE ${total} questões.\n\nFORMATO:\n## Questão [N]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---\n\nTRANSCRIÇÃO:\n${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]'}`;
 
     const orderedKeys = getOrderedKeys();
     let ok = false, err = null;
@@ -2048,9 +2007,7 @@ export default function QuestionBankApp() {
   // Creator
   const startCreation = async () => {
     if(!checkKey())return;setIsBusy(true);
-    const sys = fillPrompt('oracle_syllabus', {
-      SUBJECT: newSubName, NUM_TOPICS: settingsRef.current.numTopics, NUM_SUBTOPICS: settingsRef.current.numSubtopics,
-    }) || `Você é o Arquiteto de Alexandria. Baseado em "${newSubName}" e materiais, crie sumário com EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos cada. Responda APENAS o sumário com 'Tópico X' no início de cada linha principal.`;
+    const sys = `Você é o Arquiteto de Alexandria. Baseado em "${newSubName}" e nos materiais fornecidos, crie um sumário estruturado com EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos por tópico. Responda APENAS o sumário, com 'Tópico X' no início de cada linha principal e os subtópicos indentados abaixo.`;
     const orderedKeys = getOrderedKeys();
     let ok=false;
     for (const {k} of orderedKeys) {
@@ -2069,10 +2026,7 @@ export default function QuestionBankApp() {
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
-    const sys = fillPrompt('oracle_syllabus_adjust', {
-      NUM_TOPICS: settingsRef.current.numTopics, NUM_SUBTOPICS: settingsRef.current.numSubtopics,
-      CURRENT_SYLLABUS: syllabus, INSTRUCTION: syllabusFB,
-    }) || `Arquiteto de Alexandria. Ajuste o sumário conforme o pedido, mantendo EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.\nAtual:\n${syllabus}\nPedido: "${syllabusFB}"\nResponda APENAS o novo sumário.`;
+    const sys = `Arquiteto de Alexandria. Ajuste o sumário conforme o pedido, mantendo EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.\nAtual:\n${syllabus}\nPedido: "${syllabusFB}"\nResponda APENAS o novo sumário.`;
     const orderedKeys = getOrderedKeys();
     for (const {k} of orderedKeys) {
       try {
