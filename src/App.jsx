@@ -359,25 +359,82 @@ const parseData = (text) => {
 };
 
 
-// Render rich text: bold (**text** or <b>), italic (<i>), line breaks
-// multiline=true handles \n as <br> (for chat messages)
+// Carrega KaTeX uma vez para renderização de LaTeX
+let _katexLoaded = false;
+const ensureKatex = () => {
+  if (_katexLoaded || window.katex) { _katexLoaded = true; return Promise.resolve(); }
+  return new Promise((res, rej) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css';
+    document.head.appendChild(link);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js';
+    s.onload = () => { _katexLoaded = true; res(); };
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+};
+
+// Componente que renderiza uma expressão LaTeX inline
+const TexInline = ({ src, display=false }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ensureKatex().then(() => {
+      try {
+        window.katex.render(src, ref.current, { throwOnError: false, displayMode: display });
+      } catch(e) { if (ref.current) ref.current.textContent = src; }
+    }).catch(() => { if (ref.current) ref.current.textContent = src; });
+  }, [src, display]);
+  return <span ref={ref} style={display ? {display:'block',textAlign:'center',margin:'8px 0'} : {display:'inline'}}/>;
+};
+
+// Render rich text: bold (**text**), italic, LaTeX ($...$, $$...$$), line breaks
 const renderRichText = (text, multiline = false) => {
   if (!text) return null;
-  const renderLine = (line, li) => {
-    const parts = line.split(/(\*\*.*?\*\*|<b>.*?<\/b>|<i>.*?<\/i>|<br\s*\/?>)/g);
-    return parts.map((p, pi) => {
-      if (p.startsWith('**') && p.endsWith('**')) return <strong key={pi} className="font-bold">{p.slice(2,-2)}</strong>;
-      if (p.startsWith('<b>') && p.endsWith('</b>')) return <strong key={pi} className="font-bold">{p.slice(3,-4)}</strong>;
-      if (p.startsWith('<i>') && p.endsWith('</i>')) return <em key={pi}>{p.slice(3,-4)}</em>;
-      if (p.match(/^<br\s*\/?>$/)) return <br key={pi}/>;
-      return <span key={pi}>{p}</span>;
-    });
+
+  // Tokeniza o texto em segmentos: $$...$$ (display), $...$ (inline), **...**, <b>, <i>, <br>, texto
+  const tokenize = (str) => {
+    const tokens = [];
+    // Regex: $$...$$, $...$, **...**, <b>...</b>, <i>...</i>, <br/>
+    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*.*?\*\*|<b>.*?<\/b>|<i>.*?<\/i>|<br\s*\/?>)/g;
+    let last = 0, m;
+    while ((m = re.exec(str)) !== null) {
+      if (m.index > last) tokens.push({ type: 'text', val: str.slice(last, m.index) });
+      const v = m[0];
+      if (v.startsWith('$$')) tokens.push({ type: 'tex-display', val: v.slice(2, -2).trim() });
+      else if (v.startsWith('$'))  tokens.push({ type: 'tex-inline', val: v.slice(1, -1).trim() });
+      else if (v.startsWith('**')) tokens.push({ type: 'bold', val: v.slice(2, -2) });
+      else if (v.startsWith('<b>'))tokens.push({ type: 'bold', val: v.slice(3, -4) });
+      else if (v.startsWith('<i>'))tokens.push({ type: 'italic', val: v.slice(3, -4) });
+      else if (v.match(/^<br/))   tokens.push({ type: 'br' });
+      last = m.index + v.length;
+    }
+    if (last < str.length) tokens.push({ type: 'text', val: str.slice(last) });
+    return tokens;
   };
-  if (!multiline) return <React.Fragment>{renderLine(text, 0)}</React.Fragment>;
+
+  const renderTokens = (tokens, keyPrefix) =>
+    tokens.map((tok, i) => {
+      const k = `${keyPrefix}-${i}`;
+      switch (tok.type) {
+        case 'bold':        return <strong key={k} className="font-bold">{tok.val}</strong>;
+        case 'italic':      return <em key={k}>{tok.val}</em>;
+        case 'br':          return <br key={k}/>;
+        case 'tex-inline':  return <TexInline key={k} src={tok.val} display={false}/>;
+        case 'tex-display': return <TexInline key={k} src={tok.val} display={true}/>;
+        default:            return <span key={k}>{tok.val}</span>;
+      }
+    });
+
+  if (!multiline) {
+    return <React.Fragment>{renderTokens(tokenize(text), 'r')}</React.Fragment>;
+  }
   const lines = text.split('\n');
   return lines.map((line, li) => (
     <React.Fragment key={li}>
-      {renderLine(line, li)}
+      {renderTokens(tokenize(line), `l${li}`)}
       {li < lines.length - 1 && <br/>}
     </React.Fragment>
   ));
@@ -801,7 +858,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
-  useEffect(()=>{ if(open) bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[messages,open]);
+  // Sem scroll automático — o usuário controla a posição da página
   const send = async () => {
     if (!input.trim()||loading) return;
     const msg = input.trim(); setInput('');
