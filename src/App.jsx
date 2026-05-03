@@ -579,23 +579,24 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     setQPerBlock(Math.min(MAX_PER_BLOCK, Math.ceil(totalQ / b)));
   };
 
-  // Distribuição real: últimos blocos podem ter menos questões
-  const remainder    = totalQ % qPerBlock;
+  // Garante que qPerBlock nunca excede totalQ
+  const effectivePerBlock = Math.min(qPerBlock, totalQ);
+  const remainder    = totalQ % effectivePerBlock;
   const fullBlocks   = remainder === 0 ? numBlocks : numBlocks - 1;
   const lastBlock    = remainder === 0 ? 0 : remainder;
   const summaryText  = lastBlock === 0
-    ? `${numBlocks} bloco(s) de ${qPerBlock} questões = ${totalQ} no total`
-    : `${fullBlocks} bloco(s) de ${qPerBlock} + 1 bloco de ${lastBlock} = ${totalQ} no total`;
+    ? `${numBlocks} bloco(s) de ${effectivePerBlock} questões = ${totalQ} no total`
+    : `${fullBlocks > 0 ? `${fullBlocks} bloco(s) de ${effectivePerBlock} + ` : ''}1 bloco de ${lastBlock} = ${totalQ} no total`;
 
   return (
     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div
-        className={`w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
-        style={{isolation:'isolate'}}
+        className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
+        style={{isolation:'isolate', maxHeight:'90vh'}}
         onClick={e=>e.stopPropagation()}
       >
-        {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-5 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
+        {/* Header fixo */}
+        <div className={`flex items-center justify-between px-6 py-5 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <div>
             <h3 className="text-lg font-serif font-bold text-yellow-600 flex items-center gap-2">
               <GraduationCap className="w-5 h-5"/>Gerar Questões da Aula
@@ -605,7 +606,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           <button onClick={onClose} className={`p-2 rounded-full ${dm?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1 min-h-0">
           {/* Duração + sugestão */}
           <div className={`flex items-center gap-3 p-3 rounded-xl ${dm?'bg-gray-800':'bg-gray-50'}`}>
             <Clock className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
@@ -698,7 +699,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-6 pb-6">
+        <div className="flex gap-3 px-6 pb-6 pt-4 flex-shrink-0 border-t border-gray-700/30">
           <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
             Cancelar
           </button>
@@ -1077,7 +1078,7 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4">
-      <div className={`w-full max-w-md rounded-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+      <div className={`w-full max-w-md rounded-2xl border overflow-y-auto p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'90vh'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar</h3>
         <div className="space-y-3 mb-6">
           {opts.map(o=>(
@@ -1257,7 +1258,7 @@ const ERROR_CONFIGS = {
 
 const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMode, children, isAlert=false, actionLabel, onAction, link }) => (
   <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4">
-    <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}>
+    <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'90vh'}}>
       <div className="flex flex-col items-center text-center">
         <div className={`p-4 rounded-full mb-4 ${darkMode?'bg-yellow-900/30':'bg-yellow-100'}`}><Flame className="w-8 h-8 text-yellow-600"/></div>
         <h3 className="text-xl font-serif font-bold mb-3">{title}</h3>
@@ -4070,7 +4071,7 @@ export default function QuestionBankApp() {
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
-          <div className={`w-full max-w-md rounded-2xl p-8 border-2 border-yellow-600 ${darkMode?'bg-gray-900 text-white':'bg-white text-gray-900'}`}>
+          <div className={`w-full max-w-md rounded-2xl p-8 border-2 border-yellow-600 overflow-y-auto ${darkMode?'bg-gray-900 text-white':'bg-white text-gray-900'}`} style={{maxHeight:'90vh'}}>
             <div className="flex flex-col items-center text-center">
               <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4"><RotateCcw className="w-8 h-8 text-yellow-600"/></div>
               <h3 className="text-2xl font-serif font-bold mb-2">Recriar Bloco</h3>
