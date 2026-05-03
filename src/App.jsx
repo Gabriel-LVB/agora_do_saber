@@ -82,12 +82,12 @@ const getAulaId = (aula) => {
   return m ? m[1] : (aula.embed_url || aula.path || '');
 };
 
-// Clean raw filenames like "VIDEOAULA_S19_MEDCURSO_GAS1_Acalasia" → "Acalasia"
+// Clean raw filenames like "VIDEOAULA_S19_medcurso_GAS1_Acalasia" → "Acalasia"
 const cleanAulaTitle = (title) => {
   if (!title) return '';
-  // Strip all-caps prefix codes + underscores: "VIDEOAULA_S19_MEDCURSO_GAS1_" → ""
+  // Strip all-caps prefix codes + underscores: "VIDEOAULA_S19_medcurso_GAS1_" → ""
   let t = title
-    .replace(/^(?:VIDEOAULA|AULA[_ ]B[ÔO]NUS|AULABONUS)[_\s]+S?\d+_?(?:MEDCURSO_)?[A-Z0-9]+_?(?:BLOCO\d+_?)?/i, '')
+    .replace(/^(?:VIDEOAULA|AULA[_ ]B[ÔO]NUS|AULABONUS)[_\s]+S?\d+_?(?:medcurso_)?[A-Z0-9]+_?(?:BLOCO\d+_?)?/i, '')
     .replace(/^S\d+_AULABONUS_[A-Z0-9]+_(?:BLOCO\d+_)?/i, '')
     .replace(/_NOVO$|_SLIDE$/i, '')
     .replace(/_/g, ' ')
@@ -427,25 +427,24 @@ const shortTopicName = (key) => {
 // Modal de configuração de geração de questões para uma videoaula
 const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading }) => {
   const dm = darkMode;
+  const MAX_PER_BLOCK = 30;
 
-  // Busca duration da coleção lessons ao montar
   const [lessonMeta, setLessonMeta]   = useState(null);
   const [metaLoading, setMetaLoading] = useState(true);
 
   const durationSecs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
   const durationFmt  = lessonMeta?.duration_formatted || aula.duration_formatted || '';
-  // Arredonda para a dezena mais próxima (mínimo 10)
-  const roundToTen = (n) => Math.max(10, Math.round(n / 10) * 10);
+  const roundToTen   = (n) => Math.max(10, Math.round(n / 10) * 10);
   const calculatedQ  = durationSecs > 0 ? roundToTen(Math.ceil(durationSecs / 120)) : (suggestedQ || 10);
 
-  const [totalQ,      setTotalQ]      = useState(suggestedQ || 10); // valor provisório até busca
-  const [qPerBlock,   setQPerBlock]   = useState(Math.min(20, suggestedQ || 10));
-  const [numBlocks,   setNumBlocks]   = useState(Math.ceil((suggestedQ || 10) / Math.min(20, suggestedQ || 10)));
-  const [numAlts,     setNumAlts]     = useState(5);
-  const [extraPrompt, setExtraPrompt] = useState('');
-  const [initialized, setInitialized] = useState(false);
+  const [totalQ,      setTotalQ]      = useState(suggestedQ || 10);
+  const [qPerBlock,   setQPerBlock]   = useState(Math.min(MAX_PER_BLOCK, suggestedQ || 10));
+  const [numBlocks,   setNumBlocks]   = useState(Math.ceil((suggestedQ || 10) / Math.min(MAX_PER_BLOCK, suggestedQ || 10)));
+  const [numAlts,       setNumAlts]     = useState(5);
+  const [extraPrompt,   setExtraPrompt] = useState('');
+  const [questionStyle, setQuestionStyle] = useState('mixed'); // 'clinical' | 'direct' | 'mixed'
+  const [initialized,   setInitialized] = useState(false);
 
-  // Busca metadados da aula no Firestore (coleção lessons)
   useEffect(() => {
     const fetch = async () => {
       setMetaLoading(true);
@@ -462,42 +461,49 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     fetch();
   }, [aula.title]); // eslint-disable-line
 
-  // Quando a duração chegar, recalcula e inicializa os campos (só uma vez)
   useEffect(() => {
     if (metaLoading || initialized) return;
     const secs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
     const raw = secs > 0 ? Math.ceil(secs / 120) : (suggestedQ || 10);
-    const q = Math.max(10, Math.round(raw / 10) * 10); // dezena mais próxima
-    const perB = Math.min(20, q);
+    const q   = Math.max(10, Math.round(raw / 10) * 10);
+    const perB = Math.min(MAX_PER_BLOCK, q);
     const blks = Math.ceil(q / perB);
-    setTotalQ(q);
-    setQPerBlock(perB);
-    setNumBlocks(blks);
+    setTotalQ(q); setQPerBlock(perB); setNumBlocks(blks);
     setInitialized(true);
   }, [metaLoading, initialized]); // eslint-disable-line
 
+  // Helpers de mudança — mantém consistência entre os 3 campos
   const handleTotalChange = (v) => {
-    const t = Math.max(1, Math.min(120, parseInt(v)||1));
+    const t = Math.max(1, Math.min(300, parseInt(v)||1));
     setTotalQ(t);
-    const perB = Math.min(20, qPerBlock);
+    const perB = Math.min(MAX_PER_BLOCK, qPerBlock);
     setQPerBlock(perB);
     setNumBlocks(Math.ceil(t / perB));
   };
   const handlePerBlockChange = (v) => {
-    const p = Math.max(1, Math.min(20, parseInt(v)||1));
+    const p = Math.max(1, Math.min(MAX_PER_BLOCK, parseInt(v)||1));
     setQPerBlock(p);
     setNumBlocks(Math.ceil(totalQ / p));
   };
   const handleBlocksChange = (v) => {
-    const b = Math.max(1, Math.min(20, parseInt(v)||1));
+    const b = Math.max(1, Math.min(50, parseInt(v)||1));
     setNumBlocks(b);
-    setQPerBlock(Math.ceil(totalQ / b));
+    setQPerBlock(Math.min(MAX_PER_BLOCK, Math.ceil(totalQ / b)));
   };
+
+  // Distribuição real: últimos blocos podem ter menos questões
+  const remainder    = totalQ % qPerBlock;
+  const fullBlocks   = remainder === 0 ? numBlocks : numBlocks - 1;
+  const lastBlock    = remainder === 0 ? 0 : remainder;
+  const summaryText  = lastBlock === 0
+    ? `${numBlocks} bloco(s) de ${qPerBlock} questões = ${totalQ} no total`
+    : `${fullBlocks} bloco(s) de ${qPerBlock} + 1 bloco de ${lastBlock} = ${totalQ} no total`;
 
   return (
     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div
         className={`w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
+        style={{isolation:'isolate'}}
         onClick={e=>e.stopPropagation()}
       >
         {/* Header */}
@@ -528,49 +534,48 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
                 </p>
               </div>
             ) : (
-              <div>
-                <p className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>Duração não disponível — ajuste manualmente</p>
-              </div>
+              <p className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>Duração não disponível — ajuste manualmente</p>
             )}
           </div>
 
           {/* Configuração numérica */}
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">Total</label>
-              <input
-                type="number" min="1" max="120" value={totalQ}
-                onChange={e=>handleTotalChange(e.target.value)}
-                className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}
-              />
-              <p className="text-[10px] text-center mt-1 opacity-40">questões</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">Por bloco <span className="normal-case font-normal">(máx 20)</span></label>
-              <input
-                type="number" min="1" max="20" value={qPerBlock}
-                onChange={e=>handlePerBlockChange(e.target.value)}
-                className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}
-              />
-              <p className="text-[10px] text-center mt-1 opacity-40">questões</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">Blocos</label>
-              <input
-                type="number" min="1" max="20" value={numBlocks}
-                onChange={e=>handleBlocksChange(e.target.value)}
-                className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}
-              />
-              <p className="text-[10px] text-center mt-1 opacity-40">blocos</p>
-            </div>
+            {[
+              {label:'Total',sub:'questões',val:totalQ,fn:handleTotalChange},
+              {label:`Por bloco (máx ${MAX_PER_BLOCK})`,sub:'questões',val:qPerBlock,fn:handlePerBlockChange},
+              {label:'Blocos',sub:'blocos',val:numBlocks,fn:handleBlocksChange},
+            ].map(f=>(
+              <div key={f.label}>
+                <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">{f.label}</label>
+                <input type="number" min="1" value={f.val} onChange={e=>f.fn(e.target.value)}
+                  className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}/>
+                <p className="text-[10px] text-center mt-1 opacity-40">{f.sub}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Resumo visual */}
+          {/* Resumo visual — mostra distribuição real */}
           <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40':'bg-yellow-50 border border-yellow-200'}`}>
             <Sparkles className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
-            <span className={dm?'text-yellow-300':'text-yellow-800'}>
-              <strong>{numBlocks}</strong> bloco(s) × <strong>{qPerBlock}</strong> questões = <strong>{totalQ}</strong> questões no total
-            </span>
+            <span className={dm?'text-yellow-300':'text-yellow-800'}>{summaryText}</span>
+          </div>
+
+          {/* Tipo de questão */}
+          <div>
+            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                {k:'mixed',    label:'Misto',    desc:'Clínicas e diretas'},
+                {k:'clinical', label:'Clínico',  desc:'Casos clínicos'},
+                {k:'direct',   label:'Direto',   desc:'Perguntas diretas'},
+              ].map(opt=>(
+                <button key={opt.k} onClick={()=>setQuestionStyle(opt.k)}
+                  className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${questionStyle===opt.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
+                  {opt.label}
+                  <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Alternativas */}
@@ -611,7 +616,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle})}
             className="flex-[2] py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading
@@ -627,6 +632,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   );
 };
 
+// ─── REVISAR ERROS MODAL ──────────────────────────────────────────────────────
 // ─── QUESTION VIEW ────────────────────────────────────────────────────────────
 // Componente reutilizado pela view topic e pela view de bloco do curso.
 // Props:
@@ -652,15 +658,12 @@ const QuestionView = ({
   subtopics=[],
 }) => {
   const dm = darkMode;
-  const [showWrong, setShowWrong] = React.useState(false);
 
   const correctLetter = (q) => q.options?.find(o=>o.isCorrect)?.letter;
   const wrongIds = questions.filter(q=>answers[q.id]&&answers[q.id]!==correctLetter(q)).map(q=>q.id);
   const correctCount = questions.filter(q=>answers[q.id]===correctLetter(q)).length;
   const answeredCount = Object.keys(answers).length;
   const allDone = questions.length>0 && answeredCount===questions.length;
-  const displayQs = showWrong ? questions.filter(q=>wrongIds.includes(q.id)) : questions;
-  // Percentual só faz sentido quando tudo respondido
   const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
@@ -688,11 +691,6 @@ const QuestionView = ({
               {showBizuario&&onBizuario&&(
                 <button onClick={onBizuario} className={`${btnBase} ${bizuarioCached?(dm?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}>
                   <BrainIcon className="w-4 h-4"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
-                </button>
-              )}
-              {wrongIds.length>0&&(
-                <button onClick={()=>setShowWrong(!showWrong)} className={`${btnBase} ${showWrong?(dm?'bg-red-900/30 text-red-400 border-red-700':'bg-red-50 text-red-600 border-red-300'):(dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
-                  <FilterIcon className="w-4 h-4"/>{showWrong?`Erradas (${wrongIds.length})`:`Filtrar (${wrongIds.length})`}
                 </button>
               )}
               {onReset&&<button onClick={onReset} className="flex items-center gap-1.5 px-3 py-2 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-bold"><Eraser className="w-4 h-4"/>Limpar</button>}
@@ -736,13 +734,7 @@ const QuestionView = ({
       {/* ── Questões ── */}
       {!isGenerating&&(
         <div>
-          {showWrong&&displayQs.length===0&&(
-            <div className="text-center py-16 opacity-60">
-              <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-4"/>
-              <p className="font-bold text-lg">Nenhum erro encontrado!</p>
-            </div>
-          )}
-          {displayQs.map((q,i)=>(
+          {questions.map((q,i)=>(
             <QuestionCard key={q.id||i} question={q} index={i}
               selectedLetter={answers[q.id]}
               onAnswer={l=>onAnswer(q.id,l)}
@@ -752,17 +744,12 @@ const QuestionView = ({
               apiKey={apiKey} oracleLength={oracleLength}/>
           ))}
           {/* ── Conclusão ── */}
-          {allDone&&!showWrong&&(
+          {allDone&&(
             <div className="text-center py-10">
               <Award className="w-16 h-16 mx-auto text-yellow-500 mb-4"/>
               <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Provações Concluídas!</h3>
-              <p className="opacity-70 mb-6">{correctCount}/{questions.length} corretas ({Math.round(correctCount/questions.length*100)}%)</p>
+              <p className="opacity-70 mb-6">{correctCount}/{questions.length} corretas ({pct}%)</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                {wrongIds.length>0&&(
-                  <button onClick={()=>setShowWrong(true)} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold border border-red-400 text-red-500 hover:bg-red-50">
-                    <FilterIcon className="w-4 h-4"/>Revisar Erros ({wrongIds.length})
-                  </button>
-                )}
                 {showBizuario&&onBizuario&&(
                   <button onClick={onBizuario} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700">
                     <BrainIcon className="w-5 h-5"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
@@ -1001,7 +988,7 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4">
       <div className={`w-full max-w-md rounded-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar</h3>
         <div className="space-y-3 mb-6">
@@ -1070,19 +1057,25 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
       }
 
       const scope = topicContexts ? `da pasta "${topicTitle}" (${topicContexts.length} tópicos)` : `do tópico "${topicTitle}"${subjectTitle ? ` (${subjectTitle})` : ''}`;
+      const wordLimit = topicContexts ? 'Máximo 600 palavras, abordando todos os tópicos' : 'Máximo 400 palavras — densidade máxima, zero enrolação';
 
-      const prompt = `Crie o BIZUÁRIO ${scope}.
+      // Tenta usar prompt do Firestore
+      let prompt = '';
+      try {
+        const pSnap = await getDoc(doc(db,'config','prompts'));
+        if (pSnap.exists() && pSnap.data().bizuario) {
+          let t = pSnap.data().bizuario;
+          t = t.replaceAll('{{TOPIC_TITLE}}', scope);
+          t = t.replaceAll('{{SUBJECT_CONTEXT}}', subjectTitle?` — ${subjectTitle}`:'');
+          t = t.replaceAll('{{QUESTIONS_CONTEXT}}', contextBlock?`CONTEÚDO BASE:\n${contextBlock}`:'');
+          t = t.replaceAll('{{WORD_LIMIT}}', topicContexts?'600':'400');
+          prompt = t;
+        }
+      } catch(e) {}
 
-${contextBlock ? `CONTEÚDO BASE:\n${contextBlock}\n` : ''}
-OBJETIVO: Uma cola de revisão ultra-rápida. O estudante vai ler isso 2 minutos antes da prova.
-
-FORMATO OBRIGATÓRIO:
-- Parágrafos corridos, densos, sem bullet points
-- Baseie-se no conteúdo acima — cubra os mesmos conceitos de forma sintética
-- Destaque o que mais aparece nas questões e explicações
-- Valores numéricos, critérios diagnósticos, associações clássicas
-- Mnemônicos quando úteis ("3 Ds de...", "pensar em X quando Y")
-- ${topicContexts ? 'Máximo 600 palavras, abordando todos os tópicos' : 'Máximo 400 palavras — densidade máxima, zero enrolação'}`;
+      if (!prompt) {
+        prompt = `Crie o BIZUÁRIO ${scope}.\n\n${contextBlock?`CONTEÚDO BASE:\n${contextBlock}\n`:''}\nOBJETIVO: Cola de revisão ultra-rápida — o estudante lê 2 minutos antes da prova.\n\nFORMATO: Parágrafos corridos, densos, sem bullet points. Valores numéricos, critérios, associações clássicas. ${wordLimit}.`;
+      }
 
       const r = await callGemini(prompt, sys, apiKey);
       setText(r); setPhase('done');
@@ -1097,7 +1090,7 @@ FORMATO OBRIGATÓRIO:
   useEffect(() => { if (!cachedText) generate(); }, []); // eslint-disable-line
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div
         className={`w-full max-w-2xl rounded-2xl border flex flex-col ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
         style={{maxHeight:'85vh'}}
@@ -1175,7 +1168,7 @@ const ERROR_CONFIGS = {
 };
 
 const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMode, children, isAlert=false, actionLabel, onAction, link }) => (
-  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4">
+  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4">
     <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}>
       <div className="flex flex-col items-center text-center">
         <div className={`p-4 rounded-full mb-4 ${darkMode?'bg-yellow-900/30':'bg-yellow-100'}`}><Flame className="w-8 h-8 text-yellow-600"/></div>
@@ -1195,7 +1188,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed' };
 
 export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
@@ -1217,7 +1210,7 @@ export default function QuestionBankApp() {
   const [sigKey, setSigKey]       = useState('');
 
   // ── Library ───────────────────────────────────────────────────────────────
-  const [library, setLibrary]     = useState([]);
+  const [library, setLibrary] = useState([]);
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const [settings, setSettingsS]  = useState(defaultSettings);
@@ -1295,6 +1288,9 @@ export default function QuestionBankApp() {
   const [activeSubjectVid, setActiveSubjectVid] = useState(null);
   const [activeSubtopicVid, setActiveSubtopicVid] = useState(null);
   const [activeAula, setActiveAula] = useState(null);
+  const [videoSeek, setVideoSeek]   = useState(null); // null = não forçar tempo, número = seek em segundos
+  // Resetar seek ao trocar de aula
+  const setActiveAulaAndReset = (aula) => { setActiveAula(aula); setVideoSeek(null); };
   const [watchedAulas, setWatchedAulas] = useState({});  // { bunny_id: true }
   const [expandedSubjectsVid, setExpandedSubjectsVid] = useState({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false); // subject/subtopic picker on mobile
@@ -1674,43 +1670,46 @@ export default function QuestionBankApp() {
   const getPrompt = (forAPI=false, areas=[]) => {
     const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    const focusBlock = getFocusInst(areas);
-    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${focusBlock?focusBlock+'\n\n':''}\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questões cada. Total: EXATAMENTE ${total} questões.\n\nDIRETRIZES:\n- Raciocínio clínico estilo USMLE/Residência brasileira\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Embaralhe as alternativas aleatoriamente\n- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado clínico]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação sem citar letras]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+    const extraAlt=na===4?'':'E) [Alt]';
+    const focusBlock=getFocusInst(areas);
+
+    const fromFirestore = fillPrompt('oracle_main', {
+      FOCUS_BLOCK: focusBlock,
+      TOTAL: total,
+      NUM_SUBTOPICS: s.numSubtopics,
+      Q_PER_SUB: s.qPerSub,
+      EXTRA_ALT: na===5?'E) [Alt]':'',
+      CUSTOM_PROMPT: s.customPrompt?`Instruções extras: ${s.customPrompt}`:'',
+    });
+    if (fromFirestore) return fromFirestore;
+
+    // Fallback local
+    const styleInst = {
+      clinical: 'Use EXCLUSIVAMENTE enunciados com casos clínicos (paciente com X apresenta Y, qual a conduta/diagnóstico?).',
+      direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos (sem caso clínico — pergunte diretamente sobre mecanismos, critérios, classificações, doses).',
+      mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos, de forma variada.',
+    }[s.questionStyle||'mixed'];
+    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${focusBlock?focusBlock+'\n\n':''}\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questões cada. Total: EXATAMENTE ${total} questões.\n\nESTILO DE ENUNCIADO: ${styleInst}\n\nDIRETRIZES:\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Explicação: densa, didática, com mecanismo fisiopatológico\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
   };
 
-  // External prompt (for copying to ChatGPT / Claude / Gemini web)
   const getExternalPrompt = () => {
     const s=settingsRef.current; const na=s.numAlternatives||5;
     const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    return `[INSTRUÇÕES PARA IA EXTERNA - ÁGORA DO SABER]
 
-*** PARTE 1: ESTRUTURAÇÃO ***
-Atue como o Arquiteto de Alexandria. Crie um sumário focado em [INSERIR TEMA AQUI]. O sumário deve conter EXATAMENTE ${s.numTopics} Tópicos principais, e cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos. Apresente apenas o sumário com 'Tópico X' no início de cada linha principal. Ao final da estruturação, aguarde minhas sugestões de alterações ou minha confirmação. NÃO gere as questões ainda.
+    // Tenta montar a partir dos prompts do Firestore
+    const p1 = fillPrompt('oracle_syllabus', {
+      SUBJECT: '[INSERIR TEMA AQUI]', NUM_TOPICS: s.numTopics, NUM_SUBTOPICS: s.numSubtopics,
+    });
+    const p2 = fillPrompt('oracle_main', {
+      FOCUS_BLOCK: getFocusInst([]), TOTAL: s.numSubtopics*s.qPerSub,
+      NUM_SUBTOPICS: s.numSubtopics, Q_PER_SUB: s.qPerSub,
+      EXTRA_ALT: na===5?'E) [Alt]':'',
+      CUSTOM_PROMPT: s.customPrompt?`Instruções extras: ${s.customPrompt}`:'',
+    });
+    if (p1 && p2) return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]\n\n*** PARTE 1: ESTRUTURAÇÃO ***\n${p1}\n\nAo finalizar, aguarde minha confirmação. NÃO gere questões ainda.\n\n*** PARTE 2: GERAÇÃO (um tópico por vez ao comando "Próximo Tópico") ***\n${p2}`;
 
-*** PARTE 2: GERAÇÃO DE QUESTÕES ***
-Após eu confirmar o sumário, você iniciará a geração das questões, PROCESSANDO UM TÓPICO POR VEZ a cada comando meu de "Próximo Tópico". Para cada tópico, use as seguintes diretrizes:
-
-Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.
-${getFocusInst([])}
-
-REGRA MANDATÓRIA: Crie EXATAMENTE ${s.qPerSub} questões para CADA subtópico do tópico atual. NÃO pare a geração até ter coberto absolutamente todos os subtópicos do bloco atual! Se precisar continuar em outra mensagem, avise mas continue sem perder nenhum subtópico.
-
-DIRETRIZES:
-- Raciocínio clínico estilo USMLE/Residência brasileira
-- EXATAMENTE ${na} alternativas homogêneas e plausíveis
-- NUNCA cite letras na explicação, use termos médicos
-- Embaralhe as alternativas aleatoriamente
-- Explicação: densa, didática, com mecanismo fisiopatológico e diferencial quando relevante
-
-TEMPLATE DE SAÍDA OBRIGATÓRIO:
-## Questão [X.Y.Z]
-[Enunciado clínico]
-${alts}
-Alternativa correta: [Letra]
-Explicação:
-[Explicação sem citar letras]
----
-${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
+    // Fallback local
+    return `[INSTRUÇÕES PARA IA EXTERNA]\n\n*** PARTE 1 ***\nCrie um sumário sobre [TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.\n\n*** PARTE 2 ***\nPara cada tópico: ${s.numSubtopics} subtópicos × ${s.qPerSub} questão = ${s.numSubtopics*s.qPerSub} questões.\n\nFORMATO:\n## Questão [X.Y.Z]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---`;
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -1744,7 +1743,7 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
   // cfg = { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, subject, topic, numAlternatives }
   const generateVqSyllabus = async (cfg) => {
     if(!checkKey()) return;
-    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5 } = cfg;
+    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed' } = cfg;
     setVqSyllabusLoading(true);
 
     // 1. Buscar transcrição
@@ -1773,31 +1772,13 @@ ${s.customPrompt?`\nInstruções extras do usuário: ${s.customPrompt}`:''}`;
     const na = numAlternatives;
     const alts = na===4?'A) B) C) D)':'A) B) C) D) E)';
 
-    const summaryPrompt = `Você é um professor de medicina especialista em criar avaliações. Analise a transcrição da aula "${aula.title}" e defina os subtópicos que serão cobertos nas questões.
-
-OBJETIVO: Cada subtópico deve ser um conceito médico concreto e testável — algo que o aluno precisa saber, não algo sobre a aula em si.
-
-ESTRUTURA: ${numBlocks} bloco(s), cada um com EXATAMENTE ${qPerBlock} subtópico(s).
-
-REGRAS ABSOLUTAS:
-- Subtópicos devem ser conceitos médicos específicos (fisiopatologia, critérios diagnósticos, tratamento, conduta, mecanismo de ação, classificação, complicações, etc.)
-- NUNCA use subtópicos como "Importância do tema", "O que o professor disse sobre X", "Introdução ao assunto" — isso não testa conhecimento médico
-- Cada subtópico deve ser suficientemente específico para gerar 1 questão de múltipla escolha desafiadora
-- Os blocos devem cobrir a aula em ordem cronológica
-- Bons exemplos: "Critérios diagnósticos de Lúpus pelo SLICC 2012", "Mecanismo de ação dos inibidores de ECA na IC", "Estadiamento TNM do câncer gástrico", "Diferença entre nefrite lúpica proliferativa e membranosa"
-- Maus exemplos: "Por que esse tema é importante", "Introdução à nefrologia", "O professor explica o conceito de X"
-
-${extraPrompt?`FOCO ADICIONAL SOLICITADO:\n${extraPrompt}\n\n`:''}FORMATO DE SAÍDA (siga exatamente):
-## Bloco 1: [Título temático do bloco]
-- [Conceito médico testável 1]
-- [Conceito médico testável 2]
-...
-## Bloco 2: [Título temático do bloco]
-- [Conceito médico testável 1]
-...
-
-TRANSCRIÇÃO DA AULA:
-${transcript ? transcript.substring(0, 25000) : '[Sem transcrição — crie subtópicos com base no título: '+aula.title+']'}`;
+    const summaryPrompt = fillPrompt('vq_syllabus', {
+      AULA_TITLE: aula.title,
+      NUM_BLOCKS: numBlocks,
+      Q_PER_BLOCK: qPerBlock,
+      EXTRA_PROMPT: extraPrompt ? `FOCO ADICIONAL: ${extraPrompt}` : '',
+      TRANSCRIPT: transcript ? transcript.substring(0, 25000) : `[Sem transcrição — use o título: ${aula.title}]`,
+    }) || `Defina subtópicos testáveis para "${aula.title}": ${numBlocks} bloco(s) × ${qPerBlock} subtópico(s). Formato: ## Bloco N: [Título]\n- [Subtópico]\n...`;
 
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
@@ -1866,6 +1847,7 @@ ${transcript ? transcript.substring(0, 25000) : '[Sem transcrição — crie sub
         aulaTitle: aula.title,
         subject: cfg.subject || '',
         topic: cfg.topic || '',
+        questionStyle: questionStyle || 'mixed',
         createdAt: Date.now(),
       },
       blocks: parsedBlocks,
@@ -1903,45 +1885,21 @@ ${transcript ? transcript.substring(0, 25000) : '[Sem transcrição — crie sub
     const transcriptSlice = block.transcriptSlice||'';
     const total = subtopicsArr.length||meta.qPerBlock||5;
 
-    const PROMPT = `Você é um professor de medicina criando uma prova para testar se o aluno realmente aprendeu o conteúdo da aula. As questões devem ser difíceis o suficiente para distinguir quem estudou de quem não estudou.
+    const qStyleInst = {
+      clinical: 'Use EXCLUSIVAMENTE enunciados com casos clínicos (paciente com X apresenta Y, qual a conduta/diagnóstico?).',
+      direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos (sem caso clínico — pergunte diretamente sobre mecanismos, critérios, classificações, doses).',
+      mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos.',
+    }[meta.questionStyle||'mixed'];
 
-AULA: "${meta.aulaTitle}"
-BLOCO: "${block.title}"
-
-SUBTÓPICOS A COBRIR (1 questão por subtópico, nesta ordem):
-${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}
-
-REGRAS ABSOLUTAS DE QUALIDADE:
-1. NUNCA pergunte sobre a aula em si ("O professor afirmou que...", "Segundo a aula...", "Por que é importante estudar...")
-2. Teste CONHECIMENTO MÉDICO REAL: fisiopatologia, diagnóstico, conduta, mecanismo, classificação, dose, complicação
-3. Enunciados clínicos: use casos clínicos breves (paciente com X apresenta Y, qual a conduta?) ou perguntas diretas sobre conceitos
-4. Alternativas homogêneas: todas devem parecer plausíveis para quem não estudou bem
-5. A alternativa correta deve ser inequívoca baseada no conteúdo da transcrição
-6. Explicação: explique POR QUE a correta está certa E por que as principais incorretas estão erradas — didática, com mecanismo fisiopatológico quando relevante
-7. NUNCA cite letras na explicação (diga "hipotensão ortostática" em vez de "a alternativa B")
-8. Embaralhe as alternativas — a correta não deve seguir padrão de posição
-
-EXEMPLOS DE BOAS QUESTÕES (use como modelo):
-✓ "Paciente de 45 anos com insuficiência renal crônica e K+ = 6,8 mEq/L. Qual o mecanismo pelo qual o kayexalate reduz a hipercalemia?"
-✓ "Qual das seguintes condições NÃO faz parte dos critérios SLICC 2012 para diagnóstico de LES?"
-✓ "Homem de 60 anos, hipertenso, com dispneia progressiva e B3 ao exame. O ecocardiograma mostra FE = 35%. Qual o mecanismo pelo qual o carvedilol melhora o prognóstico?"
-
-EXEMPLOS DE QUESTÕES PROIBIDAS:
-✗ "Por que o professor considera a nefrologia uma especialidade importante?"
-✗ "Segundo a aula, qual o principal objetivo do tratamento?"
-✗ "O que foi dito sobre a fisiopatologia da doença?"
-
-FORMATO (siga exatamente, ${total} questões):
-## Questão [N]
-[Enunciado — caso clínico ou pergunta direta sobre conceito médico]
-${alts}
-Alternativa correta: [Letra]
-Explicação:
-[Explicação didática: por que a correta está certa, por que as distratoras estão erradas, mecanismo fisiopatológico]
----
-
-TRANSCRIÇÃO DO BLOCO (base de conteúdo — extraia os fatos médicos concretos):
-${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]'}`;
+    const PROMPT = fillPrompt('vq_block', {
+      AULA_TITLE: meta.aulaTitle,
+      BLOCK_TITLE: block.title,
+      SUBTOPICS: subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n'),
+      TOTAL: total,
+      EXTRA_ALT: na===5?'E) [Alt]':'',
+      QUESTION_STYLE: qStyleInst,
+      TRANSCRIPT: transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]',
+    }) || `Crie ${total} questões sobre "${block.title}" (${meta.aulaTitle}).\n${qStyleInst}\nSubtópicos:\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nFORMATO:\n## Questão [N]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---`;
 
     const orderedKeys = getOrderedKeys();
     let ok = false, err = null;
@@ -2059,7 +2017,9 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
   // Creator
   const startCreation = async () => {
     if(!checkKey())return;setIsBusy(true);
-    const sys=`Você é o Arquiteto de Alexandria. Baseado em "${newSubName}" e materiais, crie sumário com EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos cada. Responda APENAS o sumário com 'Tópico X' no início de cada linha principal.`;
+    const sys = fillPrompt('oracle_syllabus', {
+      SUBJECT: newSubName, NUM_TOPICS: settingsRef.current.numTopics, NUM_SUBTOPICS: settingsRef.current.numSubtopics,
+    }) || `Você é o Arquiteto de Alexandria. Baseado em "${newSubName}" e materiais, crie sumário com EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos cada. Responda APENAS o sumário com 'Tópico X' no início de cada linha principal.`;
     const orderedKeys = getOrderedKeys();
     let ok=false;
     for (const {k} of orderedKeys) {
@@ -2078,7 +2038,10 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
-    const sys=`Arquiteto de Alexandria. Ajuste o sumário conforme o pedido, mantendo EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.\nAtual:\n${syllabus}\nPedido: "${syllabusFB}"\nResponda APENAS o novo sumário.`;
+    const sys = fillPrompt('oracle_syllabus_adjust', {
+      NUM_TOPICS: settingsRef.current.numTopics, NUM_SUBTOPICS: settingsRef.current.numSubtopics,
+      CURRENT_SYLLABUS: syllabus, INSTRUCTION: syllabusFB,
+    }) || `Arquiteto de Alexandria. Ajuste o sumário conforme o pedido, mantendo EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.\nAtual:\n${syllabus}\nPedido: "${syllabusFB}"\nResponda APENAS o novo sumário.`;
     const orderedKeys = getOrderedKeys();
     for (const {k} of orderedKeys) {
       try {
@@ -2138,21 +2101,6 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
   const getDueReviews = () => [];
 
   // Statistics
-  const getStats = () => {
-    let tQ=0,tA=0,tC=0; const bySubject={};
-    library.forEach(s=>{
-      if(!bySubject[s.id]) bySubject[s.id]={title:s.title,source:s.source,topics:[],total:0,answered:0,correct:0};
-      s.topics.forEach(t=>{
-        const qs=t.questions?.length||0; const ans=Object.keys(t.answers||{}).length;
-        const correct=(t.questions||[]).filter(q=>t.answers?.[q.id]===q.options.find(o=>o.isCorrect)?.letter).length;
-        tQ+=qs;tA+=ans;tC+=correct;
-        bySubject[s.id].total+=qs;bySubject[s.id].answered+=ans;bySubject[s.id].correct+=correct;
-        if(qs>0) bySubject[s.id].topics.push({id:t.id,title:t.title,total:qs,answered:ans,correct,pct:ans>0?Math.round(correct/ans*100):0,subjectId:s.id,subjectTitle:s.title});
-      });
-    });
-    return {tQ,tA,tC,pct:tA>0?Math.round(tC/tA*100):0,bySubject,due:getDueReviews().length};
-  };
-
   // Open Bizuário — cached in topic.bizuario
   // Bug 7: accepts optional overrideData (e.g. from exam results) skipping topicData
   // Open Bizuário for a topic — cached in topic.bizuario, regenerated only if not cached
@@ -2302,7 +2250,6 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 opacity-50 border-r pr-3 ${darkMode?'border-gray-700':'border-gray-300'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
               {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
-              {icon:<BarChart2 className="w-4 h-4"/>,     action:()=>setView('stats'),     title:'Estatísticas'},
               {icon:<SettingsIcon className="w-4 h-4"/>,  action:()=>setView('settings'),  title:'Configurações'},
               {icon:darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>, action:()=>setDarkMode(!darkMode), title:'Tema'},
               {icon:<LogOut className="w-4 h-4"/>,        action:handleLogout,             title:'Sair', danger:true},
@@ -2334,7 +2281,6 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
             <div className="px-4 py-2 grid grid-cols-2 gap-1">
               {[
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
-                {icon:<BarChart2 className="w-5 h-5"/>,     label:'Estatísticas',  action:()=>setView('stats')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
                 {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
@@ -2461,7 +2407,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                         <h4 className="font-bold text-sm truncate">{topic.title}</h4>
                         <div className="flex items-center gap-2 mt-1">
                           <p className="text-xs opacity-50">{topic.questions?.length?`${Object.keys(topic.answers||{}).length}/${topic.questions.length}`:'Sem questões'}</p>
-                          {due>0&&<span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 rounded-full font-bold">{due} revisar</span>}
+                          {}
                           {(topic.favorites||[]).length>0&&<span className="text-xs text-red-400">♥{topic.favorites.length}</span>}
                           {(topic.subtopics?.length>0)&&<span className="text-xs text-blue-400 dark:text-blue-500" title={topic.subtopics.join('\n')}>📋 {topic.subtopics.length} subtópicos</span>}
                         </div>
@@ -2555,7 +2501,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                 <div>
                   <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros de Geração</div>
                   <div className="grid grid-cols-2 gap-3">
-                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:20},{l:'Questões/Subtópico',k:'qPerSub',mn:1,mx:5}].map(f=>(
+                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:30},{l:'Questões/Subtópico',k:'qPerSub',mn:1,mx:10}].map(f=>(
                       <div key={f.k}>
                         <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
                         <input type="number" min={f.mn} max={f.mx} value={settings[f.k]}
@@ -2575,6 +2521,24 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                   <p className={`text-xs mt-2 opacity-40`}>
                     Total estimado: {(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões
                   </p>
+                </div>
+
+                {/* Estilo das questões */}
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      {k:'mixed',    label:'Misto',    desc:'Clínicas e diretas'},
+                      {k:'clinical', label:'Clínico',  desc:'Casos clínicos'},
+                      {k:'direct',   label:'Direto',   desc:'Perguntas diretas'},
+                    ].map(opt=>(
+                      <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
+                        className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
+                        {opt.label}
+                        <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <button onClick={startCreation} disabled={isBusy||isUploading||!newSubName} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
@@ -2760,7 +2724,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                         <ArrowLeft className="w-3 h-3"/>Início
                       </button>
                       <h1 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Portal do Curso</h1>
-                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>MedCurso 2024 · 46 semanas</p>
+                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Questões · Cronograma</p>
                     </div>
                     {/* Progresso global */}
                     <div className={`flex-shrink-0 text-right`}>
@@ -3190,7 +3154,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                                         const isAct=getAulaId(effAula)===getAulaId(aula);
                                         const watched=watchedAulas[getAulaId(aula)];
                                         return (
-                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAula(aula)}
+                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAulaAndReset(aula)}
                                             className={`w-full flex items-center gap-2 px-3 py-1.5 pl-10 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
                                             <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
                                               {watched&&<CheckIcon className="w-2 h-2"/>}
@@ -3212,7 +3176,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                                         const isAct=getAulaId(effAula)===getAulaId(aula);
                                         const watched=watchedAulas[getAulaId(aula)];
                                         return (
-                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAula(aula)}
+                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAulaAndReset(aula)}
                                             className={`w-full flex items-center gap-2 px-3 py-1.5 pl-10 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
                                             <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
                                               {watched&&<CheckIcon className="w-2 h-2"/>}
@@ -3282,14 +3246,40 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           </div>
                         </div>
                       ) : effAula?.embed_url ? (
-                        <iframe
-                          key={getAulaId(effAula)||effAula.embed_url}
-                          src={effAula.embed_url}
-                          className="absolute inset-0 w-full h-full"
-                          style={{border:'none'}}
-                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
-                          allowFullScreen
-                        />
+                        <>
+                          <iframe
+                            key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??44}`}
+                            src={`${effAula.embed_url}${effAula.embed_url.includes('?')?'&':'?'}t=${videoSeek??44}`}
+                            className="absolute inset-0 w-full h-full"
+                            id="bunny-player"
+                            style={{border:'none'}}
+                            allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
+                            allowFullScreen
+                          />
+                          {/* Botões de seek sobrepostos no canto inferior */}
+                          <div className="absolute bottom-14 left-1/2 -translate-x-1/2 flex gap-2 z-10 opacity-0 hover:opacity-100 transition-opacity" style={{pointerEvents:'auto'}}>
+                            <button
+                              onClick={()=>{
+                                // Lê o tempo atual via postMessage se disponível, senão faz seek relativo estimado
+                                const iframe = document.getElementById('bunny-player');
+                                const newT = Math.max(0, (videoSeek??44) - 10);
+                                setVideoSeek(newT);
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-black/60 hover:bg-black/80 backdrop-blur"
+                            >
+                              <SkipBack className="w-3.5 h-3.5"/>−10s
+                            </button>
+                            <button
+                              onClick={()=>{
+                                const newT = (videoSeek??44) + 10;
+                                setVideoSeek(newT);
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-black/60 hover:bg-black/80 backdrop-blur"
+                            >
+                              +10s<SkipForward className="w-3.5 h-3.5"/>
+                            </button>
+                          </div>
+                        </>
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <p className="text-white opacity-40 text-sm">Vídeo não disponível</p>
@@ -3300,7 +3290,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                     <div className={`${dm?'bg-gray-900':'bg-white'}`}>
                       {/* MOBILE: prev / next row */}
                       <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
-                        <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
+                        <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
                           <SkipBack className="w-4 h-4 flex-shrink-0"/>
                           <div className="min-w-0 text-left">
@@ -3308,7 +3298,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             <p className="truncate">{prevAula?cleanAulaTitle(prevAula.title):'—'}</p>
                           </div>
                         </button>
-                        <button onClick={()=>nextAula&&setActiveAula(nextAula)} disabled={!nextAula}
+                        <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 justify-end text-right ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
                           <div className="min-w-0 text-right">
                             <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Próxima</p>
@@ -3351,7 +3341,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           const isAct = id===getAulaId(effAula);
                           const watched = watchedAulas[id];
                           return (
-                            <button key={id||aula.path} onClick={()=>setActiveAula(aula)}
+                            <button key={id||aula.path} onClick={()=>setActiveAulaAndReset(aula)}
                               className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b transition-colors ${isAct?(dm?'bg-yellow-900/25':'bg-yellow-50'):(dm?'hover:bg-gray-800':'hover:bg-gray-50')} ${dm?'border-gray-700/40':'border-gray-100'}`}>
                               <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':(isAct?'bg-yellow-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300'))}`}>
                                 {watched?<CheckIcon className="w-3 h-3"/>:isAct?<PlayIcon className="w-2.5 h-2.5" style={{marginLeft:'1px'}}/>:null}
@@ -3469,7 +3459,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                           </div>
                         </div>
                         <div className="flex items-stretch gap-3">
-                          <button onClick={()=>prevAula&&setActiveAula(prevAula)} disabled={!prevAula}
+                          <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
                             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                             <SkipBack className="w-4 h-4 flex-shrink-0"/>
                             <div className="text-left min-w-0">
@@ -3478,7 +3468,7 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                             </div>
                           </button>
                           <div className={`flex items-center px-3 rounded-xl text-xs font-bold flex-shrink-0 ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
-                          <button onClick={()=>nextAula&&setActiveAula(nextAula)} disabled={!nextAula}
+                          <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
                             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 justify-end text-right ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                             <div className="min-w-0">
                               <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p>
@@ -3785,75 +3775,10 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
           );
         })()}
 
-        {/* ── STATS ── */}
-        {view==='stats'&&(()=>{
-          const stats=getStats();
-          return (
-            <div className="max-w-3xl mx-auto">
-              <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-6 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><TrendingUp className="w-8 h-8"/>Desempenho</h2>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                {[{l:'Total',v:stats.tQ,c:'text-yellow-600'},{l:'Respondidas',v:stats.tA,c:'text-blue-600'},{l:'Corretas',v:stats.tC,c:'text-green-600'},{l:'Aproveitamento',v:`${stats.pct}%`,c:stats.pct>=70?'text-green-600':stats.pct>=50?'text-yellow-600':'text-red-600'}].map(x=>(
-                  <div key={x.l} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border text-center`}><div className={`text-3xl font-bold ${x.c}`}>{x.v}</div><div className="text-xs opacity-50 uppercase mt-1">{x.l}</div></div>
-                ))}
-              </div>
-              {/* Collapsible folders */}
-              <div className="space-y-3">
-                {Object.values(stats.bySubject).filter(s=>s.total>0).map(subj=>{
-                  const pct=subj.answered>0?Math.round(subj.correct/subj.answered*100):0;
-                  const open=statsExpanded[subj.title];
-                  return (
-                    <div key={subj.title} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} rounded-xl border overflow-hidden`}>
-                      <button onClick={()=>setStatsExpanded(p=>({...p,[subj.title]:!p[subj.title]}))} className="w-full p-4 flex items-center justify-between hover:opacity-80 transition-opacity">
-                        <div className="flex items-center gap-3">
-                          <FolderIcon className="w-5 h-5 text-yellow-600"/>
-                          <div className="text-left">
-                            <p className="font-bold text-sm">{subj.title}</p>
-                            <p className="text-xs opacity-40">{subj.topics.length} tópicos • {subj.answered}/{subj.total}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`text-lg font-bold ${pct>=70?'text-green-600':pct>=50?'text-yellow-600':'text-red-500'}`}>{subj.answered>0?`${pct}%`:'–'}</span>
-                          {open?<ChevronDown className="w-4 h-4 opacity-40"/>:<ChevronRight className="w-4 h-4 opacity-40"/>}
-                        </div>
-                      </button>
-                      {open&&(
-                        <div className={`border-t ${darkMode?'border-gray-700':'border-gray-100'}`}>
-                          {subj.topics.map((t,i)=>(
-                            <div key={i} className={`p-3 flex items-center justify-between ${i>0?(darkMode?'border-t border-gray-700':'border-t border-gray-100'):''}`}>
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{t.title}</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <div className="w-32 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div className={`h-full ${t.pct>=70?'bg-green-500':t.pct>=50?'bg-yellow-500':'bg-red-400'}`} style={{width:t.answered>0?`${t.pct}%`:'0%'}}/>
-                                  </div>
-                                  <span className="text-xs opacity-40">{t.correct}/{t.answered}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-sm font-bold ${t.pct>=70?'text-green-600':t.pct>=50?'text-yellow-600':'text-red-500'}`}>{t.answered>0?`${t.pct}%`:'–'}</span>
-                                <button onClick={()=>{const s=library.find(x=>x.id===t.subjectId);const tp=s?.topics.find(x=>x.id===t.id);if(tp&&s)openBizuario(tp,s);}} title="Bizuário" className={`p-1.5 rounded-lg ${(()=>{const s=library.find(x=>x.id===t.subjectId);return s?.topics.find(x=>x.id===t.id)?.bizuario;})()?(darkMode?'text-green-400 hover:bg-green-900/20':'text-green-600 hover:bg-green-50'):(darkMode?'text-yellow-500 hover:bg-yellow-900/20':'text-yellow-600 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/></button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {Object.values(stats.bySubject).filter(s=>s.total>0).length===0&&<p className="text-center opacity-40 py-8">Nenhum dado ainda. Responda algumas questões!</p>}
-              </div>
-            </div>
-          );
-        })()}
-
-
         {/* ── EXAM SETUP MODAL ── */}
         {examSetup!==null&&(
           // Bug 4: backdrop click closes modal
-          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-4" onClick={()=>{setExamSetup(null);setExamTopics([]);}}>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 p-4" onClick={()=>{setExamSetup(null);setExamTopics([]);}}>
             <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
               onClick={e=>e.stopPropagation()} // Bug 4: prevent backdrop close when clicking inside
             >
@@ -4017,6 +3942,22 @@ ${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula
                   <button key={k} onClick={()=>{const ns={...settings,oracleLength:k};setSettings(ns);saveSettings(ns);}}
                     className={`p-3 rounded-xl border-2 font-bold text-sm transition-all ${settings.oracleLength===k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
                     {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo das Questões</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {k:'mixed',    label:'Misto',    desc:'Clínicas e diretas'},
+                  {k:'clinical', label:'Clínico',  desc:'Casos clínicos'},
+                  {k:'direct',   label:'Direto',   desc:'Perguntas diretas'},
+                ].map(opt=>(
+                  <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
+                    className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${settings.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
+                    {opt.label}
+                    <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
                   </button>
                 ))}
               </div>
