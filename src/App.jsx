@@ -162,27 +162,44 @@ const ORACLE_LENGTH = {
 };
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-const callGemini = async (prompt, systemPrompt, apiKey, images=[]) => {
+const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
   if (!apiKey) throw new Error("API_KEY_MISSING");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   const parts = [{text:prompt}];
   images.forEach(img => parts.push({inline_data:{mime_type:img.mimeType,data:img.base64}}));
-  const payload = {contents:[{parts}],systemInstruction:{parts:[{text:systemPrompt}]}};
-  // NOTE: 503 only retries once — each failed request counts against quota
-  const attempt = async (triesLeft, delay) => {
-    const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if (res.status===503) {
-      if (triesLeft<=1) throw new Error("SERVER_OVERLOADED");
-      await new Promise(r=>setTimeout(r,delay));
-      return attempt(triesLeft-1, delay*2);
-    }
-    if (res.status===429) throw new Error("QUOTA_EXCEEDED");
-    if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
-    if (!res.ok) throw new Error("CONNECTION_ERROR");
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const payload = {
+    contents:[{parts}],
+    systemInstruction:{parts:[{text:systemPrompt}]},
+    generationConfig: {
+      thinkingConfig: { thinkingBudget: opts.thinking ?? 0 }, // desabilitado por padrão — mais rápido para sumários
+      ...(opts.maxTokens ? {maxOutputTokens: opts.maxTokens} : {}),
+    },
   };
-  return attempt(2, 3000); // max 2 attempts for 503
+  const attempt = async (triesLeft, delay) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000); // 55s timeout
+    try {
+      const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+      clearTimeout(timeout);
+      if (res.status===503) {
+        if (triesLeft<=1) throw new Error("SERVER_OVERLOADED");
+        await new Promise(r=>setTimeout(r,delay));
+        return attempt(triesLeft-1, delay*2);
+      }
+      if (res.status===429) throw new Error("QUOTA_EXCEEDED");
+      if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
+      if (!res.ok) throw new Error("CONNECTION_ERROR");
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("CONNECTION_ERROR");
+      return text;
+    } catch(e) {
+      clearTimeout(timeout);
+      if (e.name === 'AbortError') throw new Error("CONNECTION_ERROR");
+      throw e;
+    }
+  };
+  return attempt(2, 3000);
 };
 
 const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images=[]) => {
@@ -190,25 +207,39 @@ const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
   const parts = [{text:prompt}];
   images.forEach(img => parts.push({inline_data:{mime_type:img.mimeType,data:img.base64}}));
-  const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],systemInstruction:{parts:[{text:systemPrompt}]}})});
-  if (res.status===429) throw new Error("QUOTA_EXCEEDED");
-  if (res.status===503) throw new Error("SERVER_OVERLOADED");
-  if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
-  if (!res.ok) throw new Error("CONNECTION_ERROR");
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let full = '';
-  while (true) {
-    const {done,value} = await reader.read();
-    if (done) break;
-    const lines = dec.decode(value,{stream:true}).split('\n');
-    for (const line of lines) {
-      if (line.startsWith('data: ')&&!line.includes('[DONE]')) {
-        try { const j=JSON.parse(line.slice(6)); const t=j.candidates?.[0]?.content?.parts?.[0]?.text||''; if(t){full+=t; onProgress(full,(full.match(/##\s*Quest[aã]o\s*\d/gi)||[]).length);} } catch(e){}
+  const payload = {
+    contents:[{parts}],
+    systemInstruction:{parts:[{text:systemPrompt}]},
+    generationConfig:{ thinkingConfig:{ thinkingBudget:0 } },
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000); // 2min timeout para streaming
+  try {
+    const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+    if (res.status===429) throw new Error("QUOTA_EXCEEDED");
+    if (res.status===503) throw new Error("SERVER_OVERLOADED");
+    if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
+    if (!res.ok) throw new Error("CONNECTION_ERROR");
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let full = '';
+    while (true) {
+      const {done,value} = await reader.read();
+      if (done) break;
+      const lines = dec.decode(value,{stream:true}).split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')&&!line.includes('[DONE]')) {
+          try { const j=JSON.parse(line.slice(6)); const t=j.candidates?.[0]?.content?.parts?.[0]?.text||''; if(t){full+=t; onProgress(full,(full.match(/##\s*Quest[aã]o\s*\d/gi)||[]).length);} } catch(e){}
+        }
       }
     }
+    clearTimeout(timeout);
+    return full;
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error("CONNECTION_ERROR");
+    throw e;
   }
-  return full;
 };
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
