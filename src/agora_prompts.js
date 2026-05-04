@@ -18,7 +18,7 @@
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE casos clínicos reais: paciente com idade/sexo/contexto apresenta sinais e sintomas específicos. Nunca mencione exames ou diagnóstico no enunciado se a questão pede justamente isso.',
   direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos: mecanismo, critério diagnóstico, classificação, dose, indicação, contraindicação. O enunciado deve ser objetivo e sem caso clínico.',
-  mixed:    'Alterne entre casos clínicos e questões diretas ao longo das questões. Distribua de forma equilibrada.',
+  mixed:    'Alterne entre casos clínicos e questões diretas ao longo das questões. Comcece com questões diretas e depois aumente o nivel das questões com enunciados clinicos',
 };
 
 // ─── REGRAS COMPARTILHADAS ────────────────────────────────────────────────────
