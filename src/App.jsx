@@ -537,7 +537,7 @@ const shortTopicName = (key) => {
   return t.length > 32 ? t.substring(0, 31) + '…' : (t || key);
 };
 // Modal de configuração de geração de questões para uma videoaula
-const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading }) => {
+const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading, savedSettings={} }) => {
   const dm = darkMode;
   const MAX_PER_BLOCK = 30;
 
@@ -552,10 +552,11 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [totalQ,      setTotalQ]      = useState(suggestedQ || 10);
   const [qPerBlock,   setQPerBlock]   = useState(Math.min(MAX_PER_BLOCK, suggestedQ || 10));
   const [numBlocks,   setNumBlocks]   = useState(Math.ceil((suggestedQ || 10) / Math.min(MAX_PER_BLOCK, suggestedQ || 10)));
-  const [numAlts,       setNumAlts]     = useState(5);
+  // Inicializar com as configurações salvas do usuário
+  const [numAlts,       setNumAlts]     = useState(savedSettings.numAlternatives || 5);
   const [extraPrompt,   setExtraPrompt] = useState('');
-  const [questionStyle, setQuestionStyle] = useState('mixed');
-  const [autoMode,      setAutoMode]    = useState(false);
+  const [questionStyle, setQuestionStyle] = useState(savedSettings.questionStyle || 'mixed');
+  const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false); // default true
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -613,8 +614,11 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     ? `${numBlocks} bloco(s) de ${effectivePerBlock} questões = ${totalQ} no total`
     : `${fullBlocks > 0 ? `${fullBlocks} bloco(s) de ${effectivePerBlock} + ` : ''}1 bloco de ${lastBlock} = ${totalQ} no total`;
 
+  // Salva preferências atuais e fecha — chamado em qualquer forma de fechar
+  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode });
+
   return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onClick={handleClose}>
       <div
         className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
         style={{isolation:'isolate', maxHeight:'90vh'}}
@@ -628,7 +632,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
             </h3>
             <p className={`text-sm mt-0.5 truncate max-w-xs ${dm?'text-gray-400':'text-gray-500'}`}>{aula.title}</p>
           </div>
-          <button onClick={onClose} className={`p-2 rounded-full ${dm?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+          <button onClick={handleClose} className={`p-2 rounded-full ${dm?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
         </div>
 
         <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1 min-h-0">
@@ -659,8 +663,8 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
               <p className={`text-sm font-bold ${autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
               <p className="text-xs opacity-50 mt-0.5">A IA define a estrutura ideal de blocos e subtópicos</p>
             </div>
-            <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
-              <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${autoMode?'translate-x-4':'translate-x-0'}`}/>
+            <div style={{width:40,height:24,borderRadius:12,padding:2,background:autoMode?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+              <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
             </div>
           </button>
 
@@ -735,15 +739,14 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex gap-3 px-6 pb-6 pt-4 flex-shrink-0 border-t border-gray-700/30">
-          <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
+          <button onClick={handleClose} className={`flex-1 py-4 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
             Cancelar
           </button>
           <button
             disabled={loading || metaLoading}
             onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode})}
-            className="flex-[2] py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+            className="flex-[2] py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
               ? <><Spinner className="w-4 h-4 text-white"/>Gerando sumário...</>
@@ -886,6 +889,103 @@ const QuestionView = ({
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+// ─── TOAST NOTIFICATION ───────────────────────────────────────────────────────
+const ToastContainer = ({ toasts, onRemove }) => {
+  if (!toasts.length) return null;
+  const icons = { loading: <Spinner className="w-4 h-4 text-yellow-400 flex-shrink-0"/>, success: <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0"/>, error: <svg className="w-4 h-4 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, info: <svg className="w-4 h-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> };
+  return (
+    <React.Fragment>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <div className="fixed top-20 right-4 z-[500] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)]">
+        {toasts.map(t => (
+          <div key={t.id}
+            onClick={t.onClick || (() => onRemove(t.id))}
+            className={`flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl border cursor-pointer select-none transition-all
+              ${t.type==='success' ? 'bg-gray-900 border-green-700/50' :
+                t.type==='error'   ? 'bg-gray-900 border-red-700/50' :
+                t.type==='loading' ? 'bg-gray-900 border-yellow-700/40' :
+                                     'bg-gray-900 border-gray-700'}`}
+            style={{animation:'slideUp 0.25s ease both'}}>
+            {icons[t.type]||icons.info}
+            <p className="text-sm font-medium text-gray-100 flex-1 leading-snug">{t.msg}</p>
+            {t.type!=='loading'&&<button onClick={e=>{e.stopPropagation();onRemove(t.id);}} className="text-gray-500 hover:text-gray-300 text-lg leading-none flex-shrink-0">×</button>}
+          </div>
+        ))}
+      </div>
+    </React.Fragment>
+  );
+};
+
+// ─── VQ CONFIG MODAL ──────────────────────────────────────────────────────────
+// Modal leve de configurações rápidas das questões de aulas
+const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
+  const dm = darkMode;
+  const [numAlts, setNumAlts] = useState(settings.numAlternatives || 5);
+  const [style, setStyle]     = useState(settings.questionStyle || 'mixed');
+  const [auto, setAuto]       = useState(settings.autoMode !== false);
+
+  const confirm = () => {
+    onSave({ numAlternatives: numAlts, questionStyle: style, autoMode: auto });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className={`w-full max-w-sm rounded-2xl border shadow-2xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
+        onClick={e=>e.stopPropagation()}>
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
+          <h3 className="font-serif font-bold text-base text-yellow-600">Configurações das Questões</h3>
+          <button onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>×</button>
+        </div>
+        <div className="px-5 py-4 space-y-5">
+          {/* Auto mode */}
+          <button onClick={()=>setAuto(!auto)}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${auto?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-gray-50')}`}>
+            <div className="text-left">
+              <p className={`text-sm font-bold ${auto?'text-yellow-500':''}`}>✦ Oráculo escolhe a estrutura</p>
+              <p className="text-xs opacity-50 mt-0.5">Blocos e subtópicos definidos pela IA</p>
+            </div>
+            <div className={`w-10 h-6 rounded-full flex items-center px-0.5 flex-shrink-0 ml-3 ${auto?'bg-yellow-500':'bg-gray-400'}`}>
+              <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${auto?'translate-x-4':'translate-x-0'}`}/>
+            </div>
+          </button>
+
+          {/* Estilo */}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
+                <button key={o.k} onClick={()=>setStyle(o.k)}
+                  className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${style===o.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Alternativas */}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Alternativas</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[{v:4,l:'4 (A–D)'},{v:5,l:'5 (A–E)'}].map(o=>(
+                <button key={o.v} onClick={()=>setNumAlts(o.v)}
+                  className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${numAlts===o.v?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-5">
+          <button onClick={confirm} className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
+            Confirmar
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1429,6 +1529,7 @@ export default function QuestionBankApp() {
   const [vqLoading, setVqLoading]   = useState(false);   // carregamento do Firestore
   const [vqSyllabusLoading, setVqSyllabusLoading] = useState(false); // geração do sumário
   const [vqGenModal, setVqGenModal] = useState(null);
+  const [toasts, setToasts] = useState([]); // notificações toast
   const [vqActiveBlock, setVqActiveBlock] = useState(null);
   const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
@@ -1826,7 +1927,39 @@ export default function QuestionBankApp() {
     if(imageInputRef.current) imageInputRef.current.value='';
   };
 
-  // ── Geração de questões de videoaulas ──────────────────────────────────────
+  // ── Toast notifications ────────────────────────────────────────────────────
+  const addToast = (msg, type='info', duration=5000, onClick=null) => {
+    const id = Date.now() + Math.random();
+    setToasts(p => [...p, { id, msg, type, onClick }]);
+    if (duration > 0) setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
+    return id;
+  };
+  const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
+  const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
+
+  // ── Gerar questões direto (sem modal) ──────────────────────────────────────
+  const gerarQuestoesDireto = async (aula, subject, topic) => {
+    if (!checkKey()) return;
+    const s = settingsRef.current;
+    const durationSecs = aula.duration_seconds || 0;
+    const raw = durationSecs > 0 ? Math.ceil(durationSecs / 120) : 10;
+    const totalQ = Math.max(10, Math.round(raw / 10) * 10);
+    const qPerBlock = Math.min(30, totalQ);
+    const numBlocks = Math.ceil(totalQ / qPerBlock);
+    const aulaId = aulaDocId(aula);
+
+    const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
+
+    await generateVqSyllabus({
+      aula, aulaId, totalQ, numBlocks, qPerBlock,
+      numAlternatives: s.numAlternatives || 5,
+      questionStyle: s.questionStyle || 'mixed',
+      autoMode: s.autoMode !== false,
+      extraPrompt: '',
+      subject, topic,
+      toastId,
+    });
+  };
   // Busca transcrição do Firestore (coleção lessons, id = título da aula)
   const fetchTranscript = async (aula) => {
     try {
@@ -1839,124 +1972,160 @@ export default function QuestionBankApp() {
     } catch(e) { return null; }
   };
 
-  // Gera o sumário silencioso para uma aula e salva os blocos vazios no Firestore
-  // cfg = { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, subject, topic, numAlternatives }
+  // Gera sumário + todos os blocos em background sem redirecionar
+  // toastId: ID do toast de progresso já criado pelo chamador
   const generateVqSyllabus = async (cfg) => {
     if(!checkKey()) return;
-    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed' } = cfg;
+    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed', toastId } = cfg;
     setVqSyllabusLoading(true);
 
     // 1. Buscar transcrição
     const lessonData = await fetchTranscript(aula);
     const transcript = lessonData?.transcript || '';
-    const durationSecs = lessonData?.duration_seconds || aula.duration_seconds || 0;
 
-    // 2. Dividir transcrição em fatias para cada bloco
-    // Estratégia: dividir proporcionalmente por caracteres
-    const transcriptSlices = [];
-    if (transcript && numBlocks > 1) {
-      const chunkSize = Math.ceil(transcript.length / numBlocks);
-      // Quebrar em parágrafos/sentenças para não cortar no meio de palavras
-      for (let i = 0; i < numBlocks; i++) {
-        const start = i * chunkSize;
-        const end = Math.min((i+1)*chunkSize, transcript.length);
-        // Ajusta início para não cortar no meio de palavra
-        const slice = transcript.substring(start, end);
-        transcriptSlices.push(slice);
-      }
-    } else if (transcript) {
-      transcriptSlices.push(transcript);
-    }
+    // 2. Fatiar transcrição por parágrafo (não por caractere cru)
+    const splitByParagraph = (text, n) => {
+      if (!text || n <= 1) return text ? [text] : [];
+      const paras = text.split(/\n{2,}/);
+      const size = Math.ceil(paras.length / n);
+      return Array.from({length: n}, (_, i) => paras.slice(i*size, (i+1)*size).join('\n\n'));
+    };
+    const transcriptSlices = splitByParagraph(transcript, numBlocks);
 
-    // 3. Chamar Gemini para gerar sumário com subtópicos por bloco
-    const na = numAlternatives;
-    const alts = na===4?'A) B) C) D)':'A) B) C) D) E)';
-
+    // 3. Gerar sumário
     const summaryPrompt = buildVqSyllabusPrompt(aula, numBlocks, qPerBlock, transcript, extraPrompt);
-
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
-
     for (const {k} of orderedKeys) {
       try {
         summaryText = await callGemini('Gere o sumário.', summaryPrompt, k);
-        await rotateKey();
-        break;
+        await rotateKey(); break;
       } catch(e) {
         if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
-        showApiError(e.message); setVqSyllabusLoading(false); return;
+        if(toastId) updateToast(toastId, `❌ Erro ao gerar sumário: ${e.message}`, 'error');
+        setVqSyllabusLoading(false); return;
       }
     }
-    if (!summaryText) { showApiError('CONNECTION_ERROR'); setVqSyllabusLoading(false); return; }
+    if (!summaryText) {
+      if(toastId) updateToast(toastId, '❌ Não foi possível gerar o sumário. Tente novamente.', 'error');
+      setVqSyllabusLoading(false); return;
+    }
 
-    // 4. Parsear o sumário em blocos
+    // 4. Parsear blocos
     const blockRegex = /##\s*Bloco\s*(\d+)[:\s]*([^\n]*)\n([\s\S]*?)(?=##\s*Bloco|\s*$)/gi;
     const parsedBlocks = {};
-    let match;
-    let blockIndex = 0;
-
+    let match, blockIndex = 0;
     while ((match = blockRegex.exec(summaryText)) !== null) {
       const blockNum = match[1];
-      const blockTitle = match[2].trim();
-      const subtopicsRaw = match[3];
-      const subtopics = subtopicsRaw
-        .split('\n')
-        .map(l => l.replace(/^[\s\-\*•]+/,'').trim())
-        .filter(l => l.length > 3);
-
+      const subtopics = match[3].split('\n')
+        .map(l=>l.replace(/^[\s\-\*•]+/,'').trim()).filter(l=>l.length>3);
       const blockId = `block${blockNum.padStart(2,'0')}`;
       parsedBlocks[blockId] = {
-        title: blockTitle || `Bloco ${blockNum}`,
+        title: match[2].trim() || `Bloco ${blockNum}`,
         subtopics,
         transcriptSlice: transcriptSlices[blockIndex] || '',
-        questions: [],
-        answers: {},
-        generating: false,
+        questions: [], answers: {}, generating: true,
       };
       blockIndex++;
     }
-
-    // Fallback: se o parser não pegou nada, cria blocos vazios
     if (Object.keys(parsedBlocks).length === 0) {
       for (let i = 1; i <= numBlocks; i++) {
         const blockId = `block${String(i).padStart(2,'0')}`;
         parsedBlocks[blockId] = {
-          title: `Bloco ${i}`,
-          subtopics: [],
+          title: `Bloco ${i}`, subtopics: [],
           transcriptSlice: transcriptSlices[i-1] || '',
-          questions: [],
-          answers: {},
-          generating: false,
+          questions: [], answers: {}, generating: true,
         };
       }
     }
 
-    // 5. Salvar no Firestore e redirecionar
+    // 5. Salvar estrutura inicial (blocos como generating: true)
     const aulaData = {
       meta: {
-        totalQuestions: totalQ,
-        numBlocks,
-        qPerBlock,
-        numAlternatives: na,
-        aulaTitle: aula.title,
-        subject: cfg.subject || '',
-        topic: cfg.topic || '',
-        questionStyle: questionStyle || 'mixed',
-        createdAt: Date.now(),
+        totalQuestions: totalQ, numBlocks, qPerBlock,
+        numAlternatives, aulaTitle: aula.title,
+        subject: cfg.subject||'', topic: cfg.topic||'',
+        questionStyle, createdAt: Date.now(),
       },
       blocks: parsedBlocks,
     };
-
     await saveVqBlock(aulaId, aulaData);
-
-    // 6. Navegar para a aba de questões desta aula
-    setVqSubject(cfg.subject || null);
-    setVqTopic(cfg.topic || null);
-    setVqAula(aula);
-    setVqActiveBlock(null);
     setVqSyllabusLoading(false);
     setVqGenModal(null);
-    setView('videoquestions');
+    // NÃO redireciona — aluno continua onde estava
+
+    const blockIds = Object.keys(parsedBlocks).sort();
+    const total = blockIds.length;
+    if(toastId) updateToast(toastId, `⚡ Gerando questões (0/${total} blocos)...`, 'loading');
+
+    // 6. Gerar todos os blocos em paralelo, cada um com chave rotacionada
+    let done = 0;
+    const na = numAlternatives;
+    const alts = na===4
+      ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]'
+      : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+
+    const generateBlock = async (blockId, keySlot) => {
+      const block = parsedBlocks[blockId];
+      const PROMPT = buildVqBlockPrompt(block, aulaData.meta, block.subtopics||[], block.transcriptSlice||'', alts);
+      // Tenta com a chave designada, rotaciona se quota
+      const keys = getOrderedKeys();
+      const startIdx = keySlot % keys.length;
+      const ordered = [...keys.slice(startIdx), ...keys.slice(0, startIdx)];
+      for (const {k} of ordered) {
+        try {
+          const full = await callGeminiStream(
+            `Gere as questões do bloco "${block.title}" — ${aula.title}`,
+            PROMPT, k, ()=>{}
+          );
+          const parsed = parseData(full);
+          // Lê aulaData atualizado do estado para não sobrescrever outros blocos
+          setVqBlocks(prev => {
+            const cur = prev[aulaId] || aulaData;
+            const updBlocks = {
+              ...(cur.blocks||{}),
+              [blockId]: {...block, generating:false, questions:parsed.questions, answers:{}}
+            };
+            const updated = {...cur, blocks:updBlocks};
+            // Salva no Firestore de forma assíncrona
+            if(user&&!user.isAnonymous) setDoc(doc(db,'users',user.uid,'vq_blocks',aulaId), updated).catch(()=>{});
+            return {...prev, [aulaId]: updated};
+          });
+          await rotateKey();
+          done++;
+          if(toastId) {
+            if(done < total) updateToast(toastId, `⚡ Gerando questões (${done}/${total} blocos)...`, 'loading');
+          }
+          return;
+        } catch(e) {
+          if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
+          // Desmarcar generating em erro
+          setVqBlocks(prev => {
+            const cur = prev[aulaId] || aulaData;
+            const updBlocks = {...(cur.blocks||{}), [blockId]:{...block,generating:false}};
+            return {...prev, [aulaId]:{...cur,blocks:updBlocks}};
+          });
+          return;
+        }
+      }
+    };
+
+    // Disparar em paralelo — cada bloco usa um índice de chave diferente para distribuir carga
+    await Promise.all(blockIds.map((id, i) => generateBlock(id, i)));
+
+    // 7. Toast final clicável
+    if(toastId) {
+      updateToast(toastId, `✅ Questões da aula prontas! Toque para ver.`, 'success');
+      setToasts(p => p.map(t => t.id===toastId ? {
+        ...t,
+        onClick: () => {
+          setVqSubject(cfg.subject||null); setVqTopic(cfg.topic||null); setVqAula(aula);
+          setVqActiveBlock(null); setVqActiveBlockView(null); setView('videoquestions');
+          removeToast(toastId);
+        }
+      } : t));
+      setTimeout(()=>removeToast(toastId), 15000);
+    }
   };
 
   // Gera as questões de um bloco específico usando transcrição parcial
@@ -3382,7 +3551,7 @@ export default function QuestionBankApp() {
                     </div>
 
                     <div className={`${dm?'bg-gray-900':'bg-white'}`}>
-                      {/* MOBILE: prev / next row */}
+                      {/* MOBILE: Navegação anterior/próxima */}
                       <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
                         <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
@@ -3401,28 +3570,49 @@ export default function QuestionBankApp() {
                           <SkipForward className="w-4 h-4 flex-shrink-0"/>
                         </button>
                       </div>
-                      {/* MOBILE: subject/topic picker + mark watched + questões */}
-                      <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
+
+                      {/* MOBILE: Tópico atual clicável + botões de ação */}
+                      <div className={`md:hidden border-b ${sideBorder} px-3 py-3 space-y-2`}>
+                        {/* Nome do assunto/tópico — toca pra trocar */}
                         <button onClick={()=>setMobileNavOpen(true)}
-                          className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-2.5 rounded-xl border text-xs font-semibold ${dm?'border-gray-700 text-gray-300':'border-gray-200 text-gray-600'}`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
-                          <span className="truncate">{effSubject} — {shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="ml-auto flex-shrink-0 opacity-40"><polyline points="6 9 12 15 18 9"/></svg>
+                          className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-left ${dm?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
+                          <span className="flex-1 truncate">{effSubject} — {shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="opacity-40 flex-shrink-0"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
-                        <button onClick={()=>{
-                          if(aulaHasVqData(effAula)){
-                            setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
-                          } else {
-                            setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic});
-                          }
-                        }} className={`flex items-center gap-1 px-3 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 border transition-all ${aulaHasVqData(effAula)?(dm?'border-green-700 text-green-400':'border-green-500 text-green-700'):(dm?'border-yellow-700 text-yellow-400':'border-yellow-400 text-yellow-700')}`}>
-                          <GraduationCap className="w-4 h-4"/>
-                        </button>
-                        <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
-                          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400':'border-green-400 text-green-700'))}`}>
-                          <CheckIcon className="w-4 h-4"/>
-                          {watchedAulas[getAulaId(effAula)]?'✓':'Assistida'}
-                        </button>
+
+                        {/* Botões principais em linha — grandes e bem espaçados */}
+                        <div className="flex gap-2">
+                          {/* Questões + config */}
+                          <div className={`flex flex-1 rounded-xl overflow-hidden border ${aulaHasVqData(effAula)?(dm?'border-green-700':'border-green-500'):(dm?'border-yellow-700':'border-yellow-500')}`}>
+                            <button
+                              onClick={()=>{
+                                if(aulaHasVqData(effAula)){
+                                  setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
+                                } else {
+                                  gerarQuestoesDireto(effAula, effSubject, effTopic);
+                                }
+                              }}
+                              className={`flex items-center justify-center gap-2 flex-1 py-3.5 font-bold text-sm transition-all ${aulaHasVqData(effAula)?(dm?'bg-green-900/20 text-green-400 active:bg-green-900/40':'bg-green-50 text-green-700 active:bg-green-100'):(dm?'bg-yellow-900/20 text-yellow-400 active:bg-yellow-900/40':'bg-yellow-50 text-yellow-700 active:bg-yellow-100')}`}>
+                              <GraduationCap className="w-4 h-4"/>
+                              {aulaHasVqData(effAula)?'Ver Questões':'Gerar Questões'}
+                            </button>
+                            {!aulaHasVqData(effAula)&&(
+                              <button
+                                onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
+                                className={`flex items-center justify-center px-3.5 border-l transition-all ${dm?'border-yellow-700/50 text-yellow-600 active:bg-yellow-900/30':'border-yellow-300 text-yellow-600 active:bg-yellow-50'}`}>
+                                <SettingsIcon className="w-4 h-4"/>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Marcar assistida */}
+                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula))}
+                            className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white active:bg-green-600':('border '+(dm?'border-gray-600 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-600 active:bg-gray-100'))}`}>
+                            <CheckIcon className="w-4 h-4"/>
+                            {watchedAulas[getAulaId(effAula)]?'✓':'Assistida'}
+                          </button>
+                        </div>
                       </div>
 
                       {/* MOBILE: scrollable aula list */}
@@ -3527,11 +3717,18 @@ export default function QuestionBankApp() {
                               if(aulaHasVqData(effAula)){
                                 setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
                               } else {
-                                setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic});
+                                gerarQuestoesDireto(effAula, effSubject, effTopic);
                               }
                             }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${aulaHasVqData(effAula)?(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-500 text-green-700 hover:bg-green-50'):(dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}>
                               <GraduationCap className="w-4 h-4"/>{aulaHasVqData(effAula)?'Ver Questões':'Questões'}
                             </button>
+                            {!aulaHasVqData(effAula)&&(
+                              <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
+                                title="Configurações das questões"
+                                className={`p-2 rounded-xl border transition-all ${dm?'border-gray-600 text-gray-400 hover:bg-gray-700 hover:text-gray-200':'border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}>
+                                <SettingsIcon className="w-4 h-4"/>
+                              </button>
+                            )}
                             <button onClick={async()=>{
                               try {
                                 const docId=(effAula.title||'').replace(/\//g,'-');
@@ -4122,10 +4319,28 @@ export default function QuestionBankApp() {
         topic={vqGenModal.topic}
         isReset={!!vqGenModal.reset}
         darkMode={darkMode}
-        onClose={()=>setVqGenModal(null)}
-        onConfirm={(cfg)=>generateVqSyllabus({...cfg,aula:vqGenModal.aula,aulaId:vqGenModal.aulaId,subject:vqGenModal.subject,topic:vqGenModal.topic})}
+        savedSettings={settings}
+        onClose={(prefs={})=>{
+          // Salvar preferências mesmo ao fechar sem confirmar
+          if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined) {
+            const ns = {...settings, ...prefs};
+            saveSettings(ns);
+          }
+          setVqGenModal(null);
+        }}
+        onConfirm={(cfg)=>{
+          // Salvar preferências para próximas aulas
+          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, autoMode: cfg.autoMode};
+          saveSettings(ns);
+          setVqGenModal(null);
+          const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
+          generateVqSyllabus({...cfg, aula:vqGenModal.aula, aulaId:vqGenModal.aulaId, subject:vqGenModal.subject, topic:vqGenModal.topic, toastId});
+        }}
         loading={vqSyllabusLoading}
       />}
+
+      {/* Toasts */}
+      <ToastContainer toasts={toasts} onRemove={removeToast}/>
 
       {/* ── EXPORT MODAL ── */}
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}

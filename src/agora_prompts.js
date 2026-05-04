@@ -18,7 +18,7 @@
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE casos clínicos reais: paciente com idade/sexo/contexto apresenta sinais e sintomas específicos. Nunca mencione exames ou diagnóstico no enunciado se a questão pede justamente isso.',
   direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos: mecanismo, critério diagnóstico, classificação, dose, indicação, contraindicação. O enunciado deve ser objetivo e sem caso clínico.',
-  mixed:    'Alterne entre casos clínicos e questões diretas ao longo das questões. Comcece com questões diretas e depois aumente o nivel das questões com enunciados clinicos',
+  mixed:    'Siga esta ordem ao longo das questões: as primeiras questões (mais fundamentais, conceituais) devem ser DIRETAS — perguntando sobre definição, mecanismo, classificação ou critério. As últimas questões (mais avançadas, de aplicação) devem ser CLÍNICAS — casos com paciente, contexto, decisão terapêutica ou diagnóstica. A transição deve ser gradual e natural, como uma aula que vai do conceito à prática.',
 };
 
 // ─── REGRAS COMPARTILHADAS ────────────────────────────────────────────────────
@@ -86,12 +86,13 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const estruturaInst = autoMode
     ? `
 ESTRUTURA (modo automático):
-Você deve definir a quantidade ideal de subtópicos e questões por subtópico.
-Critérios:
-- Organize do mais fundamental ao mais específico: regras gerais antes de exceções, diagnóstico antes de tratamento, fisiopatologia antes de farmacologia
-- Tópicos mais amplos podem ter mais subtópicos; tópicos pontuais podem ter menos
-- Cada subtópico deve representar um conceito distinto e testável, não uma variação do anterior
-- Informe no início: "Estrutura escolhida: X subtópicos, Y questão/subtópico = Z questões"`
+Defina a quantidade ideal de blocos e subtópicos.
+Critérios obrigatórios:
+- Total de questões ≈ duração em minutos ÷ 2 (ex: aula de 40min → ~20 questões)
+- Cada bloco deve ter entre 5 e 30 subtópicos (= questões). NUNCA ultrapasse 30 por bloco — a IA não consegue gerar mais de 30 questões de qualidade em um único request
+- Se o total sugerido exigir mais de 30 questões, divida em múltiplos blocos de 20-30 cada
+- Blocos devem ter tamanho similar entre si — evite um bloco com 5 e outro com 25
+- Organize do conceito mais fundamental ao mais específico entre blocos e dentro de cada bloco`
     : `
 ESTRUTURA OBRIGATÓRIA:
 - EXATAMENTE ${s.numSubtopics} subtópicos
