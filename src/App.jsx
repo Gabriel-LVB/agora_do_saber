@@ -2,6 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
+import {
+  buildOracleQuestionPrompt,
+  buildOracleSyllabusPrompt,
+  buildOracleSyllabusRevisePrompt,
+  buildExternalPrompt,
+  buildVqSyllabusPrompt,
+  buildVqBlockPrompt,
+} from './agora_prompts.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
@@ -331,20 +339,36 @@ const parseData = (text) => {
       }
       if (options.length < 2) return;
 
-      // Explanation
+      // Explanation — tenta vários padrões, mais robusto
       let exp = '';
-      const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento)[ \t]*:([\s\S]*?)(?=\n[ \t]*(?:---|Quest[aã]o|\d{1,2}[ \t]*[).])  |$)/i);
-      if (expM) exp = expM[1].trim();
-      else if (ansM) {
-        const after = block.substring(ansM.index + ansM[0].length).trim();
+      const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio)[ \t]*:?([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*##|\n[ \t]*Quest[aã]o|$)/i);
+      if (expM?.[1]?.trim().length > 5) {
+        exp = expM[1].trim();
+      } else if (ansM) {
+        // Tudo após a linha do gabarito é a explicação
+        const after = block.substring(ansM.index + ansM[0].length).replace(/^\s*\n/,'').trim();
         if (after.length > 5) exp = after;
       }
+      // Limpar artefatos comuns
+      exp = exp.replace(/^[-–—]+\s*/,'').replace(/\n---.*$/s,'').trim();
 
-      // Build final question
+      // Build final question — embaralhar UMA VEZ aqui e salvar ordem fixa
+      // A ordem é determinística baseada no id para ser reproduzível após reload
       if (correct) {
         const ctTxt = options.find(o => o.letter === correct)?.txt;
         if (!ctTxt) return;
-        const shuffled = [...options.map(o => o.txt)].sort(() => Math.random() - 0.5);
+        // Seed determinística: soma dos char codes do id para reproduzir a mesma ordem
+        const seed = (id + '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+        const seededShuffle = (arr) => {
+          const a = [...arr]; let s = seed;
+          for (let i = a.length - 1; i > 0; i--) {
+            s = (s * 1664525 + 1013904223) & 0xffffffff;
+            const j = Math.abs(s) % (i + 1);
+            [a[i], a[j]] = [a[j], a[i]];
+          }
+          return a;
+        };
+        const shuffled = seededShuffle(options.map(o => o.txt));
         const final = shuffled.map((t, i) => ({ letter: 'ABCDE'[i], text: t, isCorrect: t === ctTxt }));
         questions.push({ id, statement: stmt, options: final, explanation: exp });
       } else {
@@ -530,7 +554,8 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [numBlocks,   setNumBlocks]   = useState(Math.ceil((suggestedQ || 10) / Math.min(MAX_PER_BLOCK, suggestedQ || 10)));
   const [numAlts,       setNumAlts]     = useState(5);
   const [extraPrompt,   setExtraPrompt] = useState('');
-  const [questionStyle, setQuestionStyle] = useState('mixed'); // 'clinical' | 'direct' | 'mixed'
+  const [questionStyle, setQuestionStyle] = useState('mixed');
+  const [autoMode,      setAutoMode]    = useState(false);
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -627,8 +652,20 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
             )}
           </div>
 
+          {/* Toggle autoMode */}
+          <button onClick={()=>setAutoMode(!autoMode)}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${autoMode?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+            <div>
+              <p className={`text-sm font-bold ${autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
+              <p className="text-xs opacity-50 mt-0.5">A IA define a estrutura ideal de blocos e subtópicos</p>
+            </div>
+            <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
+              <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${autoMode?'translate-x-4':'translate-x-0'}`}/>
+            </div>
+          </button>
+
           {/* Configuração numérica */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className={`grid grid-cols-3 gap-4 transition-opacity ${autoMode?'opacity-30 pointer-events-none':''}`}>
             {[
               {label:'Total',sub:'questões',val:totalQ,fn:handleTotalChange},
               {label:`Por bloco (máx ${MAX_PER_BLOCK})`,sub:'questões',val:qPerBlock,fn:handlePerBlockChange},
@@ -644,10 +681,10 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </div>
 
           {/* Resumo visual — mostra distribuição real */}
-          <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40':'bg-yellow-50 border border-yellow-200'}`}>
+          {!autoMode&&<div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40':'bg-yellow-50 border border-yellow-200'}`}>
             <Sparkles className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
             <span className={dm?'text-yellow-300':'text-yellow-800'}>{summaryText}</span>
-          </div>
+          </div>}
 
           {/* Tipo de questão */}
           <div>
@@ -705,7 +742,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode})}
             className="flex-[2] py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading
@@ -1277,7 +1314,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false };
 
 export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
@@ -1509,9 +1546,11 @@ export default function QuestionBankApp() {
     if (diffMs < 0) return 1;
     return Math.min(46, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
   };
-  // Load vqBlocks when entering videoquestions, curso ou videoaulas — sempre recarrega do Firestore
+  // Load vqBlocks — carrega UMA VEZ quando o usuário loga, não a cada troca de view
+  const vqBlocksLoadedRef = useRef(false);
   useEffect(() => {
-    if (!['videoquestions','curso','videoaulas'].includes(view) || !user || user.isAnonymous) return;
+    if (!user || user.isAnonymous || vqBlocksLoadedRef.current) return;
+    vqBlocksLoadedRef.current = true;
     (async () => {
       setVqLoading(true);
       try {
@@ -1522,7 +1561,12 @@ export default function QuestionBankApp() {
       } catch(e) { console.error('vqBlocks load error:', e); }
       finally { setVqLoading(false); }
     })();
-  }, [view, user]); // eslint-disable-line — recarrega toda vez que muda de view
+  }, [user]); // eslint-disable-line
+
+  // Resetar o cache quando o usuário faz logout
+  useEffect(() => {
+    if (!user) { vqBlocksLoadedRef.current = false; setVqBlocks({}); }
+  }, [user]);
 
   // Save a single aula's vqBlock data to Firestore
   const saveVqBlock = async (aulaId, data) => {
@@ -1703,11 +1747,15 @@ export default function QuestionBankApp() {
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
   };
 
+  const saveSettingsTimer = useRef(null);
   const saveSettings = async (s) => {
     const ns={...s,activeKeyIndex:Number(s.activeKeyIndex||1)};
     setSettings(ns);
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid),{username,apiKey:ns.apiKey1||ns.apiKey||'',settings:ns},{merge:true}).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_settings_${username}`,JSON.stringify(ns));
+    clearTimeout(saveSettingsTimer.current);
+    saveSettingsTimer.current = setTimeout(async () => {
+      if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid),{username,apiKey:ns.apiKey1||ns.apiKey||'',settings:ns},{merge:true}).catch(console.error);
+      else if(user?.isAnonymous) localStorage.setItem(`qb_settings_${username}`,JSON.stringify(ns));
+    }, 800);
   };
 
   // ── API Key helpers ────────────────────────────────────────────────────────
@@ -1757,22 +1805,12 @@ export default function QuestionBankApp() {
   };
 
   const getPrompt = (forAPI=false, areas=[]) => {
-    const s=settingsRef.current; const total=s.numSubtopics*s.qPerSub; const na=s.numAlternatives||5;
-    const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    const focusBlock=getFocusInst(areas);
-    const styleInst = {
-      clinical: 'Use EXCLUSIVAMENTE enunciados com casos clínicos (paciente com X apresenta Y, qual a conduta/diagnóstico?).',
-      direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos (sem caso clínico — pergunte diretamente sobre mecanismos, critérios, classificações, doses).',
-      mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos, de forma variada.',
-    }[s.questionStyle||'mixed'];
-    return `Você é o Oráculo de Medicina da Ágora do Saber. Crie questões médicas de altíssima qualidade.\n\n${focusBlock?focusBlock+'\n\n':''}\nREGRA MANDATÓRIA: Aborde EXATAMENTE ${s.numSubtopics} subtópicos, ${s.qPerSub} questões cada. Total: EXATAMENTE ${total} questões.\n\nESTILO DE ENUNCIADO: ${styleInst}\n\nDIRETRIZES:\n- EXATAMENTE ${na} alternativas homogêneas e plausíveis\n- NUNCA cite letras na explicação, use termos médicos\n- Explicação: densa, didática, com mecanismo fisiopatológico\n\nTEMPLATE:\n## Questão [X.Y.Z]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---\n\n${s.customPrompt?`Instruções extras: ${s.customPrompt}`:''}`;
+    const s = settingsRef.current;
+    const focusBlock = getFocusInst(areas);
+    return buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
   };
 
-  const getExternalPrompt = () => {
-    const s=settingsRef.current; const na=s.numAlternatives||5;
-    const alts=na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
-    return `[INSTRUÇÕES PARA IA EXTERNA]\n\n*** PARTE 1 ***\nCrie um sumário sobre [TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.\n\n*** PARTE 2 ***\nPara cada tópico: ${s.numSubtopics} subtópicos × ${s.qPerSub} questão = ${s.numSubtopics*s.qPerSub} questões.\n\nFORMATO:\n## Questão [X.Y.Z]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---`;
-  };
+  const getExternalPrompt = () => buildExternalPrompt(settingsRef.current);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleFileUpload = async (e) => {
@@ -1834,7 +1872,7 @@ export default function QuestionBankApp() {
     const na = numAlternatives;
     const alts = na===4?'A) B) C) D)':'A) B) C) D) E)';
 
-    const summaryPrompt = `Você é um especialista em criar avaliações médicas. Analise a aula "${aula.title}" e defina os subtópicos testáveis para ${numBlocks} bloco(s) de questões, com ${qPerBlock} subtópico(s) por bloco.\n\nCada subtópico deve ser um conceito médico concreto e testável (diagnóstico, fisiopatologia, tratamento, critérios, mecanismo).\n${extraPrompt?`\nFOCO ADICIONAL: ${extraPrompt}\n`:''}\nFORMATO OBRIGATÓRIO:\n## Bloco 1: [Título temático]\n- [Subtópico testável]\n- [Subtópico testável]\n...\n## Bloco 2: [Título temático]\n- [Subtópico testável]\n...\n\nTRANSCRIÇÃO:\n${transcript ? transcript.substring(0, 25000) : `[Sem transcrição — use o título: ${aula.title}]`}`;
+    const summaryPrompt = buildVqSyllabusPrompt(aula, numBlocks, qPerBlock, transcript, extraPrompt);
 
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
@@ -1947,7 +1985,7 @@ export default function QuestionBankApp() {
       mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos.',
     }[meta.questionStyle||'mixed'];
 
-    const PROMPT = `Você é um professor de medicina criando questões de prova sobre "${block.title}" da aula "${meta.aulaTitle}".\n\n${qStyleInst}\n\nSUBTÓPICOS (1 questão por subtópico, nesta ordem):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nTOTAL: EXATAMENTE ${total} questões.\n\nFORMATO:\n## Questão [N]\n[Enunciado]\n${alts}\nAlternativa correta: [Letra]\nExplicação:\n[Explicação]\n---\n\nTRANSCRIÇÃO:\n${transcriptSlice ? transcriptSlice.substring(0,40000) : '[Use o título da aula como referência]'}`;
+    const PROMPT = buildVqBlockPrompt(block, meta, subtopicsArr, transcriptSlice, alts);
 
     const orderedKeys = getOrderedKeys();
     let ok = false, err = null;
@@ -2065,7 +2103,8 @@ export default function QuestionBankApp() {
   // Creator
   const startCreation = async () => {
     if(!checkKey())return;setIsBusy(true);
-    const sys = `Você é o Arquiteto de Alexandria. Baseado em "${newSubName}" e nos materiais fornecidos, crie um sumário estruturado com EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos por tópico. Responda APENAS o sumário, com 'Tópico X' no início de cada linha principal e os subtópicos indentados abaixo.`;
+    const s = settingsRef.current;
+    const sys = buildOracleSyllabusPrompt(newSubName, s, s.autoMode || false);
     const orderedKeys = getOrderedKeys();
     let ok=false;
     for (const {k} of orderedKeys) {
@@ -2084,11 +2123,11 @@ export default function QuestionBankApp() {
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
-    const sys = `Arquiteto de Alexandria. Ajuste o sumário conforme o pedido, mantendo EXATAMENTE ${settingsRef.current.numTopics} Tópicos e ${settingsRef.current.numSubtopics} Subtópicos.\nAtual:\n${syllabus}\nPedido: "${syllabusFB}"\nResponda APENAS o novo sumário.`;
+    const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, settingsRef.current);
     const orderedKeys = getOrderedKeys();
     for (const {k} of orderedKeys) {
       try {
-        const r=await callGemini('Ajuste.',sys,k);
+        const r=await callGemini('Revise.',sys,k);
         setSyllabus(r);setSyllabusFB('');
         await rotateKey(); break;
       } catch(e) {
@@ -2543,7 +2582,19 @@ export default function QuestionBankApp() {
                 {/* Parâmetros de geração */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros de Geração</div>
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Toggle autoMode */}
+                  <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
+                      <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos, subtópicos e questões</p>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
+                      <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${settings.autoMode?'translate-x-4':'translate-x-0'}`}/>
+                    </div>
+                  </button>
+
+                  <div className={`grid grid-cols-2 gap-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
                     {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:30},{l:'Questões/Subtópico',k:'qPerSub',mn:1,mx:10}].map(f=>(
                       <div key={f.k}>
                         <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
@@ -2561,9 +2612,9 @@ export default function QuestionBankApp() {
                       </select>
                     </div>
                   </div>
-                  <p className={`text-xs mt-2 opacity-40`}>
+                  {!settings.autoMode&&<p className={`text-xs mt-2 opacity-40`}>
                     Total estimado: {(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões
-                  </p>
+                  </p>}
                 </div>
 
                 {/* Estilo das questões */}
@@ -3623,15 +3674,29 @@ export default function QuestionBankApp() {
                     <ArrowLeft className="w-4 h-4"/>{vqSubject}
                   </button>
                   <span className="opacity-30">/</span>
-                  <span className="opacity-50 text-xs">{shortTopicName(vqTopic)}</span>
+                  <span className="opacity-50 text-xs truncate max-w-[140px]">{shortTopicName(vqTopic)}</span>
                   <span className="opacity-30">/</span>
-                  <span className={`font-bold ${dm?'text-yellow-400':'text-yellow-700'}`}>{vqAula.title}</span>
+                  <span className={`font-bold truncate max-w-[180px] ${dm?'text-yellow-400':'text-yellow-700'}`}>{vqAula.title}</span>
                 </div>
 
                 <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 pb-6 border-b ${dm?'border-gray-700':'border-gray-200'}`}>
                   <div>
                     <h2 className="text-2xl font-serif font-bold text-yellow-600">{vqAula.title}</h2>
-                    {vqAula.duration_formatted&&<p className="text-sm opacity-50 mt-1">⏱ {vqAula.duration_formatted}</p>}
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {vqAula.duration_formatted&&<p className="text-sm opacity-50">⏱ {vqAula.duration_formatted}</p>}
+                      {/* Progresso dos blocos */}
+                      {blockList.length>0&&(()=>{
+                        const done = blockList.filter(([,b])=>{
+                          const qs = Array.isArray(b.questions)?b.questions:[];
+                          const ans = (b.answers&&typeof b.answers==='object'&&!Array.isArray(b.answers))?b.answers:{};
+                          return qs.length>0 && Object.keys(ans).length===qs.length;
+                        }).length;
+                        return (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${done===blockList.length?(dm?'bg-green-900/40 text-green-400':'bg-green-100 text-green-700'):(dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600')}`}>
+                            {done}/{blockList.length} blocos concluídos
+                          </span>
+                        );
+                      })()}</div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
                     {hasSetup&&(
