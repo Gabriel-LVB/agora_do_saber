@@ -1542,53 +1542,82 @@ export default function QuestionBankApp() {
   const [curWeek, setCurWeek]             = useState(null);   // semana selecionada no cronograma
   const [cronStartDate, setCronStartDate] = useState(null);   // data de início do curso (salva no Firestore)
 
-  // Load videoaulas: monta estrutura a partir da coleção lessons (embed_urls sempre corretos)
+  // Load videoaulas: carrega UMA VEZ no login e usa localStorage como cache entre sessões
+  const videoaulasLoadedRef = useRef(false);
   useEffect(() => {
-    if (!['videoaulas','videoquestions','curso'].includes(view) || !user || videoaulasData) return;
+    if (!user || user.isAnonymous || videoaulasLoadedRef.current) return;
+
+    // Tentar cache do localStorage primeiro (evita loading na abertura)
+    const cacheKey = `agora_videoaulas_${user.uid}`;
+    const watchedKey = `agora_watched_${user.uid}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      const cachedWatched = localStorage.getItem(watchedKey);
+      if (cached) {
+        setVideoaulasData(JSON.parse(cached));
+        if (cachedWatched) setWatchedAulas(JSON.parse(cachedWatched));
+        videoaulasLoadedRef.current = true;
+        // Recarrega em background silenciosamente para atualizar cache
+        refreshVideoaulasInBackground(user, cacheKey, watchedKey);
+        return;
+      }
+    } catch(e) {}
+
+    // Sem cache — carrega normalmente com loading
+    videoaulasLoadedRef.current = true;
     setVideoaulasLoading(true);
-    (async () => {
-      try {
-        // Carregar todos os documentos da coleção lessons
-        const snap = await getDocs(collection(db, 'lessons'));
-        if (!snap.empty) {
-          // Montar estrutura: { subject: { topic: { "Aulas Principais": [], "Bônus": [] } } }
-          const built = {};
-          snap.forEach(d => {
-            const data = d.data();
-            const subj  = data.subject;
-            const topic = data.topic;
-            const isBonus = !!data.is_bonus;
-            if (!subj || !topic) return;
-            if (!built[subj]) built[subj] = {};
-            if (!built[subj][topic]) built[subj][topic] = { 'Aulas Principais': [], 'Bônus': [] };
-            const aula = {
-              title:             data.title,
-              embed_url:         data.embed_url,
-              bunny_id:          data.bunny_id,
-              duration_seconds:  data.duration_seconds  || 0,
-              duration_formatted:data.duration_formatted || '',
-            };
-            if (isBonus) built[subj][topic]['Bônus'].push(aula);
-            else         built[subj][topic]['Aulas Principais'].push(aula);
-          });
-          // Ordenar aulas dentro de cada categoria pelo título
-          Object.values(built).forEach(topics =>
-            Object.values(topics).forEach(cats =>
-              Object.values(cats).forEach(arr =>
-                arr.sort((a,b) => a.title.localeCompare(b.title, 'pt'))
-              )
+    refreshVideoaulasInBackground(user, cacheKey, watchedKey, true);
+  }, [user]); // eslint-disable-line
+
+  // Resetar ao fazer logout
+  useEffect(() => {
+    if (!user) { videoaulasLoadedRef.current = false; }
+  }, [user]);
+
+  const refreshVideoaulasInBackground = async (u, cacheKey, watchedKey, showLoading=false) => {
+    try {
+      const snap = await getDocs(collection(db, 'lessons'));
+      if (!snap.empty) {
+        const built = {};
+        snap.forEach(d => {
+          const data = d.data();
+          const subj  = data.subject;
+          const topic = data.topic;
+          const isBonus = !!data.is_bonus;
+          if (!subj || !topic) return;
+          if (!built[subj]) built[subj] = {};
+          if (!built[subj][topic]) built[subj][topic] = { 'Aulas Principais': [], 'Bônus': [] };
+          const aula = {
+            title:             data.title,
+            embed_url:         data.embed_url,
+            bunny_id:          data.bunny_id,
+            duration_seconds:  data.duration_seconds  || 0,
+            duration_formatted:data.duration_formatted || '',
+          };
+          if (isBonus) built[subj][topic]['Bônus'].push(aula);
+          else         built[subj][topic]['Aulas Principais'].push(aula);
+        });
+        Object.values(built).forEach(topics =>
+          Object.values(topics).forEach(cats =>
+            Object.values(cats).forEach(arr =>
+              arr.sort((a,b) => a.title.localeCompare(b.title, 'pt'))
             )
-          );
-          setVideoaulasData(built);
-        } else {
-          setVideoaulasData({});
-        }
-        const ps = await getDoc(doc(db, 'users', user.uid, 'videoaulas_progress', 'watched'));
-        if (ps.exists()) setWatchedAulas(ps.data() || {});
-      } catch(e) { console.error(e); setVideoaulasData({}); }
-      finally { setVideoaulasLoading(false); }
-    })();
-  }, [view, user, videoaulasData]); // eslint-disable-line
+          )
+        );
+        setVideoaulasData(built);
+        try { localStorage.setItem(cacheKey, JSON.stringify(built)); } catch(e) {}
+      } else {
+        setVideoaulasData({});
+      }
+      const ps = await getDoc(doc(db, 'users', u.uid, 'videoaulas_progress', 'watched'));
+      if (ps.exists()) {
+        const w = ps.data() || {};
+        setWatchedAulas(w);
+        try { localStorage.setItem(watchedKey, JSON.stringify(w)); } catch(e) {}
+      }
+    } catch(e) { console.error(e); if (showLoading) setVideoaulasData({}); }
+    finally { if (showLoading) setVideoaulasLoading(false); }
+  };
 
   const markAulaWatched = async (bunnyId) => {
     if (!bunnyId) return;
@@ -1596,8 +1625,9 @@ export default function QuestionBankApp() {
     const u = { ...watchedAulas };
     if (already) { delete u[bunnyId]; } else { u[bunnyId] = true; }
     setWatchedAulas(u);
+    // Atualizar cache local imediatamente
+    if (user) try { localStorage.setItem(`agora_watched_${user.uid}`, JSON.stringify(u)); } catch(e) {}
     if (user && !user.isAnonymous) try {
-      // Use setDoc (not merge) to write the full clean object so deletes persist
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
     } catch(e) {}
   };
@@ -1609,9 +1639,26 @@ export default function QuestionBankApp() {
     } catch(e) {}
   };
 
-  // Load cronograma from Firestore
+  // Load cronograma from Firestore — carrega UMA VEZ no login com cache localStorage
+  const cronLoadedRef = useRef(false);
   useEffect(() => {
-    if (view !== 'curso' || !user || cronograma) return;
+    if (!user || user.isAnonymous || cronLoadedRef.current) return;
+    cronLoadedRef.current = true;
+
+    const cacheKey = `agora_cronograma_${user.uid}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        setCronograma(JSON.parse(cached));
+        // Carregar prefs do usuário (data de início) em background
+        getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main')).then(prefSnap => {
+          if (prefSnap.exists() && prefSnap.data().startDate) setCronStartDate(prefSnap.data().startDate);
+        }).catch(()=>{});
+        return;
+      }
+    } catch(e) {}
+
+    // Sem cache — carrega do Firestore
     setCronLoading(true);
     (async () => {
       try {
@@ -1620,16 +1667,18 @@ export default function QuestionBankApp() {
         snap.forEach(d => weeks.push(d.data()));
         weeks.sort((a,b) => a.week - b.week);
         setCronograma(weeks);
-        // Carregar data de início salva pelo usuário
+        try { localStorage.setItem(cacheKey, JSON.stringify(weeks)); } catch(e) {}
         const prefSnap = await getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'));
-        if (prefSnap.exists()) {
-          const prefs = prefSnap.data();
-          if (prefs.startDate) setCronStartDate(prefs.startDate);
-        }
+        if (prefSnap.exists() && prefSnap.data().startDate) setCronStartDate(prefSnap.data().startDate);
       } catch(e) { setCronograma([]); }
       finally { setCronLoading(false); }
     })();
-  }, [view, user, cronograma]); // eslint-disable-line
+  }, [user]); // eslint-disable-line
+
+  // Resetar ao logout
+  useEffect(() => {
+    if (!user) cronLoadedRef.current = false;
+  }, [user]);
 
   const saveCronStartDate = async (dateStr) => {
     setCronStartDate(dateStr);
