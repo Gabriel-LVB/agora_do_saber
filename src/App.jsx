@@ -2369,8 +2369,9 @@ export default function QuestionBankApp() {
       const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
       const subtopics = lines
         .slice(lineIdx + 1, nextTopicIdx)
-        .map(l => l.replace(/^[\s*#\-–]+/, '').trim())  // strip leading symbols/spaces
-        .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l));
+        .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
+        .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
+        .slice(0, 20); // enforça máximo de 20 subtópicos por tópico
       return {
         id: `t-${topicPos}-${Date.now()}`,
         title,

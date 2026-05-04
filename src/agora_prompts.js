@@ -86,13 +86,14 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const estruturaInst = autoMode
     ? `
 ESTRUTURA (modo automático):
-Defina a quantidade ideal de blocos e subtópicos.
-Critérios obrigatórios:
-- Total de questões ≈ duração em minutos ÷ 2 (ex: aula de 40min → ~20 questões)
-- Cada bloco deve ter entre 5 e 30 subtópicos (= questões). NUNCA ultrapasse 30 por bloco — a IA não consegue gerar mais de 30 questões de qualidade em um único request
-- Se o total sugerido exigir mais de 30 questões, divida em múltiplos blocos de 20-30 cada
-- Blocos devem ter tamanho similar entre si — evite um bloco com 5 e outro com 25
-- Organize do conceito mais fundamental ao mais específico entre blocos e dentro de cada bloco`
+Você define a quantidade ideal de subtópicos por tópico.
+LIMITE ABSOLUTO: MÁXIMO 20 subtópicos por tópico — NUNCA ultrapasse isso.
+Critérios:
+- Tópicos mais amplos podem ter mais subtópicos (10-20); tópicos pontuais podem ter menos (5-10)
+- Quantidade ideal por tópico: suficiente para cobrir o assunto sem repetição nem superficialidade
+- Cada subtópico deve ser um conceito distinto e testável — não uma variação do anterior
+- Organize do conceito mais fundamental ao mais específico dentro de cada tópico
+- Informe a estrutura escolhida no início: "Estrutura: Tópico X → N subtópicos"`
     : `
 ESTRUTURA OBRIGATÓRIA:
 - EXATAMENTE ${s.numSubtopics} subtópicos
@@ -125,11 +126,12 @@ Gere TODAS as questões sem interromper. Não resuma, não pergunte, não coment
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos por tópico para cobrir "${subjectName}" de forma completa e didática.
-Critérios para a estrutura:
-- Tópicos devem ser grandes divisões temáticas do assunto (ex: Fisiopatologia, Diagnóstico, Tratamento, Complicações)
-- Subtópicos dentro de cada tópico devem seguir ordem lógica: do geral para o específico, do mecanismo para a aplicação clínica
-- Tópicos mais complexos podem ter mais subtópicos que tópicos simples
-- Cada subtópico deve ser testável de forma independente (conceito único, claro, sem sobreposição)
+LIMITE ABSOLUTO: MÁXIMO 20 subtópicos por tópico — NUNCA ultrapasse isso, independente da amplitude do tema.
+Critérios:
+- Tópicos devem ser grandes divisões temáticas (ex: Fisiopatologia, Diagnóstico, Tratamento, Complicações)
+- Subtópicos dentro de cada tópico seguem ordem lógica: geral → específico, mecanismo → clínica
+- Tópicos mais complexos podem ter mais subtópicos (10-20); tópicos simples, menos (5-10)
+- Cada subtópico deve ser testável de forma independente — conceito único, sem sobreposição
 - Informe ao final: "Estrutura escolhida: X tópicos, variando entre Y e Z subtópicos por tópico"`
     : `Crie um sumário com EXATAMENTE ${s.numTopics} Tópicos.
 Cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos.
