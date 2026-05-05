@@ -1426,6 +1426,105 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
   </div>
 );
 
+// ─── EXTERNAL PROMPT MODAL ────────────────────────────────────────────────────
+const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
+  const dm = darkMode;
+  const [cfg, setCfg] = useState({
+    numTopics:       settings.numTopics      || 10,
+    numSubtopics:    settings.numSubtopics   || 5,
+    qPerSub:         settings.qPerSub        || 1,
+    numAlternatives: settings.numAlternatives || 5,
+    questionStyle:   settings.questionStyle  || 'mixed',
+    autoMode:        settings.autoMode !== false,
+    customPrompt:    settings.customPrompt   || '',
+  });
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg});
+    navigator.clipboard.writeText(prompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+      <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
+        style={{maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+        <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
+          <h3 className="font-serif font-bold text-lg text-yellow-600">Configurar Prompt Externo</h3>
+          <button onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-400 hover:text-gray-200':'text-gray-400 hover:text-gray-600'}`}>×</button>
+        </div>
+        <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1">
+          {/* AutoMode */}
+          <button onClick={()=>setCfg(p=>({...p,autoMode:!p.autoMode}))}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.autoMode?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-gray-50')}`}>
+            <div>
+              <p className={`text-sm font-bold ${cfg.autoMode?'text-yellow-500':''}`}>✦ IA escolhe a estrutura</p>
+              <p className="text-xs opacity-50 mt-0.5">A IA define tópicos e subtópicos ideais</p>
+            </div>
+            <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.autoMode?'#ca8a04':'#9ca3af',flexShrink:0,display:'flex',alignItems:'center',transition:'background 0.2s'}}>
+              <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+            </div>
+          </button>
+
+          {/* Estrutura */}
+          <div className={`grid grid-cols-3 gap-3 transition-opacity ${cfg.autoMode?'opacity-30 pointer-events-none':''}`}>
+            {[{l:'Tópicos',k:'numTopics',mn:1,mx:20},{l:'Subtóp./Tópico',k:'numSubtopics',mn:1,mx:30},{l:'Q./Subtópico',k:'qPerSub',mn:1,mx:10}].map(f=>(
+              <div key={f.k}>
+                <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
+                <input type="number" min={f.mn} max={f.mx} value={cfg[f.k]}
+                  onChange={e=>setCfg(p=>({...p,[f.k]:Math.max(f.mn,Math.min(f.mx,parseInt(e.target.value)||f.mn))}))}
+                  className={`w-full p-3 rounded-lg border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+              </div>
+            ))}
+          </div>
+
+          {/* Estilo */}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
+                <button key={o.k} onClick={()=>setCfg(p=>({...p,questionStyle:o.k}))}
+                  className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Alternativas */}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Alternativas</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[{v:4,l:'4 (A–D)'},{v:5,l:'5 (A–E)'}].map(o=>(
+                <button key={o.v} onClick={()=>setCfg(p=>({...p,numAlternatives:o.v}))}
+                  className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${cfg.numAlternatives===o.v?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Instrução extra */}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Instrução Extra (opcional)</p>
+            <textarea value={cfg.customPrompt} onChange={e=>setCfg(p=>({...p,customPrompt:e.target.value}))}
+              placeholder="Ex: Foque apenas em farmacologia clínica..."
+              rows={3} className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+          </div>
+        </div>
+        <div className="px-6 pb-6 pt-4 flex gap-3 flex-shrink-0 border-t border-gray-700/30">
+          <button onClick={onClose} className={`flex-1 py-3.5 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+          <button onClick={copy} className={`flex-[2] py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${copied?'bg-green-600 text-white':'bg-yellow-600 hover:bg-yellow-700 text-white'}`}>
+            {copied?<><CheckCircle2 className="w-4 h-4"/>Copiado!</>:<><Copy className="w-4 h-4"/>Copiar Prompt</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false };
 
@@ -1476,6 +1575,7 @@ export default function QuestionBankApp() {
   const [isBusy, setIsBusy]           = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [externalPromptModal, setExternalPromptModal] = useState(false);
   const [loadingMsg, setLoadingMsg]   = useState('');
   const [streamCount, setStreamCount] = useState(0);
   const [deleteId, setDeleteId]       = useState(null);
@@ -2660,7 +2760,7 @@ export default function QuestionBankApp() {
               )}
             </div>
             <div className="mt-8 flex justify-center">
-              <button onClick={()=>{navigator.clipboard.writeText(getExternalPrompt());setCopiedPrompt(true);setTimeout(()=>setCopiedPrompt(false),3000);}} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${darkMode?'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300':'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>
+              <button onClick={()=>setExternalPromptModal(true)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${darkMode?'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300':'bg-white hover:bg-gray-50 border-gray-200 text-gray-600'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>
                 {copiedPrompt?<CheckCircle2 className="w-5 h-5 text-yellow-500"/>:<Copy className="w-5 h-5"/>}{copiedPrompt?'Copiado!':'Copiar Prompt'}
               </button>
             </div>
@@ -4355,6 +4455,13 @@ export default function QuestionBankApp() {
       </main>
 
 
+
+      {externalPromptModal&&<ExternalPromptModal
+        darkMode={darkMode}
+        settings={settings}
+        settingsRef={settingsRef}
+        onClose={()=>setExternalPromptModal(false)}
+      />}
 
       {vqGenModal&&<VqGenModal
         key={vqGenModal.aulaId}
