@@ -125,40 +125,30 @@ Gere TODAS as questões sem interromper. Não resuma, não pergunte, não coment
  */
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
-    ? `Defina a quantidade ideal de tópicos e subtópicos por tópico para cobrir "${subjectName}" de forma completa e didática.
-LIMITE ABSOLUTO: MÁXIMO 20 subtópicos por tópico — NUNCA ultrapasse isso, independente da amplitude do tema.
-Critérios:
-- Tópicos devem ser grandes divisões temáticas (ex: Fisiopatologia, Diagnóstico, Tratamento, Complicações)
-- Subtópicos dentro de cada tópico seguem ordem lógica: geral → específico, mecanismo → clínica
-- Tópicos mais complexos podem ter mais subtópicos (10-20); tópicos simples, menos (5-10)
-- Cada subtópico deve ser testável de forma independente — conceito único, sem sobreposição
-- Informe ao final: "Estrutura escolhida: X tópicos, variando entre Y e Z subtópicos por tópico"`
-    : `Crie um sumário com EXATAMENTE ${s.numTopics} Tópicos.
-Cada tópico deve ter EXATAMENTE ${s.numSubtopics} Subtópicos.
-Organize do conceito mais fundamental ao mais específico dentro de cada tópico.`;
+    ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
+LIMITE: máximo 30 subtópicos por tópico.
+- Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
+- Quantidade por tópico: o necessário para cobrir bem aquele tema (entre 5 e 30)
+- Cada subtópico = 1 conceito específico e testável, sem sobreposição com outros`
+    : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
-  return `Você é o Arquiteto de Alexandria, especialista em estruturar conhecimento médico para estudo eficiente.
-
-TAREFA: Criar um sumário de estudo para "${subjectName}" baseado nos materiais fornecidos.
+  return `Você é o Arquiteto de Alexandria. Crie um sumário para "${subjectName}" baseado no material do usuário.
 
 ${estrutura}
 
-REGRAS DO SUMÁRIO:
-- Cada subtópico deve ser um conceito médico concreto e testável (não uma frase longa ou um parágrafo)
-- A ordem dentro de cada tópico deve ser didática: não mencione exceções antes de estabelecer a regra, não cite efeito colateral antes de explicar o mecanismo, não fale em tratamento antes do diagnóstico
-- Subtópicos não podem se sobrepor entre si
-- Use linguagem técnica e objetiva
+REGRAS:
+- Baseie os subtópicos no material fornecido — não extrapole para fora do que foi pedido
+- Ordem obrigatória dentro de cada tópico: fundamentos antes de detalhes, mecanismo antes da aplicação clínica, regra antes da exceção
+- Subtópicos concretos e objetivos — nada de "Generalidades", "Introdução" ou "Aspectos gerais"
 
-FORMATO OBRIGATÓRIO:
-Tópico 1: [Nome do tópico]
+FORMATO:
+Tópico 1: [Nome]
   - [Subtópico]
   - [Subtópico]
-  ...
-Tópico 2: [Nome do tópico]
+Tópico 2: [Nome]
   - [Subtópico]
-  ...
 
-Responda APENAS o sumário, sem explicações adicionais.`;
+Responda APENAS o sumário.`;
 };
 
 // ─── PROMPT: REVISÃO DE SUMÁRIO ───────────────────────────────────────────────

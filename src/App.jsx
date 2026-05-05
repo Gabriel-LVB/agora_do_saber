@@ -785,6 +785,7 @@ const QuestionView = ({
   darkMode, apiKey, oracleLength='medium',
   generateLabel='Gerar Questões', generateIcon=null, onGenerate=null,
   subtopics=[],
+  topicStyle=null, onTopicStyleChange=null, // seletor de estilo por tópico
 }) => {
   const dm = darkMode;
 
@@ -827,9 +828,21 @@ const QuestionView = ({
             </>
           )}
           {questions.length===0&&!isGenerating&&onGenerate&&(
-            <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
-              {generateIcon||<Sparkles className="w-5 h-5"/>}{generateLabel}
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              {onTopicStyleChange&&(
+                <div className="flex gap-1.5">
+                  {[{k:'mixed',l:'Misto'},{k:'direct',l:'Direto'},{k:'clinical',l:'Clínico'}].map(o=>(
+                    <button key={o.k} onClick={()=>onTopicStyleChange(o.k)}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${topicStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400':'border-gray-200 text-gray-500')}`}>
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
+                {generateIcon||<Sparkles className="w-5 h-5"/>}{generateLabel}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -2287,16 +2300,25 @@ export default function QuestionBankApp() {
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
 
-    // Build subtopics injection
+    // Estilo salvo no tópico tem prioridade sobre settings global
+    const topicStyle = topic.questionStyle || settingsRef.current.questionStyle || 'mixed';
+
     const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
     const total = subtopicsArr.length > 0 ? subtopicsArr.length * settingsRef.current.qPerSub : settingsRef.current.numSubtopics * settingsRef.current.qPerSub;
     const subtopicsBlock = subtopicsArr.length > 0
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, um por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão = 1 subtópico da lista. NÃO repita. NÃO invente. Total: EXATAMENTE ${total} questões.`
       : '';
 
-    const ctx=cleared.sourceMaterials?`\n\nMATERIAIS:\n${cleared.sourceMaterials}`:'';
-    const PROMPT=getPrompt(true, cleared.focusAreas||[])+ctx+subtopicsBlock+(addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')+
-      `\n\nATENÇÃO FINAL: Você DEVE gerar TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO resuma. NÃO pergunte. Gere questão por questão até o total de ${total}.`;
+    // Material base como instrução PRIORITÁRIA — vem antes de tudo no system prompt
+    const matInst = cleared.sourceMaterials
+      ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
+      : '';
+
+    const s = {...settingsRef.current, questionStyle: topicStyle};
+    const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
+      + matInst + subtopicsBlock
+      + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
+      + `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar.`;
 
     const orderedKeys = getOrderedKeys();
     let err=null, ok=false;
@@ -2304,13 +2326,13 @@ export default function QuestionBankApp() {
       try {
         const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc));
         const p=parseData(full);
-        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics}:t)});
-        await rotateKey(); // Always rotate after success
+        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
+        await rotateKey();
         ok=true; break;
       } catch(e) {
         err=e;
-        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; } // try next key
-        break; // other errors: stop
+        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        break;
       }
     }
     clearInterval(mi_int);setLoadingMsg('');setStreamCount(0);
@@ -2324,10 +2346,17 @@ export default function QuestionBankApp() {
     const s = settingsRef.current;
     const sys = buildOracleSyllabusPrompt(newSubName, s, s.autoMode || false);
     const orderedKeys = getOrderedKeys();
+    // Material base como instrução prioritária separada do conteúdo
+    const matText = materialText.trim();
+    const filesText = uploadedFiles.map(f=>`[${f.name}]\n${f.content}`).join('\n');
+    const userMsg = [
+      matText ? `INSTRUÇÃO PRIORITÁRIA DO USUÁRIO (siga à risca):\n${matText}` : '',
+      filesText ? `\nMATERIAL BASE:\n${filesText}` : '',
+    ].filter(Boolean).join('\n\n') || `Crie o sumário para: ${newSubName}`;
     let ok=false;
     for (const {k} of orderedKeys) {
       try {
-        const r=await callGemini(`Materiais: ${getMaterial()}`,sys,k,uploadedImages);
+        const r=await callGemini(userMsg, sys, k, uploadedImages);
         setSyllabus(r);setCreatorStep(2);
         await rotateKey();
         ok=true; break;
@@ -2371,11 +2400,12 @@ export default function QuestionBankApp() {
         .slice(lineIdx + 1, nextTopicIdx)
         .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
         .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
-        .slice(0, 20); // enforça máximo de 20 subtópicos por tópico
+        .slice(0, 30); // enforça máximo de 30 subtópicos por tópico
       return {
         id: `t-${topicPos}-${Date.now()}`,
         title,
-        subtopics,  // ← stored per topic
+        subtopics,
+        questionStyle: settingsRef.current.questionStyle || 'mixed', // herdado do modal na criação
         questions: [], answers: {}, summary: '', favorites: [], spacedReview: {},
       };
     });
@@ -2754,6 +2784,13 @@ export default function QuestionBankApp() {
               generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
               onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
+              topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
+              onTopicStyleChange={activeSubject?.source==='gemini'?(style)=>{
+                const updated = {...activeSubject, topics: activeSubject.topics.map(t=>
+                  t.id===activeTopic.id ? {...t, questionStyle: style} : t
+                )};
+                updateSubject(updated);
+              }:null}
             />
           </div>
         )}
@@ -3559,40 +3596,15 @@ export default function QuestionBankApp() {
                           </div>
                         </div>
                       ) : effAula?.embed_url ? (
-                        <>
-                          <iframe
-                            key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??44}`}
-                            src={`${effAula.embed_url}${effAula.embed_url.includes('?')?'&':'?'}t=${videoSeek??44}`}
-                            className="absolute inset-0 w-full h-full"
-                            id="bunny-player"
-                            style={{border:'none'}}
-                            allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
-                            allowFullScreen
-                          />
-                          {/* Botões de seek sobrepostos no canto inferior */}
-                          <div className="absolute bottom-14 left-1/2 -translate-x-1/2 flex gap-2 z-10 opacity-0 hover:opacity-100 transition-opacity" style={{pointerEvents:'auto'}}>
-                            <button
-                              onClick={()=>{
-                                // Lê o tempo atual via postMessage se disponível, senão faz seek relativo estimado
-                                const iframe = document.getElementById('bunny-player');
-                                const newT = Math.max(0, (videoSeek??44) - 10);
-                                setVideoSeek(newT);
-                              }}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-black/60 hover:bg-black/80 backdrop-blur"
-                            >
-                              <SkipBack className="w-3.5 h-3.5"/>−10s
-                            </button>
-                            <button
-                              onClick={()=>{
-                                const newT = (videoSeek??44) + 10;
-                                setVideoSeek(newT);
-                              }}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-black/60 hover:bg-black/80 backdrop-blur"
-                            >
-                              +10s<SkipForward className="w-3.5 h-3.5"/>
-                            </button>
-                          </div>
-                        </>
+                        <iframe
+                          key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??44}`}
+                          src={`${effAula.embed_url}${effAula.embed_url.includes('?')?'&':'?'}t=${videoSeek??44}`}
+                          className="absolute inset-0 w-full h-full"
+                          id="bunny-player"
+                          style={{border:'none'}}
+                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
+                          allowFullScreen
+                        />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <p className="text-white opacity-40 text-sm">Vídeo não disponível</p>
@@ -4297,22 +4309,6 @@ export default function QuestionBankApp() {
                   <button key={k} onClick={()=>{const ns={...settings,oracleLength:k};setSettings(ns);saveSettings(ns);}}
                     className={`p-3 rounded-xl border-2 font-bold text-sm transition-all ${settings.oracleLength===k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
                     {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo das Questões</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  {k:'mixed',    label:'Misto',    desc:'Clínicas e diretas'},
-                  {k:'clinical', label:'Clínico',  desc:'Casos clínicos'},
-                  {k:'direct',   label:'Direto',   desc:'Perguntas diretas'},
-                ].map(opt=>(
-                  <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
-                    className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${settings.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
-                    {opt.label}
-                    <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
                   </button>
                 ))}
               </div>
