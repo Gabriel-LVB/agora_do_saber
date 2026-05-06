@@ -255,7 +255,7 @@ const loadScript = (src, gv) => new Promise((res,rej)=>{ if(window[gv]) return r
 const extractPdfText = async (ab) => { const lib = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js','pdfjsLib'); lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; const pdf=await lib.getDocument({data:ab}).promise; let t=''; for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const c=await pg.getTextContent();t+=c.items.map(x=>x.str).join(' ')+'\n';} return t; };
 const extractDocxText = async (ab) => { const m = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js','mammoth'); const r=await m.extractRawText({arrayBuffer:ab}); return r.value; };
 
-const parseData = (text) => {
+const parseData = (text, namespace = '') => {
   const norm = text.replace(/\r\n/g,'\n');
 
   // Legacy summary
@@ -264,9 +264,6 @@ const parseData = (text) => {
   if (sm?.[1]) summary = sm[1].replace(/\n---.*/g,'').trim();
 
   const questions = [];
-
-  // Split by question headers — only at start of line
-  // Handles: "## Questão 1", "1)", "1.", "Questão 1", "Q1)"
   const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o[ \t]*\d|(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t])/im)
     .filter(b => b.trim());
 
@@ -274,30 +271,25 @@ const parseData = (text) => {
 
   blocks.forEach((block) => {
     if (!block.trim()) return;
-
-    // Must have lettered options on their own line
     const hasOptions = /(?:^|\n)[ \t]*[A-Ea-e][ \t]*[).][ \t]*\S/.test(block);
     if (!hasOptions) return;
 
     try {
-      // Question ID
       const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*([0-9.]+)/i) ||
                   block.match(/(?:^|\n)[ \t]*(\d{1,2})[ \t]*[).]/m);
-      const id = idM ? idM[1] : `${++qCount}`;
+      const rawId = idM ? idM[1] : `${++qCount}`;
+      // ID único: combina namespace (topicId/blockId) com o id da questão
+      const id = namespace ? `${namespace}_${rawId}` : rawId;
 
-      // First option position
       const firstOptMatch = block.match(/(?:^|\n)([ \t]*[Aa][ \t]*[).][ \t]*\S)/);
       if (!firstOptMatch) return;
       const firstOptIdx = block.indexOf(firstOptMatch[0]);
 
-      // Statement: text before first option
-      // Handle "1) Question text here" (inline) and multi-line statements
       const inlineM = block.match(/(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t]*([^\n]{5,})/m);
       const qHeaderM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[^\n]*\n/i);
       let stmt = '';
       if (inlineM && inlineM.index <= firstOptIdx) {
         stmt = inlineM[1].trim();
-        // grab continuation lines
         const contStart = block.indexOf(inlineM[0]) + inlineM[0].length;
         if (contStart < firstOptIdx) stmt += ' ' + block.substring(contStart, firstOptIdx).trim();
       } else if (qHeaderM) {
@@ -308,7 +300,6 @@ const parseData = (text) => {
       stmt = stmt.trim();
       if (!stmt || stmt.length < 5) return;
 
-      // Answer marker
       const ansM =
         block.match(/(?:[Aa]lternativa[ \t]+correta|[Gg]abarito|[Rr]esposta(?:[ \t]+correta)?)[ \t]*[:\-][ \t]*\*{0,2}[ \t]*\(?([A-Ea-e])\)?/im);
 
@@ -319,7 +310,6 @@ const parseData = (text) => {
         correct = ansM[1].toUpperCase();
         optionsEnd = ansM.index;
       } else {
-        // Standalone line with ONLY a letter after options
         const stM = block.match(/\n[ \t]*\(?([A-Ea-e])\)?[ \t]*(?:\n|$)/m);
         if (stM && stM.index > firstOptIdx + 10) {
           correct = stM[1].toUpperCase();
@@ -327,7 +317,6 @@ const parseData = (text) => {
         }
       }
 
-      // Parse options
       const optText = block.substring(firstOptIdx, optionsEnd);
       const options = [];
       const optRe = /(?:^|\n)[ \t]*\(?([A-Ea-e])[ \t]*[).][ \t]*([\s\S]*?)(?=(?:\n[ \t]*\(?[A-Ea-e][ \t]*[).])|\n[ \t]*$|$)/gim;
@@ -339,26 +328,21 @@ const parseData = (text) => {
       }
       if (options.length < 2) return;
 
-      // Explanation — tenta vários padrões, mais robusto
       let exp = '';
       const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio)[ \t]*:?([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*##|\n[ \t]*Quest[aã]o|$)/i);
       if (expM?.[1]?.trim().length > 5) {
         exp = expM[1].trim();
       } else if (ansM) {
-        // Tudo após a linha do gabarito é a explicação
         const after = block.substring(ansM.index + ansM[0].length).replace(/^\s*\n/,'').trim();
         if (after.length > 5) exp = after;
       }
-      // Limpar artefatos comuns
       exp = exp.replace(/^[-–—]+\s*/,'').replace(/\n---.*$/s,'').trim();
 
-      // Build final question — embaralhar UMA VEZ aqui e salvar ordem fixa
-      // A ordem é determinística baseada no id para ser reproduzível após reload
       if (correct) {
         const ctTxt = options.find(o => o.letter === correct)?.txt;
         if (!ctTxt) return;
-        // Seed determinística: soma dos char codes do id para reproduzir a mesma ordem
-        const seed = (id + '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+        // Seed usa o id completo (com namespace) para garantir embaralhamento consistente
+        const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
         const seededShuffle = (arr) => {
           const a = [...arr]; let s = seed;
           for (let i = a.length - 1; i > 0; i--) {
@@ -372,7 +356,6 @@ const parseData = (text) => {
         const final = shuffled.map((t, i) => ({ letter: 'ABCDE'[i], text: t, isCorrect: t === ctTxt }));
         questions.push({ id, statement: stmt, options: final, explanation: exp });
       } else {
-        // No answer key — import without correct answer marked
         const final = options.map((o, i) => ({ letter: 'ABCDE'[i], text: o.txt, isCorrect: false }));
         questions.push({ id, statement: stmt, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)' });
       }
@@ -782,10 +765,10 @@ const QuestionView = ({
   onReset, onRegenerate, onExport,
   isGenerating=false, streamCount=0, loadingMsg='',
   showBizuario=false, onBizuario, bizuarioCached=false,
-  darkMode, apiKey, oracleLength='medium',
+  darkMode, apiKey, oracleLength='medium', onCall,
   generateLabel='Gerar Questões', generateIcon=null, onGenerate=null,
   subtopics=[],
-  topicStyle=null, onTopicStyleChange=null, // seletor de estilo por tópico
+  topicStyle=null, onTopicStyleChange=null,
 }) => {
   const dm = darkMode;
 
@@ -878,12 +861,10 @@ const QuestionView = ({
         <div>
           {questions.map((q,i)=>(
             <QuestionCard key={q.id||i} question={q} index={i}
-              selectedLetter={answers[q.id]}
-              onAnswer={l=>onAnswer(q.id,l)}
-              darkMode={dm}
-              isFavorite={favorites.includes(q.id)}
+              selectedLetter={answers[q.id]} onAnswer={l=>onAnswer(q.id,l)}
+              darkMode={dm} isFavorite={favorites.includes(q.id)}
               onToggleFavorite={()=>onToggleFavorite(q.id)}
-              apiKey={apiKey} oracleLength={oracleLength}/>
+              apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>
           ))}
           {/* ── Conclusão ── */}
           {allDone&&(
@@ -963,7 +944,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
               <p className="text-xs opacity-50 mt-0.5">Blocos e subtópicos definidos pela IA</p>
             </div>
             <div className={`w-10 h-6 rounded-full flex items-center px-0.5 flex-shrink-0 ml-3 ${auto?'bg-yellow-500':'bg-gray-400'}`}>
-              <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${auto?'translate-x-4':'translate-x-0'}`}/>
+              <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auto?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
             </div>
           </button>
 
@@ -1003,7 +984,10 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
   );
 };
 
-const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
+const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) => {
+  // onCall(prompt, sys) → chama Gemini com rotação de chaves
+  // fallback: usa apiKey direto se onCall não for passado
+  const callOracle = onCall || ((prompt, sys) => callGemini(prompt, sys, apiKey));
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -1019,7 +1003,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
       const ctx = `Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${question.explanation}`;
       const sys = `Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Responda com precisão clínica. Contexto:\n${ctx}`;
       const hist = messages.map(m=>`${m.role==='user'?'Estudante':'Oráculo'}: ${m.text}`).join('\n');
-      const r = await callGemini(`${hist}\nEstudante: ${msg}`,sys,apiKey);
+      const r = await callOracle(`${hist}\nEstudante: ${msg}`, sys);
       setMessages(p=>[...p,{role:'assistant',text:r}]);
     } catch(e) { setMessages(p=>[...p,{role:'assistant',text:'O Oráculo encontrou dificuldades. Tente novamente.'}]); }
     finally { setLoading(false); }
@@ -1048,7 +1032,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
             <span className={`text-xs mr-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Explicar:</span>
             {question.options.map(opt=>(
               <button key={opt.letter}
-                onClick={()=>{ const msg=`Por que a alternativa ${opt.letter}) está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${question.explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callGemini(msg,sys,apiKey); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
+                onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${question.explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
                 className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${opt.isCorrect?(darkMode?'bg-green-800 text-green-200 hover:bg-green-700':'bg-green-100 text-green-700 hover:bg-green-200'):(darkMode?'bg-gray-700 text-gray-300 hover:bg-gray-600':'bg-gray-100 text-gray-500 hover:bg-gray-200')}`}>
                 {opt.letter}
               </button>
@@ -1065,7 +1049,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium' }) => {
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal' }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal', onCall }) => {
   // revealMode: 'normal' (immediate), 'selected' (blind - no green/red), 'revealed' (blind - show results)
   // Fix 3: treat 'SKIPPED' as answered-wrong (show correct answer but no wrong highlight)
   const isSkipped = selectedLetter === 'SKIPPED';
@@ -1135,7 +1119,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             }
           </div>
           <div className="text-base leading-relaxed">{parseHtmlText(question.explanation,darkMode)}</div>
-          {apiKey && <ChatBox question={question} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength}/>}
+          {apiKey && <ChatBox question={question} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>}
         </div>
       )}
     </div>
@@ -2089,7 +2073,23 @@ export default function QuestionBankApp() {
     if(imageInputRef.current) imageInputRef.current.value='';
   };
 
-  // ── Toast notifications ────────────────────────────────────────────────────
+  // Wrapper que chama Gemini com rotação automática de chaves — para uso no ChatBox
+  const callWithRotation = async (prompt, sys) => {
+    const orderedKeys = getOrderedKeys();
+    let lastErr;
+    for (const {k} of orderedKeys) {
+      try {
+        const r = await callGemini(prompt, sys, k);
+        await rotateKey();
+        return r;
+      } catch(e) {
+        lastErr = e;
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        throw e;
+      }
+    }
+    throw lastErr;
+  };
   const addToast = (msg, type='info', duration=5000, onClick=null) => {
     const id = Date.now() + Math.random();
     setToasts(p => [...p, { id, msg, type, onClick }]);
@@ -2240,8 +2240,7 @@ export default function QuestionBankApp() {
             `Gere as questões do bloco "${block.title}" — ${aula.title}`,
             PROMPT, k, ()=>{}
           );
-          const parsed = parseData(full);
-          // Lê aulaData atualizado do estado para não sobrescrever outros blocos
+          const parsed = parseData(full, `${aulaId}_${blockId}`);
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {
@@ -2328,7 +2327,7 @@ export default function QuestionBankApp() {
           PROMPT, k,
           (acc,qc)=>setStreamCount(qc)
         );
-        const parsed = parseData(full);
+        const parsed = parseData(full, `${aulaId}_${blockId}`);
         const finalBlocks = {
           ...aulaData.blocks,
           [blockId]: { ...block, generating:false, questions:parsed.questions, answers:{} }
@@ -2425,7 +2424,7 @@ export default function QuestionBankApp() {
     for (const {k} of orderedKeys) {
       try {
         const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc));
-        const p=parseData(full);
+        const p=parseData(full, `${activeSubject.id}_${topicId}`);
         await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
         await rotateKey();
         ok=true; break;
@@ -2880,7 +2879,7 @@ export default function QuestionBankApp() {
               darkMode={darkMode}
               apiKey={getKey()}
               oracleLength={settings.oracleLength||'medium'}
-              generateLabel={isBusy?'Gerando...':'Gerar Questões'}
+              onCall={callWithRotation}
               generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
               onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
@@ -2946,7 +2945,7 @@ export default function QuestionBankApp() {
                       <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos, subtópicos e questões</p>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
-                      <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${settings.autoMode?'translate-x-4':'translate-x-0'}`}/>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
                     </div>
                   </button>
 
@@ -3123,7 +3122,7 @@ export default function QuestionBankApp() {
                       darkMode={darkMode}
                       isFavorite={true}
                       onToggleFavorite={()=>handleFavUnfavorite(subject,topic,question.id)}
-                      apiKey={getKey()} oracleLength={settings.oracleLength}
+                      apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
                     />
                   ))}
                 </div>
@@ -4015,6 +4014,7 @@ export default function QuestionBankApp() {
                     darkMode={darkMode}
                     apiKey={getKey()}
                     oracleLength={settings.oracleLength}
+                    onCall={callWithRotation}
                     generateLabel="Gerar Questões"
                     onGenerate={()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}
@@ -4356,7 +4356,7 @@ export default function QuestionBankApp() {
                               selectedLetter={activeExam.answers[q.id]}
                               onAnswer={()=>{}} darkMode={darkMode}
                               isFavorite={isExamQuestionFav(q)} onToggleFavorite={()=>handleExamFavorite(q)}
-                              apiKey={getKey()} oracleLength={settings.oracleLength} revealMode="revealed"/>
+                              apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation} revealMode="revealed"/>
                           ))}
                         </div>
                       )}
@@ -4375,7 +4375,7 @@ export default function QuestionBankApp() {
                     darkMode={darkMode}
                     isFavorite={isExamQuestionFav(q)}
                     onToggleFavorite={()=>handleExamFavorite(q)}
-                    apiKey={getKey()} oracleLength={settings.oracleLength}
+                    apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
                     revealMode={activeExam.blindMode?'selected':'normal'}
                   />
                 ))}

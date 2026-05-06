@@ -87,13 +87,12 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
     ? `
 ESTRUTURA (modo automático):
 Você define a quantidade ideal de subtópicos por tópico.
-LIMITE ABSOLUTO: MÁXIMO 20 subtópicos por tópico — NUNCA ultrapasse isso.
+LIMITES ABSOLUTOS: mínimo 5 e máximo 30 subtópicos por tópico — nunca fora dessa faixa.
 Critérios:
-- Tópicos mais amplos podem ter mais subtópicos (10-20); tópicos pontuais podem ter menos (5-10)
-- Quantidade ideal por tópico: suficiente para cobrir o assunto sem repetição nem superficialidade
+- Tópicos mais amplos podem ter mais subtópicos (15-30); tópicos pontuais, menos (5-15)
+- Quantidade ideal: suficiente para cobrir o assunto sem repetição nem superficialidade
 - Cada subtópico deve ser um conceito distinto e testável — não uma variação do anterior
-- Organize do conceito mais fundamental ao mais específico dentro de cada tópico
-- Informe a estrutura escolhida no início: "Estrutura: Tópico X → N subtópicos"`
+- Organize do conceito mais fundamental ao mais específico dentro de cada tópico`
     : `
 ESTRUTURA OBRIGATÓRIA:
 - EXATAMENTE ${s.numSubtopics} subtópicos
@@ -126,7 +125,7 @@ Gere TODAS as questões sem interromper. Não resuma, não pergunte, não coment
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
-LIMITE: máximo 30 subtópicos por tópico.
+LIMITES: mínimo 5 e máximo 30 subtópicos por tópico — nunca fora dessa faixa.
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
 - Quantidade por tópico: o necessário para cobrir bem aquele tema (entre 5 e 30)
 - Cada subtópico = 1 conceito específico e testável, sem sobreposição com outros`
@@ -177,15 +176,28 @@ export const buildExternalPrompt = (s) => {
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
 
-  return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]
-
-*** PARTE 1: ESTRUTURA ***
+  const parte1 = s.autoMode
+    ? `*** PARTE 1: ESTRUTURA (modo automático) ***
+A IA deve definir a quantidade ideal de tópicos e subtópicos por tópico.
+LIMITES OBRIGATÓRIOS: mínimo 5 e máximo 30 subtópicos por tópico.
+Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 conceito testável único.
+Responda APENAS o sumário. Aguarde confirmação antes de gerar questões.`
+    : `*** PARTE 1: ESTRUTURA ***
 Crie um sumário sobre [INSERIR TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.
 Organize do conceito mais fundamental ao mais específico.
-Responda APENAS o sumário. Aguarde a confirmação antes de gerar questões.
+Responda APENAS o sumário. Aguarde a confirmação antes de gerar questões.`;
 
-*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere ${s.numSubtopics * s.qPerSub} questões (${s.numSubtopics} subtópicos × ${s.qPerSub} por subtópico).
+  const parte2 = s.autoMode
+    ? `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
+Para cada tópico gere 1 questão por subtópico (total = número de subtópicos daquele tópico).`
+    : `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
+Para cada tópico gere ${s.numSubtopics * s.qPerSub} questões (${s.numSubtopics} subtópicos × ${s.qPerSub} por subtópico).`;
+
+  return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]
+
+${parte1}
+
+${parte2}
 
 ESTILO: ${STYLE_INST[s.questionStyle || 'mixed']}
 ${REGRAS_ENUNCIADO}
@@ -208,7 +220,7 @@ export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, ex
 
 ESTRUTURA OBRIGATÓRIA:
 - ${numBlocks} bloco(s) de questões
-- ${qPerBlock} subtópico(s) por bloco (cada subtópico gerará 1 questão)
+- Entre 5 e 30 subtópicos por bloco (ideal: ${qPerBlock})
 - Ordem OBRIGATORIAMENTE didática dentro de cada bloco: conceitos gerais → específicos, mecanismo → clínica → tratamento
 - Nunca coloque um detalhe, exceção ou efeito adverso antes de ter coberto o conceito principal
 
