@@ -404,8 +404,9 @@ const renderRichText = (text, multiline = false) => {
   // Tokeniza o texto em segmentos: $$...$$ (display), $...$ (inline), **...**, <b>, <i>, <br>, texto
   const tokenize = (str) => {
     const tokens = [];
-    // Regex: $$...$$, $...$, **...**, <b>...</b>, <i>...</i>, <br/>
-    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*.*?\*\*|<b>.*?<\/b>|<i>.*?<\/i>|<br\s*\/?>)/g;
+    // Regex: $$...$$, $...$, **...**, *...*, <b>...</b>, <i>...</i>, <br/>
+    // Nota: [\s\S] para capturar múltiplas linhas no bold
+    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[\s\S]*?\*\*|\*[^*\n]+?\*|<b>[\s\S]*?<\/b>|<i>[\s\S]*?<\/i>|<br\s*\/?>)/g;
     let last = 0, m;
     while ((m = re.exec(str)) !== null) {
       if (m.index > last) tokens.push({ type: 'text', val: str.slice(last, m.index) });
@@ -413,6 +414,7 @@ const renderRichText = (text, multiline = false) => {
       if (v.startsWith('$$')) tokens.push({ type: 'tex-display', val: v.slice(2, -2).trim() });
       else if (v.startsWith('$'))  tokens.push({ type: 'tex-inline', val: v.slice(1, -1).trim() });
       else if (v.startsWith('**')) tokens.push({ type: 'bold', val: v.slice(2, -2) });
+      else if (v.startsWith('*') && !v.startsWith('**')) tokens.push({ type: 'italic', val: v.slice(1, -1) });
       else if (v.startsWith('<b>'))tokens.push({ type: 'bold', val: v.slice(3, -4) });
       else if (v.startsWith('<i>'))tokens.push({ type: 'italic', val: v.slice(3, -4) });
       else if (v.match(/^<br/))   tokens.push({ type: 'br' });
@@ -1063,14 +1065,14 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     <div className={`rounded-xl shadow-sm border p-4 md:p-6 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Questão {question.id}</span>
+          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Questão {index + 1}</span>
           {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onToggleFavorite} className={`p-1 rounded-full transition-colors ${isFavorite?'text-red-500':'text-gray-300 hover:text-red-400'}`}><Heart className="w-5 h-5" filled={isFavorite}/></button>
         </div>
       </div>
-      <div className={`text-base md:text-lg mb-6 leading-relaxed whitespace-pre-wrap ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(question.statement,darkMode)}</div>
+      <div className={`text-base md:text-lg mb-6 leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</div>
       <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
           const isSelected = effectiveLetter===opt.letter;
@@ -1102,7 +1104,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
                 {opt.letter}
               </div>
-              <div className="pt-1 flex-1 leading-snug text-sm md:text-base">{parseHtmlText(opt.text,darkMode)}</div>
+              <div className="pt-1 flex-1 leading-snug text-sm md:text-base">{parseHtmlTextChat(opt.text)}</div>
             </button>
           );
         })}
@@ -1118,7 +1120,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
                 : <span className="text-xs text-red-500 font-bold">✗ Incorreto</span>
             }
           </div>
-          <div className="text-base leading-relaxed">{parseHtmlText(question.explanation,darkMode)}</div>
+          <div className="text-base leading-relaxed">{parseHtmlTextChat(question.explanation)}</div>
           {apiKey && <ChatBox question={question} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>}
         </div>
       )}
@@ -2185,7 +2187,7 @@ export default function QuestionBankApp() {
       parsedBlocks[blockId] = {
         title: match[2].trim() || `Bloco ${blockNum}`,
         subtopics,
-        transcriptSlice: transcriptSlices[blockIndex] || '',
+        transcriptSlice: transcriptSlices[blockIndex] || '', // só em memória, não salvo no Firestore
         questions: [], answers: {}, generating: true,
       };
       blockIndex++;
@@ -2201,7 +2203,13 @@ export default function QuestionBankApp() {
       }
     }
 
-    // 5. Salvar estrutura inicial (blocos como generating: true)
+    // 5. Salvar estrutura inicial SEM transcriptSlice (evita exceder limite do Firestore)
+    const blocksForFirestore = Object.fromEntries(
+      Object.entries(parsedBlocks).map(([id, b]) => {
+        const { transcriptSlice, ...rest } = b;
+        return [id, rest];
+      })
+    );
     const aulaData = {
       meta: {
         totalQuestions: totalQ, numBlocks, qPerBlock,
@@ -2209,7 +2217,7 @@ export default function QuestionBankApp() {
         subject: cfg.subject||'', topic: cfg.topic||'',
         questionStyle, createdAt: Date.now(),
       },
-      blocks: parsedBlocks,
+      blocks: blocksForFirestore,
     };
     await saveVqBlock(aulaId, aulaData);
     setVqSyllabusLoading(false);
@@ -2241,14 +2249,14 @@ export default function QuestionBankApp() {
             PROMPT, k, ()=>{}
           );
           const parsed = parseData(full, `${aulaId}_${blockId}`);
+          const { transcriptSlice: _ts, ...blockToSave } = block;
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {
               ...(cur.blocks||{}),
-              [blockId]: {...block, generating:false, questions:parsed.questions, answers:{}}
+              [blockId]: {...blockToSave, generating:false, questions:parsed.questions, answers:{}}
             };
             const updated = {...cur, blocks:updBlocks};
-            // Salva no Firestore de forma assíncrona
             if(user&&!user.isAnonymous) setDoc(doc(db,'users',user.uid,'vq_blocks',aulaId), updated).catch(()=>{});
             return {...prev, [aulaId]: updated};
           });
