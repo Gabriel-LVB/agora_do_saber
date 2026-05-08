@@ -9,6 +9,7 @@ import {
   buildExternalPrompt,
   buildVqSyllabusPrompt,
   buildVqBlockPrompt,
+  buildTypeInst,
 } from './agora_prompts.js';
 
 const firebaseConfig = {
@@ -179,35 +180,28 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
     contents:[{parts}],
     systemInstruction:{parts:[{text:systemPrompt}]},
     generationConfig: {
-      thinkingConfig: { thinkingBudget: opts.thinking ?? 0 }, // desabilitado por padrão — mais rápido para sumários
+      thinkingConfig: { thinkingBudget: opts.thinking ?? 0 },
       ...(opts.maxTokens ? {maxOutputTokens: opts.maxTokens} : {}),
     },
   };
-  const attempt = async (triesLeft, delay) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000); // 55s timeout
-    try {
-      const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
-      clearTimeout(timeout);
-      if (res.status===503) {
-        if (triesLeft<=1) throw new Error("SERVER_OVERLOADED");
-        await new Promise(r=>setTimeout(r,delay));
-        return attempt(triesLeft-1, delay*2);
-      }
-      if (res.status===429) throw new Error("QUOTA_EXCEEDED");
-      if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
-      if (!res.ok) throw new Error("CONNECTION_ERROR");
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("CONNECTION_ERROR");
-      return text;
-    } catch(e) {
-      clearTimeout(timeout);
-      if (e.name === 'AbortError') throw new Error("CONNECTION_ERROR");
-      throw e;
-    }
-  };
-  return attempt(2, 3000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000);
+  try {
+    const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+    clearTimeout(timeout);
+    if (res.status===503) throw new Error("SERVER_OVERLOADED");  // sem retry — 1 req por chamada
+    if (res.status===429) throw new Error("QUOTA_EXCEEDED");
+    if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
+    if (!res.ok) throw new Error("CONNECTION_ERROR");
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("CONNECTION_ERROR");
+    return text;
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error("CONNECTION_ERROR");
+    throw e;
+  }
 };
 
 const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images=[]) => {
@@ -524,7 +518,7 @@ const shortTopicName = (key) => {
 // Modal de configuração de geração de questões para uma videoaula
 const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading, savedSettings={} }) => {
   const dm = darkMode;
-  const MAX_PER_BLOCK = 30;
+  const MAX_PER_BLOCK = 20;
 
   const [lessonMeta, setLessonMeta]   = useState(null);
   const [metaLoading, setMetaLoading] = useState(true);
@@ -541,7 +535,8 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [numAlts,       setNumAlts]     = useState(savedSettings.numAlternatives || 5);
   const [extraPrompt,   setExtraPrompt] = useState('');
   const [questionStyle, setQuestionStyle] = useState(savedSettings.questionStyle || 'mixed');
-  const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false); // default true
+  const [questionTypes, setQuestionTypes] = useState(savedSettings.questionTypes || ['direct']);
+  const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false);
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -677,21 +672,25 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
 
           {/* Tipo de questão */}
           <div>
-            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                {k:'mixed',    label:'Misto',    desc:'Clínicas e diretas'},
-                {k:'clinical', label:'Clínico',  desc:'Casos clínicos'},
-                {k:'direct',   label:'Direto',   desc:'Perguntas diretas'},
-              ].map(opt=>(
-                <button key={opt.k} onClick={()=>setQuestionStyle(opt.k)}
-                  className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${questionStyle===opt.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
-                  {opt.label}
-                  <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
-                </button>
-              ))}
-            </div>
+            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
+            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm}/>
           </div>
+
+          {/* Estilo clínico/direto — só aparece se "direta" está selecionada */}
+          {(questionTypes.includes('direct') || questionTypes.includes('vof') || questionTypes.includes('cespe')) && (
+            <div>
+              <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
+                  <button key={opt.k} onClick={()=>setQuestionStyle(opt.k)}
+                    className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${questionStyle===opt.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                    {opt.label}
+                    <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Alternativas */}
           <div>
@@ -730,7 +729,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes})}
             className="flex-[2] py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
@@ -767,7 +766,7 @@ const QuestionView = ({
   onReset, onRegenerate, onExport,
   isGenerating=false, streamCount=0, loadingMsg='',
   showBizuario=false, onBizuario, bizuarioCached=false,
-  darkMode, apiKey, oracleLength='medium', onCall,
+  darkMode, apiKey, oracleLength='medium', onCall, onOpenAnswer,
   generateLabel='Gerar Questões', generateIcon=null, onGenerate=null,
   subtopics=[],
   topicStyle=null, onTopicStyleChange=null,
@@ -866,7 +865,8 @@ const QuestionView = ({
               selectedLetter={answers[q.id]} onAnswer={l=>onAnswer(q.id,l)}
               darkMode={dm} isFavorite={favorites.includes(q.id)}
               onToggleFavorite={()=>onToggleFavorite(q.id)}
-              apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>
+              apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
+              onOpenAnswer={onOpenAnswer}/>
           ))}
           {/* ── Conclusão ── */}
           {allDone&&(
@@ -986,6 +986,163 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
   );
 };
 
+// ─── OPEN ANSWER MODAL ────────────────────────────────────────────────────────
+const OpenAnswerModal = ({ question, darkMode, apiKey, onCall, onClose, isEssay=false }) => {
+  const dm = darkMode;
+  const [answer, setAnswer] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null); // { score, feedback }
+  const maxChars = isEssay ? 2000 : 400;
+
+  const isDaytime = () => {
+    const h = new Date().getHours();
+    return h >= 6 && h < 20; // 6h–20h = horário de pico
+  };
+
+  const submit = async () => {
+    if (!answer.trim() || loading) return;
+    if (isDaytime()) {
+      // Avisar mas não bloquear — deixar tentar
+      const ok = window.confirm('⚠️ Aviso: o Gemini costuma funcionar mal durante o dia (6h–20h). A correção pode ser imprecisa ou falhar.\n\nDeseja tentar mesmo assim?');
+      if (!ok) return;
+    }
+    setLoading(true);
+    try {
+      const ctx = isEssay
+        ? `Questão dissertativa: ${question.statement}`
+        : `Questão de resposta curta: ${question.statement}`;
+      const esperado = question.expectedAnswer || question.explanation || '';
+      const sys = `Você é um professor/monitor corrigindo uma resposta de aluno. Seja direto, justo e formal — como um docente experiente, não um assistente puxa-saco.
+
+QUESTÃO: ${ctx}
+GABARITO/REFERÊNCIA: ${esperado}
+RESPOSTA DO ALUNO: ${answer}
+
+Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações fora do JSON):
+{
+  "nota": <número de 0 a 100>,
+  "veredicto": "<CORRETO|PARCIALMENTE CORRETO|INCORRETO>",
+  "feedback": "<2-4 frases diretas: o que acertou, o que errou, o que faltou. Sem elogios excessivos. Aponte a resposta correta se errou.>"
+}`;
+      const call = onCall || ((p, s) => callGemini(p, s, apiKey));
+      const raw = await call('Corrija esta resposta.', sys);
+      const json = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      setResult(json);
+    } catch(e) {
+      setResult({ nota: null, veredicto: 'ERRO', feedback: 'Não foi possível corrigir agora. ' + (isDaytime() ? 'Tente novamente à noite.' : 'Verifique sua conexão e tente novamente.') });
+    }
+    setLoading(false);
+  };
+
+  const color = result ? (result.nota >= 70 ? 'green' : result.nota >= 40 ? 'yellow' : 'red') : null;
+
+  return (
+    <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+      <div className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
+        style={{maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+        <div className={`flex items-center justify-between px-5 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
+          <h3 className="font-serif font-bold text-yellow-600 flex items-center gap-2">
+            {isEssay ? '📝 Dissertativa' : '✏️ Resposta Curta'}
+          </h3>
+          <button onClick={onClose} className={`text-xl ${dm?'text-gray-400':'text-gray-400'}`}>×</button>
+        </div>
+        <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+          <p className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</p>
+
+          {isDaytime() && !result && (
+            <div className={`flex items-start gap-2 p-3 rounded-xl text-xs ${dm?'bg-orange-900/20 border border-orange-700/40 text-orange-300':'bg-orange-50 border border-orange-200 text-orange-800'}`}>
+              <span>⚠️</span>
+              <span>O Gemini funciona melhor à noite. A correção pode ser imprecisa durante o dia.</span>
+            </div>
+          )}
+
+          {!result ? (
+            <>
+              <textarea
+                value={answer} onChange={e=>setAnswer(e.target.value.slice(0, maxChars))}
+                placeholder={isEssay ? 'Escreva sua resposta dissertativa aqui...' : 'Responda em até 3 linhas...'}
+                rows={isEssay ? 8 : 4}
+                className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
+              />
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{answer.length}/{maxChars} chars</span>
+                <button onClick={submit} disabled={!answer.trim() || loading}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-40">
+                  {loading ? <><Spinner className="w-4 h-4 text-white"/>Corrigindo...</> : 'Enviar para o Oráculo'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className={`rounded-xl border p-4 space-y-3 ${
+              color==='green' ? (dm?'bg-green-900/20 border-green-700':'bg-green-50 border-green-200') :
+              color==='yellow' ? (dm?'bg-yellow-900/20 border-yellow-700':'bg-yellow-50 border-yellow-200') :
+              (dm?'bg-red-900/20 border-red-700':'bg-red-50 border-red-200')
+            }`}>
+              {result.nota !== null && (
+                <div className="flex items-center gap-3">
+                  <div className={`text-4xl font-bold font-serif ${color==='green'?'text-green-500':color==='yellow'?'text-yellow-600':'text-red-500'}`}>
+                    {result.nota}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">{result.veredicto}</p>
+                    <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>de 100 pontos</p>
+                  </div>
+                </div>
+              )}
+              <p className={`text-sm leading-relaxed ${dm?'text-gray-200':'text-gray-700'}`}>{result.feedback}</p>
+              {result.veredicto === 'ERRO' && (
+                <button onClick={()=>{setResult(null);}} className="text-xs text-yellow-600 font-bold underline">Tentar novamente</button>
+              )}
+            </div>
+          )}
+        </div>
+        <div className={`px-5 pb-5 pt-3 border-t flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
+          <button onClick={onClose} className={`w-full py-3 rounded-xl font-bold text-sm ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
+            {result ? 'Fechar' : 'Cancelar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── QUESTION TYPE SELECTOR ───────────────────────────────────────────────────
+const QUESTION_TYPES = [
+  { k: 'direct',   label: '📋 Direta',       desc: 'Pergunta + alternativas' },
+  { k: 'vof',      label: '☑️ V ou F',        desc: 'Assertivas verdadeiro/falso' },
+  { k: 'cespe',    label: '⚖️ Certo/Errado',  desc: 'Estilo CESPE — 1 afirmação' },
+  { k: 'open',     label: '✏️ Aberta',        desc: 'Resposta curta corrigida pela IA' },
+  { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
+];
+
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode }) => {
+  const dm = darkMode;
+  const toggle = (k) => {
+    const next = selected.includes(k) ? selected.filter(x=>x!==k) : [...selected, k];
+    if (next.length === 0) return; // pelo menos 1 selecionado
+    onChange(next);
+  };
+  return (
+    <div className="space-y-2">
+      {QUESTION_TYPES.map(t => {
+        const on = selected.includes(t.k);
+        return (
+          <button key={t.k} onClick={()=>toggle(t.k)}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
+            <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+              {on && <svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+            </div>
+            <div className="min-w-0">
+              <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
+              <p className="text-xs opacity-50">{t.desc}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) => {
   // onCall(prompt, sys) → chama Gemini com rotação de chaves
   // fallback: usa apiKey direto se onCall não for passado
@@ -1051,7 +1208,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal', onCall }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer }) => {
   // revealMode: 'normal' (immediate), 'selected' (blind - no green/red), 'revealed' (blind - show results)
   // Fix 3: treat 'SKIPPED' as answered-wrong (show correct answer but no wrong highlight)
   const isSkipped = selectedLetter === 'SKIPPED';
@@ -1073,7 +1230,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         </div>
       </div>
       <div className={`text-base md:text-lg mb-6 leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</div>
-      <div className="space-y-3 mb-4">
+
+      {/* Questão aberta/essay — botão responder em vez de alternativas */}
+      {question.isOpen && onOpenAnswer ? (
+        <div className="mb-4">
+          <button onClick={()=>onOpenAnswer(question)}
+            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm border-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-all`}>
+            {question.isEssay ? '📝 Escrever resposta dissertativa' : '✏️ Escrever resposta curta'}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
           const isSelected = effectiveLetter===opt.letter;
           let cls = "w-full text-left flex items-start p-3 md:p-4 rounded-lg border transition-colors focus:outline-none ";
@@ -1109,6 +1276,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           );
         })}
       </div>
+      )}
       {showResults && (
         <div className={`mt-4 p-4 md:p-5 rounded-xl border ${darkMode?'bg-yellow-900/20 border-yellow-800/50 text-gray-200':'bg-yellow-50 border-yellow-200 text-gray-800'}`}>
           <div className="flex items-center justify-between mb-3">
@@ -1366,28 +1534,28 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
 // Error configs per type — titles, messages, actions
 const ERROR_CONFIGS = {
   QUOTA_EXCEEDED: {
-    title: 'Cota da Chave Excedida',
-    message: 'Esta chave API atingiu o limite de requisições gratuitas (20/dia). Você pode:\n• Aguardar a renovação (reseta à meia-noite)\n• Cadastrar outra chave gratuita nas Configurações\n• Usar uma chave diferente da conta Google',
+    title: 'Limite de Requisições Atingido',
+    message: 'Esta chave API atingiu o limite gratuito (20 req/dia por chave). Isso é diferente de congestionamento — o limite foi mesmo atingido.\n\nOpções:\n• Aguardar renovação automática (reseta à meia-noite no horário de Brasília)\n• Cadastrar outra chave gratuita nas Configurações\n• Criar uma nova chave em outra conta Google',
     link: { label: 'Criar nova chave gratuita', url: 'https://aistudio.google.com/app/apikey' },
   },
   API_KEY_INVALID: {
     title: 'Chave API Inválida',
-    message: 'A chave cadastrada não foi aceita pelo Gemini. Verifique:\n• Se a chave foi copiada corretamente (sem espaços)\n• Se a chave é de um projeto ativo no Google AI Studio\n• Se a API Gemini está habilitada no projeto',
+    message: 'A chave não foi aceita. Verifique:\n• Se foi copiada corretamente (sem espaços extras)\n• Se é de um projeto ativo no Google AI Studio\n• Se a API Gemini está habilitada\n\n⚠️ Atenção: durante horários de pico (manhã/tarde), o Gemini pode rejeitar requisições válidas com este mesmo erro. Se sua chave funcionou antes, tente novamente mais tarde ou à noite.',
     link: { label: 'Verificar minhas chaves', url: 'https://aistudio.google.com/app/apikey' },
   },
   API_KEY_MISSING: {
     title: 'Nenhuma Chave Cadastrada',
-    message: 'Você ainda não cadastrou uma chave API do Gemini. A chave é gratuita e necessária para gerar questões.',
+    message: 'Você ainda não cadastrou uma chave API do Gemini. A chave é gratuita e necessária para gerar questões.\n\nComo criar:\n1. Acesse o link abaixo\n2. Clique em "Create API key"\n3. Copie a chave e cole nas Configurações do site',
     link: { label: 'Criar chave gratuita agora', url: 'https://aistudio.google.com/app/apikey' },
   },
   SERVER_OVERLOADED: {
-    title: 'Servidores do Gemini Sobrecarregados',
-    message: 'O Gemini está temporariamente indisponível (erro 503). Este problema é no lado do Google e se resolve sozinho em alguns minutos. Aguarde 2–5 minutos e tente novamente.',
+    title: 'Gemini Sobrecarregado 😤',
+    message: 'Os servidores do Gemini estão com alto tráfego agora (erro 503). Isso é comum durante o dia, especialmente de manhã e à tarde.\n\nO que fazer:\n• Aguarde 2–5 minutos e tente novamente\n• Prefira usar o site à noite (horário de Brasília) — o Gemini funciona muito melhor\n• Sua chave está OK, o problema é no lado do Google',
     link: { label: 'Ver status do Google AI', url: 'https://status.cloud.google.com' },
   },
   CONNECTION_ERROR: {
     title: 'Falha de Conexão',
-    message: 'Não foi possível conectar ao Gemini. Verifique sua conexão com a internet e tente novamente.',
+    message: 'Não foi possível conectar ao Gemini.\n\nPossíveis causas:\n• Problema de internet\n• Gemini sobrecarregado (comum durante o dia)\n• Timeout na requisição\n\nTente novamente. Se o problema persistir durante o dia, tente à noite.',
     link: null,
   },
 };
@@ -1512,7 +1680,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'] };
 
 export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
@@ -1565,6 +1733,8 @@ export default function QuestionBankApp() {
   const [loadingMsg, setLoadingMsg]   = useState('');
   const [streamCount, setStreamCount] = useState(0);
   const [deleteId, setDeleteId]       = useState(null);
+
+  const [openAnswerModal, setOpenAnswerModal] = useState(null); // { question, onScore }
 
   const [errorModal, setErrorModal]   = useState(null);
   const [regenModal, setRegenModal]   = useState(false);
@@ -2087,6 +2257,7 @@ export default function QuestionBankApp() {
       } catch(e) {
         lastErr = e;
         if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        // SERVER_OVERLOADED, CONNECTION_ERROR etc. — não tenta outra chave, só desperdiça
         throw e;
       }
     }
@@ -2268,7 +2439,7 @@ export default function QuestionBankApp() {
           return;
         } catch(e) {
           if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
-          // Desmarcar generating em erro
+          // SERVER_OVERLOADED ou outro erro — não tenta outra chave
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {...(cur.blocks||{}), [blockId]:{...block,generating:false}};
@@ -2421,11 +2592,12 @@ export default function QuestionBankApp() {
       ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
       : '';
 
-    const s = {...settingsRef.current, questionStyle: topicStyle};
+    const s = {...settingsRef.current, questionStyle: topicStyle, questionTypes: topic.questionTypes || settingsRef.current.questionTypes || ['direct']};
+    const na = s.numAlternatives || 5;
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
       + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
-      + `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar.`;
+      + `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Cada questão deve ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`;
 
     const orderedKeys = getOrderedKeys();
     let err=null, ok=false;
@@ -2507,7 +2679,7 @@ export default function QuestionBankApp() {
         .slice(lineIdx + 1, nextTopicIdx)
         .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
         .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
-        .slice(0, 30); // enforça máximo de 30 subtópicos por tópico
+        .slice(0, 20); // enforça máximo de 20 subtópicos por tópico
       return {
         id: `t-${topicPos}-${Date.now()}`,
         title,
@@ -2660,7 +2832,12 @@ export default function QuestionBankApp() {
           <div className="space-y-4">
             <input type="text" value={sigName} onChange={e=>setSigName(e.target.value)} placeholder="Nome de Usuário" className={`w-full p-4 rounded-xl border uppercase font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/>
             <input type="password" value={sigKey} onChange={e=>setSigKey(e.target.value)} placeholder="API Key do Gemini" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/>
-            <div className={`p-4 rounded-lg text-xs leading-relaxed ${darkMode?'bg-yellow-900/20 text-yellow-200':'bg-yellow-50 text-yellow-800'}`}>Crie sua chave gratuita: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold">aistudio.google.com/app/apikey</a></div>
+            <div className={`p-4 rounded-lg text-xs leading-relaxed ${darkMode?'bg-yellow-900/20 text-yellow-200':'bg-yellow-50 text-yellow-800'}`}>
+              <p className="font-bold mb-1">🔑 O que é a API Key do Gemini?</p>
+              <p className="mb-1">É uma chave gratuita que dá acesso à IA do Google (Gemini). Sem ela o site não consegue gerar questões.</p>
+              <p className="mb-1">✅ 100% gratuita • ✅ Fácil de criar • ⚠️ Funciona melhor à noite</p>
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold">→ Clique aqui para criar a sua chave</a>
+            </div>
             <button onClick={handleRegister} disabled={!sigName.trim()||!sigKey.trim()} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold disabled:opacity-50">Criar Perfil</button>
             <button onClick={handleLogout} className="w-full py-3 opacity-60 hover:opacity-100 font-bold text-sm">Voltar</button>
           </div>
@@ -2888,6 +3065,7 @@ export default function QuestionBankApp() {
               apiKey={getKey()}
               oracleLength={settings.oracleLength||'medium'}
               onCall={callWithRotation}
+              onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
               generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
               onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
@@ -2980,23 +3158,31 @@ export default function QuestionBankApp() {
                   </p>}
                 </div>
 
-                {/* Estilo das questões */}
+                {/* Tipo e estilo das questões */}
                 <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      {k:'mixed',    label:'Misto',    desc:'Clínicas e diretas'},
-                      {k:'clinical', label:'Clínico',  desc:'Casos clínicos'},
-                      {k:'direct',   label:'Direto',   desc:'Perguntas diretas'},
-                    ].map(opt=>(
-                      <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
-                        className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
-                        {opt.label}
-                        <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></div>
+                  <QuestionTypeSelector
+                    selected={settings.questionTypes || ['direct']}
+                    onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
+                    darkMode={darkMode}
+                  />
                 </div>
+
+                {/* Estilo clínico/direto */}
+                {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t))) && (
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
+                        <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
+                          className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                          {opt.label}
+                          <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <button onClick={startCreation} disabled={isBusy||isUploading||!newSubName} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura')}
@@ -4023,6 +4209,7 @@ export default function QuestionBankApp() {
                     apiKey={getKey()}
                     oracleLength={settings.oracleLength}
                     onCall={callWithRotation}
+                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
                     generateLabel="Gerar Questões"
                     onGenerate={()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}
@@ -4402,6 +4589,12 @@ export default function QuestionBankApp() {
             {/* API Keys */}
             <div>
               <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/>Chaves API (Gemini)</label>
+              <div className={`p-3 rounded-xl mb-3 text-xs leading-relaxed ${darkMode?'bg-blue-900/20 border border-blue-800/40 text-blue-300':'bg-blue-50 border border-blue-200 text-blue-800'}`}>
+                <p className="font-bold mb-1">ℹ️ Sobre as chaves</p>
+                <p>Cada chave gratuita tem limite de ~20 requests/dia. Cadastre até 3 chaves (de contas Google diferentes) para o site alternar automaticamente.</p>
+                <p className="mt-1 opacity-80">⚠️ O Gemini funciona melhor à noite. Erros durante o dia geralmente são sobrecarga dos servidores, não problema da sua chave.</p>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold block mt-1">Criar nova chave gratuita →</a>
+              </div>
               {[1,2,3].map(n=>{const kv=n===1?(settings.apiKey1!==undefined?settings.apiKey1:settings.apiKey):settings[`apiKey${n}`];const disabled=n>1&&(!kv||!kv.trim());return(
                 <div key={n} className="flex items-center gap-3 mb-3">
                   <input type="radio" name="ak" checked={(settings.activeKeyIndex||1)===n} onChange={()=>saveSettings({...settings,activeKeyIndex:n})} disabled={disabled} className="w-5 h-5 accent-yellow-600 disabled:opacity-30"/>
@@ -4502,6 +4695,16 @@ export default function QuestionBankApp() {
 
       {/* Toasts */}
       <ToastContainer toasts={toasts} onRemove={removeToast}/>
+
+      {/* Open Answer Modal */}
+      {openAnswerModal&&<OpenAnswerModal
+        question={openAnswerModal.question}
+        darkMode={darkMode}
+        apiKey={getKey()}
+        onCall={callWithRotation}
+        onClose={()=>setOpenAnswerModal(null)}
+        isEssay={openAnswerModal.isEssay}
+      />}
 
       {/* ── EXPORT MODAL ── */}
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}

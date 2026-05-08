@@ -13,7 +13,65 @@
  *   buildVqBlockPrompt(block, meta, subtopicsArr, transcriptSlice, alts) → questões de bloco
  */
 
-// ─── CONSTANTES DE ESTILO ─────────────────────────────────────────────────────
+// ─── INSTRUÇÕES POR TIPO DE QUESTÃO ─────────────────────────────────────────
+
+export const TYPE_INST = {
+  direct: '',  // padrão — sem instrução adicional
+  vof: `
+TIPO: VERDADEIRO OU FALSO
+Cada questão deve conter 4 assertivas (I, II, III, IV) que o aluno classifica como V ou F.
+REGRAS CRÍTICAS das assertivas:
+- Todas devem ter tamanho similar (±15 caracteres) para não dar pista por tamanho
+- Misture verdadeiras e falsas (nunca todas V ou todas F)
+- Use a alternativa correta como o gabarito da combinação (ex: "V, F, V, F")
+- As alternativas devem ser combinações plausíveis das assertivas
+FORMATO especial do enunciado: "Analise as assertivas abaixo e marque a opção correta:\nI. [assertiva]\nII. [assertiva]\nIII. [assertiva]\nIV. [assertiva]"`,
+
+  cespe: `
+TIPO: CERTO OU ERRADO (estilo CESPE/CEBRASPE)
+Cada questão é uma única afirmação que o aluno julga como CERTO ou ERRADO.
+Não use alternativas A/B/C/D — as únicas alternativas são:
+A) Certo
+B) Errado
+REGRAS:
+- A afirmação deve ser tecnicamente precisa ou conter um erro sutil e clinicamente relevante
+- Evite afirmações óbvias demais ou ambíguas
+- Distribua equilibradamente entre certas e erradas`,
+
+  open: `
+TIPO: RESPOSTA CURTA (questão aberta)
+O aluno deve responder em 1 a 3 linhas. NÃO use alternativas A/B/C/D.
+Use este formato especial:
+## Questão [ID]
+[Enunciado da questão]
+Resposta esperada: [resposta direta e objetiva em 1-2 linhas — ESTA LINHA NÃO APARECE AO ALUNO]
+Alternativa correta: A
+A) [resposta esperada completa]
+Explicação:
+[explicação didática]
+---`,
+
+  essay: `
+TIPO: DISSERTATIVA (resposta longa)
+O aluno deve responder em 1 parágrafo (5-10 linhas). NÃO use alternativas A/B/C/D.
+Use o mesmo formato da questão aberta mas com resposta esperada mais detalhada.
+A resposta esperada deve cobrir os pontos principais que um aluno deve mencionar.`,
+};
+
+// Constrói a instrução de tipo combinada para múltiplos tipos selecionados
+export const buildTypeInst = (types = ['direct']) => {
+  if (!types || types.length === 0) types = ['direct'];
+  if (types.length === 1) return TYPE_INST[types[0]] || '';
+  return `MISTURE os seguintes tipos de questão ao longo das questões:\n${types.map(t => `- ${QUESTION_TYPE_LABELS[t] || t}`).join('\n')}\n\n${types.map(t => TYPE_INST[t]).filter(Boolean).join('\n\n')}`;
+};
+
+const QUESTION_TYPE_LABELS = {
+  direct: 'Direta (múltipla escolha)',
+  vof: 'Verdadeiro ou Falso',
+  cespe: 'Certo ou Errado (CESPE)',
+  open: 'Resposta Curta (aberta)',
+  essay: 'Dissertativa',
+};
 
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE casos clínicos reais: paciente com idade/sexo/contexto apresenta sinais e sintomas específicos. Nunca mencione exames ou diagnóstico no enunciado se a questão pede justamente isso.',
@@ -87,7 +145,7 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
     ? `
 ESTRUTURA (modo automático):
 Você define a quantidade ideal de subtópicos por tópico.
-LIMITES ABSOLUTOS: mínimo 5 e máximo 30 subtópicos por tópico — nunca fora dessa faixa.
+LIMITES ABSOLUTOS: mínimo 5 e máximo 20 subtópicos por tópico — nunca fora dessa faixa.
 Critérios:
 - Tópicos mais amplos podem ter mais subtópicos (15-30); tópicos pontuais, menos (5-15)
 - Quantidade ideal: suficiente para cobrir o assunto sem repetição nem superficialidade
@@ -100,11 +158,13 @@ ESTRUTURA OBRIGATÓRIA:
 - Total: EXATAMENTE ${s.numSubtopics * s.qPerSub} questões
 - Ordem: do conceito mais fundamental ao mais específico`;
 
+  const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+
   return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
 
 ${focusBlock ? focusBlock + '\n' : ''}
 ESTILO DE ENUNCIADO: ${styleInst}
-${estruturaInst}
+${typeInst ? typeInst + '\n' : ''}${estruturaInst}
 ${REGRAS_ENUNCIADO}
 ${REGRAS_ALTERNATIVAS}
 ${REGRAS_EXPLICACAO}
@@ -125,9 +185,9 @@ Gere TODAS as questões sem interromper. Não resuma, não pergunte, não coment
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
-LIMITES: mínimo 5 e máximo 30 subtópicos por tópico — nunca fora dessa faixa.
+LIMITES: mínimo 5 e máximo 20 subtópicos por tópico — nunca fora dessa faixa.
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
-- Quantidade por tópico: o necessário para cobrir bem aquele tema (entre 5 e 30)
+- Quantidade por tópico: o necessário para cobrir bem aquele tema (entre 5 e 20)
 - Cada subtópico = 1 conceito específico e testável, sem sobreposição com outros`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
@@ -179,7 +239,7 @@ export const buildExternalPrompt = (s) => {
   const parte1 = s.autoMode
     ? `*** PARTE 1: ESTRUTURA (modo automático) ***
 A IA deve definir a quantidade ideal de tópicos e subtópicos por tópico.
-LIMITES OBRIGATÓRIOS: mínimo 5 e máximo 30 subtópicos por tópico.
+LIMITES OBRIGATÓRIOS: mínimo 5 e máximo 20 subtópicos por tópico.
 Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 conceito testável único.
 Responda APENAS o sumário. Aguarde confirmação antes de gerar questões.`
     : `*** PARTE 1: ESTRUTURA ***
@@ -220,7 +280,7 @@ export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, ex
 
 ESTRUTURA OBRIGATÓRIA:
 - ${numBlocks} bloco(s) de questões
-- Entre 5 e 30 subtópicos por bloco (ideal: ${qPerBlock})
+- Entre 5 e 20 subtópicos por bloco (ideal: ${qPerBlock})
 - Ordem OBRIGATORIAMENTE didática dentro de cada bloco: conceitos gerais → específicos, mecanismo → clínica → tratamento
 - Nunca coloque um detalhe, exceção ou efeito adverso antes de ter coberto o conceito principal
 
