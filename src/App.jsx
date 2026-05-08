@@ -1157,7 +1157,7 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
           </button>
           <button onClick={()=>onConfirm(selected)} disabled={selected.length===0}
             className="flex-[2] py-3 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-40 flex items-center justify-center gap-2">
-            <RepeatIcon className="w-4 h-4"/> Adicionar {selected.length} questão{selected.length!==1?'s':''}
+            <RepeatIcon className="w-4 h-4"/> Adicionar {selected.length} selected.length===1?'questão':'questões'
           </button>
         </div>
       </div>
@@ -3417,6 +3417,8 @@ export default function QuestionBankApp() {
               {library.filter(s=>s.source===libFilter).length===0&&<div className="col-span-full py-10 text-center opacity-40 italic">Biblioteca vazia.</div>}
               {library.filter(s=>s.source===libFilter).map(s=>{
                 const pct=subjectProgress(s);
+                const totalTopics = s.topics.length;
+                const totalQs = s.topics.reduce((acc,t)=>(t.questions?.length||0)+acc, 0);
                 return (
                   <div key={s.id} onClick={()=>{setActiveSubjectId(s.id);setView('subject');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-6 rounded-2xl border hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex justify-between items-start mb-4">
@@ -3432,7 +3434,13 @@ export default function QuestionBankApp() {
                     <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
                       <div className="bg-yellow-500 h-full transition-all" style={{width:`${pct}%`}}/>
                     </div>
-                    <div className="flex justify-between"><p className="text-xs opacity-50">{s.topics.length} tópicos</p><p className="text-xs font-bold text-yellow-600">{pct}%</p></div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs opacity-50">
+                        <span>{totalTopics} tópico{totalTopics!==1?'s':''}</span>
+                        {totalQs>0&&<><span>·</span><span>{totalQs} {totalQs===1?'questão':'questões'}</span></>}
+                      </div>
+                      <p className="text-xs font-bold text-yellow-600 flex-shrink-0">{pct}%</p>
+                    </div>
                   </div>
                 );
               })}
@@ -4050,7 +4058,7 @@ export default function QuestionBankApp() {
                           <div className="space-y-3">
                             <div className="flex items-center justify-between mb-2">
                               <p className={`text-sm font-bold ${dm?'text-gray-400':'text-gray-500'}`}>
-                                {dueItems.length} questão{dueItems.length!==1?'s':''} pendente{dueItems.length!==1?'s':''}
+                                {dueItems.length} dueItems.length===1?'questão pendente':'questões pendentes'
                               </p>
                               <button onClick={()=>setReviewSession({items: dueItems, index: 0, sessionAnswers: {}})}
                                 className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
@@ -4062,7 +4070,7 @@ export default function QuestionBankApp() {
                                 <div className={`flex items-center justify-between px-5 py-3 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
                                   <div className="min-w-0">
                                     <p className="font-bold text-sm truncate">{aulaTitle||aulaId}</p>
-                                    <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{items.length} questão{items.length!==1?'s':''}</p>
+                                    <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{items.length} items.length===1?'questão':'questões'</p>
                                   </div>
                                   <button onClick={()=>setReviewSession({items, index:0, sessionAnswers:{}})}
                                     className={`flex-shrink-0 ml-3 text-xs font-bold px-3 py-1.5 rounded-lg ${dm?'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50':'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`}>
