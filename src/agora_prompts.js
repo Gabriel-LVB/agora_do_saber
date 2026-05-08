@@ -39,23 +39,26 @@ REGRAS:
 - Distribua equilibradamente entre certas e erradas`,
 
   open: `
-TIPO: RESPOSTA CURTA (questão aberta)
-O aluno deve responder em 1 a 3 linhas. NÃO use alternativas A/B/C/D.
-Use este formato especial:
-## Questão [ID]
-[Enunciado da questão]
-Resposta esperada: [resposta direta e objetiva em 1-2 linhas — ESTA LINHA NÃO APARECE AO ALUNO]
-Alternativa correta: A
-A) [resposta esperada completa]
-Explicação:
-[explicação didática]
----`,
+TIPO: RESPOSTA CURTA
+Cada questão deve pedir uma resposta objetiva de 1 a 3 linhas.
+FORMATO OBRIGATÓRIO (siga à risca, sem variações):
+## Questão [N]
+[Enunciado — pergunta direta sobre um conceito]
+Resposta esperada: [resposta em 1-2 frases]
+Explicação: [explicação didática em 2-3 frases]
+---
+NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa correta:". Apenas o formato acima.`,
 
   essay: `
-TIPO: DISSERTATIVA (resposta longa)
-O aluno deve responder em 1 parágrafo (5-10 linhas). NÃO use alternativas A/B/C/D.
-Use o mesmo formato da questão aberta mas com resposta esperada mais detalhada.
-A resposta esperada deve cobrir os pontos principais que um aluno deve mencionar.`,
+TIPO: DISSERTATIVA
+Cada questão deve pedir uma resposta de 1 parágrafo (5-8 linhas).
+FORMATO OBRIGATÓRIO (siga à risca, sem variações):
+## Questão [N]
+[Enunciado — pede para explicar, discutir ou relacionar conceitos]
+Resposta esperada: [resposta completa cobrindo os pontos principais, em 4-6 frases]
+Explicação: [feedback sobre o que uma boa resposta deve conter]
+---
+NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa correta:". Apenas o formato acima.`,
 };
 
 // Constrói a instrução de tipo combinada para múltiplos tipos selecionados
@@ -159,6 +162,19 @@ ESTRUTURA OBRIGATÓRIA:
 - Ordem: do conceito mais fundamental ao mais específico`;
 
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+  const types = s.questionTypes || ['direct'];
+  const onlyOpen = types.every(t => ['open','essay'].includes(t));
+
+  // Questões abertas não usam template de alternativas nem regras de alternativas
+  const templateBlock = onlyOpen ? `
+FORMATO OBRIGATÓRIO para cada questão (separe com ---):
+## Questão [N]
+[Enunciado]
+Resposta esperada: [resposta objetiva]
+Explicação: [explicação didática]
+---` : `${REGRAS_ALTERNATIVAS}
+${REGRAS_EXPLICACAO}
+${TEMPLATE_QUESTAO(alts)}`;
 
   return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
 
@@ -166,9 +182,7 @@ ${focusBlock ? focusBlock + '\n' : ''}
 ESTILO DE ENUNCIADO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}${estruturaInst}
 ${REGRAS_ENUNCIADO}
-${REGRAS_ALTERNATIVAS}
-${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}
+${templateBlock}
 
 Use o ID no formato [TOPICO.SUBTOPICO.QUESTAO] (ex: 3.2.1).
 ${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` : ''}

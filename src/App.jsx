@@ -74,6 +74,8 @@ const VideoIcon   = ic('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="
 const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>');
 const SkipBack    = ic('<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>');
 
+const RepeatIcon = ic('<path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>');
+
 const GoogleIcon  = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>;
 const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{animation:'spin 1s linear infinite',transformOrigin:'center'}}><style>{`@keyframes spin{100%{transform:rotate(360deg)}}`}</style><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
 
@@ -359,6 +361,46 @@ const parseData = (text, namespace = '') => {
   return { questions, summary };
 };
 
+// Parser específico para questões abertas (sem alternativas A/B/C/D)
+const parseOpenQuestions = (text, namespace='', isEssay=false) => {
+  const norm = text.replace(/\r\n/g,'\n');
+  const questions = [];
+  let qCount = 0;
+
+  // Dividir por ## Questão N ou N) ou N.
+  const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o[ \t]*\d|(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t])/im).filter(b=>b.trim());
+
+  blocks.forEach(block => {
+    if (!block.trim()) return;
+    try {
+      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*([0-9.]+)/i) || block.match(/(?:^|\n)[ \t]*(\d{1,2})[ \t]*[).]/m);
+      const rawId = idM ? idM[1] : `${++qCount}`;
+      const id = namespace ? `${namespace}_${rawId}` : rawId;
+
+      // Extrai enunciado: tudo antes de "Resposta esperada:"
+      const respMatch = block.match(/Resposta esperada:\s*([\s\S]*?)(?:\nAlternativa correta:|$)/i);
+      const stmtEnd = respMatch ? block.indexOf(respMatch[0]) : block.length;
+
+      // Limpa cabeçalho da questão do enunciado
+      let stmt = block.substring(0, stmtEnd)
+        .replace(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*\d+[^\n]*\n?/i, '')
+        .replace(/(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][^\n]*\n?/, '')
+        .trim();
+      if (!stmt || stmt.length < 5) return;
+
+      const expectedAnswer = respMatch ? respMatch[1].trim() : '';
+
+      // Extrai explicação
+      let exp = '';
+      const expM = block.match(/Explica[çc][aã]o[:\s]+([\s\S]*?)$/i);
+      if (expM) exp = expM[1].trim();
+
+      questions.push({ id, statement: stmt, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay });
+    } catch(e) {}
+  });
+
+  return { questions, summary: '' };
+};
 
 // Carrega KaTeX uma vez para renderização de LaTeX
 let _katexLoaded = false;
@@ -673,7 +715,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           {/* Tipo de questão */}
           <div>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
-            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm}/>
+            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true}/>
           </div>
 
           {/* Estilo clínico/direto — só aparece se "direta" está selecionada */}
@@ -770,14 +812,43 @@ const QuestionView = ({
   generateLabel='Gerar Questões', generateIcon=null, onGenerate=null,
   subtopics=[],
   topicStyle=null, onTopicStyleChange=null,
+  topicType=null,
+  onAddToReview=null,
+  onGoToAula=null, // botão para ir para a aula
 }) => {
   const dm = darkMode;
 
   const correctLetter = (q) => q.options?.find(o=>o.isCorrect)?.letter;
-  const wrongIds = questions.filter(q=>answers[q.id]&&answers[q.id]!==correctLetter(q)).map(q=>q.id);
-  const correctCount = questions.filter(q=>answers[q.id]===correctLetter(q)).length;
-  const answeredCount = Object.keys(answers).length;
-  const allDone = questions.length>0 && answeredCount===questions.length;
+
+  const validAnswers = Object.fromEntries(
+    Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
+  );
+
+  const isOpenAnswered = (q) => {
+    if (!q.isOpen) return false;
+    const val = validAnswers[q.id];
+    if (!val || val === 'SKIPPED') return false;
+    try { const p = JSON.parse(val); return !!(p?.answer); } catch(e) { return false; }
+  };
+  const isOpenCorrect = (q) => {
+    if (!q.isOpen) return false;
+    try { const p = JSON.parse(validAnswers[q.id]); return (p?.score ?? 0) >= 70; } catch(e) { return false; }
+  };
+
+  const wrongIds = questions.filter(q => {
+    if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
+    return validAnswers[q.id] && validAnswers[q.id] !== correctLetter(q);
+  }).map(q=>q.id);
+
+  const correctCount = questions.filter(q =>
+    q.isOpen ? isOpenCorrect(q) : validAnswers[q.id] === correctLetter(q)
+  ).length;
+
+  const answeredCount = questions.filter(q =>
+    q.isOpen ? isOpenAnswered(q) : !!validAnswers[q.id]
+  ).length;
+
+  const allDone = questions.length > 0 && answeredCount === questions.length;
   const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
@@ -799,6 +870,11 @@ const QuestionView = ({
           </p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onGoToAula&&(
+            <button onClick={onGoToAula} className={btnNeutral}>
+              <VideoIcon className="w-4 h-4"/>Assistir Aula
+            </button>
+          )}
           {questions.length>0&&(
             <>
               {onExport&&<button onClick={onExport} className={btnNeutral}><Printer className="w-4 h-4"/>Exportar</button>}
@@ -812,28 +888,16 @@ const QuestionView = ({
             </>
           )}
           {questions.length===0&&!isGenerating&&onGenerate&&(
-            <div className="flex flex-col items-end gap-2">
-              {onTopicStyleChange&&(
-                <div className="flex gap-1.5">
-                  {[{k:'mixed',l:'Misto'},{k:'direct',l:'Direto'},{k:'clinical',l:'Clínico'}].map(o=>(
-                    <button key={o.k} onClick={()=>onTopicStyleChange(o.k)}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${topicStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400':'border-gray-200 text-gray-500')}`}>
-                      {o.l}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
-                {generateIcon||<Sparkles className="w-5 h-5"/>}{generateLabel}
-              </button>
-            </div>
+            <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
+              {generateIcon||<Sparkles className="w-5 h-5"/>}{generateLabel}
+            </button>
           )}
         </div>
       </div>
 
       {/* ── Subtópicos ── */}
       {!isGenerating&&questions.length===0&&subtopics.length>0&&(
-        <div className={`mb-6 p-4 rounded-xl border ${dm?'bg-blue-900/20 border-blue-700':'bg-blue-50 border-blue-200'}`}>
+        <div className={`mb-4 p-4 rounded-xl border ${dm?'bg-blue-900/20 border-blue-700':'bg-blue-50 border-blue-200'}`}>
           <p className={`text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2 ${dm?'text-blue-400':'text-blue-600'}`}>
             📋 Subtópicos — o Oráculo cobrirá exatamente estes:
           </p>
@@ -843,6 +907,38 @@ const QuestionView = ({
                 <span className="opacity-40 mr-2">{i+1}.</span>{sub}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Seletores de estilo/tipo — aparecem abaixo dos subtópicos, antes de gerar ── */}
+      {!isGenerating&&questions.length===0&&onGenerate&&onTopicStyleChange&&(
+        <div className={`mb-6 p-4 rounded-xl border space-y-4 ${dm?'bg-gray-800/50 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+          {/* Estilo do enunciado */}
+          <div>
+            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
+            <div className="flex gap-2">
+              {[{k:'mixed',l:'Misto',d:'Clínico + Direto'},{k:'clinical',l:'Clínico',d:'Casos clínicos'},{k:'direct',l:'Direto',d:'Conceitos'}].map(o=>(
+                <button key={o.k} onClick={()=>onTopicStyleChange(o.k,'style')}
+                  className={`flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${topicStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                  {o.l}
+                  <p className="font-normal opacity-50 mt-0.5 hidden sm:block">{o.d}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Tipo de questão */}
+          <div>
+            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Tipo de Questão</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {QUESTION_TYPES.map(t=>(
+                <button key={t.k} onClick={()=>onTopicStyleChange(t.k,'type')}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${topicType===t.k?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
+                  <span className={`text-sm font-bold ${topicType===t.k?(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-300':'text-gray-600')}`}>{t.label}</span>
+                  <span className={`text-xs ml-auto ${dm?'text-gray-500':'text-gray-400'}`}>{t.desc}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -874,10 +970,16 @@ const QuestionView = ({
               <Award className="w-16 h-16 mx-auto text-yellow-500 mb-4"/>
               <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Provações Concluídas!</h3>
               <p className="opacity-70 mb-6">{correctCount}/{questions.length} corretas ({pct}%)</p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
                 {showBizuario&&onBizuario&&(
                   <button onClick={onBizuario} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700">
                     <BrainIcon className="w-5 h-5"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
+                  </button>
+                )}
+                {onAddToReview&&(
+                  <button onClick={()=>onAddToReview(questions, answers)}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20`}>
+                    <RepeatIcon className="w-5 h-5"/>Revisão Espaçada
                   </button>
                 )}
               </div>
@@ -986,7 +1088,211 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
   );
 };
 
-// ─── OPEN ANSWER MODAL ────────────────────────────────────────────────────────
+// ─── SPACED REVIEW MODAL ─────────────────────────────────────────────────────
+const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose }) => {
+  const dm = darkMode;
+  const correctLetter = q => q.options?.find(o => o.isCorrect)?.letter;
+  const wrongIds = questions.filter(q => answers[q.id] && answers[q.id] !== correctLetter(q)).map(q => q.id);
+
+  const [selected, setSelected] = useState(() => questions.map(q => q.id));
+
+  const toggle = (id) => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+      <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
+        style={{maxHeight:'88vh'}} onClick={e=>e.stopPropagation()}>
+        <div className={`px-5 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
+          <h3 className="font-serif font-bold text-lg text-yellow-600 flex items-center gap-2">
+            <RepeatIcon className="w-5 h-5"/> Adicionar à Revisão Espaçada
+          </h3>
+          <p className={`text-xs mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>
+            As questões selecionadas voltarão em <strong>3 dias</strong>. Acertos avançam o intervalo (7→14→30→90 dias). Erros voltam para 3 dias.
+          </p>
+        </div>
+
+        <div className="flex gap-2 px-5 pt-3 pb-2 flex-shrink-0">
+          <button onClick={()=>setSelected(questions.map(q=>q.id))}
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            Todas ({questions.length})
+          </button>
+          <button onClick={()=>setSelected(wrongIds)}
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-red-700/50 text-red-400 hover:bg-red-900/20':'border-red-200 text-red-600 hover:bg-red-50'}`}>
+            Só erradas ({wrongIds.length})
+          </button>
+          <button onClick={()=>setSelected([])}
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-gray-700 text-gray-500':'border-gray-100 text-gray-400'}`}>
+            Nenhuma
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-1.5 min-h-0">
+          {questions.map((q, i) => {
+            const on = selected.includes(q.id);
+            const isWrong = wrongIds.includes(q.id);
+            const isCorrect = answers[q.id] && answers[q.id] === correctLetter(q);
+            return (
+              <button key={q.id} onClick={()=>toggle(q.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${on?(dm?'border-yellow-500/60 bg-yellow-900/15':'border-yellow-400 bg-yellow-50'):(dm?'border-gray-700 bg-gray-800/50':'border-gray-100 bg-gray-50')}`}>
+                <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+                  {on && <svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs truncate ${dm?'text-gray-300':'text-gray-700'}`}>
+                    <span className="opacity-40 mr-1">Q{i+1}</span>
+                    {q.statement.replace(/\n/g,' ').substring(0, 80)}…
+                  </p>
+                </div>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${isCorrect?'text-green-500':isWrong?'text-red-400':'text-gray-400'}`}>
+                  {isCorrect?'✓':isWrong?'✗':'—'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className={`px-5 py-4 border-t flex gap-3 flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
+          <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold text-sm ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
+            Pular
+          </button>
+          <button onClick={()=>onConfirm(selected)} disabled={selected.length===0}
+            className="flex-[2] py-3 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-40 flex items-center justify-center gap-2">
+            <RepeatIcon className="w-4 h-4"/> Adicionar {selected.length} questão{selected.length!==1?'s':''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── OPEN ANSWER INLINE ──────────────────────────────────────────────────────
+// Componente inline para questões abertas/dissertativas dentro do QuestionCard
+const OpenAnswerInline = ({ question, darkMode, apiKey, onCall, oracleLength, savedAnswer, onSave }) => {
+  const dm = darkMode;
+  const isEssay = question.isEssay;
+  const maxChars = isEssay ? 2000 : 400;
+
+  // savedAnswer = JSON string { answer, score, verdict, feedback } — validar antes de usar
+  let parsed = null;
+  try {
+    const p = savedAnswer ? JSON.parse(savedAnswer) : null;
+    if (p?.answer) parsed = p; // só usa se tem campo answer
+  } catch(e) { parsed = null; }
+
+  const [answer, setAnswer]   = useState(parsed?.answer || '');
+  const [result, setResult]   = useState(parsed?.score != null ? parsed : null);
+  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(!parsed?.answer);
+
+  const isDaytime = () => { const h = new Date().getHours(); return h >= 6 && h < 20; };
+  const callOracle = onCall || ((p,s) => callGemini(p, s, apiKey));
+
+  const submit = async () => {
+    if (!answer.trim() || loading) return;
+    setLoading(true);
+    try {
+      const sys = `Você é um professor de medicina corrigindo uma prova de residência. Seja rigoroso e honesto.
+
+QUESTÃO: ${question.statement}
+GABARITO/REFERÊNCIA: ${question.expectedAnswer || question.explanation || ''}
+RESPOSTA DO ALUNO: ${answer}
+
+REGRA PRINCIPAL: avalie se a resposta demonstra conhecimento médico real sobre o tema perguntado.
+- Se a resposta é vaga, genérica, nonsense, incompleta demais ou claramente um chute → nota baixa (0 a 30)
+- Se menciona algo correto mas de forma superficial ou incompleta → nota média (31 a 65)
+- Se demonstra conhecimento técnico real e cobre os pontos essenciais → nota alta (66 a 100)
+- NÃO dê crédito por coincidências textuais — o aluno pode ter acertado uma palavra sem saber o conceito
+- NÃO seja condescendente — se errou, errou; se não sabe, não sabe
+
+Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
+{"nota":número de 0 a 100,"veredicto":"CORRETO|PARCIALMENTE CORRETO|INCORRETO","feedback":"Use 3-5 frases como aula: mostre o que o aluno acertou ou errou, qual é a resposta correta e por que cada ponto é clinicamente relevante. Se errou tudo, explique o conteúdo do zero."}`;
+      const raw = await callOracle('Corrija esta resposta.', sys);
+      const json = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      const saved = { answer, score: json.nota, verdict: json.veredicto, feedback: json.feedback };
+      setResult(saved);
+      setEditing(false);
+      onSave(JSON.stringify(saved));
+    } catch(e) {
+      const saved = { answer, score: null, verdict: 'ERRO', feedback: isDaytime() ? 'Falha na correção. O Gemini funciona melhor à noite — tente novamente.' : 'Falha na correção. Tente novamente.' };
+      setResult(saved);
+      setEditing(false);
+      onSave(JSON.stringify(saved));
+    }
+    setLoading(false);
+  };
+
+  const color = result?.score != null ? (result.score >= 70 ? 'green' : result.score >= 40 ? 'yellow' : 'red') : null;
+
+  return (
+    <div className="mb-4 space-y-3">
+      {isDaytime() && editing && (
+        <div className={`flex items-start gap-2 p-3 rounded-xl text-xs ${dm?'bg-orange-900/20 border border-orange-700/40 text-orange-300':'bg-orange-50 border border-orange-200 text-orange-800'}`}>
+          ⚠️ O Gemini funciona melhor à noite — a correção pode ser imprecisa agora.
+        </div>
+      )}
+
+      {/* Campo de resposta */}
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            value={answer} onChange={e=>setAnswer(e.target.value.slice(0, maxChars))}
+            placeholder={isEssay ? 'Escreva sua resposta dissertativa...' : 'Responda em até 3 linhas...'}
+            rows={isEssay ? 7 : 3}
+            className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-700 border-gray-600 text-white placeholder-gray-500':'bg-gray-50 border-gray-200'}`}
+          />
+          <div className="flex items-center justify-between">
+            <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{answer.length}/{maxChars}</span>
+            <div className="flex gap-2">
+              {result && <button onClick={()=>setEditing(false)} className={`text-xs px-3 py-1.5 rounded-lg ${dm?'text-gray-400 hover:text-gray-200':'text-gray-500 hover:text-gray-700'}`}>Cancelar</button>}
+              <button onClick={submit} disabled={!answer.trim()||loading}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-40">
+                {loading ? <><Spinner className="w-3.5 h-3.5 text-white"/>Corrigindo...</> : 'Enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Resposta salva */
+        <div className={`rounded-xl border p-3 text-sm ${dm?'bg-gray-700/50 border-gray-600':'bg-gray-50 border-gray-200'}`}>
+          <div className="flex items-start justify-between gap-2">
+            <p className={`flex-1 leading-relaxed ${dm?'text-gray-300':'text-gray-700'}`}>{answer}</p>
+            <button onClick={()=>setEditing(true)} className={`flex-shrink-0 text-xs px-2 py-1 rounded ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>
+              <EditIcon className="w-3.5 h-3.5"/>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Resultado da correção */}
+      {result && !editing && (
+        <div className={`rounded-xl border p-4 space-y-2 ${
+          color==='green'?(dm?'bg-green-900/20 border-green-700/50':'bg-green-50 border-green-200'):
+          color==='yellow'?(dm?'bg-yellow-900/20 border-yellow-700/50':'bg-yellow-50 border-yellow-200'):
+          color==='red'?(dm?'bg-red-900/20 border-red-700/50':'bg-red-50 border-red-200'):
+          (dm?'bg-gray-800 border-gray-700':'bg-gray-50 border-gray-200')}`}>
+          {result.score != null && (
+            <div className="flex items-center gap-3 mb-2">
+              <span className={`text-3xl font-bold font-serif ${color==='green'?'text-green-500':color==='yellow'?'text-yellow-600':'text-red-500'}`}>{result.score}</span>
+              <div>
+                <p className={`font-bold text-sm ${color==='green'?'text-green-600':color==='yellow'?'text-yellow-700':color==='red'?'text-red-600':''}`}>{result.verdict}</p>
+                <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>de 100 pontos</p>
+              </div>
+            </div>
+          )}
+          <div className={`text-sm leading-relaxed ${dm?'text-gray-200':'text-gray-700'}`}>{parseHtmlTextChat(result.feedback||'')}</div>
+        </div>
+      )}
+
+      {/* Chat com o Oráculo — aparece quando já respondeu */}
+      {result && !editing && apiKey && (
+        <ChatBox question={{...question, statement: question.statement, options: [], explanation: question.expectedAnswer||question.explanation||''}}
+          darkMode={dm} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>
+      )}
+    </div>
+  );
+};
+
+// ─── OPEN ANSWER MODAL (mantido para compatibilidade) ─────────────────────────
 const OpenAnswerModal = ({ question, darkMode, apiKey, onCall, onClose, isEssay=false }) => {
   const dm = darkMode;
   const [answer, setAnswer] = useState('');
@@ -1115,11 +1421,12 @@ const QUESTION_TYPES = [
   { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false }) => {
   const dm = darkMode;
   const toggle = (k) => {
+    if (single) { onChange([k]); return; }
     const next = selected.includes(k) ? selected.filter(x=>x!==k) : [...selected, k];
-    if (next.length === 0) return; // pelo menos 1 selecionado
+    if (next.length === 0) return;
     onChange(next);
   };
   return (
@@ -1129,7 +1436,7 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode }) => {
         return (
           <button key={t.k} onClick={()=>toggle(t.k)}
             className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
-            <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+            <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
               {on && <svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
             </div>
             <div className="min-w-0">
@@ -1209,13 +1516,16 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
 const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer }) => {
-  // revealMode: 'normal' (immediate), 'selected' (blind - no green/red), 'revealed' (blind - show results)
-  // Fix 3: treat 'SKIPPED' as answered-wrong (show correct answer but no wrong highlight)
   const isSkipped = selectedLetter === 'SKIPPED';
   const effectiveLetter = isSkipped ? null : selectedLetter;
-  const isAnswered = effectiveLetter != null;
-  const showResults = (revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped));
-  const correctLetter = question.options.find(o=>o.isCorrect)?.letter;
+  // Para questões abertas: só é "respondida" se tiver JSON salvo com campo answer
+  const isOpenAnswered = (() => {
+    if (!question.isOpen || !selectedLetter || selectedLetter === 'SKIPPED') return false;
+    try { const p = JSON.parse(selectedLetter); return !!(p?.answer); } catch(e) { return false; }
+  })();
+  const isAnswered = question.isOpen ? isOpenAnswered : (effectiveLetter != null);
+  const showResults = question.isOpen ? false : ((revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped)));
+  const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && correctLetter === effectiveLetter;
 
   return (
@@ -1231,14 +1541,18 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       </div>
       <div className={`text-base md:text-lg mb-6 leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</div>
 
-      {/* Questão aberta/essay — botão responder em vez de alternativas */}
-      {question.isOpen && onOpenAnswer ? (
-        <div className="mb-4">
-          <button onClick={()=>onOpenAnswer(question)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm border-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-all`}>
-            {question.isEssay ? '📝 Escrever resposta dissertativa' : '✏️ Escrever resposta curta'}
-          </button>
-        </div>
+      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
+      {question.isOpen ? (
+        <OpenAnswerInline
+          question={question}
+          darkMode={darkMode}
+          apiKey={apiKey}
+          onCall={onCall}
+          oracleLength={oracleLength}
+          savedAnswer={selectedLetter && selectedLetter !== 'SKIPPED' ? selectedLetter : null}
+          onSave={l=>onAnswer(l)}
+          isFavorite={isFavorite}
+        />
       ) : (
         <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
@@ -1805,7 +2119,11 @@ export default function QuestionBankApp() {
   const [vqExpandedTopic, setVqExpandedTopic] = useState({});
 
   // Portal do Curso — aba ativa e cronograma
-  const [cursoTab, setCursoTab]           = useState('videoaulas'); // 'videoaulas'|'questoes'|'cronograma'
+  const [cursoTab, setCursoTab]           = useState('videoaulas');
+  const [reviewQueue, setReviewQueue]     = useState({});  // { aulaId: { blockId: { qId: { interval, dueDate, seed } } } }
+  const [reviewLoaded, setReviewLoaded]   = useState(false);
+  const [srModal, setSrModal]             = useState(null);  // modal de adicionar à revisão
+  const [reviewSession, setReviewSession] = useState(null);  // sessão ativa de revisão
   const [cronograma, setCronograma]       = useState(null);   // array de 46 semanas
   const [cronLoading, setCronLoading]     = useState(false);
   const [curWeek, setCurWeek]             = useState(null);   // semana selecionada no cronograma
@@ -1949,6 +2267,24 @@ export default function QuestionBankApp() {
     if (!user) cronLoadedRef.current = false;
   }, [user]);
 
+  // Load reviewQueue — carrega uma vez no login
+  useEffect(() => {
+    if (!user || user.isAnonymous || reviewLoaded) return;
+    setReviewLoaded(true);
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, 'users', user.uid, 'vq_review'));
+        const loaded = {};
+        snap.forEach(d => { loaded[d.id] = d.data(); });
+        setReviewQueue(loaded);
+      } catch(e) {}
+    })();
+  }, [user]); // eslint-disable-line
+
+  useEffect(() => {
+    if (!user) { setReviewLoaded(false); setReviewQueue({}); }
+  }, [user]);
+
   const saveCronStartDate = async (dateStr) => {
     setCronStartDate(dateStr);
     if (user && !user.isAnonymous) try {
@@ -1965,6 +2301,84 @@ export default function QuestionBankApp() {
     if (diffMs < 0) return 1;
     return Math.min(46, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
   };
+
+  // ── Revisão Espaçada ───────────────────────────────────────────────────────
+  const SR_INTERVALS = [3, 7, 14, 30, 90]; // dias
+  const MS_DAY = 86400000;
+
+  const saveReviewQueue = async (updated) => {
+    setReviewQueue(updated);
+    // Persiste cada aulaId como doc separado
+    if (!user || user.isAnonymous) return;
+    // Calcular diffs para salvar apenas os que mudaram
+    for (const [aulaId, data] of Object.entries(updated)) {
+      try { await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data); } catch(e) {}
+    }
+  };
+
+  // Adiciona questões selecionadas à fila de revisão
+  const addToReview = async (aulaId, blockId, selectedQIds, questions) => {
+    const now = Date.now();
+    const cur = reviewQueue[aulaId] || {};
+    const curBlock = cur[blockId] || {};
+    const updated = { ...cur, [blockId]: { ...curBlock } };
+    selectedQIds.forEach(qId => {
+      if (!updated[blockId][qId]) {
+        updated[blockId][qId] = { interval: 0, dueDate: now + SR_INTERVALS[0] * MS_DAY, reviewSeed: Math.floor(Math.random() * 999999) };
+      }
+    });
+    await saveReviewQueue({ ...reviewQueue, [aulaId]: updated });
+  };
+
+  // Atualiza após responder uma questão na revisão (acerto avança, erro volta)
+  const updateReviewItem = async (aulaId, blockId, qId, correct) => {
+    const cur = reviewQueue[aulaId] || {};
+    const item = cur[blockId]?.[qId];
+    if (!item) return;
+    const newInterval = correct
+      ? Math.min(item.interval + 1, SR_INTERVALS.length - 1)
+      : 0;
+    const newDue = Date.now() + SR_INTERVALS[newInterval] * MS_DAY;
+    const updated = {
+      ...cur,
+      [blockId]: { ...cur[blockId], [qId]: { ...item, interval: newInterval, dueDate: newDue, reviewSeed: Math.floor(Math.random() * 999999) } }
+    };
+    await saveReviewQueue({ ...reviewQueue, [aulaId]: updated });
+  };
+
+  // Remove questão da fila de revisão
+  const removeFromReview = async (aulaId, blockId, qId) => {
+    const cur = reviewQueue[aulaId] || {};
+    const updBlock = { ...(cur[blockId] || {}) };
+    delete updBlock[qId];
+    const updated = { ...cur, [blockId]: updBlock };
+    await saveReviewQueue({ ...reviewQueue, [aulaId]: updated });
+  };
+
+  // Retorna todas as questões com revisão vencida hoje
+  const getDueReviews = () => {
+    const now = Date.now();
+    const due = [];
+    Object.entries(reviewQueue).forEach(([aulaId, blocks]) => {
+      const aulaData = vqBlocks[aulaId];
+      if (!aulaData) return;
+      Object.entries(blocks).forEach(([blockId, qMap]) => {
+        const block = aulaData.blocks?.[blockId];
+        if (!block) return;
+        const questions = Array.isArray(block.questions) ? block.questions : [];
+        Object.entries(qMap).forEach(([qId, item]) => {
+          if (item.dueDate <= now) {
+            const q = questions.find(x => x.id === qId);
+            if (q) due.push({ aulaId, blockId, qId, item, question: q, aulaTitle: aulaData.meta?.aulaTitle, blockTitle: block.title });
+          }
+        });
+      });
+    });
+    return due.sort((a, b) => a.item.dueDate - b.item.dueDate);
+  };
+
+  // Total de revisões pendentes (para badge)
+  const dueCount = getDueReviews().length;
   // Load vqBlocks — carrega UMA VEZ quando o usuário loga, não a cada troca de view
   const vqBlocksLoadedRef = useRef(false);
   useEffect(() => {
@@ -2145,7 +2559,14 @@ export default function QuestionBankApp() {
   const activeTopic   = activeSubject?.topics.find(t=>t.id===activeTopicId);
   const displayedQs   = (() => {
     if (!activeTopic) return [];
-    if (showOnlyWrong) return activeTopic.questions.filter(q=>{ const a=activeTopic.answers?.[q.id]; return a&&a!==q.options.find(o=>o.isCorrect)?.letter; });
+    if (showOnlyWrong) return activeTopic.questions.filter(q=>{
+      if (q.isOpen) {
+        const val = activeTopic.answers?.[q.id];
+        try { const p = JSON.parse(val); return !!(p?.answer) && (p?.score ?? 0) < 70; } catch(e) { return false; }
+      }
+      const a = activeTopic.answers?.[q.id];
+      return a && a !== q.options?.find(o=>o.isCorrect)?.letter;
+    });
     return activeTopic.questions;
   })();
 
@@ -2594,18 +3015,35 @@ export default function QuestionBankApp() {
 
     const s = {...settingsRef.current, questionStyle: topicStyle, questionTypes: topic.questionTypes || settingsRef.current.questionTypes || ['direct']};
     const na = s.numAlternatives || 5;
+    const types = s.questionTypes || ['direct'];
+    const hasOpen   = types.includes('open');
+    const hasEssay  = types.includes('essay');
+    const hasClosed = types.some(t=>['direct','vof','cespe'].includes(t));
+
+    const altSuffix = hasClosed
+      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+      : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
+
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
       + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
-      + `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Cada questão deve ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`;
+      + altSuffix;
 
     const orderedKeys = getOrderedKeys();
     let err=null, ok=false;
     for (const {k} of orderedKeys) {
       try {
         const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc));
-        const p=parseData(full, `${activeSubject.id}_${topicId}`);
-        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:p.questions,summary:p.summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
+        // Separar questões fechadas (com alternativas) das abertas
+        let allQuestions = [];
+        if (hasClosed) {
+          const p = parseData(full, `${activeSubject.id}_${topicId}`);
+          allQuestions = [...allQuestions, ...p.questions];
+        }
+        if (hasOpen)  { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, false); allQuestions = [...allQuestions, ...p.questions]; }
+        if (hasEssay) { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
+        const summary = parseData(full).summary;
+        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
         await rotateKey();
         ok=true; break;
       } catch(e) {
@@ -2707,9 +3145,6 @@ export default function QuestionBankApp() {
     setPasteText('');setPasteTopic('');setActiveTopicId(nt.id);setView('topic');
   };
 
-  // Spaced review — kept for legacy data compatibility but not shown in UI
-  const getDueReviews = () => [];
-
   // Statistics
   // Open Bizuário — cached in topic.bizuario
   // Bug 7: accepts optional overrideData (e.g. from exam results) skipping topicData
@@ -2795,7 +3230,22 @@ export default function QuestionBankApp() {
   };
 
   // Helpers
-  const subjectProgress = (s) => { const all=s.topics.flatMap(t=>t.questions||[]); const ans=s.topics.flatMap(t=>Object.keys(t.answers||{})).length; return all.length>0?Math.round(ans/all.length*100):0; };
+  const countValidAnswers = (topic) => {
+    const qs = topic.questions || [];
+    const ans = topic.answers || {};
+    return qs.filter(q => {
+      const v = ans[q.id];
+      if (!v || v === 'SKIPPED') return false;
+      if (q.isOpen) { try { const p = JSON.parse(v); return !!(p?.answer); } catch(e) { return false; } }
+      return true;
+    }).length;
+  };
+
+  const subjectProgress = (s) => {
+    const all = s.topics.flatMap(t=>t.questions||[]);
+    const ans = s.topics.reduce((acc,t) => acc + countValidAnswers(t), 0);
+    return all.length>0 ? Math.round(ans/all.length*100) : 0;
+  };
   const isAdmin         = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
@@ -3013,7 +3463,7 @@ export default function QuestionBankApp() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...activeSubject.topics].map(topic=>{
                 const due=Object.values(topic.spacedReview||{}).filter(r=>r.dueDate<=Date.now()).length;
-                const pct=topic.questions?.length?Math.round(Object.keys(topic.answers||{}).length/topic.questions.length*100):0;
+                const pct=topic.questions?.length?Math.round(countValidAnswers(topic)/topic.questions.length*100):0;
                 return (
                   <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView('topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex items-center gap-3 flex-1 truncate pr-3">
@@ -3021,7 +3471,7 @@ export default function QuestionBankApp() {
                       <div className="truncate">
                         <h4 className="font-bold text-sm truncate">{topic.title}</h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-xs opacity-50">{topic.questions?.length?`${Object.keys(topic.answers||{}).length}/${topic.questions.length}`:'Sem questões'}</p>
+                          <p className="text-xs opacity-50">{topic.questions?.length?`${countValidAnswers(topic)}/${topic.questions.length}`:'Sem questões'}</p>
                           {}
                           {(topic.favorites||[]).length>0&&<span className="text-xs text-red-400">♥{topic.favorites.length}</span>}
                           {(topic.subtopics?.length>0)&&<span className="text-xs text-blue-400 dark:text-blue-500" title={topic.subtopics.join('\n')}>📋 {topic.subtopics.length} subtópicos</span>}
@@ -3070,9 +3520,12 @@ export default function QuestionBankApp() {
               onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
-              onTopicStyleChange={activeSubject?.source==='gemini'?(style)=>{
+              topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
+              onTopicStyleChange={activeSubject?.source==='gemini'?(val,kind)=>{
+                const field = kind==='type' ? 'questionTypes' : 'questionStyle';
+                const newVal = kind==='type' ? [val] : val;
                 const updated = {...activeSubject, topics: activeSubject.topics.map(t=>
-                  t.id===activeTopic.id ? {...t, questionStyle: style} : t
+                  t.id===activeTopic.id ? {...t, [field]: newVal} : t
                 )};
                 updateSubject(updated);
               }:null}
@@ -3165,6 +3618,7 @@ export default function QuestionBankApp() {
                     selected={settings.questionTypes || ['direct']}
                     onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
                     darkMode={darkMode}
+                    single={true}
                   />
                 </div>
 
@@ -3352,6 +3806,7 @@ export default function QuestionBankApp() {
           const tabs = [
             {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
             {id:'questoes',   label:'Questões',     icon:<GraduationCap className="w-4 h-4"/>},
+            {id:'revisoes',   label:'Revisões',     icon:<RepeatIcon className="w-4 h-4"/>, badge: dueCount},
             {id:'cronograma', label:'Cronograma',   icon:<CalendarCheck className="w-4 h-4"/>},
           ];
 
@@ -3384,11 +3839,12 @@ export default function QuestionBankApp() {
                   <div className="flex mt-1 -mb-px">
                     {tabs.map(tab=>(
                       <button key={tab.id} onClick={()=>setCursoTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${cursoTab===tab.id
+                        className={`relative flex items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${cursoTab===tab.id
                           ?'border-yellow-500 text-yellow-600'
                           :`border-transparent ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-700'}`}`}>
                         {tab.icon}
                         <span className="hidden sm:inline">{tab.label}</span>
+                        {(tab.badge||0)>0&&<span className="absolute -top-0 right-0 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-0.5 flex items-center justify-center">{tab.badge>9?'9+':tab.badge}</span>}
                       </button>
                     ))}
                   </div>
@@ -3568,6 +4024,146 @@ export default function QuestionBankApp() {
                 })()}
 
                 {/* ── ABA CRONOGRAMA ── */}
+                {cursoTab==='revisoes'&&(()=>{
+                  const dueItems = getDueReviews();
+                  const SR_LABELS = ['3d','7d','14d','30d','90d'];
+
+                  // Agrupar por aula
+                  const byAula = {};
+                  dueItems.forEach(item => {
+                    const key = item.aulaId;
+                    if (!byAula[key]) byAula[key] = { aulaTitle: item.aulaTitle, blockTitle: item.blockTitle, items: [] };
+                    byAula[key].items.push(item);
+                  });
+
+                  if (!reviewSession) {
+                    // Tela de lista de revisões pendentes
+                    return (
+                      <div>
+                        {dueItems.length === 0 ? (
+                          <div className={`text-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
+                            <RepeatIcon className="w-14 h-14 mx-auto mb-4 text-yellow-500"/>
+                            <p className={`font-bold text-lg ${dm?'text-gray-400':'text-gray-500'}`}>Nenhuma revisão pendente!</p>
+                            <p className={`text-sm mt-2 ${dm?'text-gray-500':'text-gray-400'}`}>Quando terminar um bloco de questões, adicione-o à revisão espaçada.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className={`text-sm font-bold ${dm?'text-gray-400':'text-gray-500'}`}>
+                                {dueItems.length} questão{dueItems.length!==1?'s':''} pendente{dueItems.length!==1?'s':''}
+                              </p>
+                              <button onClick={()=>setReviewSession({items: dueItems, index: 0, sessionAnswers: {}})}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
+                                <RepeatIcon className="w-4 h-4"/> Revisar Tudo
+                              </button>
+                            </div>
+                            {Object.entries(byAula).map(([aulaId, {aulaTitle, items}]) => (
+                              <div key={aulaId} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                                <div className={`flex items-center justify-between px-5 py-3 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-sm truncate">{aulaTitle||aulaId}</p>
+                                    <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{items.length} questão{items.length!==1?'s':''}</p>
+                                  </div>
+                                  <button onClick={()=>setReviewSession({items, index:0, sessionAnswers:{}})}
+                                    className={`flex-shrink-0 ml-3 text-xs font-bold px-3 py-1.5 rounded-lg ${dm?'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50':'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`}>
+                                    Revisar
+                                  </button>
+                                </div>
+                                {items.map((item, i) => (
+                                  <div key={item.qId} className={`flex items-center gap-3 px-5 py-2.5 ${i<items.length-1?`border-b ${dm?'border-gray-800':'border-gray-50'}`:''}`}>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500'}`}>
+                                      {SR_LABELS[item.item.interval]||'—'}
+                                    </span>
+                                    <p className={`text-xs truncate flex-1 ${dm?'text-gray-400':'text-gray-600'}`}>
+                                      {item.blockTitle} — {item.question.statement.replace(/\n/g,' ').substring(0,60)}…
+                                    </p>
+                                    <button onClick={()=>removeFromReview(item.aulaId, item.blockId, item.qId)}
+                                      className={`flex-shrink-0 text-xs ${dm?'text-gray-600 hover:text-red-400':'text-gray-300 hover:text-red-500'}`} title="Remover da revisão">
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Sessão de revisão ativa
+                  const { items: sessionItems, index, sessionAnswers } = reviewSession;
+                  const cur = sessionItems[index];
+                  const total = sessionItems.length;
+                  const done = Object.keys(sessionAnswers).length;
+                  const finished = done === total;
+
+                  if (finished) {
+                    const correct = sessionItems.filter(item => sessionAnswers[item.qId] === item.question.options?.find(o=>o.isCorrect)?.letter).length;
+                    const pct = Math.round(correct / total * 100);
+                    return (
+                      <div className="text-center py-12">
+                        <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
+                        <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Revisão Concluída!</h3>
+                        <p className={`text-lg font-bold mb-1 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
+                        <p className={`text-sm mb-8 ${dm?'text-gray-400':'text-gray-500'}`}>{correct}/{total} corretas</p>
+                        <button onClick={async()=>{
+                          // Atualizar intervalos de cada questão
+                          for (const item of sessionItems) {
+                            const correct = sessionAnswers[item.qId] === item.question.options?.find(o=>o.isCorrect)?.letter;
+                            await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
+                          }
+                          setReviewSession(null);
+                        }} className="px-8 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
+                          Salvar e Voltar
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  // Questão atual da sessão com seed diferente para embaralhar alternativas
+                  const item = cur;
+                  const q = item.question;
+                  const seed = item.item.reviewSeed || 42;
+                  const shuffleWithSeed = (arr, s) => {
+                    const a = [...arr]; let st = s;
+                    for (let i = a.length-1; i>0; i--) {
+                      st = (st * 1664525 + 1013904223) & 0xffffffff;
+                      const j = Math.abs(st) % (i+1);
+                      [a[i], a[j]] = [a[j], a[i]];
+                    }
+                    return a;
+                  };
+                  const correctText = q.options?.find(o=>o.isCorrect)?.text;
+                  const shuffled = shuffleWithSeed(q.options||[], seed).map((opt,i)=>({...opt, letter:'ABCDE'[i], isCorrect: opt.text===correctText}));
+                  const reviewQ = {...q, options: shuffled};
+
+                  return (
+                    <div className="max-w-2xl mx-auto">
+                      {/* Progresso */}
+                      <div className={`flex items-center gap-3 mb-6 p-3 rounded-xl ${dm?'bg-gray-800':'bg-gray-50'}`}>
+                        <div className={`flex-1 h-2 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-200'}`}>
+                          <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${done/total*100}%`}}/>
+                        </div>
+                        <span className={`text-xs font-bold flex-shrink-0 ${dm?'text-gray-400':'text-gray-500'}`}>{done}/{total}</span>
+                        <button onClick={()=>setReviewSession(null)} className={`text-xs ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>Pausar</button>
+                      </div>
+                      <p className={`text-xs mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>{item.aulaTitle} — {item.blockTitle}</p>
+                      <QuestionCard
+                        question={reviewQ} index={index}
+                        selectedLetter={sessionAnswers[item.qId]}
+                        onAnswer={(qId, letter)=>{
+                          const newAnswers = {...sessionAnswers, [item.qId]: letter};
+                          setReviewSession(p=>({...p, sessionAnswers: newAnswers, index: Math.min(index+1, total-1)}));
+                        }}
+                        darkMode={dm}
+                        isFavorite={false} onToggleFavorite={()=>{}}
+                        apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
+                      />
+                    </div>
+                  );
+                })()}
+
                 {cursoTab==='cronograma'&&(()=>{
                   // Config de data de início
                   const hasStart = !!cronStartDate;
@@ -4210,6 +4806,8 @@ export default function QuestionBankApp() {
                     oracleLength={settings.oracleLength}
                     onCall={callWithRotation}
                     onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
+                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:block.title||`Bloco ${blockId.replace('block','')}`, questions:qs, answers:ans})}
+                    onGoToAula={()=>{setVqActiveBlockView(null); setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}}
                     generateLabel="Gerar Questões"
                     onGenerate={()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}
@@ -4695,6 +5293,22 @@ export default function QuestionBankApp() {
 
       {/* Toasts */}
       <ToastContainer toasts={toasts} onRemove={removeToast}/>
+
+      {/* Spaced Review Modal */}
+      {srModal&&<SRModal
+        questions={srModal.questions}
+        answers={srModal.answers}
+        aulaId={srModal.aulaId}
+        blockId={srModal.blockId}
+        blockTitle={srModal.blockTitle}
+        darkMode={darkMode}
+        onClose={()=>setSrModal(null)}
+        onConfirm={async(selectedIds)=>{
+          await addToReview(srModal.aulaId, srModal.blockId, selectedIds, srModal.questions);
+          setSrModal(null);
+          addToast(`↺ ${selectedIds.length} questão${selectedIds.length!==1?'s':''} adicionada${selectedIds.length!==1?'s':''} à revisão!`, 'success', 4000);
+        }}
+      />}
 
       {/* Open Answer Modal */}
       {openAnswerModal&&<OpenAnswerModal
