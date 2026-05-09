@@ -10,6 +10,10 @@ import {
   buildVqSyllabusPrompt,
   buildVqBlockPrompt,
   buildTypeInst,
+  buildAcademiaSyllabusPrompt,
+  buildAcademiaLessonPrompt,
+  buildAcademiaFixationPrompt,
+  buildAcademiaExtraBatteryPrompt,
 } from './agora_prompts.js';
 
 const firebaseConfig = {
@@ -75,6 +79,7 @@ const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="
 const SkipBack    = ic('<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>');
 
 const RepeatIcon = ic('<path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>');
+const AcademiaIcon = ic('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="12" y1="7" x2="16" y2="7"/><line x1="12" y1="11" x2="16" y2="11"/><line x1="9" y1="7" x2="9.01" y2="7"/><line x1="9" y1="11" x2="9.01" y2="11"/>');
 
 const GoogleIcon  = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24" height="24" className={className}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>;
 const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{animation:'spin 1s linear infinite',transformOrigin:'center'}}><style>{`@keyframes spin{100%{transform:rotate(360deg)}}`}</style><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
@@ -2064,6 +2069,27 @@ export default function QuestionBankApp() {
   const [pasteTopic, setPasteTopic]   = useState('');
   const [showSubSugs, setShowSubSugs] = useState(false);
 
+  // ── Academia do Saber ─────────────────────────────────────────────────────
+  const [academiaCreatorStep, setAcademiaCreatorStep] = useState(1);
+  const [academiaSubName, setAcademiaSubName]         = useState('');
+  const [academiaMaterialText, setAcademiaMaterialText] = useState('');
+  const [academiaUploadedFiles, setAcademiaUploadedFiles] = useState([]);
+  const [academiaUploadedImages, setAcademiaUploadedImages] = useState([]);
+  const [academiaSyllabus, setAcademiaSyllabus]       = useState('');
+  const [academiaSyllabusFB, setAcademiaSyllabusFB]   = useState('');
+  const [academiaFocusAreas, setAcademiaFocusAreas]   = useState([]);
+  const academiaFileInputRef  = useRef(null);
+  const academiaImageInputRef = useRef(null);
+  // Academia topic view state
+  const [academiaGenerating, setAcademiaGenerating]   = useState(false);
+  const [academiaGenProgress, setAcademiaGenProgress] = useState('');
+  const [academiaTopicAnswers, setAcademiaTopicAnswers] = useState({});
+  const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
+  const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
+  const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
+  const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
+  const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
+
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
 
@@ -2463,9 +2489,11 @@ export default function QuestionBankApp() {
       e.preventDefault();
       // Navigate back logically
       if (view === 'topic')        { setView('subject'); return; }
+      if (view === 'academia-topic') { setView('subject'); return; }
       if (view === 'subject')      { setView('sub-library'); return; }
       if (view === 'sub-library')  { setView('library'); return; }
       if (view === 'creator')      { setCreatorStep(1); setView('library'); return; }
+      if (view === 'academia-creator') { setAcademiaCreatorStep(1); setView('library'); return; }
       setView('library');
     };
     // Push a state so back button fires popstate instead of leaving
@@ -3246,6 +3274,300 @@ export default function QuestionBankApp() {
     const ans = s.topics.reduce((acc,t) => acc + countValidAnswers(t), 0);
     return all.length>0 ? Math.round(ans/all.length*100) : 0;
   };
+  // ── ACADEMIA: funções de criação ──────────────────────────────────────────
+
+  const getAcademiaMaterial = () => {
+    const filesText = academiaUploadedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n');
+    const imgText   = academiaMaterialText.trim();
+    return [imgText, filesText].filter(Boolean).join('\n\n');
+  };
+
+  const startAcademiaCreation = async () => {
+    if (!checkKey()) return;
+    setIsBusy(true);
+    const s = settingsRef.current;
+    const sys = buildAcademiaSyllabusPrompt(academiaSubName, s, s.autoMode || false);
+    const matText   = academiaMaterialText.trim();
+    const filesText = academiaUploadedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n');
+    const userMsg = [
+      matText   ? `INSTRUÇÃO PRIORITÁRIA DO USUÁRIO:\n${matText}` : '',
+      filesText ? `\nMATERIAL BASE:\n${filesText}` : '',
+    ].filter(Boolean).join('\n\n') || `Crie o sumário para: ${academiaSubName}`;
+
+    const orderedKeys = getOrderedKeys();
+    let ok = false;
+    for (const { k } of orderedKeys) {
+      try {
+        const r = await callGemini(userMsg, sys, k, academiaUploadedImages);
+        setAcademiaSyllabus(r);
+        setAcademiaCreatorStep(2);
+        await rotateKey();
+        ok = true; break;
+      } catch (e) {
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        showApiError(e.message); break;
+      }
+    }
+    if (!ok && !errorModal) showApiError('QUOTA_EXCEEDED');
+    setIsBusy(false);
+  };
+
+  const reviseAcademiaSyllabus = async () => {
+    if (!academiaSyllabusFB.trim() || !checkKey()) return;
+    setIsBusy(true);
+    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, settingsRef.current);
+    const orderedKeys = getOrderedKeys();
+    for (const { k } of orderedKeys) {
+      try {
+        const r = await callGemini('Revise.', sys, k);
+        setAcademiaSyllabus(r);
+        setAcademiaSyllabusFB('');
+        await rotateKey(); break;
+      } catch (e) {
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        showApiError(e.message); break;
+      }
+    }
+    setIsBusy(false);
+  };
+
+  const finalizeAcademia = async () => {
+    // Parseia o sumário igual ao finalizeSub, mas salva com source:'academia'
+    const lines = academiaSyllabus.split('\n');
+    const topicLineIndices = lines.reduce((acc, l, i) => {
+      if (/T[óo]pico\s*\d+/i.test(l)) acc.push(i);
+      return acc;
+    }, []);
+
+    const topics = topicLineIndices.map((lineIdx, topicPos) => {
+      const title = lines[lineIdx].replace(/[*#]/g, '').trim();
+      const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
+      const subtopics = lines
+        .slice(lineIdx + 1, nextTopicIdx)
+        .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
+        .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
+        .slice(0, 15);
+      return {
+        id: `ac-${topicPos}-${Date.now()}`,
+        title,
+        subtopics,
+        questionStyle: settingsRef.current.questionStyle || 'mixed',
+        questions: [],
+        answers: {},
+        summary: '',
+        favorites: [],
+        spacedReview: {},
+        // Academia-specific fields
+        lessonSections: {},   // { subtopicIndex: markdownText }
+        fixationQuestions: {}, // { subtopicIndex: [questions] }
+        lessonGenerated: false,
+      };
+    });
+
+    const ns = {
+      id: Date.now(),
+      title: academiaSubName,
+      fullSyllabus: academiaSyllabus,
+      source: 'academia',
+      sourceMaterials: getAcademiaMaterial(),
+      focusAreas: academiaFocusAreas,
+      topics,
+    };
+
+    await addSubject(ns);
+    setAcademiaSubName('');
+    setAcademiaMaterialText('');
+    setAcademiaUploadedFiles([]);
+    setAcademiaUploadedImages([]);
+    setAcademiaSyllabus('');
+    setAcademiaFocusAreas([]);
+    setAcademiaCreatorStep(1);
+    setView('library');
+    addToast('Academia criada! Agora entre no assunto e gere as aulas.', 'success', 4000);
+  };
+
+  // ── ACADEMIA: geração da aula ─────────────────────────────────────────────
+
+  const generateAcademiaLesson = async (topic, subject) => {
+    if (!checkKey()) return;
+    setAcademiaGenerating(true);
+    setAcademiaGenProgress('Gerando aula e questões de fixação...');
+
+    const s = settingsRef.current;
+    const material = subject.sourceMaterials || '';
+    const subtopics = topic.subtopics || [];
+
+    const na = s.numAlternatives || 5;
+    const alts = na === 4
+      ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
+      : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
+
+    const orderedKeys = getOrderedKeys();
+
+    // Requisição A: aula em markdown
+    let lessonText = '';
+    const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title);
+    setAcademiaGenProgress('📝 Gerando explicação dos subtópicos...');
+    for (const { k } of orderedKeys) {
+      try {
+        lessonText = await callGemini(lessonPrompt, 'Você é professor de medicina. Escreva em português.', k);
+        await rotateKey();
+        break;
+      } catch (e) {
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        showApiError(e.message);
+        setAcademiaGenerating(false);
+        setAcademiaGenProgress('');
+        return;
+      }
+    }
+
+    // Requisição B: questões de fixação (1 por subtópico, indexadas por subtópico)
+    setAcademiaGenProgress('Gerando questões de fixação...');
+    const fixPrompt = buildAcademiaFixationPrompt(
+      subtopics, topic.title, s, lessonText
+    );
+    let fixText = '';
+    const orderedKeys2 = getOrderedKeys();
+    for (const { k } of orderedKeys2) {
+      try {
+        fixText = await callGemini(fixPrompt, 'Você é examinador de residência médica. Escreva em português.', k);
+        await rotateKey();
+        break;
+      } catch (e) {
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        // Questões falharam mas temos a aula — continua sem questões
+        break;
+      }
+    }
+
+    // Parsear a aula em seções por subtópico (separa em ## Título)
+    const lessonSections = {};
+    if (lessonText) {
+      const sectionRegex = /^##\s+(.+)$/gm;
+      const positions = [];
+      let match;
+      while ((match = sectionRegex.exec(lessonText)) !== null) {
+        positions.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
+      }
+      positions.forEach((pos, i) => {
+        const start = pos.end;
+        const end = positions[i + 1]?.index ?? lessonText.length;
+        const content = lessonText.slice(start, end).trim();
+        // Mapeia pelo índice do subtópico (tenta casar título, senão usa posição)
+        const subIdx = subtopics.findIndex(s =>
+          pos.title.toLowerCase().includes(s.toLowerCase().slice(0, 20)) ||
+          s.toLowerCase().includes(pos.title.toLowerCase().slice(0, 20))
+        );
+        const key = subIdx >= 0 ? subIdx : i;
+        lessonSections[key] = { title: pos.title, content };
+      });
+    }
+
+    // Parsear as questões de fixação
+    const fixQuestions = fixText ? parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions : [];
+
+    // Distribuir questões por subtópico (sequencialmente)
+    const fixationBySubtopic = {};
+    let qIdx = 0;
+    subtopics.forEach((_, i) => {
+      fixationBySubtopic[i] = fixQuestions[qIdx] ? [fixQuestions[qIdx]] : [];
+      qIdx++;
+    });
+
+    // Salvar no tópico
+    const updatedTopic = {
+      ...topic,
+      lessonSections,
+      fixationQuestions: fixationBySubtopic,
+      lessonGenerated: true,
+    };
+    const updatedSubject = {
+      ...subject,
+      topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
+    };
+    await updateSubject(updatedSubject);
+    setAcademiaGenerating(false);
+    setAcademiaGenProgress('');
+    addToast('Aula gerada com sucesso!', 'success', 4000);
+  };
+
+  const generateAcademiaExtraBattery = async (topic, subject, extraSettings = null) => {
+    if (!checkKey()) return;
+    setAcademiaExtraBusy(true);
+    const s = extraSettings || settingsRef.current;
+    const subtopics = topic.subtopics || [];
+    const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s);
+    const orderedKeys = getOrderedKeys();
+    let extraText = '';
+    for (const { k } of orderedKeys) {
+      try {
+        extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k);
+        await rotateKey();
+        break;
+      } catch (e) {
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        showApiError(e.message);
+        setAcademiaExtraBusy(false);
+        return;
+      }
+    }
+
+    const parsed = parseData(extraText, `extra_${topic.id}_${Date.now()}`);
+    if (!parsed.questions.length) {
+      addToast('Nenhuma questão foi gerada. Tente novamente.', 'info', 4000);
+      setAcademiaExtraBusy(false);
+      return;
+    }
+
+    // Salva no tópico da Academia (campo extraBattery) E cria/atualiza assunto no Oráculo
+    const updatedTopic = {
+      ...topic,
+      extraBattery: [...(topic.extraBattery || []), {
+        id: `eb_${Date.now()}`,
+        title: `Bateria ${(topic.extraBattery||[]).length + 1}`,
+        generatedAt: Date.now(),
+        oracleTopicId: oracleTopic.id,
+        questions: parsed.questions,
+      }],
+    };
+    const updatedSubject = {
+      ...subject,
+      topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
+    };
+    await updateSubject(updatedSubject);
+
+    // Também salva no Oráculo como assunto separado "Academia — SubjectTitle"
+    const oracleTitle = `Academia — ${subject.title}`;
+    const existingOracle = library.find(s => s.title === oracleTitle && s.source === 'gemini');
+    const oracleTopic = {
+      id: `oracle_${topic.id}_${Date.now()}`,
+      title: `${topic.title} (bateria extra)`,
+      subtopics: topic.subtopics || [],
+      questions: parsed.questions,
+      answers: {}, summary: '', favorites: [], spacedReview: {},
+      questionStyle: s.questionStyle || 'mixed',
+    };
+    if (existingOracle) {
+      const updatedOracle = { ...existingOracle, topics: [...existingOracle.topics, oracleTopic] };
+      await updateSubject(updatedOracle);
+    } else {
+      const newOracle = {
+        id: Date.now(),
+        title: oracleTitle,
+        source: 'gemini',
+        fullSyllabus: '',
+        topics: [oracleTopic],
+      };
+      await addSubject(newOracle);
+    }
+
+    setAcademiaExtraBusy(false);
+    addToast(`${parsed.questions.length} questões extras adicionadas ao Oráculo!`, 'success', 5000);
+  };
+
+  // ── FIM ACADEMIA ──────────────────────────────────────────────────────────
+
   const isAdmin         = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
@@ -3375,7 +3697,7 @@ export default function QuestionBankApp() {
                 <button onClick={()=>setExamSetup({})} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border ${darkMode?'bg-gray-800 text-white hover:bg-gray-700 border-gray-700':'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'}`}><Zap className="w-5 h-5 text-yellow-600"/>Modo Prova</button>
               </div>
             </div>
-            <div className={`grid grid-cols-1 gap-6 ${canSeeVideoaulas?'md:grid-cols-3':'md:grid-cols-2'}`}>
+            <div className={`grid grid-cols-1 gap-6 md:grid-cols-2`}>
               {[{f:'gemini',icon:<Landmark className="w-12 h-12 text-yellow-600"/>,title:'Acervo do Oráculo',desc:'Assuntos gerados via Gemini'},{f:'external',icon:<FolderIcon className="w-12 h-12 text-yellow-600"/>,title:'Acervo Externo',desc:'Questões importadas'}].map(item=>(
                 <div key={item.f} onClick={()=>{setLibFilter(item.f);setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform">{item.icon}</div>
@@ -3384,6 +3706,14 @@ export default function QuestionBankApp() {
                   <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{library.filter(s=>s.source===item.f).length} Pastas</div>
                 </div>
               ))}
+              {isAdmin&&(
+                <div onClick={()=>{setLibFilter('academia');setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
+                  <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><AcademiaIcon className="w-12 h-12 text-yellow-600"/></div>
+                  <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Academia do Saber</h3>
+                  <p className="text-sm opacity-60">Aulas + questões de fixação integradas</p>
+                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{library.filter(s=>s.source==='academia').length} Cursos</div>
+                </div>
+              )}
               {canSeeVideoaulas&&(
                 <div onClick={()=>setView('curso')} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><GraduationCap className="w-12 h-12 text-yellow-600"/></div>
@@ -3407,11 +3737,13 @@ export default function QuestionBankApp() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
               <div>
                 <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-4 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-                <h2 className="text-3xl font-serif font-bold text-yellow-600">{libFilter==='gemini'?'Acervo do Oráculo':'Acervo Externo'}</h2>
+                <h2 className="text-3xl font-serif font-bold text-yellow-600">{libFilter==='gemini'?'Acervo do Oráculo':libFilter==='academia'?'Academia do Saber':'Acervo Externo'}</h2>
               </div>
               {libFilter==='gemini'
                 ?<button onClick={()=>setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Sparkles className="w-4 h-4"/>Gerar</button>
-                :<button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Feather className="w-4 h-4"/>Importar</button>}
+                :libFilter==='academia'
+                  ?isAdmin&&<button onClick={()=>{setAcademiaCreatorStep(1);setView('academia-creator');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><AcademiaIcon className="w-4 h-4"/>Nova Aula</button>
+                  :<button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Feather className="w-4 h-4"/>Importar</button>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {library.filter(s=>s.source===libFilter).length===0&&<div className="col-span-full py-10 text-center opacity-40 italic">Biblioteca vazia.</div>}
@@ -3464,23 +3796,28 @@ export default function QuestionBankApp() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>
+                {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...activeSubject.topics].map(topic=>{
+                const isAcademiaTopic = activeSubject.source==='academia';
+                const fixAll = isAcademiaTopic ? Object.values(topic.fixationQuestions||{}).flat().concat((topic.extraBattery||[]).flatMap(b=>b.questions||b)) : [];
+                const fixTotal = fixAll.length;
+                const fixAnswered = fixAll.filter(q=>academiaTopicAnswers[q.id]).length;
                 const due=Object.values(topic.spacedReview||{}).filter(r=>r.dueDate<=Date.now()).length;
-                const pct=topic.questions?.length?Math.round(countValidAnswers(topic)/topic.questions.length*100):0;
+                const pct=isAcademiaTopic
+                  ?(topic.lessonGenerated?(fixTotal>0?Math.round(fixAnswered/fixTotal*100):50):0)
+                  :(topic.questions?.length?Math.round(countValidAnswers(topic)/topic.questions.length*100):0);
                 return (
-                  <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView('topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
+                  <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex items-center gap-3 flex-1 truncate pr-3">
-                      <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0"><ScrollText className="w-5 h-5"/></div>
+                      <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0">{isAcademiaTopic?<AcademiaIcon className="w-5 h-5"/>:<ScrollText className="w-5 h-5"/>}</div>
                       <div className="truncate">
                         <h4 className="font-bold text-sm truncate">{topic.title}</h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-xs opacity-50">{topic.questions?.length?`${countValidAnswers(topic)}/${topic.questions.length}`:'Sem questões'}</p>
-                          {}
+                          <p className="text-xs opacity-50">{isAcademiaTopic?(topic.lessonGenerated?`${fixAnswered}/${fixTotal} respostas`:'Aula não gerada'):(topic.questions?.length?`${countValidAnswers(topic)}/${topic.questions.length}`:'Sem questões')}</p>
                           {(topic.favorites||[]).length>0&&<span className="text-xs text-red-400">♥{topic.favorites.length}</span>}
                           {(topic.subtopics?.length>0)&&<span className="text-xs text-blue-400 dark:text-blue-500" title={topic.subtopics.join('\n')}>📋 {topic.subtopics.length} subtópicos</span>}
                         </div>
@@ -3540,6 +3877,203 @@ export default function QuestionBankApp() {
             />
           </div>
         )}
+
+        {/* ── ACADEMIA TOPIC ── */}
+        {view==='academia-topic'&&activeTopic&&activeSubject?.source==='academia'&&(()=>{
+          const topic   = activeTopic;
+          const subject = activeSubject;
+          const subtopics = topic.subtopics || [];
+          const hasLesson = topic.lessonGenerated;
+
+          // Helper: renderiza markdown da aula (negrito, listas, parágrafos)
+          const renderLesson = (md) => {
+            if (!md) return null;
+            return md.split('\n').map((line, i) => {
+              if (!line.trim()) return <div key={i} className="h-3"/>;
+              if (/^\s*[-*]\s/.test(line)) {
+                const txt = line.replace(/^\s*[-*]\s/, '');
+                return <li key={i} className={`ml-4 list-disc text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`}>{parseHtmlText(txt)}</li>;
+              }
+              return <p key={i} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>;
+            });
+          };
+
+          return (
+            <div className="max-w-3xl mx-auto">
+              {/* Header */}
+              <button onClick={()=>setView('subject')} className={`flex items-center gap-2 mb-6 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                <ArrowLeft className="w-4 h-4"/>Voltar
+              </button>
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-1">
+                  <AcademiaIcon className="w-6 h-6 text-yellow-600"/>
+                  <span className={`text-xs font-bold uppercase opacity-40`}>{subject.title}</span>
+                </div>
+                <h1 className="text-3xl font-serif font-bold text-yellow-600">{topic.title}</h1>
+                <p className={`text-sm mt-1 opacity-50`}>{subtopics.length} subtópicos</p>
+              </div>
+
+              {/* Gerar aula — estado inicial */}
+              {!hasLesson&&!academiaGenerating&&(
+                <div className={`rounded-2xl border p-10 text-center ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  <AcademiaIcon className="w-16 h-16 text-yellow-600 mx-auto mb-4 opacity-60"/>
+                  <h3 className="text-xl font-serif font-bold text-yellow-600 mb-2">Aula ainda não gerada</h3>
+                  <p className={`text-sm opacity-60 mb-6 max-w-sm mx-auto`}>Clique abaixo para gerar a explicação completa e as questões de fixação de cada subtópico.</p>
+                  <div className={`text-xs rounded-xl p-3 mb-6 text-left max-w-sm mx-auto ${darkMode?'bg-gray-700 text-gray-300':'bg-gray-50 text-gray-600'}`}>
+                    <p className="font-bold mb-1">Subtópicos que serão cobertos:</p>
+                    {subtopics.map((s, i) => <p key={i} className="opacity-70">• {s}</p>)}
+                  </div>
+                  {isAdmin&&(
+                    <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 mx-auto">
+                      <AcademiaIcon className="w-5 h-5"/>Gerar Aula
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Loading */}
+              {academiaGenerating&&(
+                <div className={`rounded-2xl border p-10 text-center ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  <Spinner className="w-12 h-12 text-yellow-600 mx-auto mb-4"/>
+                  <p className="font-bold text-yellow-600">{academiaGenProgress||'Gerando...'}</p>
+                  <p className={`text-xs mt-2 opacity-50`}>Isso pode levar até 60 segundos</p>
+                </div>
+              )}
+
+              {/* Conteúdo da aula — seção por subtópico */}
+              {hasLesson&&!academiaGenerating&&(
+                <div className="space-y-10">
+                  {subtopics.map((subtopic, idx) => {
+                    const section = topic.lessonSections?.[idx];
+                    const fixqs   = topic.fixationQuestions?.[idx] || [];
+
+                    return (
+                      <div key={idx}>
+                        {/* Cabeçalho do subtópico */}
+                        <div className={`flex items-center gap-3 mb-4 pb-3 border-b ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                          <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${darkMode?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>{idx+1}</span>
+                          <h2 className={`text-lg font-serif font-bold ${darkMode?'text-white':'text-gray-900'}`}>{section?.title || subtopic}</h2>
+                        </div>
+
+                        {/* Explicação */}
+                        {section?.content ? (
+                          <div className={`rounded-xl p-6 mb-6 ${darkMode?'bg-gray-800/60':'bg-white'} border ${darkMode?'border-gray-700':'border-gray-100'}`}>
+                            <div className="space-y-2">{renderLesson(section.content)}</div>
+                          </div>
+                        ) : (
+                          <div className={`rounded-xl p-5 mb-6 opacity-50 text-sm italic ${darkMode?'bg-gray-800':'bg-gray-50'}`}>Explicação não disponível para este subtópico.</div>
+                        )}
+
+                        {/* Questões de fixação */}
+                        {fixqs.length > 0 && (
+                          <div>
+                            <div className={`flex items-center gap-2 mb-3`}>
+                              <div className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/>
+                              <span className={`text-xs font-bold uppercase px-3 ${darkMode?'text-yellow-500':'text-yellow-600'}`}> Fixação</span>
+                              <div className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/>
+                            </div>
+                            <div className="space-y-4">
+                              {fixqs.map((q, qi) => (
+                                <QuestionCard
+                                  key={q.id}
+                                  question={q}
+                                  index={idx}
+                                  selectedLetter={academiaTopicAnswers[q.id]}
+                                  onAnswer={(letter) => setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}))}
+                                  darkMode={darkMode}
+                                  isFavorite={false}
+                                  onToggleFavorite={()=>{}}
+                                  apiKey={getKey()}
+                                  oracleLength={settings.oracleLength||'medium'}
+                                  onCall={callWithRotation}
+                                  onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Bateria extra */}
+                  <div className={`rounded-2xl border-2 border-dashed p-8 text-center ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                    <h3 className={`font-serif font-bold text-lg mb-2 ${darkMode?'text-white':'text-gray-900'}`}>⚡ Gerar bateria extra</h3>
+                    <p className={`text-sm opacity-60 mb-4`}>Gera novas questões sobre todo este tópico e salva também no Acervo do Oráculo.</p>
+
+                    {/* Baterias extras — cada geração é um bloco separado */}
+                    {(topic.extraBattery||[]).map((bloco, blocoIdx) => {
+                      const blocoQs = bloco.questions || bloco; // compat com estrutura antiga (array plano)
+                      const isLegacy = !bloco.questions;
+                      const blocoId = bloco.id || `legacy_${blocoIdx}`;
+                      const blocoTitle = bloco.title || `Bateria ${blocoIdx + 1}`;
+                      const [blocoOpen, setBlocoOpen] = [true, ()=>{}]; // sempre aberto por ora
+                      return (
+                        <div key={blocoId} className={`rounded-2xl border ${darkMode?'bg-gray-800/60 border-gray-700':'bg-white border-gray-200'}`}>
+                          {/* Header do bloco */}
+                          <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode?'border-gray-700':'border-gray-100'}`}>
+                            <div className="flex items-center gap-3">
+                              <Zap className="w-4 h-4 text-yellow-500"/>
+                              <span className="font-bold text-sm">{blocoTitle}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${darkMode?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''}</span>
+                            </div>
+                            {isAdmin&&(
+                              <div className="flex items-center gap-1">
+                                <button title="Exportar" onClick={()=>setExportModal({topic:{...topic,questions:blocoQs,title:blocoTitle},subject})}
+                                  className={`p-2 rounded-lg text-xs font-bold transition-colors ${darkMode?'text-gray-400 hover:text-yellow-400 hover:bg-gray-700':'text-gray-500 hover:text-yellow-600 hover:bg-yellow-50'}`}>
+                                  <DownloadIcon className="w-4 h-4"/>
+                                </button>
+                                <button title="Excluir bloco" onClick={()=>setDeleteId({type:'academia-extra-bloco', blocoId, topicId: topic.id, subjectId: subject.id, oracleTopicId: bloco.oracleTopicId})}
+                                  className={`p-2 rounded-lg transition-colors ${darkMode?'text-gray-500 hover:text-red-400 hover:bg-gray-700':'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}>
+                                  <Trash2 className="w-4 h-4"/>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {/* Questões do bloco */}
+                          <div className="p-5 space-y-4">
+                            {blocoQs.map((q, qi) => (
+                              <QuestionCard
+                                key={q.id}
+                                question={q}
+                                index={qi}
+                                selectedLetter={academiaTopicAnswers[q.id]}
+                                onAnswer={(letter) => setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}))}
+                                darkMode={darkMode}
+                                isFavorite={false}
+                                onToggleFavorite={()=>{}}
+                                apiKey={getKey()}
+                                oracleLength={settings.oracleLength||'medium'}
+                                onCall={callWithRotation}
+                                onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {isAdmin&&(
+                      <button onClick={()=>setAcademiaExtraModal({topic, subject})} disabled={academiaExtraBusy} className="bg-yellow-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center gap-2 mx-auto">
+                        {academiaExtraBusy?<Spinner className="w-4 h-4 text-white"/>:<Zap className="w-4 h-4"/>}
+                        {academiaExtraBusy?'Gerando...':'Gerar bateria extra'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Regenerar aula */}
+                  {isAdmin&&(
+                    <div className="text-center pb-4">
+                      <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating} className={`text-xs font-bold flex items-center gap-1.5 mx-auto opacity-40 hover:opacity-80 transition-opacity ${darkMode?'text-gray-400':'text-gray-500'}`}>
+                        <RotateCcw className="w-3 h-3"/>Regenerar aula
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── CREATOR ── */}
         {view==='creator'&&(
@@ -3661,6 +4195,146 @@ export default function QuestionBankApp() {
                 <div className="flex gap-4">
                   <button onClick={()=>setCreatorStep(1)} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
                   <button onClick={finalizeSub} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700">Confirmar e Salvar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ACADEMIA CREATOR ── */}
+        {view==='academia-creator'&&isAdmin&&(
+          <div className="max-w-2xl mx-auto">
+            <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setAcademiaFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            {academiaCreatorStep===1?(
+              <div className="space-y-6">
+                <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><AcademiaIcon className="w-8 h-8"/>Nova Aula</h2>
+                <p className={`text-sm rounded-xl p-4 ${darkMode?'bg-yellow-900/20 text-yellow-300 border border-yellow-800/30':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
+                  📖 A Academia gera <strong>aula + questões de fixação</strong> integradas por subtópico — como um curso profissional. Quanto mais detalhado o material, melhor a aula.
+                </p>
+
+                <input value={academiaSubName} onChange={e=>setAcademiaSubName(e.target.value)} placeholder="Título do assunto (ex: Síndrome Nefrótica)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+
+                {/* Focus areas */}
+                <div>
+                  <div className="text-xs font-bold uppercase mb-3 opacity-50">Ênfases <span className="opacity-60 normal-case font-normal">(opcional)</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FOCUS_AREAS.map(area=>{
+                      const selected = academiaFocusAreas.includes(area.id);
+                      return (
+                        <button key={area.id} type="button"
+                          onClick={()=>setAcademiaFocusAreas(p=>p.includes(area.id)?p.filter(x=>x!==area.id):[...p,area.id])}
+                          className={`text-left p-3 rounded-xl border-2 transition-all ${selected?'border-yellow-500 bg-yellow-600 text-white':(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-yellow-600':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400')}`}>
+                          <div className="font-bold text-sm">{area.label}</div>
+                          <div className={`text-xs mt-0.5 ${selected?'text-yellow-100 opacity-80':'opacity-40'}`}>{area.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Material */}
+                <div className="relative">
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base <span className="opacity-60 normal-case font-normal">(quanto mais completo, melhor a aula)</span></div>
+                  {academiaUploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button onClick={()=>setAcademiaUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
+                  {academiaUploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button onClick={()=>setAcademiaUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div>}
+                  <textarea value={academiaMaterialText} onChange={e=>setAcademiaMaterialText(e.target.value)} placeholder="Cole slides, transcrições, resumos, anotações..." className={`w-full h-48 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                  <div className="absolute bottom-4 right-4 flex gap-2">
+                    <button onClick={()=>academiaImageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
+                    <button onClick={()=>academiaFileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
+                  </div>
+                  <input type="file" ref={academiaFileInputRef} onChange={async(e)=>{
+                    const files=Array.from(e.target.files||[]);
+                    setIsUploading(true);
+                    const loaded=[];
+                    for(const f of files){
+                      try{
+                        const ab=await f.arrayBuffer();
+                        let content='';
+                        if(f.name.endsWith('.pdf')) content=await extractPdfText(ab);
+                        else if(f.name.endsWith('.docx')) content=await extractDocxText(ab);
+                        else content=await f.text();
+                        loaded.push({name:f.name,content:content.substring(0,MAX_MATERIAL_CHARS)});
+                      }catch(err){loaded.push({name:f.name,content:`[Erro ao ler ${f.name}]`});}
+                    }
+                    setAcademiaUploadedFiles(p=>[...p,...loaded]);
+                    setIsUploading(false);
+                    e.target.value='';
+                  }} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx"/>
+                  <input type="file" ref={academiaImageInputRef} onChange={async(e)=>{
+                    const files=Array.from(e.target.files||[]);
+                    const loaded=[];
+                    for(const f of files){
+                      const b64=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.readAsDataURL(f);});
+                      loaded.push({base64:b64,mimeType:f.type,preview:URL.createObjectURL(f)});
+                    }
+                    setAcademiaUploadedImages(p=>[...p,...loaded]);
+                    e.target.value='';
+                  }} multiple className="hidden" accept="image/*"/>
+                </div>
+
+                {/* Parâmetros */}
+                <div>
+                  <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros da Aula</div>
+                  <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
+                      <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos e subtópicos</p>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400'}`}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                  <div className={`grid grid-cols-2 gap-3 mt-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
+                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:2,mx:15}].map(f=>(
+                      <div key={f.k}>
+                        <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
+                        <input type="number" min={f.mn} max={f.mx} value={settings[f.k]}
+                          onChange={e=>setSettings({...settings,[f.k]:e.target.value})}
+                          onBlur={()=>{let v=parseInt(settings[f.k]);if(isNaN(v)||v<f.mn)v=f.mn;if(v>f.mx)v=f.mx;const ns={...settings,[f.k]:v};setSettings(ns);saveSettings(ns);}}
+                          className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tipo e estilo das questões de fixação */}
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões de fixação — tipo</div>
+                  <QuestionTypeSelector selected={settings.questionTypes||['direct']} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true}/>
+                </div>
+                {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
+                        <button key={opt.k} onClick={()=>{const ns={...settings,questionStyle:opt.k};setSettings(ns);saveSettings(ns);}}
+                          className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                          {opt.label}<p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button onClick={startAcademiaCreation} disabled={isBusy||isUploading||!academiaSubName.trim()} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                  {isBusy?<Spinner className="w-5 h-5 text-white"/>:<AcademiaIcon className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura da Aula')}
+                </button>
+              </div>
+            ):(
+              <div className="space-y-6">
+                <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura da Aula</h2>
+                <p className={`text-sm rounded-xl p-3 ${darkMode?'bg-blue-900/20 text-blue-300 border border-blue-800/30':'bg-blue-50 text-blue-800 border border-blue-200'}`}>
+                  ✅ Revise os tópicos e subtópicos. Cada subtópico vai virar uma seção da aula com questões de fixação.
+                </p>
+                <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>
+                <div className="relative">
+                  <textarea value={academiaSyllabusFB} onChange={e=>setAcademiaSyllabusFB(e.target.value)} placeholder="Solicite ajustes (ex: adicione mais subtópicos sobre tratamento...)" className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                  <button onClick={reviseAcademiaSyllabus} disabled={!academiaSyllabusFB.trim()||isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg disabled:opacity-40">{isBusy?<Spinner className="w-5 h-5 text-white"/>:<Send className="w-5 h-5"/>}</button>
+                </div>
+                <div className="flex gap-4">
+                  <button onClick={()=>setAcademiaCreatorStep(1)} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
+                  <button onClick={finalizeAcademia} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><AcademiaIcon className="w-5 h-5"/>Criar Academia</button>
                 </div>
               </div>
             )}
@@ -5334,6 +6008,57 @@ export default function QuestionBankApp() {
       {/* ── INSIGHTS MODAL ── */}
       {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
 
+      {/* ── ACADEMIA EXTRA BATTERY MODAL ── */}
+      {academiaExtraModal&&(
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 p-4">
+          <div className={`w-full max-w-md rounded-2xl p-8 border overflow-y-auto max-h-[90vh] ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`}>
+            <h3 className="text-xl font-serif font-bold text-yellow-600 mb-1">Bateria Extra</h3>
+            <p className={`text-sm mb-6 opacity-60`}>Gera novas questões sobre todos os subtópicos de <strong>{academiaExtraModal.topic.title}</strong>.</p>
+            <div className="space-y-5">
+              <div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
+                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true}/>
+              </div>
+              {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
+                      <button key={opt.k} onClick={()=>setAcademiaExtraQStyle(opt.k)}
+                        className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${academiaExtraQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                <div className="flex gap-2">
+                  {[4,5].map(n=>(
+                    <button key={n} onClick={()=>setAcademiaExtraQAlts(n)}
+                      className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${academiaExtraQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                      {n} (A-{n===4?'D':'E'})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-7">
+              <button onClick={()=>setAcademiaExtraModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+              <button onClick={()=>{
+                const extraSettings = {...settings, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts};
+                const {topic,subject} = academiaExtraModal;
+                setAcademiaExtraModal(null);
+                generateAcademiaExtraBattery(topic, subject, extraSettings);
+              }} className="flex-[2] py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2">
+                <Zap className="w-4 h-4"/>Gerar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
@@ -5355,6 +6080,26 @@ export default function QuestionBankApp() {
       {/* ── STANDARD MODALS ── */}
       {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='academia-extra-bloco'&&<GModal title="Excluir bloco?" message="As questões deste bloco serão removidas da Academia e do Acervo do Oráculo." confirmText="Excluir" onConfirm={async()=>{
+        const {blocoId, topicId, subjectId, oracleTopicId} = deleteId;
+        // Remove from Academia subject
+        const acSub = library.find(s=>s.id===subjectId);
+        if(acSub){
+          const updatedAcSub = {...acSub, topics: acSub.topics.map(t=>t.id===topicId?{...t,extraBattery:(t.extraBattery||[]).filter(b=>(b.id||`legacy_${(t.extraBattery||[]).indexOf(b)}`)!==blocoId)}:t)};
+          await updateSubject(updatedAcSub);
+        }
+        // Remove from Oracle subject
+        if(oracleTopicId){
+          const oracleTitle = `Academia — ${acSub?.title||''}`;
+          const oracleSub = library.find(s=>s.title===oracleTitle&&s.source==='gemini');
+          if(oracleSub){
+            const updatedOracle = {...oracleSub, topics: oracleSub.topics.filter(t=>t.id!==oracleTopicId)};
+            if(updatedOracle.topics.length===0) await removeSubject(oracleSub.id);
+            else await updateSubject(updatedOracle);
+          }
+        }
+        setDeleteId(null);
+      }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {editingSub&&<GModal title="Renomear" message="" confirmText="Renomear" onConfirm={async()=>{const s=library.find(x=>x.id===editingSub);if(s)await updateSubject({...s,title:editingSubName.trim()});setEditingSub(null);}} onCancel={()=>setEditingSub(null)} darkMode={darkMode}><input value={editingSubName} onChange={e=>setEditingSubName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}
       {editingTopic&&<GModal title="Renomear Bloco" message="" confirmText="Renomear" onConfirm={async()=>{if(!activeSubject)return;await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===editingTopic?{...t,title:editingTopicName.trim()}:t)});setEditingTopic(null);}} onCancel={()=>setEditingTopic(null)} darkMode={darkMode}><input value={editingTopicName} onChange={e=>setEditingTopicName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}

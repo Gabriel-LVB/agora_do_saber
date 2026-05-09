@@ -1,22 +1,11 @@
 /**
  * ÁGORA DO SABER — PROMPTS
- *
- * Este arquivo contém TODOS os prompts usados pelo site.
- * Edite aqui para ajustar o comportamento das IAs sem mexer no App.jsx.
- *
- * FUNÇÕES EXPORTADAS:
- *   buildOracleQuestionPrompt(s, focusBlock, autoMode)   → prompt de geração do Oráculo
- *   buildOracleSyllabusPrompt(subjectName, s, autoMode)  → prompt de sumário do Oráculo
- *   buildOracleSyllabusRevisePrompt(current, feedback, s)→ prompt de revisão de sumário
- *   buildExternalPrompt(s)                               → prompt para IA externa
- *   buildVqSyllabusPrompt(aula, numBlocks, qPerBlock, transcript, extraPrompt) → sumário das aulas
- *   buildVqBlockPrompt(block, meta, subtopicsArr, transcriptSlice, alts) → questões de bloco
  */
 
 // ─── INSTRUÇÕES POR TIPO DE QUESTÃO ─────────────────────────────────────────
 
 export const TYPE_INST = {
-  direct: '',  // padrão — sem instrução adicional
+  direct: '',
   vof: `
 TIPO: VERDADEIRO OU FALSO
 Cada questão deve conter 4 assertivas (I, II, III, IV) que o aluno classifica como V ou F.
@@ -61,7 +50,6 @@ Explicação: [feedback sobre o que uma boa resposta deve conter]
 NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa correta:". Apenas o formato acima.`,
 };
 
-// Constrói a instrução de tipo combinada para múltiplos tipos selecionados
 export const buildTypeInst = (types = ['direct']) => {
   if (!types || types.length === 0) types = ['direct'];
   if (types.length === 1) return TYPE_INST[types[0]] || '';
@@ -86,38 +74,50 @@ export const STYLE_INST = {
 
 const REGRAS_ENUNCIADO = `
 REGRAS DO ENUNCIADO:
-- Jamais mencione a aula, o professor, a importância de estudar o assunto ou qualquer referência ao contexto didático
-- Nos casos clínicos: inclua dados como idade, sexo, tempo de evolução, sintomas principais e achados relevantes de exame — sem entregar o diagnóstico ou o tratamento se eles forem a resposta
-- Nas questões diretas: vá direto ao conceito, sem introduções desnecessárias
-- O enunciado deve conter APENAS o que é necessário para resolver a questão
-- Tamanho ideal: suficiente para contextualizar sem ser prolixo — evite enunciados de uma linha e evite romances clínicos desnecessários`;
+- Jamais mencione a aula, o professor, o assunto ou qualquer referência ao contexto didático
+- O enunciado NUNCA deve conter palavras que sejam sinônimos diretos da resposta correta. Se a resposta é "inibição da bomba de prótons", o enunciado não pode dizer "supressão ácida" ou "bomba de prótons"
+- Nos casos clínicos: inclua idade, sexo, tempo de evolução, sintomas e achados de exame — nunca entregue o diagnóstico ou tratamento que é a resposta
+- Nas questões diretas: enunciado objetivo, sem introduções desnecessárias
+- PROIBIDO no enunciado: qualquer dica semântica que permita eliminar distratores sem conhecimento do tema
+- Tamanho ideal: suficiente para contextualizar sem ser prolixo`;
 
 const REGRAS_ALTERNATIVAS = `
-REGRAS DAS ALTERNATIVAS (CRÍTICO):
-- Todas as alternativas devem ser plausíveis para quem não domina o assunto: sem alternativas absurdas, óbvias ou que possam ser eliminadas por bom senso
-- Todas as alternativas devem ter comprimento similar: a alternativa correta NÃO pode ser reconhecida pelo tamanho
-- Use distratores sofisticados: condições parecidas, tratamentos do mesmo grupo, mecanismos semelhantes, exceções da regra
-- Nunca use palavras do enunciado como dica direta para a alternativa correta
-- A dificuldade de cada questão deve exigir conhecimento real — quem não estudou não deve conseguir chutar`;
+REGRAS DAS ALTERNATIVAS — AS MAIS IMPORTANTES DESTE PROMPT:
+
+REGRA 1 — COMPRIMENTO UNIFORME (CRÍTICO):
+Meça mentalmente o comprimento de cada alternativa. A correta NÃO pode ser a mais longa nem a mais curta.
+Todas as alternativas devem ter comprimento similar (variação máxima de ±20% em número de palavras).
+Se a correta precisar de mais palavras para estar correta, encurte-a ou reformule-a.
+Se os distratores forem muito curtos, alongue-os com especificações plausíveis.
+EXEMPLO PROIBIDO: A) Não / B) Não / C) Não / D) Sim, porque X, Y e Z são características que comprovam...
+EXEMPLO CORRETO: todas as alternativas com frases completas de tamanho similar.
+
+REGRA 2 — DISTRATORES SOFISTICADOS (CRÍTICO):
+Cada distrator deve ser uma afirmação que um estudante que estudou superficialmente poderia confundir com a resposta correta.
+Use: condições do mesmo grupo nosológico, fármacos da mesma classe, mecanismos parecidos, exceções da regra, valores próximos mas incorretos, inversões de causa/efeito, confusões clássicas do tema.
+PROIBIDO: distratores obviamente absurdos, anatomicamente impossíveis, ou que qualquer pessoa sem conhecimento médico eliminaria por bom senso.
+PROIBIDO: distratores que são apenas a negação direta do enunciado.
+
+REGRA 3 — SEM PISTAS SINTÁTICAS:
+- A alternativa correta não pode ter estrutura gramatical diferente das erradas
+- Não use "todas as anteriores" ou "nenhuma das anteriores"
+- Distribua a posição da alternativa correta aleatoriamente (não sempre B ou C)
+
+REGRA 4 — DIFICULDADE REAL:
+Um estudante que nunca viu o tema deve errar. Um que estudou superficialmente deve hesitar. Só quem domina o conteúdo deve acertar com segurança.`;
 
 const REGRAS_EXPLICACAO = `
 REGRAS DA EXPLICAÇÃO:
-- Comece explicando o CONCEITO central que a questão testa (o subtópico em si), não apenas o gabarito
-- Depois conecte esse conceito ao enunciado específico da questão
-- Explique por que cada distrator está errado usando o raciocínio clínico correto — pelo conteúdo, nunca pela letra
-- A explicação deve ser suficiente para que o aluno entenda o assunto, não apenas decore a resposta
-- Inclua: mecanismo fisiopatológico, critérios relevantes, comparações com os distratores
-- Tamanho ideal: 3 a 6 parágrafos curtos — nem uma frase solta nem um artigo. Seja denso e objetivo
+- Comece pelo CONCEITO central que a questão testa, não pelo gabarito
+- Explique por que a alternativa correta está certa usando raciocínio fisiopatológico ou clínico
+- Para cada distrator: explique por que está errado pelo conteúdo (nunca pela letra)
+- A explicação deve ensinar o assunto, não apenas confirmar o gabarito
+- Tamanho: 3 a 5 parágrafos objetivos
 
 PROIBIDO ABSOLUTO — LETRAS DAS ALTERNATIVAS:
-As alternativas serão EMBARALHADAS antes de serem exibidas ao aluno, portanto as letras A, B, C, D, E NÃO têm significado fixo.
-JAMAIS escreva "a alternativa A", "a opção B", "a letra C", ou qualquer referência a letras na explicação.
-Refira-se sempre pelo CONTEÚDO: "a opção que menciona X", "o uso de Y está incorreto porque...", "confundir Z com W é um erro comum pois..."
-ERRADO: "A alternativa B está correta pois o cálcio é o íon responsável..."
-CERTO: "O cálcio é o íon responsável pela contração muscular porque..."
-ERRADO: "A opção D está errada pois o potássio não..."
-CERTO: "O potássio não participa desse mecanismo porque..."`;
-
+As alternativas serão EMBARALHADAS antes de serem exibidas ao aluno — as letras A, B, C, D, E NÃO têm significado fixo.
+JAMAIS escreva "a alternativa A", "a opção B", "a letra C" na explicação.
+Refira-se SEMPRE pelo conteúdo: "a opção que menciona X", "confundir Y com Z é um erro comum pois..."`;
 
 const TEMPLATE_QUESTAO = (alts) => `
 FORMATO OBRIGATÓRIO (uma questão por bloco ---):
@@ -131,11 +131,6 @@ Explicação:
 
 // ─── PROMPT: GERAÇÃO DE QUESTÕES DO ORÁCULO ──────────────────────────────────
 
-/**
- * @param {object} s           - settings do usuário (numSubtopics, qPerSub, numAlternatives, questionStyle, customPrompt)
- * @param {string} focusBlock  - instruções de ênfase opcionais
- * @param {boolean} autoMode   - se true, o Oráculo escolhe a estrutura ideal
- */
 export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) => {
   const na   = s.numAlternatives || 5;
   const alts = na === 4
@@ -150,7 +145,7 @@ ESTRUTURA (modo automático):
 Você define a quantidade ideal de subtópicos por tópico.
 LIMITES ABSOLUTOS: mínimo 5 e máximo 20 subtópicos por tópico — nunca fora dessa faixa.
 Critérios:
-- Tópicos mais amplos podem ter mais subtópicos (15-30); tópicos pontuais, menos (5-15)
+- Tópicos mais amplos podem ter mais subtópicos (15-20); tópicos pontuais, menos (5-10)
 - Quantidade ideal: suficiente para cobrir o assunto sem repetição nem superficialidade
 - Cada subtópico deve ser um conceito distinto e testável — não uma variação do anterior
 - Organize do conceito mais fundamental ao mais específico dentro de cada tópico`
@@ -165,16 +160,13 @@ ESTRUTURA OBRIGATÓRIA:
   const types = s.questionTypes || ['direct'];
   const onlyOpen = types.every(t => ['open','essay'].includes(t));
 
-  // Questões abertas não usam template de alternativas nem regras de alternativas
   const templateBlock = onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ## Questão [N]
 [Enunciado]
 Resposta esperada: [resposta objetiva]
 Explicação: [explicação didática]
----` : `${REGRAS_ALTERNATIVAS}
-${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}`;
+---` : `${REGRAS_ALTERNATIVAS}\n${REGRAS_EXPLICACAO}\n${TEMPLATE_QUESTAO(alts)}`;
 
   return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
 
@@ -191,11 +183,6 @@ Gere TODAS as questões sem interromper. Não resuma, não pergunte, não coment
 
 // ─── PROMPT: SUMÁRIO DO ORÁCULO ───────────────────────────────────────────────
 
-/**
- * @param {string} subjectName - nome do assunto
- * @param {object} s           - settings
- * @param {boolean} autoMode   - se true, o Oráculo escolhe tópicos e subtópicos
- */
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
@@ -282,13 +269,6 @@ ${TEMPLATE_QUESTAO(alts)}`;
 
 // ─── PROMPT: SUMÁRIO DAS AULAS (VIDEOAULAS) ──────────────────────────────────
 
-/**
- * @param {object} aula        - objeto da aula
- * @param {number} numBlocks   - número de blocos
- * @param {number} qPerBlock   - questões por bloco (= subtópicos por bloco)
- * @param {string} transcript  - transcrição da aula (pode ser vazia)
- * @param {string} extraPrompt - instrução extra do usuário
- */
 export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, extraPrompt = '') => {
   return `Você é um especialista em avaliações médicas. Sua tarefa é criar um guia de questões para a aula "${aula.title}".
 
@@ -324,13 +304,6 @@ ${transcript
 
 // ─── PROMPT: GERAÇÃO DE QUESTÕES DE BLOCO (VIDEOAULAS) ───────────────────────
 
-/**
- * @param {object} block         - bloco com title e subtopics
- * @param {object} meta          - meta da aula (aulaTitle, questionStyle, numAlternatives)
- * @param {string[]} subtopicsArr- array de subtópicos do bloco
- * @param {string} transcriptSlice - trecho da transcrição para este bloco
- * @param {string} alts          - template de alternativas
- */
 export const buildVqBlockPrompt = (block, meta, subtopicsArr, transcriptSlice, alts) => {
   const styleInst = STYLE_INST[meta.questionStyle || 'mixed'];
   const total = subtopicsArr.length || meta.qPerBlock || 5;
@@ -355,4 +328,150 @@ ${transcriptSlice
   : '[Sem transcrição — baseie-se nos subtópicos e no título da aula]'}
 
 Gere TODAS as ${total} questões sem interromper ou comentar.`;
+};
+
+// ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
+
+export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) => {
+  const estrutura = autoMode
+    ? `Você tem liberdade para definir a quantidade de tópicos e subtópicos.
+LIMITES: mínimo 6 e máximo 20 subtópicos por tópico.
+Prefira MAIS subtópicos menores a MENOS subtópicos maiores.`
+    : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
+
+  return `Você é o Arquiteto de Alexandria, construindo o esqueleto de um curso sobre "${subjectName}".
+
+${estrutura}
+
+PRINCÍPIO FUNDAMENTAL — GRANULARIDADE DE QUESTÃO:
+Cada subtópico deve ser tão específico que possa ser coberto por:
+  1. UM parágrafo de explicação (não um capítulo)
+  2. UMA questão de múltipla escolha
+
+TESTE MENTAL que você deve aplicar a cada subtópico:
+"Consigo escrever 1 parágrafo sobre isso e criar 1 questão de múltipla escolha sobre apenas isso?"
+Se precisaria de 3 parágrafos → o subtópico é um guarda-chuva → quebre-o em 3 subtópicos.
+
+EXEMPLOS DE GRANULARIDADE ERRADA vs CERTA:
+ERRADO: "Organização Macroscópica, Segmentação e Sistema Porta do Fígado"
+  (cobre 3 conceitos distintos, renderia 4 questões)
+CERTO — quebre em:
+  - "Lobos hepáticos: direito, esquerdo, quadrado e caudado"
+  - "Segmentação de Couinaud: 8 segmentos e relevância cirúrgica"
+  - "Sistema porta: origem, tributárias e composição do fluxo"
+  - "Dupla irrigação hepática: proporções de volume e oxigênio"
+
+ERRADO: "Tratamento da Hipertensão Portal"
+CERTO — quebre em:
+  - "Profilaxia primária do sangramento varicoso: betabloqueadores vs ligadura"
+  - "Manejo agudo da hemorragia varicosa: vasoconstritores e endoscopia"
+  - "TIPS: indicações e contraindicações na hipertensão portal"
+
+REGRAS ADICIONAIS:
+- Títulos descritivos: deixe claro O QUE especificamente será ensinado
+- Ordem didática: definição → mecanismo → diagnóstico → tratamento → complicações
+- Baseie-se no material fornecido quando disponível
+- Nada de "Introdução", "Generalidades" ou títulos com vírgulas separando conceitos distintos
+
+FORMATO:
+Tópico 1: [Nome]
+  - [Subtópico específico]
+  - [Subtópico específico]
+Tópico 2: [Nome]
+  - [Subtópico específico]
+
+Responda APENAS o sumário.`;
+};
+
+// ─── PROMPT: AULA DA ACADEMIA ─────────────────────────────────────────────────
+
+export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', subjectName = '') => {
+  return `Você é um professor de medicina da Ágora do Saber, criando uma aula sobre "${topicTitle}"${subjectName ? ` (${subjectName})` : ''}.
+
+SUBTÓPICOS A COBRIR (um por seção, nesta ordem):
+${subtopics.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+FORMATO OBRIGATÓRIO:
+## [Título exato do subtópico]
+[Explicação]
+
+## [Próximo subtópico]
+[Explicação]
+
+REGRAS DA EXPLICAÇÃO:
+- Cada subtópico já é ATÔMICO (1 conceito). Sua explicação deve ser proporcionalmente focada.
+- Tamanho ideal por seção: 1 a 2 parágrafos densos. NÃO escreva 4-5 parágrafos sobre um subtópico atômico.
+- Se um subtópico diz "Segmentação de Couinaud", explique APENAS isso — não derive para sistema porta, dupla irrigação, etc.
+- Comece com o conceito central, depois o mecanismo ou critério relevante
+- Use **negrito** para termos-chave, valores e critérios diagnósticos
+- Use listas quando houver enumeração (critérios, classificações, doses)
+- Linguagem didática e densa: ensine o raciocínio, não apenas fatos
+- Português brasileiro, rigor técnico-científico
+
+${material ? `MATERIAL BASE:\n${material.substring(0, 40000)}` : '[Sem material — baseie-se no título e subtópicos]'}
+
+Gere a aula COMPLETA para todos os ${subtopics.length} subtópicos sem interromper.`;
+};
+
+// ─── PROMPT: QUESTÕES DE FIXAÇÃO DA ACADEMIA ──────────────────────────────────
+
+export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText = '') => {
+  const na = s.numAlternatives || 5;
+  const alts = na === 4
+    ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
+    : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
+
+  const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
+  const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+  const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
+
+  return `Você é um examinador de residência médica criando questões de fixação para "${topicTitle}".
+
+ESTILO: ${styleInst}
+${typeInst ? typeInst + '\n' : ''}
+ESTRUTURA — EXATAMENTE 1 questão por subtópico, nesta ordem:
+${subtopicsArr.map((s, i) => `${i + 1}. "${s}"`).join('\n')}
+Total: EXATAMENTE ${subtopicsArr.length} questões.
+
+REGRA DE ESCOPO (CRÍTICA): cada questão cobre APENAS o conceito do subtópico mapeado para ela.
+A questão 2 não pode abordar conteúdo da questão 1, 3 ou qualquer outro.
+
+${REGRAS_ENUNCIADO}
+${REGRAS_ALTERNATIVAS}
+${REGRAS_EXPLICACAO}
+${TEMPLATE_QUESTAO(alts)}
+
+Use IDs sequenciais simples (1, 2, 3...).
+
+${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
+
+Gere TODAS as ${subtopicsArr.length} questões sem interromper.`;
+};
+
+// ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
+
+export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s) => {
+  const na = s.numAlternatives || 5;
+  const alts = na === 4
+    ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
+    : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
+
+  const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
+  const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+
+  return `Você é o Oráculo de Medicina da Ágora do Saber, gerando uma bateria de revisão sobre "${topicTitle}".
+
+ESTILO: ${styleInst}
+${typeInst ? typeInst + '\n' : ''}
+ESTRUTURA:
+${subtopics.map((sub, i) => `- Subtópico ${i + 1}: "${sub}" → 1 questão`).join('\n')}
+Total: EXATAMENTE ${subtopics.length} questões, uma por subtópico, na ordem acima.
+
+${REGRAS_ENUNCIADO}
+${REGRAS_ALTERNATIVAS}
+${REGRAS_EXPLICACAO}
+${TEMPLATE_QUESTAO(alts)}
+
+Use o ID no formato [SUBTOPICO.QUESTAO] (ex: 1.1, 2.1...).
+Gere TODAS as questões sem interromper.`;
 };
