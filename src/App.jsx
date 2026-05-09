@@ -11,6 +11,7 @@ import {
   buildVqBlockPrompt,
   buildTypeInst,
 } from './agora_prompts.js';
+import { offlineDB, pendingQueue, useOnlineStatus, syncPendingOps } from './offline.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
@@ -2129,6 +2130,86 @@ export default function QuestionBankApp() {
   const [curWeek, setCurWeek]             = useState(null);   // semana selecionada no cronograma
   const [cronStartDate, setCronStartDate] = useState(null);   // data de início do curso (salva no Firestore)
 
+  // ── Offline support ───────────────────────────────────────────────────────
+  const { isOnline, justReconnected } = useOnlineStatus();
+  const [pendingCount, setPendingCount] = useState(0);
+  const [isSyncing, setIsSyncing]      = useState(false);
+  const [syncMsg, setSyncMsg]          = useState('');
+
+  // Atualiza contagem de pendências quando volta online
+  useEffect(() => {
+    pendingQueue.getAll().then(ops => setPendingCount(ops.length)).catch(()=>{});
+  }, [isOnline]);
+
+  // Sincroniza automaticamente ao reconectar
+  useEffect(() => {
+    if (!justReconnected || !user || user.isAnonymous || isSyncing) return;
+
+    const doSync = async () => {
+      const ops = await pendingQueue.getAll().catch(()=>[]);
+      if (!ops.length) return;
+
+      setIsSyncing(true);
+      setSyncMsg(`Sincronizando ${ops.length} resposta${ops.length!==1?'s':''}...`);
+
+      const handlers = {
+        saveAnswer: async (subjectId, topicId, qId, letter) => {
+          const subj = library.find(s => s.id === subjectId);
+          if (!subj) return;
+          const now = Date.now();
+          const topic = subj.topics.find(t => t.id === topicId);
+          if (!topic) return;
+          const q = topic.questions?.find(x => x.id === qId);
+          const isRight = q?.options?.find(o => o.isCorrect)?.letter === letter;
+          const sr = { ...(topic.spacedReview || {}) };
+          if (!isRight) sr[qId] = { dueDate: now + 86400000, interval: 1, wrongCount: (sr[qId]?.wrongCount || 0) + 1 };
+          else if (sr[qId]) { const ni = Math.min((sr[qId].interval || 1) * 2, 30); sr[qId] = { ...sr[qId], dueDate: now + ni * 86400000, interval: ni }; }
+          const updated = { ...subj, topics: subj.topics.map(t => t.id !== topicId ? t : { ...t, answers: { ...t.answers, [qId]: letter }, spacedReview: sr }) };
+          await setDoc(doc(db, 'users', user.uid, 'library', subjectId.toString()), updated);
+        },
+        saveVqBlockAnswers: async (aulaId, blockId, answers) => {
+          const cur = vqBlocks[aulaId];
+          if (!cur) return;
+          const updBlocks = { ...(cur.blocks || {}), [blockId]: { ...(cur.blocks?.[blockId] || {}), answers } };
+          const updated = { ...cur, blocks: updBlocks };
+          await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), updated);
+        },
+        markWatched: async (bunnyId, value) => {
+          const current = { ...watchedAulas };
+          if (value) current[bunnyId] = true; else delete current[bunnyId];
+          await setDoc(doc(db, 'users', user.uid, 'videoaulas_progress', 'watched'), current);
+        },
+        saveReviewItem: async (aulaId, blockId, qId, item) => {
+          const cur = reviewQueue[aulaId] || {};
+          const updated = { ...cur, [blockId]: { ...(cur[blockId] || {}), [qId]: item } };
+          await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), updated);
+        },
+        saveFavorites: async (subjectId, topicId, favorites) => {
+          const subj = library.find(s => s.id === subjectId);
+          if (!subj) return;
+          const updated = { ...subj, topics: subj.topics.map(t => t.id === topicId ? { ...t, favorites } : t) };
+          await setDoc(doc(db, 'users', user.uid, 'library', subjectId.toString()), updated);
+        },
+      };
+
+      try {
+        const synced = await syncPendingOps(handlers, (done, total) => {
+          setSyncMsg(`Sincronizando ${done}/${total}...`);
+        });
+        setPendingCount(0);
+        setSyncMsg(synced > 0 ? `✅ ${synced} resposta${synced!==1?'s':''} sincronizada${synced!==1?'s':''}!` : '');
+        setTimeout(() => setSyncMsg(''), 3000);
+      } catch (e) {
+        setSyncMsg('⚠️ Erro ao sincronizar. Tentará novamente depois.');
+        setTimeout(() => setSyncMsg(''), 4000);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    doSync();
+  }, [justReconnected]); // eslint-disable-line
+
   // Load videoaulas: carrega UMA VEZ no login e usa localStorage como cache entre sessões
   const videoaulasLoadedRef = useRef(false);
   useEffect(() => {
@@ -2212,11 +2293,16 @@ export default function QuestionBankApp() {
     const u = { ...watchedAulas };
     if (already) { delete u[bunnyId]; } else { u[bunnyId] = true; }
     setWatchedAulas(u);
-    // Atualizar cache local imediatamente
+    // Cache local imediato
     if (user) try { localStorage.setItem(`agora_watched_${user.uid}`, JSON.stringify(u)); } catch(e) {}
-    if (user && !user.isAnonymous) try {
-      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
-    } catch(e) {}
+    try { await offlineDB.saveWatched(u); } catch(e) {}
+    if (!isOnline && user && !user.isAnonymous) {
+      // Offline: enfileira para sincronizar
+      await pendingQueue.add('WATCHED', { bunnyId, value: !already });
+      setPendingCount(c => c + 1);
+    } else if (user && !user.isAnonymous) {
+      try { await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u); } catch(e) {}
+    }
   };
 
   const resetWatchedProgress = async () => {
@@ -2379,18 +2465,40 @@ export default function QuestionBankApp() {
 
   // Total de revisões pendentes (para badge)
   const dueCount = getDueReviews().length;
-  // Load vqBlocks — carrega UMA VEZ quando o usuário loga, não a cada troca de view
+  // Load vqBlocks — carrega UMA VEZ quando o usuário loga (IndexedDB primeiro, depois Firestore)
   const vqBlocksLoadedRef = useRef(false);
   useEffect(() => {
     if (!user || user.isAnonymous || vqBlocksLoadedRef.current) return;
     vqBlocksLoadedRef.current = true;
     (async () => {
       setVqLoading(true);
+      // 1. Tenta IndexedDB primeiro (disponível offline)
+      try {
+        const cached = await offlineDB.loadVqBlocks();
+        if (cached && Object.keys(cached).length > 0) {
+          setVqBlocks(cached);
+          setVqLoading(false);
+          // Recarrega do Firestore em background se online
+          if (isOnline) {
+            getDocs(collection(db, 'users', user.uid, 'vq_blocks')).then(snap => {
+              const loaded = {};
+              snap.forEach(d => { loaded[d.id] = d.data(); });
+              if (Object.keys(loaded).length > 0) {
+                setVqBlocks(loaded);
+                offlineDB.saveVqBlocks(loaded).catch(()=>{});
+              }
+            }).catch(()=>{});
+          }
+          return;
+        }
+      } catch(e) {}
+      // 2. Sem cache — carrega do Firestore
       try {
         const snap = await getDocs(collection(db, 'users', user.uid, 'vq_blocks'));
         const loaded = {};
         snap.forEach(d => { loaded[d.id] = d.data(); });
         setVqBlocks(loaded);
+        offlineDB.saveVqBlocks(loaded).catch(()=>{});
       } catch(e) { console.error('vqBlocks load error:', e); }
       finally { setVqLoading(false); }
     })();
@@ -2401,11 +2509,14 @@ export default function QuestionBankApp() {
     if (!user) { vqBlocksLoadedRef.current = false; setVqBlocks({}); }
   }, [user]);
 
-  // Save a single aula's vqBlock data to Firestore
+  // Save a single aula's vqBlock data (IndexedDB + Firestore)
   const saveVqBlock = async (aulaId, data) => {
     const updated = { ...vqBlocks, [aulaId]: data };
     setVqBlocks(updated);
-    if (user && !user.isAnonymous) try {
+    // Sempre salva no IndexedDB (offline)
+    try { await offlineDB.saveVqBlocks(updated); } catch(e) {}
+    // Salva no Firestore apenas se online
+    if (user && !user.isAnonymous && isOnline) try {
       await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), data);
     } catch(e) {}
   };
@@ -2541,7 +2652,7 @@ export default function QuestionBankApp() {
     return ()=>unsub();
   },[]);
 
-  // Library sync
+  // Library sync — com suporte offline via IndexedDB
   useEffect(()=>{
     if(!user||!username) return;
     const defFolder=[{id:'imported-folder',title:'Pergaminhos Diversos',fullSyllabus:'Questões importadas.',source:'external',topics:[]}];
@@ -2549,10 +2660,21 @@ export default function QuestionBankApp() {
       try{const s=localStorage.getItem(`qb_lib_${username}`);setLibrary(s?JSON.parse(s):defFolder);}catch(e){setLibrary(defFolder);}
       return;
     }
+    // 1. Carrega do IndexedDB imediatamente (disponível offline)
+    offlineDB.loadLibrary().then(cached => {
+      if (cached && cached.length > 0) setLibrary(cached);
+    }).catch(()=>{});
+    // 2. Sincroniza com Firestore em tempo real (onSnapshot funciona offline com cache do SDK)
     const libRef=collection(db,'users',user.uid,'library');
-    const u1=onSnapshot(libRef,(snap)=>{const d=snap.docs.map(x=>x.data()).sort((a,b)=>b.id-a.id);setLibrary(d.length?d:defFolder);});
+    const u1=onSnapshot(libRef,(snap)=>{
+      const d=snap.docs.map(x=>x.data()).sort((a,b)=>b.id-a.id);
+      const lib = d.length?d:defFolder;
+      setLibrary(lib);
+      // Atualiza cache IndexedDB sempre que Firestore retornar dados
+      offlineDB.saveLibrary(lib).catch(()=>{});
+    }, ()=>{}); // ignora erro de rede — IndexedDB já cobriu
     return ()=>u1();
-  },[user,username]);
+  },[user,username]); // eslint-disable-line
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeSubject = library.find(s=>s.id===activeSubjectId);
@@ -2572,19 +2694,29 @@ export default function QuestionBankApp() {
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
   const updateSubject = async (s) => {
-    setLibrary(p=>p.map(x=>x.id===s.id?s:x));
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.map(x=>x.id===s.id?s:x)));
+    const newLib = library.map(x=>x.id===s.id?s:x);
+    setLibrary(newLib);
+    try { await offlineDB.saveLibrary(newLib); } catch(e) {}  // cache offline sempre
+    if(user&&!user.isAnonymous) {
+      if (isOnline) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
+      // Se offline, o handleAnswer já enfileirou — outros casos (rename, etc.) salvam quando voltar online via onSnapshot
+    } else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(newLib));
   };
   const addSubject = async (s) => {
-    setLibrary(p=>[s,...p]);
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([s,...library]));
+    const newLib = [s,...library];
+    setLibrary(newLib);
+    try { await offlineDB.saveLibrary(newLib); } catch(e) {}
+    if(user&&!user.isAnonymous) {
+      if (isOnline) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
+    } else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(newLib));
   };
   const removeSubject = async (id) => {
-    setLibrary(p=>p.filter(s=>s.id!==id));
-    if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
+    const newLib = library.filter(s=>s.id!==id);
+    setLibrary(newLib);
+    try { await offlineDB.saveLibrary(newLib); } catch(e) {}
+    if(user&&!user.isAnonymous) {
+      if (isOnline) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
+    } else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(newLib));
   };
 
   const saveSettingsTimer = useRef(null);
@@ -2955,13 +3087,38 @@ export default function QuestionBankApp() {
     const now=Date.now(); const sr={...(activeTopic.spacedReview||{})};
     if(!isRight) sr[qId]={dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
     else if(sr[qId]){const ni=Math.min((sr[qId].interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id!==activeTopicId?t:{...t,answers:{...t.answers,[qId]:letter},spacedReview:sr})});
+    const updatedSubject={...activeSubject,topics:activeSubject.topics.map(t=>t.id!==activeTopicId?t:{...t,answers:{...t.answers,[qId]:letter},spacedReview:sr})};
+    // Atualiza estado local imediatamente — funciona offline
+    setLibrary(p=>p.map(x=>x.id===updatedSubject.id?updatedSubject:x));
+    // Salva no IndexedDB como cache offline
+    try { await offlineDB.saveLibrary(library.map(x=>x.id===updatedSubject.id?updatedSubject:x)); } catch(e) {}
+    if (!isOnline || (user && user.isAnonymous)) {
+      // Offline: enfileira para sincronizar depois
+      if (!isOnline && user && !user.isAnonymous) {
+        await pendingQueue.add('ANSWER', { subjectId: activeSubject.id, topicId: activeTopicId, qId, letter });
+        setPendingCount(c => c + 1);
+      } else if (user?.isAnonymous) {
+        try { localStorage.setItem(`qb_lib_${username}`, JSON.stringify(library.map(x=>x.id===updatedSubject.id?updatedSubject:x))); } catch(e) {}
+      }
+    } else {
+      // Online: salva direto no Firestore
+      if (user && !user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',updatedSubject.id.toString()),updatedSubject).catch(console.error);
+    }
   };
 
   const handleFavorite = async (qId) => {
     if(!activeTopic)return;
     const favs=activeTopic.favorites||[]; const nf=favs.includes(qId)?favs.filter(f=>f!==qId):[...favs,qId];
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,favorites:nf}:t)});
+    const updatedSubj = {...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,favorites:nf}:t)};
+    // Atualiza estado local imediatamente
+    setLibrary(p=>p.map(x=>x.id===updatedSubj.id?updatedSubj:x));
+    try { await offlineDB.saveLibrary(library.map(x=>x.id===updatedSubj.id?updatedSubj:x)); } catch(e) {}
+    if (!isOnline && user && !user.isAnonymous) {
+      await pendingQueue.add('FAVORITE', { subjectId: activeSubject.id, topicId: activeTopicId, favorites: nf });
+      setPendingCount(c => c + 1);
+    } else {
+      await updateSubject(updatedSubj);
+    }
   };
 
   // Bug 6: toggle favorite for a question that came from the exam (carries _subjectId, _topicId)
@@ -3308,6 +3465,26 @@ export default function QuestionBankApp() {
           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setView('library');setMenuOpen(false);}}>
             <div className="bg-yellow-600 p-1.5 rounded-lg shadow-md"><Landmark className="w-4 h-4 text-white"/></div>
             <h1 className={`font-serif font-bold text-lg tracking-wide ${darkMode?'text-yellow-500':'text-yellow-700'}`}>ÁGORA DO SABER</h1>
+            {/* Indicador offline */}
+            {!isOnline && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-500 border border-orange-500/30" title={`Offline${pendingCount>0?` — ${pendingCount} resposta${pendingCount!==1?'s':''} pendente${pendingCount!==1?'s':''}`:''}`}>
+                <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
+                {pendingCount > 0 ? `offline · ${pendingCount}` : 'offline'}
+              </span>
+            )}
+            {isOnline && pendingCount > 0 && !isSyncing && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-500 border border-blue-500/30">
+                ↑ {pendingCount} pendente{pendingCount!==1?'s':''}
+              </span>
+            )}
+            {isSyncing && (
+              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-600 border border-yellow-500/30">
+                <Spinner className="w-2.5 h-2.5"/> sincronizando
+              </span>
+            )}
+            {syncMsg && !isSyncing && isOnline && pendingCount === 0 && (
+              <span className="text-[10px] font-bold text-green-500 animate-pulse">{syncMsg}</span>
+            )}
           </div>
 
           {/* Desktop nav buttons */}
@@ -4772,7 +4949,19 @@ export default function QuestionBankApp() {
               const blockFavs = Array.isArray(block.favorites) ? block.favorites : [];
 
               const handleVqAnswer = async (qId, letter) => {
-                await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{...ans,[qId]:letter}}}});
+                const newAnswers = {...ans,[qId]:letter};
+                const newData = {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:newAnswers}}};
+                // Salva no IndexedDB imediatamente (offline)
+                const updAll = {...vqBlocks,[aulaIdNew]:newData};
+                setVqBlocks(updAll);
+                try { await offlineDB.saveVqBlocks(updAll); } catch(e) {}
+                if (!isOnline && user && !user.isAnonymous) {
+                  // Offline: enfileira resposta
+                  await pendingQueue.add('VQ_ANSWER', { aulaId: aulaIdNew, blockId, answers: newAnswers });
+                  setPendingCount(c => c + 1);
+                } else if (user && !user.isAnonymous) {
+                  try { await setDoc(doc(db,'users',user.uid,'vq_blocks',aulaIdNew), newData); } catch(e) {}
+                }
               };
               const handleVqFavorite = async (qId) => {
                 const nf = blockFavs.includes(qId) ? blockFavs.filter(f=>f!==qId) : [...blockFavs,qId];
