@@ -3621,7 +3621,7 @@ export default function QuestionBankApp() {
 
                 {/* Tipo e estilo das questões */}
                 <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um)</span></div>
                   <QuestionTypeSelector
                     selected={settings.questionTypes || ['direct']}
                     onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
