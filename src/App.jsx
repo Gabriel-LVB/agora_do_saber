@@ -819,9 +819,38 @@ const QuestionView = ({
   topicStyle=null, onTopicStyleChange=null,
   topicType=null,
   onAddToReview=null,
-  onGoToAula=null, // botão para ir para a aula
+  onGoToAula=null,
 }) => {
   const dm = darkMode;
+
+  // Auto-scroll to first unanswered question when block loads
+  useEffect(() => {
+    if (!questions || questions.length === 0) return;
+    const validAns = Object.fromEntries(
+      Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
+    );
+    const answeredCount = questions.filter(q => {
+      const v = validAns[q.id];
+      if (!v || v === 'SKIPPED') return false;
+      if (q.isOpen) { try { return !!(JSON.parse(v)?.answer); } catch(e) { return false; } }
+      return true;
+    }).length;
+    // Don't scroll if none answered or all answered
+    if (answeredCount === 0 || answeredCount === questions.length) return;
+    // Find first unanswered
+    const firstUnanswered = questions.find(q => {
+      const v = validAns[q.id];
+      if (!v || v === 'SKIPPED') return true;
+      if (q.isOpen) { try { return !!(JSON.parse(v)?.answer); } catch(e) { return true; } }
+      return false;
+    });
+    if (!firstUnanswered) return;
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-question-id="${firstUnanswered.id}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []); // only on mount
 
   const correctLetter = (q) => q.options?.find(o=>o.isCorrect)?.letter;
 
@@ -962,12 +991,14 @@ const QuestionView = ({
       {!isGenerating&&(
         <div>
           {questions.map((q,i)=>(
-            <QuestionCard key={q.id||i} question={q} index={i}
+            <div key={q.id||i} data-question-id={q.id}>
+            <QuestionCard question={q} index={i}
               selectedLetter={answers[q.id]} onAnswer={l=>onAnswer(q.id,l)}
               darkMode={dm} isFavorite={favorites.includes(q.id)}
               onToggleFavorite={()=>onToggleFavorite(q.id)}
               apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
               onOpenAnswer={onOpenAnswer}/>
+            </div>
           ))}
           {/* ── Conclusão ── */}
           {allDone&&(
@@ -1162,7 +1193,7 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
           </button>
           <button onClick={()=>onConfirm(selected)} disabled={selected.length===0}
             className="flex-[2] py-3 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-40 flex items-center justify-center gap-2">
-            <RepeatIcon className="w-4 h-4"/> Adicionar {selected.length} selected.length===1?'questão':'questões'
+            <RepeatIcon className="w-4 h-4"/> Adicionar {selected.length} {selected.length===1?'questão':'questões'}
           </button>
         </div>
       </div>
@@ -2086,6 +2117,7 @@ export default function QuestionBankApp() {
   const [academiaTopicAnswers, setAcademiaTopicAnswers] = useState({});
   const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
   const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
+  const [academiaQMode, setAcademiaQMode]             = useState('interleaved'); // 'interleaved' | 'end'
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
@@ -3441,27 +3473,62 @@ export default function QuestionBankApp() {
       }
     }
 
-    // Parsear a aula em seções por subtópico (separa em ## Título)
+    // Parsear a aula em seções por subtópico
+    // O prompt instrui a IA a usar ## para cada subtópico.
+    // O parser detecta ## e mapeia sequencialmente. Se a IA desobedecer, há fallbacks.
     const lessonSections = {};
     if (lessonText) {
+      // Log do texto cru para diagnóstico
+      console.log('[Academia Parser] lessonText cru (primeiros 3000 chars):\n', lessonText?.substring(0, 3000));
+
+      // Detecta ## (o que o prompt pede)
       const sectionRegex = /^##\s+(.+)$/gm;
       const positions = [];
       let match;
       while ((match = sectionRegex.exec(lessonText)) !== null) {
-        positions.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
+        const rawTitle = match[1].replace(/\*+/g, '').trim();
+        if (rawTitle.length >= 3) {
+          positions.push({ title: rawTitle, index: match.index, end: match.index + match[0].length });
+        }
       }
-      positions.forEach((pos, i) => {
-        const start = pos.end;
-        const end = positions[i + 1]?.index ?? lessonText.length;
-        const content = lessonText.slice(start, end).trim();
-        // Mapeia pelo índice do subtópico (tenta casar título, senão usa posição)
-        const subIdx = subtopics.findIndex(s =>
-          pos.title.toLowerCase().includes(s.toLowerCase().slice(0, 20)) ||
-          s.toLowerCase().includes(pos.title.toLowerCase().slice(0, 20))
-        );
-        const key = subIdx >= 0 ? subIdx : i;
-        lessonSections[key] = { title: pos.title, content };
-      });
+      console.log('[Academia Parser] ## encontrados:', positions.length, '| Subtópicos:', subtopics.length);
+
+      if (positions.length >= subtopics.length) {
+        // Caso ideal: IA seguiu o formato — mapeia por posição sequencial
+        positions.slice(0, subtopics.length).forEach((pos, i) => {
+          const start = pos.end;
+          const end = positions[i + 1]?.index ?? lessonText.length;
+          lessonSections[i] = { title: pos.title, content: lessonText.slice(start, end).trim() };
+        });
+
+      } else if (positions.length > 0 && positions.length < subtopics.length) {
+        // IA gerou poucos ## — pode ter agrupado subtópicos. Distribui proporcionalmente.
+        console.warn('[Academia Parser] IA gerou menos ## que subtópicos. Distribuindo proporcionalmente.');
+        positions.forEach((pos, pi) => {
+          const start = pos.end;
+          const end = positions[pi + 1]?.index ?? lessonText.length;
+          const sectionContent = lessonText.slice(start, end).trim();
+          const subStart = Math.round(pi * subtopics.length / positions.length);
+          const subEnd   = Math.round((pi + 1) * subtopics.length / positions.length);
+          for (let si = subStart; si < subEnd; si++) {
+            lessonSections[si] = { title: si === subStart ? pos.title : subtopics[si], content: sectionContent };
+          }
+        });
+
+      } else {
+        // Fallback total: IA não usou ## — divide o texto em blocos por parágrafo
+        console.warn('[Academia Parser] Nenhum ## encontrado. Usando fallback por parágrafo.');
+        console.log('[Academia Parser] Texto COMPLETO:\n', lessonText);
+        const paras = lessonText.split(/\n\n+/).filter(p => p.trim().length > 10);
+        subtopics.forEach((sub, i) => {
+          const from = Math.floor(i * paras.length / subtopics.length);
+          const to   = Math.max(from + 1, Math.floor((i + 1) * paras.length / subtopics.length));
+          lessonSections[i] = { title: sub, content: paras.slice(from, to).join('\n\n') };
+        });
+      }
+
+      console.log('[Academia Parser] Seções mapeadas:', Object.keys(lessonSections).length,
+        Object.keys(lessonSections).map(k => `[${k}] ${lessonSections[k]?.content?.substring(0,40)}...`));
     }
 
     // Parsear as questões de fixação
@@ -3805,7 +3872,7 @@ export default function QuestionBankApp() {
                 const isAcademiaTopic = activeSubject.source==='academia';
                 const fixAll = isAcademiaTopic ? Object.values(topic.fixationQuestions||{}).flat().concat((topic.extraBattery||[]).flatMap(b=>b.questions||b)) : [];
                 const fixTotal = fixAll.length;
-                const fixAnswered = fixAll.filter(q=>academiaTopicAnswers[q.id]).length;
+                const fixAnswered = fixAll.filter(q=>(topic.answers||{})[q.id]).length;
                 const due=Object.values(topic.spacedReview||{}).filter(r=>r.dueDate<=Date.now()).length;
                 const pct=isAcademiaTopic
                   ?(topic.lessonGenerated?(fixTotal>0?Math.round(fixAnswered/fixTotal*100):50):0)
@@ -3879,53 +3946,113 @@ export default function QuestionBankApp() {
         )}
 
         {/* ── ACADEMIA TOPIC ── */}
+        {/* ── ACADEMIA TOPIC ── */}
         {view==='academia-topic'&&activeTopic&&activeSubject?.source==='academia'&&(()=>{
           const topic   = activeTopic;
           const subject = activeSubject;
           const subtopics = topic.subtopics || [];
           const hasLesson = topic.lessonGenerated;
 
-          // Helper: renderiza markdown da aula (negrito, listas, parágrafos)
+          // Renderiza markdown da aula: parágrafos, listas, tabelas
           const renderLesson = (md) => {
             if (!md) return null;
-            return md.split('\n').map((line, i) => {
-              if (!line.trim()) return <div key={i} className="h-3"/>;
-              if (/^\s*[-*]\s/.test(line)) {
-                const txt = line.replace(/^\s*[-*]\s/, '');
-                return <li key={i} className={`ml-4 list-disc text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`}>{parseHtmlText(txt)}</li>;
+            const lines = md.split('\n');
+            const elements = [];
+            let i = 0;
+            while (i < lines.length) {
+              const line = lines[i];
+              // Tabela markdown
+              if (/^\s*\|.+\|\s*$/.test(line)) {
+                const tableLines = [];
+                while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) {
+                  tableLines.push(lines[i]);
+                  i++;
+                }
+                const rows = tableLines.filter(l => !/^\s*\|[-:\s|]+\|\s*$/.test(l));
+                const header = rows[0];
+                const body = rows.slice(1);
+                const parseCells = (row) => row.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').split(/\s*\|\s*/);
+                elements.push(
+                  <div key={`tbl-${i}`} className="overflow-x-auto my-4">
+                    <table className={`w-full text-sm border-collapse ${darkMode?'text-gray-200':'text-gray-800'}`}>
+                      <thead>
+                        <tr className={`border-b-2 ${darkMode?'border-gray-600':'border-gray-300'}`}>
+                          {header && parseCells(header).map((cell, ci) => (
+                            <th key={ci} className={`px-3 py-2 text-left font-bold ${darkMode?'bg-gray-800/80':'bg-gray-100'}`}>{parseHtmlText(cell)}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {body.map((row, ri) => (
+                          <tr key={ri} className={`border-b ${darkMode?'border-gray-700/50':'border-gray-200'}`}>
+                            {parseCells(row).map((cell, ci) => (
+                              <td key={ci} className="px-3 py-2">{parseHtmlText(cell)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+                continue;
               }
-              return <p key={i} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>;
-            });
+              // Lista
+              if (/^\s*[-*•]\s/.test(line)) {
+                const items = [];
+                while (i < lines.length && /^\s*[-*•]\s/.test(lines[i])) {
+                  items.push(lines[i].replace(/^\s*[-*•]\s/, ''));
+                  i++;
+                }
+                elements.push(
+                  <ul key={`ul-${i}`} className={`list-disc ml-5 space-y-1 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
+                    {items.map((item, ii) => <li key={ii}>{parseHtmlText(item)}</li>)}
+                  </ul>
+                );
+                continue;
+              }
+              if (!line.trim()) { elements.push(<div key={`sp-${i}`} className="h-2"/>); i++; continue; }
+              elements.push(<p key={`p-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>);
+              i++;
+            }
+            return elements;
           };
 
           return (
             <div className="max-w-3xl mx-auto">
               {/* Header */}
-              <button onClick={()=>setView('subject')} className={`flex items-center gap-2 mb-6 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+              <button onClick={()=>setView('subject')} className={`flex items-center gap-2 mb-8 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
                 <ArrowLeft className="w-4 h-4"/>Voltar
               </button>
-              <div className="mb-8">
-                <div className="flex items-center gap-3 mb-1">
-                  <AcademiaIcon className="w-6 h-6 text-yellow-600"/>
-                  <span className={`text-xs font-bold uppercase opacity-40`}>{subject.title}</span>
-                </div>
-                <h1 className="text-3xl font-serif font-bold text-yellow-600">{topic.title}</h1>
-                <p className={`text-sm mt-1 opacity-50`}>{subtopics.length} subtópicos</p>
+              <div className="mb-10">
+                <div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{subject.title}</div>
+                <h1 className={`text-3xl font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{topic.title}</h1>
+                <p className={`text-sm ${darkMode?'text-gray-500':'text-gray-400'}`}>{subtopics.length} subtópicos</p>
+                {hasLesson&&(
+                  <div className={`flex items-center gap-1 mt-4 p-1 rounded-lg w-fit ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
+                    {[
+                      {k:'interleaved', label:'Fixação intercalada'},
+                      {k:'end',         label:'Fixação no final'},
+                    ].map(opt=>(
+                      <button key={opt.k} onClick={()=>setAcademiaQMode(opt.k)}
+                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${academiaQMode===opt.k
+                          ?(darkMode?'bg-gray-700 text-yellow-400 shadow':'bg-white text-yellow-600 shadow')
+                          :(darkMode?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600')}`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Gerar aula — estado inicial */}
+              {/* Estado: aula não gerada */}
               {!hasLesson&&!academiaGenerating&&(
-                <div className={`rounded-2xl border p-10 text-center ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                  <AcademiaIcon className="w-16 h-16 text-yellow-600 mx-auto mb-4 opacity-60"/>
-                  <h3 className="text-xl font-serif font-bold text-yellow-600 mb-2">Aula ainda não gerada</h3>
-                  <p className={`text-sm opacity-60 mb-6 max-w-sm mx-auto`}>Clique abaixo para gerar a explicação completa e as questões de fixação de cada subtópico.</p>
-                  <div className={`text-xs rounded-xl p-3 mb-6 text-left max-w-sm mx-auto ${darkMode?'bg-gray-700 text-gray-300':'bg-gray-50 text-gray-600'}`}>
-                    <p className="font-bold mb-1">Subtópicos que serão cobertos:</p>
-                    {subtopics.map((s, i) => <p key={i} className="opacity-70">• {s}</p>)}
-                  </div>
+                <div className={`py-16 text-center ${darkMode?'text-gray-500':'text-gray-400'}`}>
+                  <AcademiaIcon className="w-14 h-14 mx-auto mb-5 opacity-30"/>
+                  <p className="font-bold text-lg mb-1">Aula não gerada</p>
+                  <p className="text-sm opacity-70 mb-6 max-w-xs mx-auto">Clique abaixo para gerar a explicação e as questões de fixação.</p>
                   {isAdmin&&(
-                    <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 mx-auto">
-                      <AcademiaIcon className="w-5 h-5"/>Gerar Aula
+                    <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-700">
+                      Gerar Aula
                     </button>
                   )}
                 </div>
@@ -3933,138 +4060,145 @@ export default function QuestionBankApp() {
 
               {/* Loading */}
               {academiaGenerating&&(
-                <div className={`rounded-2xl border p-10 text-center ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                  <Spinner className="w-12 h-12 text-yellow-600 mx-auto mb-4"/>
-                  <p className="font-bold text-yellow-600">{academiaGenProgress||'Gerando...'}</p>
-                  <p className={`text-xs mt-2 opacity-50`}>Isso pode levar até 60 segundos</p>
+                <div className="py-20 text-center">
+                  <Spinner className="w-10 h-10 text-yellow-600 mx-auto mb-4"/>
+                  <p className={`font-bold ${darkMode?'text-yellow-400':'text-yellow-600'}`}>{academiaGenProgress||'Gerando...'}</p>
+                  <p className={`text-xs mt-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Pode levar até 60 segundos</p>
                 </div>
               )}
 
-              {/* Conteúdo da aula — seção por subtópico */}
+              {/* Conteúdo gerado */}
               {hasLesson&&!academiaGenerating&&(
-                <div className="space-y-10">
-                  {subtopics.map((subtopic, idx) => {
-                    const section = topic.lessonSections?.[idx];
-                    const fixqs   = topic.fixationQuestions?.[idx] || [];
+                <div>
+                  {/* Helper: renderiza uma questão de fixação */}
+                  {(()=>{
+                    const renderFixQ = (q, idx) => (
+                      <div key={q.id} data-question-id={q.id} className="mb-6">
+                        <QuestionCard
+                          question={q}
+                          index={idx}
+                          selectedLetter={(topic.answers||{})[q.id] || academiaTopicAnswers[q.id]}
+                          onAnswer={(letter) => {
+                            setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}));
+                            const updTopic = {...topic, answers:{...(topic.answers||{}), [q.id]:letter}};
+                            const updSubj = {...subject, topics:subject.topics.map(t=>t.id===topic.id?updTopic:t)};
+                            updateSubject(updSubj);
+                          }}
+                          darkMode={darkMode}
+                          isFavorite={(topic.favorites||[]).includes(q.id)}
+                          onToggleFavorite={(qId)=>{
+                            const favs = topic.favorites||[];
+                            const newFavs = favs.includes(qId) ? favs.filter(f=>f!==qId) : [...favs, qId];
+                            const updTopic = {...topic, favorites: newFavs};
+                            const updSubj = {...subject, topics: subject.topics.map(t=>t.id===topic.id?updTopic:t)};
+                            updateSubject(updSubj);
+                          }}
+                          apiKey={getKey()}
+                          oracleLength={settings.oracleLength||'medium'}
+                          onCall={callWithRotation}
+                          onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
+                        />
+                      </div>
+                    );
+
+                    // Coleta todas as questões de fixação em ordem (para o modo "end")
+                    const allFixqs = subtopics.flatMap((_, idx) => topic.fixationQuestions?.[idx] || []);
 
                     return (
-                      <div key={idx}>
-                        {/* Cabeçalho do subtópico */}
-                        <div className={`flex items-center gap-3 mb-4 pb-3 border-b ${darkMode?'border-gray-700':'border-gray-200'}`}>
-                          <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${darkMode?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>{idx+1}</span>
-                          <h2 className={`text-lg font-serif font-bold ${darkMode?'text-white':'text-gray-900'}`}>{section?.title || subtopic}</h2>
-                        </div>
+                      <>
+                        {/* Explicações — sempre aparecendo em sequência */}
+                        {subtopics.map((subtopic, idx) => {
+                          const section = topic.lessonSections?.[idx];
+                          const fixqs   = topic.fixationQuestions?.[idx] || [];
+                          return (
+                            <div key={idx} className={`mb-14 ${idx > 0 ? `border-t pt-12 ${darkMode?'border-gray-800':'border-gray-100'}` : ''}`}>
+                              <div className="flex items-baseline gap-3 mb-5">
+                                <span className={`text-sm font-bold tabular-nums mr-1 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>
+                                <h2 className={`text-xl font-semibold leading-snug ${darkMode?'text-gray-100':'text-gray-900'}`}>{section?.title || subtopic}</h2>
+                              </div>
+                              {section?.content ? (
+                                <div className="space-y-3 mb-8">{renderLesson(section.content)}</div>
+                              ) : (
+                                <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este subtópico.</p>
+                              )}
+                              {/* Fixação intercalada — aparece logo após a explicação */}
+                              {academiaQMode==='interleaved' && fixqs.map((q, qi) => renderFixQ(q, idx))}
+                            </div>
+                          );
+                        })}
 
-                        {/* Explicação */}
-                        {section?.content ? (
-                          <div className={`rounded-xl p-6 mb-6 ${darkMode?'bg-gray-800/60':'bg-white'} border ${darkMode?'border-gray-700':'border-gray-100'}`}>
-                            <div className="space-y-2">{renderLesson(section.content)}</div>
+                        {/* Fixação no final — todas as questões após todas as explicações */}
+                        {academiaQMode==='end' && allFixqs.length > 0 && (
+                          <div className={`mt-4 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
+                            <p className={`text-xs font-bold uppercase tracking-widest mb-8 ${darkMode?'text-gray-500':'text-gray-400'}`}>Questões de fixação</p>
+                            {allFixqs.map((q, qi) => renderFixQ(q, qi))}
                           </div>
-                        ) : (
-                          <div className={`rounded-xl p-5 mb-6 opacity-50 text-sm italic ${darkMode?'bg-gray-800':'bg-gray-50'}`}>Explicação não disponível para este subtópico.</div>
                         )}
+                      </>
+                    );
+                  })()}
 
-                        {/* Questões de fixação */}
-                        {fixqs.length > 0 && (
+                  {/* Baterias extras */}
+                  {(topic.extraBattery||[]).map((bloco, blocoIdx) => {
+                    const blocoQs = bloco.questions || bloco;
+                    const blocoId = bloco.id || `legacy_${blocoIdx}`;
+                    const blocoTitle = bloco.title || `Bateria ${blocoIdx + 1}`;
+                    return (
+                      <div key={blocoId} className={`mt-12 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
+                        <div className="flex items-center justify-between mb-6">
                           <div>
-                            <div className={`flex items-center gap-2 mb-3`}>
-                              <div className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/>
-                              <span className={`text-xs font-bold uppercase px-3 ${darkMode?'text-yellow-500':'text-yellow-600'}`}> Fixação</span>
-                              <div className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/>
-                            </div>
-                            <div className="space-y-4">
-                              {fixqs.map((q, qi) => (
-                                <QuestionCard
-                                  key={q.id}
-                                  question={q}
-                                  index={idx}
-                                  selectedLetter={academiaTopicAnswers[q.id]}
-                                  onAnswer={(letter) => setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}))}
-                                  darkMode={darkMode}
-                                  isFavorite={false}
-                                  onToggleFavorite={()=>{}}
-                                  apiKey={getKey()}
-                                  oracleLength={settings.oracleLength||'medium'}
-                                  onCall={callWithRotation}
-                                  onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
-                                />
-                              ))}
-                            </div>
+                            <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>{blocoTitle}</span>
+                            <p className={`text-xs mt-0.5 ${darkMode?'text-gray-600':'text-gray-400'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''}</p>
                           </div>
-                        )}
+                          {isAdmin&&(
+                            <button title="Excluir bloco" onClick={()=>setDeleteId({type:'academia-extra-bloco', blocoId, topicId: topic.id, subjectId: subject.id, oracleTopicId: bloco.oracleTopicId})}
+                              className={`p-2 rounded-lg transition-colors ${darkMode?'text-gray-600 hover:text-red-400':'text-gray-300 hover:text-red-500'}`}>
+                              <Trash2 className="w-4 h-4"/>
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-6">
+                          {blocoQs.map((q, qi) => (
+                            <QuestionCard
+                              key={q.id}
+                              question={q}
+                              index={qi}
+                              selectedLetter={(topic.answers||{})[q.id] || academiaTopicAnswers[q.id]}
+                              onAnswer={(letter) => {
+                                setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}));
+                                const updTopic = {...topic, answers:{...(topic.answers||{}), [q.id]:letter}};
+                                const updSubj = {...subject, topics:subject.topics.map(t=>t.id===topic.id?updTopic:t)};
+                                updateSubject(updSubj);
+                              }}
+                              darkMode={darkMode}
+                              isFavorite={false}
+                              onToggleFavorite={()=>{}}
+                              apiKey={getKey()}
+                              oracleLength={settings.oracleLength||'medium'}
+                              onCall={callWithRotation}
+                              onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
+                            />
+                          ))}
+                        </div>
                       </div>
                     );
                   })}
 
-                  {/* Bateria extra */}
-                  <div className={`rounded-2xl border-2 border-dashed p-8 text-center ${darkMode?'border-gray-700':'border-gray-200'}`}>
-                    <h3 className={`font-serif font-bold text-lg mb-2 ${darkMode?'text-white':'text-gray-900'}`}>⚡ Gerar bateria extra</h3>
-                    <p className={`text-sm opacity-60 mb-4`}>Gera novas questões sobre todo este tópico e salva também no Acervo do Oráculo.</p>
-
-                    {/* Baterias extras — cada geração é um bloco separado */}
-                    {(topic.extraBattery||[]).map((bloco, blocoIdx) => {
-                      const blocoQs = bloco.questions || bloco; // compat com estrutura antiga (array plano)
-                      const isLegacy = !bloco.questions;
-                      const blocoId = bloco.id || `legacy_${blocoIdx}`;
-                      const blocoTitle = bloco.title || `Bateria ${blocoIdx + 1}`;
-                      const [blocoOpen, setBlocoOpen] = [true, ()=>{}]; // sempre aberto por ora
-                      return (
-                        <div key={blocoId} className={`rounded-2xl border ${darkMode?'bg-gray-800/60 border-gray-700':'bg-white border-gray-200'}`}>
-                          {/* Header do bloco */}
-                          <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode?'border-gray-700':'border-gray-100'}`}>
-                            <div className="flex items-center gap-3">
-                              <Zap className="w-4 h-4 text-yellow-500"/>
-                              <span className="font-bold text-sm">{blocoTitle}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${darkMode?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''}</span>
-                            </div>
-                            {isAdmin&&(
-                              <div className="flex items-center gap-1">
-                                <button title="Exportar" onClick={()=>setExportModal({topic:{...topic,questions:blocoQs,title:blocoTitle},subject})}
-                                  className={`p-2 rounded-lg text-xs font-bold transition-colors ${darkMode?'text-gray-400 hover:text-yellow-400 hover:bg-gray-700':'text-gray-500 hover:text-yellow-600 hover:bg-yellow-50'}`}>
-                                  <DownloadIcon className="w-4 h-4"/>
-                                </button>
-                                <button title="Excluir bloco" onClick={()=>setDeleteId({type:'academia-extra-bloco', blocoId, topicId: topic.id, subjectId: subject.id, oracleTopicId: bloco.oracleTopicId})}
-                                  className={`p-2 rounded-lg transition-colors ${darkMode?'text-gray-500 hover:text-red-400 hover:bg-gray-700':'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}>
-                                  <Trash2 className="w-4 h-4"/>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          {/* Questões do bloco */}
-                          <div className="p-5 space-y-4">
-                            {blocoQs.map((q, qi) => (
-                              <QuestionCard
-                                key={q.id}
-                                question={q}
-                                index={qi}
-                                selectedLetter={academiaTopicAnswers[q.id]}
-                                onAnswer={(letter) => setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}))}
-                                darkMode={darkMode}
-                                isFavorite={false}
-                                onToggleFavorite={()=>{}}
-                                apiKey={getKey()}
-                                oracleLength={settings.oracleLength||'medium'}
-                                onCall={callWithRotation}
-                                onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-
+                  {/* Gerar bateria extra */}
+                  <div className={`mt-16 pt-10 border-t text-center ${darkMode?'border-gray-800':'border-gray-100'}`}>
                     {isAdmin&&(
-                      <button onClick={()=>setAcademiaExtraModal({topic, subject})} disabled={academiaExtraBusy} className="bg-yellow-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center gap-2 mx-auto">
-                        {academiaExtraBusy?<Spinner className="w-4 h-4 text-white"/>:<Zap className="w-4 h-4"/>}
-                        {academiaExtraBusy?'Gerando...':'Gerar bateria extra'}
+                      <button onClick={()=>setAcademiaExtraModal({topic, subject})} disabled={academiaExtraBusy}
+                        className={`text-sm font-bold px-6 py-3 rounded-xl border-2 transition-all disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
+                        {academiaExtraBusy?'Gerando...':'+ Gerar bateria extra'}
                       </button>
                     )}
                   </div>
 
-                  {/* Regenerar aula */}
+                  {/* Regenerar */}
                   {isAdmin&&(
-                    <div className="text-center pb-4">
-                      <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating} className={`text-xs font-bold flex items-center gap-1.5 mx-auto opacity-40 hover:opacity-80 transition-opacity ${darkMode?'text-gray-400':'text-gray-500'}`}>
+                    <div className="mt-6 text-center">
+                      <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating}
+                        className={`text-xs opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1.5 mx-auto ${darkMode?'text-gray-400':'text-gray-500'}`}>
                         <RotateCcw className="w-3 h-3"/>Regenerar aula
                       </button>
                     </div>

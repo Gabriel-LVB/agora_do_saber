@@ -386,31 +386,46 @@ Responda APENAS o sumário.`;
 // ─── PROMPT: AULA DA ACADEMIA ─────────────────────────────────────────────────
 
 export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', subjectName = '') => {
+  // Gera exemplo de saída esperada com os 2 primeiros subtópicos para a IA imitar o padrão
+  const exampleOutput = subtopics.slice(0, 2).map((s, i) =>
+    `## ${s}\n[explicação aqui]`
+  ).join('\n\n');
+
   return `Você é um professor de medicina da Ágora do Saber, criando uma aula sobre "${topicTitle}"${subjectName ? ` (${subjectName})` : ''}.
 
-SUBTÓPICOS A COBRIR (um por seção, nesta ordem):
+SUBTÓPICOS A COBRIR — gere EXATAMENTE ${subtopics.length} seções, uma por subtópico, nesta ordem:
 ${subtopics.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-FORMATO OBRIGATÓRIO:
-## [Título exato do subtópico]
-[Explicação]
+FORMATO DE SAÍDA OBRIGATÓRIO:
+Cada seção DEVE começar com ## seguido do título do subtópico, exatamente assim:
 
-## [Próximo subtópico]
-[Explicação]
+## [título do subtópico 1]
+[explicação]
 
-REGRAS DA EXPLICAÇÃO:
-- Cada subtópico já é ATÔMICO (1 conceito). Sua explicação deve ser proporcionalmente focada.
-- Tamanho ideal por seção: 1 a 2 parágrafos densos. NÃO escreva 4-5 parágrafos sobre um subtópico atômico.
-- Se um subtópico diz "Segmentação de Couinaud", explique APENAS isso — não derive para sistema porta, dupla irrigação, etc.
-- Comece com o conceito central, depois o mecanismo ou critério relevante
-- Use **negrito** para termos-chave, valores e critérios diagnósticos
-- Use listas quando houver enumeração (critérios, classificações, doses)
-- Linguagem didática e densa: ensine o raciocínio, não apenas fatos
-- Português brasileiro, rigor técnico-científico
+## [título do subtópico 2]
+[explicação]
+
+... e assim por diante até o subtópico ${subtopics.length}.
+
+EXEMPLO COM SEUS SUBTÓPICOS:
+${exampleOutput}
+... (continue para todos os ${subtopics.length} subtópicos)
+
+REGRAS DE CONTEÚDO:
+- Tamanho por seção: 1 a 2 parágrafos. NÃO escreva 4+ parágrafos por subtópico atômico.
+- Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
+- Comece com o conceito central, depois mecanismo ou critério relevante.
+- Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
+- Use listas (- item) para enumerações, classificações e doses.
+- Tabelas markdown (| col | col |) são aceitas e encorajadas para comparações.
+- Linguagem didática e densa. Português brasileiro.
+
+IMPORTANTE: NÃO use ###, ####, numeração (1.) ou qualquer outro marcador de seção.
+Use APENAS ## para separar os subtópicos. O sistema depende disso para funcionar corretamente.
 
 ${material ? `MATERIAL BASE:\n${material.substring(0, 40000)}` : '[Sem material — baseie-se no título e subtópicos]'}
 
-Gere a aula COMPLETA para todos os ${subtopics.length} subtópicos sem interromper.`;
+Gere a aula COMPLETA para todos os ${subtopics.length} subtópicos, começando pelo ## do primeiro.`;
 };
 
 // ─── PROMPT: QUESTÕES DE FIXAÇÃO DA ACADEMIA ──────────────────────────────────
@@ -438,7 +453,11 @@ A questão 2 não pode abordar conteúdo da questão 1, 3 ou qualquer outro.
 
 ${REGRAS_ENUNCIADO}
 ${REGRAS_ALTERNATIVAS}
-${REGRAS_EXPLICACAO}
+REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
+- 1 a 2 parágrafos curtos
+- Por que a correta está certa e por que cada distrator está errado — pelo conteúdo
+- Não aprofunde teoria além do necessário
+- PROIBIDO: referir-se a letras A, B, C, D, E
 ${TEMPLATE_QUESTAO(alts)}
 
 Use IDs sequenciais simples (1, 2, 3...).
