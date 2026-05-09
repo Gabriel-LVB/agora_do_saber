@@ -3637,6 +3637,7 @@ export default function QuestionBankApp() {
 
   const isAdmin         = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
+  const canUseAcademia   = isAdmin || canSeeVideoaulas;
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
@@ -3773,7 +3774,7 @@ export default function QuestionBankApp() {
                   <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{library.filter(s=>s.source===item.f).length} Pastas</div>
                 </div>
               ))}
-              {isAdmin&&(
+              {canUseAcademia&&(
                 <div onClick={()=>{setLibFilter('academia');setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><AcademiaIcon className="w-12 h-12 text-yellow-600"/></div>
                   <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Academia do Saber</h3>
@@ -3809,7 +3810,7 @@ export default function QuestionBankApp() {
               {libFilter==='gemini'
                 ?<button onClick={()=>setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Sparkles className="w-4 h-4"/>Gerar</button>
                 :libFilter==='academia'
-                  ?isAdmin&&<button onClick={()=>{setAcademiaCreatorStep(1);setView('academia-creator');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><AcademiaIcon className="w-4 h-4"/>Nova Aula</button>
+                  ?canUseAcademia&&<button onClick={()=>{setAcademiaCreatorStep(1);setView('academia-creator');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><AcademiaIcon className="w-4 h-4"/>Nova Aula</button>
                   :<button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Feather className="w-4 h-4"/>Importar</button>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -4050,7 +4051,7 @@ export default function QuestionBankApp() {
                   <AcademiaIcon className="w-14 h-14 mx-auto mb-5 opacity-30"/>
                   <p className="font-bold text-lg mb-1">Aula não gerada</p>
                   <p className="text-sm opacity-70 mb-6 max-w-xs mx-auto">Clique abaixo para gerar a explicação e as questões de fixação.</p>
-                  {isAdmin&&(
+                  {canUseAcademia&&(
                     <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-700">
                       Gerar Aula
                     </button>
@@ -4150,7 +4151,7 @@ export default function QuestionBankApp() {
                             <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>{blocoTitle}</span>
                             <p className={`text-xs mt-0.5 ${darkMode?'text-gray-600':'text-gray-400'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''}</p>
                           </div>
-                          {isAdmin&&(
+                          {canUseAcademia&&(
                             <button title="Excluir bloco" onClick={()=>setDeleteId({type:'academia-extra-bloco', blocoId, topicId: topic.id, subjectId: subject.id, oracleTopicId: bloco.oracleTopicId})}
                               className={`p-2 rounded-lg transition-colors ${darkMode?'text-gray-600 hover:text-red-400':'text-gray-300 hover:text-red-500'}`}>
                               <Trash2 className="w-4 h-4"/>
@@ -4186,7 +4187,7 @@ export default function QuestionBankApp() {
 
                   {/* Gerar bateria extra */}
                   <div className={`mt-16 pt-10 border-t text-center ${darkMode?'border-gray-800':'border-gray-100'}`}>
-                    {isAdmin&&(
+                    {canUseAcademia&&(
                       <button onClick={()=>setAcademiaExtraModal({topic, subject})} disabled={academiaExtraBusy}
                         className={`text-sm font-bold px-6 py-3 rounded-xl border-2 transition-all disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
                         {academiaExtraBusy?'Gerando...':'+ Gerar bateria extra'}
@@ -4195,7 +4196,7 @@ export default function QuestionBankApp() {
                   </div>
 
                   {/* Regenerar */}
-                  {isAdmin&&(
+                  {canUseAcademia&&(
                     <div className="mt-6 text-center">
                       <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating}
                         className={`text-xs opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1.5 mx-auto ${darkMode?'text-gray-400':'text-gray-500'}`}>
@@ -4336,7 +4337,7 @@ export default function QuestionBankApp() {
         )}
 
         {/* ── ACADEMIA CREATOR ── */}
-        {view==='academia-creator'&&isAdmin&&(
+        {view==='academia-creator'&&canUseAcademia&&(
           <div className="max-w-2xl mx-auto">
             <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setAcademiaFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {academiaCreatorStep===1?(
