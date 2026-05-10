@@ -2326,7 +2326,7 @@ const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:
 // ─── ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────────
 
 function AcademiaTopicView({
-  topic, subject, darkMode, isAdmin, canUseAcademia,
+  topic, subject, library, darkMode, isAdmin, canUseAcademia,
   academiaGenerating, academiaGenProgress,
   academiaQMode, setAcademiaQMode,
   academiaTopicAnswers, setAcademiaTopicAnswers,
@@ -2403,16 +2403,23 @@ function AcademiaTopicView({
 
   const handleAnswer = (q, letter) => {
     setAcademiaTopicAnswers(p => ({...p, [q.id]: letter}));
-    const updTopic = {...topic, answers: {...(topic.answers||{}), [q.id]: letter}};
-    const updSubj  = {...subject, topics: subject.topics.map(t => t.id===topic.id ? updTopic : t)};
+    const freshSubj  = (library||[]).find(s => s.id === subject.id) || subject;
+    const freshTopic = freshSubj.topics.find(t => t.id === topic.id) || topic;
+    const updTopic = {...freshTopic, answers: {...(freshTopic.answers||{}), [q.id]: letter}};
+    const updSubj  = {...freshSubj, topics: freshSubj.topics.map(t => t.id===topic.id ? updTopic : t)};
     updateSubject(updSubj);
   };
 
   const handleFavorite = (qId) => {
-    const favs = topic.favorites || [];
-    const newFavs = favs.includes(qId) ? favs.filter(f=>f!==qId) : [...favs, qId];
-    const updTopic = {...topic, favorites: newFavs};
-    const updSubj  = {...subject, topics: subject.topics.map(t => t.id===topic.id ? updTopic : t)};
+    // Read fresh topic from subject to avoid stale closure bug
+    const freshSubj  = (library||[]).find(s => s.id === subject.id) || subject;
+    const freshTopic = freshSubj.topics.find(t => t.id === topic.id) || topic;
+    const favs    = freshTopic.favorites || [];
+    const newFavs = favs.includes(qId)
+      ? favs.filter(f => f !== qId)
+      : [...new Set([...favs, qId])]; // deduplicate for safety
+    const updTopic = {...freshTopic, favorites: newFavs.filter(Boolean)};
+    const updSubj  = {...freshSubj, topics: freshSubj.topics.map(t => t.id===topic.id ? updTopic : t)};
     updateSubject(updSubj);
   };
 
@@ -2425,7 +2432,7 @@ function AcademiaTopicView({
         onAnswer={(letter) => handleAnswer(q, letter)}
         darkMode={darkMode}
         isFavorite={(topic.favorites||[]).includes(q.id)}
-        onToggleFavorite={handleFavorite}
+        onToggleFavorite={() => handleFavorite(q.id)}
         apiKey={getKey()}
         oracleLength={settings.oracleLength||'medium'}
         onCall={callWithRotation}
@@ -4531,6 +4538,7 @@ export default function QuestionBankApp() {
           <AcademiaTopicView
             topic={activeTopic}
             subject={activeSubject}
+            library={library}
             darkMode={darkMode}
             isAdmin={isAdmin}
             canUseAcademia={canUseAcademia}
