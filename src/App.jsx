@@ -4028,18 +4028,14 @@ export default function QuestionBankApp() {
       return acc;
     }, []);
 
-    // Enforce maxSubtopics limit across all topics
-    let subtopicBudget = academiaMaxSubtopics;
     const topics = topicLineIndices.map((lineIdx, topicPos) => {
       const title = lines[lineIdx].replace(/[*#]/g, '').trim();
       const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
-      const rawSubs = lines
+      const subtopics = lines
         .slice(lineIdx + 1, nextTopicIdx)
         .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
         .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
         .slice(0, 20);
-      const subtopics = rawSubs.slice(0, subtopicBudget);
-      subtopicBudget -= subtopics.length;
       return {
         id: `ac-${topicPos}-${Date.now()}`,
         title,
