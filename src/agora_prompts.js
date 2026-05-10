@@ -342,12 +342,14 @@ Gere TODAS as ${total} questões sem interromper ou comentar.`;
 
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
 
-export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) => {
+export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false, maxSubtopics = 100) => {
   const estrutura = autoMode
     ? `Você tem liberdade para definir a quantidade de tópicos e subtópicos.
-LIMITES: mínimo 6 e máximo 20 subtópicos por tópico.
+LIMITES por tópico: mínimo 6 e máximo 20 subtópicos.
+LIMITE GLOBAL: o sumário completo NÃO pode ultrapassar ${maxSubtopics} subtópicos no total — distribua os tópicos dentro desse limite.
 Prefira MAIS subtópicos menores a MENOS subtópicos maiores.`
-    : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
+    : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.
+LIMITE GLOBAL: máximo de ${maxSubtopics} subtópicos no total.`;
 
   return `Você é o Arquiteto de Alexandria, construindo o esqueleto de um curso sobre "${subjectName}".
 

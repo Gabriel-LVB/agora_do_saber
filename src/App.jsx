@@ -2729,6 +2729,7 @@ export default function QuestionBankApp() {
   const [academiaTopicAnswers, setAcademiaTopicAnswers] = useState({});
   const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
   const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
+  const [academiaMaxSubtopics, setAcademiaMaxSubtopics] = useState(100);
   const [academiaQMode, setAcademiaQMode]             = useState('interleaved'); // 'interleaved' | 'end'
   const [academiaExportModal, setAcademiaExportModal] = useState(null); // { topic, subject }
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
@@ -3974,7 +3975,7 @@ export default function QuestionBankApp() {
     if (!checkKey()) return;
     setIsBusy(true);
     const s = settingsRef.current;
-    const sys = buildAcademiaSyllabusPrompt(academiaSubName, s, s.autoMode || false);
+    const sys = buildAcademiaSyllabusPrompt(academiaSubName, s, s.autoMode || false, academiaMaxSubtopics);
     const matText   = academiaMaterialText.trim();
     const filesText = academiaUploadedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n');
     const userMsg = [
@@ -4898,6 +4899,28 @@ export default function QuestionBankApp() {
                           className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                       </div>
                     ))}
+                  </div>
+                  {/* Max subtopics — sempre visível, inclusive no autoMode */}
+                  <div className="mt-3">
+                    <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Limite máximo de subtópicos no sumário</label>
+                    <input type="number" min={10} max={500} value={academiaMaxSubtopics}
+                      onChange={e=>setAcademiaMaxSubtopics(e.target.value)}
+                      onBlur={()=>{let v=parseInt(academiaMaxSubtopics);if(isNaN(v)||v<10)v=10;if(v>500)v=500;setAcademiaMaxSubtopics(v);}}
+                      className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                    <p className="text-xs opacity-40 mt-1">Padrão: 100 — evita sumários excessivamente longos</p>
+                  </div>
+                  {/* Alternativas — sempre visível, independente do autoMode */}
+                  <div className="mt-3">
+                    <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
+                    <div className="flex gap-2">
+                      {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(opt=>(
+                        <button key={opt.v} type="button"
+                          onClick={()=>{const ns={...settings,numAlternatives:opt.v};setSettings(ns);saveSettings(ns);}}
+                          className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${(settings.numAlternatives||5)===opt.v?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                          {opt.l}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -6694,6 +6717,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
               )}
+              {/* Alternativas — sempre visível independente do autoMode */}
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                 <div className="flex gap-2">
