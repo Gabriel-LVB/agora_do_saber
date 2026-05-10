@@ -353,37 +353,20 @@ LIMITE GLOBAL: máximo de ${maxSubtopics} subtópicos no total.`;
 
   return `Você é o Arquiteto de Alexandria, construindo o esqueleto de um curso sobre "${subjectName}".
 
+⛔ LIMITE ABSOLUTO E INEGOCIÁVEL: ${maxSubtopics} SUBTÓPICOS NO TOTAL ⛔
+Conte mentalmente enquanto escreve. Se atingir ${maxSubtopics} subtópicos, PARE — não adicione mais, mesmo que o assunto tenha mais conteúdo. Este limite não pode ser ignorado ou justificado pelo conteúdo.
+
 ${estrutura}
 
-PRINCÍPIO FUNDAMENTAL — GRANULARIDADE DE QUESTÃO:
-Cada subtópico deve ser tão específico que possa ser coberto por:
-  1. UM parágrafo de explicação (não um capítulo)
-  2. UMA questão de múltipla escolha
+GRANULARIDADE: cada subtópico = 1 conceito → 1 parágrafo → 1 questão de múltipla escolha.
+Títulos com vírgula separando conceitos distintos são proibidos — quebre em subtópicos separados.
+Exemplo errado: "Organização, Segmentação e Sistema Porta" → exemplo certo: três subtópicos distintos.
 
-TESTE MENTAL que você deve aplicar a cada subtópico:
-"Consigo escrever 1 parágrafo sobre isso e criar 1 questão de múltipla escolha sobre apenas isso?"
-Se precisaria de 3 parágrafos → o subtópico é um guarda-chuva → quebre-o em 3 subtópicos.
-
-EXEMPLOS DE GRANULARIDADE ERRADA vs CERTA:
-ERRADO: "Organização Macroscópica, Segmentação e Sistema Porta do Fígado"
-  (cobre 3 conceitos distintos, renderia 4 questões)
-CERTO — quebre em:
-  - "Lobos hepáticos: direito, esquerdo, quadrado e caudado"
-  - "Segmentação de Couinaud: 8 segmentos e relevância cirúrgica"
-  - "Sistema porta: origem, tributárias e composição do fluxo"
-  - "Dupla irrigação hepática: proporções de volume e oxigênio"
-
-ERRADO: "Tratamento da Hipertensão Portal"
-CERTO — quebre em:
-  - "Profilaxia primária do sangramento varicoso: betabloqueadores vs ligadura"
-  - "Manejo agudo da hemorragia varicosa: vasoconstritores e endoscopia"
-  - "TIPS: indicações e contraindicações na hipertensão portal"
-
-REGRAS ADICIONAIS:
-- Títulos descritivos: deixe claro O QUE especificamente será ensinado
-- Ordem didática: definição → mecanismo → diagnóstico → tratamento → complicações
-- Baseie-se no material fornecido quando disponível
-- Nada de "Introdução", "Generalidades" ou títulos com vírgulas separando conceitos distintos
+REGRAS:
+- Títulos descritivos e específicos
+- Ordem: definição → mecanismo → diagnóstico → tratamento → complicações
+- Baseie-se no material fornecido
+- Nada de "Introdução" ou "Generalidades"
 
 FORMATO:
 Tópico 1: [Nome]
@@ -392,6 +375,7 @@ Tópico 1: [Nome]
 Tópico 2: [Nome]
   - [Subtópico específico]
 
+⛔ LEMBRE-SE: máximo ${maxSubtopics} subtópicos no total. Conte antes de responder.
 Responda APENAS o sumário.`;
 };
 
