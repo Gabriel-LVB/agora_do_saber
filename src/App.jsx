@@ -2032,6 +2032,249 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'] };
 
+
+// ─── ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────────
+
+function AcademiaTopicView({
+  topic, subject, darkMode, isAdmin, canUseAcademia,
+  academiaGenerating, academiaGenProgress,
+  academiaQMode, setAcademiaQMode,
+  academiaTopicAnswers, setAcademiaTopicAnswers,
+  academiaExtraBusy, settings, updateSubject,
+  generateAcademiaLesson, setAcademiaExtraModal, setDeleteId,
+  setOpenAnswerModal, getKey, callWithRotation, parseHtmlText, onBack,
+}) {
+  const subtopics = topic.subtopics || [];
+  const hasLesson = topic.lessonGenerated;
+
+  // Renderiza markdown da aula com suporte a tabelas, listas e parágrafos
+  const renderLesson = (md) => {
+    if (!md) return null;
+    const mdLines = md.split('\n');
+    const elements = [];
+    let i = 0;
+    while (i < mdLines.length) {
+      const line = mdLines[i];
+      // Tabela markdown
+      if (/^\s*\|.+\|\s*$/.test(line)) {
+        const tableLines = [];
+        while (i < mdLines.length && /^\s*\|.+\|\s*$/.test(mdLines[i])) {
+          tableLines.push(mdLines[i]); i++;
+        }
+        const rows = tableLines.filter(l => !/^\s*\|[-:\s|]+\|\s*$/.test(l));
+        const header = rows[0];
+        const body = rows.slice(1);
+        const parseCells = (row) => row.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').split(/\s*\|\s*/);
+        elements.push(
+          <div key={`tbl-${i}`} className="overflow-x-auto my-4">
+            <table className={`w-full text-sm border-collapse ${darkMode?'text-gray-200':'text-gray-800'}`}>
+              <thead>
+                <tr className={`border-b-2 ${darkMode?'border-gray-600':'border-gray-300'}`}>
+                  {header && parseCells(header).map((cell, ci) => (
+                    <th key={ci} className={`px-3 py-2 text-left font-bold ${darkMode?'bg-gray-800/80':'bg-gray-100'}`}>{parseHtmlText(cell)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {body.map((row, ri) => (
+                  <tr key={ri} className={`border-b ${darkMode?'border-gray-700/50':'border-gray-200'}`}>
+                    {parseCells(row).map((cell, ci) => (
+                      <td key={ci} className="px-3 py-2">{parseHtmlText(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+      // Lista
+      if (/^\s*[-*•]\s/.test(line)) {
+        const items = [];
+        while (i < mdLines.length && /^\s*[-*•]\s/.test(mdLines[i])) {
+          items.push(mdLines[i].replace(/^\s*[-*•]\s/, '')); i++;
+        }
+        elements.push(
+          <ul key={`ul-${i}`} className={`list-disc ml-5 space-y-1 my-2 text-[16px] ${darkMode?'text-gray-300':'text-gray-700'}`}>
+            {items.map((item, ii) => <li key={ii}>{parseHtmlText(item)}</li>)}
+          </ul>
+        );
+        continue;
+      }
+      if (!line.trim()) { elements.push(<div key={`sp-${i}`} className="h-2"/>); i++; continue; }
+      elements.push(
+        <p key={`p-${i}`} className={`text-[16px] leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>
+      );
+      i++;
+    }
+    return elements;
+  };
+
+  const handleAnswer = (q, letter) => {
+    setAcademiaTopicAnswers(p => ({...p, [q.id]: letter}));
+    const updTopic = {...topic, answers: {...(topic.answers||{}), [q.id]: letter}};
+    const updSubj  = {...subject, topics: subject.topics.map(t => t.id===topic.id ? updTopic : t)};
+    updateSubject(updSubj);
+  };
+
+  const handleFavorite = (qId) => {
+    const favs = topic.favorites || [];
+    const newFavs = favs.includes(qId) ? favs.filter(f=>f!==qId) : [...favs, qId];
+    const updTopic = {...topic, favorites: newFavs};
+    const updSubj  = {...subject, topics: subject.topics.map(t => t.id===topic.id ? updTopic : t)};
+    updateSubject(updSubj);
+  };
+
+  const renderFixQ = (q, idx) => (
+    <div key={q.id} data-question-id={q.id} className="mb-6">
+      <QuestionCard
+        question={q}
+        index={idx}
+        selectedLetter={(topic.answers||{})[q.id] || academiaTopicAnswers[q.id]}
+        onAnswer={(letter) => handleAnswer(q, letter)}
+        darkMode={darkMode}
+        isFavorite={(topic.favorites||[]).includes(q.id)}
+        onToggleFavorite={handleFavorite}
+        apiKey={getKey()}
+        oracleLength={settings.oracleLength||'medium'}
+        onCall={callWithRotation}
+        onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
+      />
+    </div>
+  );
+
+  const allFixqs = subtopics.flatMap((_, idx) => topic.fixationQuestions?.[idx] || []);
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Header */}
+      <button onClick={onBack} className={`flex items-center gap-2 mb-8 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+        <ArrowLeft className="w-4 h-4"/>Voltar
+      </button>
+      <div className="mb-10">
+        <div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{subject.title}</div>
+        <h1 className={`text-3xl font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{topic.title}</h1>
+        <p className={`text-sm ${darkMode?'text-gray-500':'text-gray-400'}`}>{subtopics.length} subtópicos</p>
+        {hasLesson && (
+          <div className={`flex items-center gap-1 mt-4 p-1 rounded-lg w-fit ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
+            {[{k:'interleaved',label:'Fixação intercalada'},{k:'end',label:'Fixação no final'}].map(opt => (
+              <button key={opt.k} onClick={()=>setAcademiaQMode(opt.k)}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${academiaQMode===opt.k
+                  ?(darkMode?'bg-gray-700 text-yellow-400 shadow':'bg-white text-yellow-600 shadow')
+                  :(darkMode?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600')}`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Aula não gerada */}
+      {!hasLesson && !academiaGenerating && (
+        <div className={`py-16 text-center ${darkMode?'text-gray-500':'text-gray-400'}`}>
+          <p className="font-bold text-lg mb-1">Aula não gerada</p>
+          <p className="text-sm opacity-70 mb-6 max-w-xs mx-auto">Clique abaixo para gerar a explicação e as questões de fixação.</p>
+          {canUseAcademia && (
+            <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-700">
+              Gerar Aula
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Loading */}
+      {academiaGenerating && (
+        <div className="py-20 text-center">
+          <p className={`font-bold ${darkMode?'text-yellow-400':'text-yellow-600'}`}>{academiaGenProgress||'Gerando...'}</p>
+          <p className={`text-xs mt-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Pode levar até 60 segundos</p>
+        </div>
+      )}
+
+      {/* Conteúdo */}
+      {hasLesson && !academiaGenerating && (
+        <div>
+          {/* Explicações */}
+          {subtopics.map((subtopic, idx) => {
+            const section = topic.lessonSections?.[idx];
+            const fixqs   = topic.fixationQuestions?.[idx] || [];
+            return (
+              <div key={idx} className="mb-8">
+                <div className="flex items-baseline gap-3 mb-5">
+                  <span className={`text-sm font-bold tabular-nums mr-1 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>
+                  <h2 className={`text-base font-semibold leading-snug ${darkMode?'text-gray-100':'text-gray-900'}`}>{section?.title || subtopic}</h2>
+                </div>
+                {section?.content ? (
+                  <div className="space-y-3 mb-8">{renderLesson(section.content)}</div>
+                ) : (
+                  <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este subtópico.</p>
+                )}
+                {academiaQMode==='interleaved' && fixqs.map((q, qi) => renderFixQ(q, idx))}
+              </div>
+            );
+          })}
+
+          {/* Fixação no final */}
+          {academiaQMode==='end' && allFixqs.length > 0 && (
+            <div className={`mt-4 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
+              <p className={`text-xs font-bold uppercase tracking-widest mb-8 ${darkMode?'text-gray-500':'text-gray-400'}`}>Questões de fixação</p>
+              {allFixqs.map((q, qi) => renderFixQ(q, qi))}
+            </div>
+          )}
+
+          {/* Baterias extras */}
+          {(topic.extraBattery||[]).map((bloco, blocoIdx) => {
+            const blocoQs = bloco.questions || bloco;
+            const blocoId = bloco.id || `legacy_${blocoIdx}`;
+            const blocoTitle = bloco.title || `Bateria ${blocoIdx+1}`;
+            return (
+              <div key={blocoId} className={`mt-12 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>{blocoTitle}</span>
+                    <p className={`text-xs mt-0.5 ${darkMode?'text-gray-600':'text-gray-400'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''}</p>
+                  </div>
+                  {canUseAcademia && (
+                    <button title="Excluir bloco" onClick={()=>setDeleteId({type:'academia-extra-bloco', blocoId, topicId:topic.id, subjectId:subject.id, oracleTopicId:bloco.oracleTopicId})}
+                      className={`p-2 rounded-lg transition-colors ${darkMode?'text-gray-600 hover:text-red-400':'text-gray-300 hover:text-red-500'}`}>
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-6">
+                  {blocoQs.map((q, qi) => renderFixQ(q, qi))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Gerar bateria extra */}
+          <div className={`mt-16 pt-10 border-t text-center ${darkMode?'border-gray-800':'border-gray-100'}`}>
+            {canUseAcademia && (
+              <button onClick={()=>setAcademiaExtraModal({topic, subject})} disabled={academiaExtraBusy}
+                className={`text-sm font-bold px-6 py-3 rounded-xl border-2 transition-all disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
+                {academiaExtraBusy?'Gerando...':'+ Gerar bateria extra'}
+              </button>
+            )}
+          </div>
+
+          {/* Regenerar */}
+          {canUseAcademia && (
+            <div className="mt-6 text-center">
+              <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating}
+                className={`text-xs opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1.5 mx-auto ${darkMode?'text-gray-400':'text-gray-500'}`}>
+                <RotateCcw className="w-3 h-3"/>Regenerar aula
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── FIM ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────
+
 export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
 
@@ -3948,267 +4191,34 @@ export default function QuestionBankApp() {
 
         {/* ── ACADEMIA TOPIC ── */}
         {/* ── ACADEMIA TOPIC ── */}
-        {view==='academia-topic'&&activeTopic&&activeSubject?.source==='academia'&&(()=>{
-          const topic   = activeTopic;
-          const subject = activeSubject;
-          const subtopics = topic.subtopics || [];
-          const hasLesson = topic.lessonGenerated;
+        {/* ── ACADEMIA TOPIC ── */}
+        {view==='academia-topic'&&activeTopic&&activeSubject?.source==='academia'&&(
+          <AcademiaTopicView
+            topic={activeTopic}
+            subject={activeSubject}
+            darkMode={darkMode}
+            isAdmin={isAdmin}
+            canUseAcademia={canUseAcademia}
+            academiaGenerating={academiaGenerating}
+            academiaGenProgress={academiaGenProgress}
+            academiaQMode={academiaQMode}
+            setAcademiaQMode={setAcademiaQMode}
+            academiaTopicAnswers={academiaTopicAnswers}
+            setAcademiaTopicAnswers={setAcademiaTopicAnswers}
+            academiaExtraBusy={academiaExtraBusy}
+            settings={settings}
+            updateSubject={updateSubject}
+            generateAcademiaLesson={generateAcademiaLesson}
+            setAcademiaExtraModal={setAcademiaExtraModal}
+            setDeleteId={setDeleteId}
+            setOpenAnswerModal={setOpenAnswerModal}
+            getKey={getKey}
+            callWithRotation={callWithRotation}
+            parseHtmlText={parseHtmlText}
+            onBack={()=>setView('subject')}
+          />
+        )}
 
-          // Renderiza markdown da aula: parágrafos, listas, tabelas
-          const renderLesson = (md) => {
-            if (!md) return null;
-            const lines = md.split('\n');
-            const elements = [];
-            let i = 0;
-            while (i < lines.length) {
-              const line = lines[i];
-              // Tabela markdown
-              if (/^\s*\|.+\|\s*$/.test(line)) {
-                const tableLines = [];
-                while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) {
-                  tableLines.push(lines[i]);
-                  i++;
-                }
-                const rows = tableLines.filter(l => !/^\s*\|[-:\s|]+\|\s*$/.test(l));
-                const header = rows[0];
-                const body = rows.slice(1);
-                const parseCells = (row) => row.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').split(/\s*\|\s*/);
-                elements.push(
-                  <div key={`tbl-${i}`} className="overflow-x-auto my-4">
-                    <table className={`w-full text-sm border-collapse ${darkMode?'text-gray-200':'text-gray-800'}`}>
-                      <thead>
-                        <tr className={`border-b-2 ${darkMode?'border-gray-600':'border-gray-300'}`}>
-                          {header && parseCells(header).map((cell, ci) => (
-                            <th key={ci} className={`px-3 py-2 text-left font-bold ${darkMode?'bg-gray-800/80':'bg-gray-100'}`}>{parseHtmlText(cell)}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {body.map((row, ri) => (
-                          <tr key={ri} className={`border-b ${darkMode?'border-gray-700/50':'border-gray-200'}`}>
-                            {parseCells(row).map((cell, ci) => (
-                              <td key={ci} className="px-3 py-2">{parseHtmlText(cell)}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-                continue;
-              }
-              // Lista
-              if (/^\s*[-*•]\s/.test(line)) {
-                const items = [];
-                while (i < lines.length && /^\s*[-*•]\s/.test(lines[i])) {
-                  items.push(lines[i].replace(/^\s*[-*•]\s/, ''));
-                  i++;
-                }
-                elements.push(
-                  <ul key={`ul-${i}`} className={`list-disc ml-5 space-y-1 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
-                    {items.map((item, ii) => <li key={ii}>{parseHtmlText(item)}</li>)}
-                  </ul>
-                );
-                continue;
-              }
-              if (!line.trim()) { elements.push(<div key={`sp-${i}`} className="h-2"/>); i++; continue; }
-              elements.push(<p key={`p-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>);
-              i++;
-            }
-            return elements;
-          };
-
-          return (
-            <div className="max-w-3xl mx-auto">
-              {/* Header */}
-              <button onClick={()=>setView('subject')} className={`flex items-center gap-2 mb-8 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
-                <ArrowLeft className="w-4 h-4"/>Voltar
-              </button>
-              <div className="mb-10">
-                <div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{subject.title}</div>
-                <h1 className={`text-3xl font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{topic.title}</h1>
-                <p className={`text-sm ${darkMode?'text-gray-500':'text-gray-400'}`}>{subtopics.length} subtópicos</p>
-                {hasLesson&&(
-                  <div className={`flex items-center gap-1 mt-4 p-1 rounded-lg w-fit ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
-                    {[
-                      {k:'interleaved', label:'Fixação intercalada'},
-                      {k:'end',         label:'Fixação no final'},
-                    ].map(opt=>(
-                      <button key={opt.k} onClick={()=>setAcademiaQMode(opt.k)}
-                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${academiaQMode===opt.k
-                          ?(darkMode?'bg-gray-700 text-yellow-400 shadow':'bg-white text-yellow-600 shadow')
-                          :(darkMode?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600')}`}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Estado: aula não gerada */}
-              {!hasLesson&&!academiaGenerating&&(
-                <div className={`py-16 text-center ${darkMode?'text-gray-500':'text-gray-400'}`}>
-                  <AcademiaIcon className="w-14 h-14 mx-auto mb-5 opacity-30"/>
-                  <p className="font-bold text-lg mb-1">Aula não gerada</p>
-                  <p className="text-sm opacity-70 mb-6 max-w-xs mx-auto">Clique abaixo para gerar a explicação e as questões de fixação.</p>
-                  {canUseAcademia&&(
-                    <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-700">
-                      Gerar Aula
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Loading */}
-              {academiaGenerating&&(
-                <div className="py-20 text-center">
-                  <Spinner className="w-10 h-10 text-yellow-600 mx-auto mb-4"/>
-                  <p className={`font-bold ${darkMode?'text-yellow-400':'text-yellow-600'}`}>{academiaGenProgress||'Gerando...'}</p>
-                  <p className={`text-xs mt-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Pode levar até 60 segundos</p>
-                </div>
-              )}
-
-              {/* Conteúdo gerado */}
-              {hasLesson&&!academiaGenerating&&(
-                <div>
-                  {/* Helper: renderiza uma questão de fixação */}
-                  {(()=>{
-                    const renderFixQ = (q, idx) => (
-                      <div key={q.id} data-question-id={q.id} className="mb-6">
-                        <QuestionCard
-                          question={q}
-                          index={idx}
-                          selectedLetter={(topic.answers||{})[q.id] || academiaTopicAnswers[q.id]}
-                          onAnswer={(letter) => {
-                            setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}));
-                            const updTopic = {...topic, answers:{...(topic.answers||{}), [q.id]:letter}};
-                            const updSubj = {...subject, topics:subject.topics.map(t=>t.id===topic.id?updTopic:t)};
-                            updateSubject(updSubj);
-                          }}
-                          darkMode={darkMode}
-                          isFavorite={(topic.favorites||[]).includes(q.id)}
-                          onToggleFavorite={(qId)=>{
-                            const favs = topic.favorites||[];
-                            const newFavs = favs.includes(qId) ? favs.filter(f=>f!==qId) : [...favs, qId];
-                            const updTopic = {...topic, favorites: newFavs};
-                            const updSubj = {...subject, topics: subject.topics.map(t=>t.id===topic.id?updTopic:t)};
-                            updateSubject(updSubj);
-                          }}
-                          apiKey={getKey()}
-                          oracleLength={settings.oracleLength||'medium'}
-                          onCall={callWithRotation}
-                          onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
-                        />
-                      </div>
-                    );
-
-                    // Coleta todas as questões de fixação em ordem (para o modo "end")
-                    const allFixqs = subtopics.flatMap((_, idx) => topic.fixationQuestions?.[idx] || []);
-
-                    return (
-                      <>
-                        {/* Explicações — sempre aparecendo em sequência */}
-                        {subtopics.map((subtopic, idx) => {
-                          const section = topic.lessonSections?.[idx];
-                          const fixqs   = topic.fixationQuestions?.[idx] || [];
-                          return (
-                            <div key={idx} className={`mb-14 ${idx > 0 ? `border-t pt-12 ${darkMode?'border-gray-800':'border-gray-100'}` : ''}`}>
-                              <div className="flex items-baseline gap-3 mb-5">
-                                <span className={`text-sm font-bold tabular-nums mr-1 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>
-                                <h2 className={`text-xl font-semibold leading-snug ${darkMode?'text-gray-100':'text-gray-900'}`}>{section?.title || subtopic}</h2>
-                              </div>
-                              {section?.content ? (
-                                <div className="space-y-3 mb-8">{renderLesson(section.content)}</div>
-                              ) : (
-                                <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este subtópico.</p>
-                              )}
-                              {/* Fixação intercalada — aparece logo após a explicação */}
-                              {academiaQMode==='interleaved' && fixqs.map((q, qi) => renderFixQ(q, idx))}
-                            </div>
-                          );
-                        })}
-
-                        {/* Fixação no final — todas as questões após todas as explicações */}
-                        {academiaQMode==='end' && allFixqs.length > 0 && (
-                          <div className={`mt-4 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
-                            <p className={`text-xs font-bold uppercase tracking-widest mb-8 ${darkMode?'text-gray-500':'text-gray-400'}`}>Questões de fixação</p>
-                            {allFixqs.map((q, qi) => renderFixQ(q, qi))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  {/* Baterias extras */}
-                  {(topic.extraBattery||[]).map((bloco, blocoIdx) => {
-                    const blocoQs = bloco.questions || bloco;
-                    const blocoId = bloco.id || `legacy_${blocoIdx}`;
-                    const blocoTitle = bloco.title || `Bateria ${blocoIdx + 1}`;
-                    return (
-                      <div key={blocoId} className={`mt-12 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
-                        <div className="flex items-center justify-between mb-6">
-                          <div>
-                            <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>{blocoTitle}</span>
-                            <p className={`text-xs mt-0.5 ${darkMode?'text-gray-600':'text-gray-400'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''}</p>
-                          </div>
-                          {canUseAcademia&&(
-                            <button title="Excluir bloco" onClick={()=>setDeleteId({type:'academia-extra-bloco', blocoId, topicId: topic.id, subjectId: subject.id, oracleTopicId: bloco.oracleTopicId})}
-                              className={`p-2 rounded-lg transition-colors ${darkMode?'text-gray-600 hover:text-red-400':'text-gray-300 hover:text-red-500'}`}>
-                              <Trash2 className="w-4 h-4"/>
-                            </button>
-                          )}
-                        </div>
-                        <div className="space-y-6">
-                          {blocoQs.map((q, qi) => (
-                            <QuestionCard
-                              key={q.id}
-                              question={q}
-                              index={qi}
-                              selectedLetter={(topic.answers||{})[q.id] || academiaTopicAnswers[q.id]}
-                              onAnswer={(letter) => {
-                                setAcademiaTopicAnswers(p=>({...p,[q.id]:letter}));
-                                const updTopic = {...topic, answers:{...(topic.answers||{}), [q.id]:letter}};
-                                const updSubj = {...subject, topics:subject.topics.map(t=>t.id===topic.id?updTopic:t)};
-                                updateSubject(updSubj);
-                              }}
-                              darkMode={darkMode}
-                              isFavorite={false}
-                              onToggleFavorite={()=>{}}
-                              apiKey={getKey()}
-                              oracleLength={settings.oracleLength||'medium'}
-                              onCall={callWithRotation}
-                              onOpenAnswer={q=>setOpenAnswerModal({question:q,isEssay:q.isEssay})}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Gerar bateria extra */}
-                  <div className={`mt-16 pt-10 border-t text-center ${darkMode?'border-gray-800':'border-gray-100'}`}>
-                    {canUseAcademia&&(
-                      <button onClick={()=>setAcademiaExtraModal({topic, subject})} disabled={academiaExtraBusy}
-                        className={`text-sm font-bold px-6 py-3 rounded-xl border-2 transition-all disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
-                        {academiaExtraBusy?'Gerando...':'+ Gerar bateria extra'}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Regenerar */}
-                  {canUseAcademia&&(
-                    <div className="mt-6 text-center">
-                      <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating}
-                        className={`text-xs opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1.5 mx-auto ${darkMode?'text-gray-400':'text-gray-500'}`}>
-                        <RotateCcw className="w-3 h-3"/>Regenerar aula
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
 
         {/* ── CREATOR ── */}
         {view==='creator'&&(
