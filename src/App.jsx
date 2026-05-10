@@ -353,8 +353,15 @@ const parseData = (text, namespace = '') => {
           }
           return a;
         };
-        const shuffled = seededShuffle(options.map(o => o.txt));
-        const final = shuffled.map((t, i) => ({ letter: 'ABCDE'[i], text: t, isCorrect: t === ctTxt }));
+        // Shuffle distratores only, then insert correct at seed-determined position
+        const distractors = options.filter(o => o.txt !== ctTxt).map(o => o.txt);
+        const shuffledDistractors = seededShuffle(distractors);
+        // Position of correct answer: spread across all positions using seed
+        const nOpts = options.length;
+        const correctPos = Math.abs(seed * 2654435761) % nOpts; // well-distributed hash
+        const withCorrect = [...shuffledDistractors];
+        withCorrect.splice(correctPos, 0, ctTxt);
+        const final = withCorrect.slice(0, nOpts).map((t, i) => ({ letter: 'ABCDE'[i], text: t, isCorrect: t === ctTxt }));
         questions.push({ id, statement: stmt, options: final, explanation: exp });
       } else {
         const final = options.map((o, i) => ({ letter: 'ABCDE'[i], text: o.txt, isCorrect: false }));
@@ -820,6 +827,7 @@ const QuestionView = ({
   topicType=null,
   onAddToReview=null,
   onGoToAula=null,
+  inReviewCount=0,
 }) => {
   const dm = darkMode;
 
@@ -1014,8 +1022,9 @@ const QuestionView = ({
                 )}
                 {onAddToReview&&(
                   <button onClick={()=>onAddToReview(questions, answers)}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20`}>
-                    <RepeatIcon className="w-5 h-5"/>Revisão Espaçada
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border-2 transition-all ${inReviewCount>0?'border-yellow-600 bg-yellow-600 text-white hover:bg-yellow-700':'border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'}`}>
+                    <RepeatIcon className="w-5 h-5"/>
+                    {inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada'}
                   </button>
                 )}
               </div>
@@ -1125,59 +1134,116 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
 };
 
 // ─── SPACED REVIEW MODAL ─────────────────────────────────────────────────────
-const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose }) => {
+const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose, currentReview }) => {
   const dm = darkMode;
+  const SR_LABELS = ['3d','7d','14d','30d','90d'];
   const correctLetter = q => q.options?.find(o => o.isCorrect)?.letter;
   const wrongIds = questions.filter(q => answers[q.id] && answers[q.id] !== correctLetter(q)).map(q => q.id);
 
-  const [selected, setSelected] = useState(() => questions.map(q => q.id));
+  // currentReview: object { [qId]: { interval, dueDate } } from reviewQueue[aulaId][blockId]
+  const inReview = currentReview || {};
+  const inReviewIds = Object.keys(inReview);
 
-  const toggle = (id) => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  // Start with all questions that are NOT yet in review selected for addition
+  const [selected, setSelected] = useState(() => questions.map(q=>q.id).filter(id => !inReviewIds.includes(id)));
+  const [toRemove, setToRemove] = useState([]);
+
+  const toggle = (id) => {
+    if (inReviewIds.includes(id)) {
+      // Already in review — toggle removal
+      setToRemove(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
+    } else {
+      // Not in review — toggle addition
+      setSelected(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
+    }
+  };
+
+  const handleConfirm = () => {
+    onConfirm(selected, toRemove);
+  };
+
+  const dueNow = (qId) => inReview[qId] && inReview[qId].dueDate <= Date.now();
+  const dueLabel = (qId) => {
+    if (!inReview[qId]) return null;
+    const days = Math.ceil((inReview[qId].dueDate - Date.now()) / 86400000);
+    const interval = SR_LABELS[inReview[qId].interval] || '?';
+    if (days <= 0) return `vence hoje · intervalo ${interval}`;
+    return `em ${days}d · intervalo ${interval}`;
+  };
+
+  const addCount = selected.length;
+  const removeCount = toRemove.length;
+  const hasChanges = addCount > 0 || removeCount > 0;
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
         style={{maxHeight:'88vh'}} onClick={e=>e.stopPropagation()}>
+
         <div className={`px-5 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-lg text-yellow-600 flex items-center gap-2">
-            <RepeatIcon className="w-5 h-5"/> Adicionar à Revisão Espaçada
+            <RepeatIcon className="w-5 h-5"/> Revisão Espaçada
           </h3>
           <p className={`text-xs mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>
-            As questões selecionadas voltarão em <strong>3 dias</strong>. Acertos avançam o intervalo (7→14→30→90 dias). Erros voltam para 3 dias.
+            {inReviewIds.length > 0
+              ? <>{inReviewIds.length} questão{inReviewIds.length!==1?'s':''} já na fila · Acertos: 3→7→14→30→90 dias</>
+              : <>Questões selecionadas voltarão em <strong>3 dias</strong>. Acertos avançam o intervalo.</>
+            }
           </p>
         </div>
 
-        <div className="flex gap-2 px-5 pt-3 pb-2 flex-shrink-0">
-          <button onClick={()=>setSelected(questions.map(q=>q.id))}
+        <div className="flex gap-2 px-5 pt-3 pb-2 flex-shrink-0 flex-wrap">
+          <button onClick={()=>setSelected(questions.filter(q=>!inReviewIds.includes(q.id)).map(q=>q.id))}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            Todas ({questions.length})
+            Todas novas ({questions.filter(q=>!inReviewIds.includes(q.id)).length})
           </button>
-          <button onClick={()=>setSelected(wrongIds)}
+          <button onClick={()=>setSelected(wrongIds.filter(id=>!inReviewIds.includes(id)))}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-red-700/50 text-red-400 hover:bg-red-900/20':'border-red-200 text-red-600 hover:bg-red-50'}`}>
-            Só erradas ({wrongIds.length})
+            Só erradas novas ({wrongIds.filter(id=>!inReviewIds.includes(id)).length})
           </button>
-          <button onClick={()=>setSelected([])}
+          <button onClick={()=>{setSelected([]);setToRemove([]);}}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-gray-700 text-gray-500':'border-gray-100 text-gray-400'}`}>
-            Nenhuma
+            Limpar
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-1.5 min-h-0">
           {questions.map((q, i) => {
-            const on = selected.includes(q.id);
+            const isInReview = inReviewIds.includes(q.id);
             const isWrong = wrongIds.includes(q.id);
             const isCorrect = answers[q.id] && answers[q.id] === correctLetter(q);
+            const willAdd = selected.includes(q.id);
+            const willRemove = toRemove.includes(q.id);
+            const isDue = dueNow(q.id);
+
             return (
               <button key={q.id} onClick={()=>toggle(q.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${on?(dm?'border-yellow-500/60 bg-yellow-900/15':'border-yellow-400 bg-yellow-50'):(dm?'border-gray-700 bg-gray-800/50':'border-gray-100 bg-gray-50')}`}>
-                <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
-                  {on && <svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all
+                  ${isInReview && !willRemove ? (dm?'border-yellow-700/50 bg-yellow-900/10':'border-yellow-200 bg-yellow-50/50') : ''}
+                  ${willRemove ? (dm?'border-red-700/50 bg-red-900/10 opacity-60':'border-red-200 bg-red-50 opacity-60') : ''}
+                  ${willAdd ? (dm?'border-yellow-500/60 bg-yellow-900/15':'border-yellow-400 bg-yellow-50') : ''}
+                  ${!isInReview && !willAdd ? (dm?'border-gray-700 bg-gray-800/50':'border-gray-100 bg-gray-50') : ''}
+                `}>
+                <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-all
+                  ${isInReview && !willRemove ? 'bg-yellow-600 border-yellow-600' : ''}
+                  ${willRemove ? 'bg-red-500 border-red-500' : ''}
+                  ${willAdd ? 'bg-yellow-500 border-yellow-500' : ''}
+                  ${!isInReview && !willAdd ? 'border-gray-400' : ''}
+                `}>
+                  {isInReview && !willRemove && <RepeatIcon className="w-3 h-3 text-white"/>}
+                  {willRemove && <span className="text-white text-[10px] font-bold">✕</span>}
+                  {willAdd && <svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs truncate ${dm?'text-gray-300':'text-gray-700'}`}>
                     <span className="opacity-40 mr-1">Q{i+1}</span>
-                    {q.statement.replace(/\n/g,' ').substring(0, 80)}…
+                    {q.statement.replace(/\n/g,' ').substring(0,80)}…
                   </p>
+                  {isInReview && (
+                    <p className={`text-[10px] mt-0.5 ${isDue?(dm?'text-yellow-400':'text-yellow-600'):(dm?'text-gray-500':'text-gray-400')}`}>
+                      {isDue ? '🔔 ' : ''}{dueLabel(q.id)}
+                    </p>
+                  )}
                 </div>
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${isCorrect?'text-green-500':isWrong?'text-red-400':'text-gray-400'}`}>
                   {isCorrect?'✓':isWrong?'✗':'—'}
@@ -1189,11 +1255,14 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
 
         <div className={`px-5 py-4 border-t flex gap-3 flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold text-sm ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
-            Pular
+            Cancelar
           </button>
-          <button onClick={()=>onConfirm(selected)} disabled={selected.length===0}
+          <button onClick={handleConfirm} disabled={!hasChanges}
             className="flex-[2] py-3 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-40 flex items-center justify-center gap-2">
-            <RepeatIcon className="w-4 h-4"/> Adicionar {selected.length} {selected.length===1?'questão':'questões'}
+            <RepeatIcon className="w-4 h-4"/>
+            {addCount>0 && removeCount>0 ? `+${addCount} / −${removeCount}` :
+             addCount>0 ? `Adicionar ${addCount} questão${addCount!==1?'s':''}` :
+             removeCount>0 ? `Remover ${removeCount} da fila` : 'Sem alterações'}
           </button>
         </div>
       </div>
@@ -2724,6 +2793,9 @@ export default function QuestionBankApp() {
   const [cursoTab, setCursoTab]           = useState('videoaulas');
   const [reviewQueue, setReviewQueue]     = useState({});  // { aulaId: { blockId: { qId: { interval, dueDate, seed } } } }
   const [reviewLoaded, setReviewLoaded]   = useState(false);
+  const [resetCourseModal, setResetCourseModal] = useState(false);
+  const [resetCourseInput, setResetCourseInput] = useState('');
+  const RESET_CONFIRM_WORD = 'APAGAR';
   const [srModal, setSrModal]             = useState(null);  // modal de adicionar à revisão
   const [reviewSession, setReviewSession] = useState(null);  // sessão ativa de revisão
   const [cronograma, setCronograma]       = useState(null);   // array de 46 semanas
@@ -3004,6 +3076,33 @@ export default function QuestionBankApp() {
   }, [user]);
 
   // Save a single aula's vqBlock data to Firestore
+  const resetCourseProgress = async () => {
+    if (!user || user.isAnonymous) return;
+    try {
+      // 1. Clear watched status
+      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
+      setWatchedAulas({});
+      localStorage.removeItem(`agora_watched_${user.uid}`);
+
+      // 2. Delete all vq_blocks docs
+      const blocksSnap = await getDocs(collection(db,'users',user.uid,'vq_blocks'));
+      await Promise.all(blocksSnap.docs.map(d => deleteDoc(d.ref)));
+      setVqBlocks({});
+
+      // 3. Delete all vq_review docs
+      const reviewSnap = await getDocs(collection(db,'users',user.uid,'vq_review'));
+      await Promise.all(reviewSnap.docs.map(d => deleteDoc(d.ref)));
+      setReviewQueue({});
+
+      setResetCourseModal(false);
+      setResetCourseInput('');
+      addToast('Progresso do curso apagado com sucesso.', 'success', 5000);
+    } catch(e) {
+      console.error('Reset failed:', e);
+      addToast('Erro ao apagar progresso. Tente novamente.', 'info', 4000);
+    }
+  };
+
   const saveVqBlock = async (aulaId, data) => {
     const updated = { ...vqBlocks, [aulaId]: data };
     setVqBlocks(updated);
@@ -3846,6 +3945,19 @@ export default function QuestionBankApp() {
   };
 
   const subjectProgress = (s) => {
+    if (s.source === 'academia') {
+      // For academia: count answered fixation questions across all topics
+      const allFixqs = s.topics.flatMap(t =>
+        Object.values(t.fixationQuestions||{}).flat()
+          .concat((t.extraBattery||[]).flatMap(b=>b.questions||b))
+      );
+      if (allFixqs.length === 0) return s.topics.every(t=>t.lessonGenerated) ? 50 : 0;
+      const answered = allFixqs.filter(q => {
+        const v = s.topics.reduce((acc,t)=>acc||(t.answers||{})[q.id], null);
+        return !!v && v !== 'SKIPPED';
+      }).length;
+      return Math.round(answered / allFixqs.length * 100);
+    }
     const all = s.topics.flatMap(t=>t.questions||[]);
     const ans = s.topics.reduce((acc,t) => acc + countValidAnswers(t), 0);
     return all.length>0 ? Math.round(ans/all.length*100) : 0;
@@ -4362,7 +4474,9 @@ export default function QuestionBankApp() {
               {library.filter(s=>s.source===libFilter).map(s=>{
                 const pct=subjectProgress(s);
                 const totalTopics = s.topics.length;
-                const totalQs = s.topics.reduce((acc,t)=>(t.questions?.length||0)+acc, 0);
+                const totalQs = s.source==='academia'
+                  ? s.topics.flatMap(t=>Object.values(t.fixationQuestions||{}).flat()).length
+                  : s.topics.reduce((acc,t)=>(t.questions?.length||0)+acc, 0);
                 return (
                   <div key={s.id} onClick={()=>{setActiveSubjectId(s.id);setView('subject');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-6 rounded-2xl border hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex justify-between items-start mb-4">
@@ -5924,7 +6038,7 @@ export default function QuestionBankApp() {
             const blockList = Object.entries(blocks).sort((a,b)=>a[0].localeCompare(b[0]));
             const hasSetup  = aulaHasVqData(vqAula); // usa busca em todos os formatos de chave
             const durationSecs = vqAula.duration_seconds || 0;
-            const suggestedQ   = durationSecs > 0 ? Math.ceil(durationSecs/120) : 10;
+            const suggestedQ   = durationSecs > 0 ? Math.ceil(durationSecs/90) : 10;
 
             // ── VIEW COMPLETA DE UM BLOCO ── usa o mesmo QuestionView do topic
             if(vqActiveBlockView) {
@@ -5978,6 +6092,7 @@ export default function QuestionBankApp() {
                     onCall={callWithRotation}
                     onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
                     onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:block.title||`Bloco ${blockId.replace('block','')}`, questions:qs, answers:ans})}
+                    inReviewCount={Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length}
                     onGoToAula={()=>{setVqActiveBlockView(null); setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}}
                     generateLabel="Gerar Questões"
                     onGenerate={()=>generateVqBlock(aulaIdNew,blockId)}
@@ -6419,6 +6534,18 @@ export default function QuestionBankApp() {
               </div>
             )}
 
+            {/* Zona de perigo */}
+            {canSeeVideoaulas&&(
+              <div className={`border-2 border-dashed rounded-2xl p-6 ${darkMode?'border-red-800/50':'border-red-200'}`}>
+                <p className={`text-xs font-bold uppercase mb-1 ${darkMode?'text-red-400':'text-red-600'}`}>Zona de perigo</p>
+                <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>Apaga todo o progresso do Portal do Curso: aulas assistidas, questões geradas e fila de revisão espaçada. A biblioteca do Oráculo não é afetada.</p>
+                <button onClick={()=>{setResetCourseModal(true);setResetCourseInput('');}}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${darkMode?'border-red-700 text-red-400 hover:bg-red-900/20':'border-red-300 text-red-600 hover:bg-red-50'}`}>
+                  <Trash2 className="w-4 h-4"/>Apagar progresso do curso
+                </button>
+              </div>
+            )}
+
             <button onClick={()=>{saveSettings(settings);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold">Salvar</button>
           </div>
         )}
@@ -6473,11 +6600,16 @@ export default function QuestionBankApp() {
         blockId={srModal.blockId}
         blockTitle={srModal.blockTitle}
         darkMode={darkMode}
+        currentReview={reviewQueue[srModal.aulaId]?.[srModal.blockId] || {}}
         onClose={()=>setSrModal(null)}
-        onConfirm={async(selectedIds)=>{
-          await addToReview(srModal.aulaId, srModal.blockId, selectedIds, srModal.questions);
+        onConfirm={async(selectedIds, removeIds=[])=>{
+          if (selectedIds.length > 0) await addToReview(srModal.aulaId, srModal.blockId, selectedIds, srModal.questions);
+          for (const qId of removeIds) await removeFromReview(srModal.aulaId, srModal.blockId, qId);
           setSrModal(null);
-          addToast(`↺ ${selectedIds.length} questão${selectedIds.length!==1?'s':''} adicionada${selectedIds.length!==1?'s':''} à revisão!`, 'success', 4000);
+          const parts = [];
+          if (selectedIds.length > 0) parts.push(`+${selectedIds.length} adicionada${selectedIds.length!==1?'s':''}`);
+          if (removeIds.length > 0) parts.push(`−${removeIds.length} removida${removeIds.length!==1?'s':''}`);
+          if (parts.length) addToast(`↺ Revisão: ${parts.join(' · ')}`, 'success', 4000);
         }}
       />}
 
@@ -6497,6 +6629,46 @@ export default function QuestionBankApp() {
 
       {/* ── INSIGHTS MODAL ── */}
       {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
+
+      {/* ── RESET COURSE MODAL ── */}
+      {resetCourseModal&&(
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 p-4">
+          <div className={`w-full max-w-sm rounded-2xl border p-8 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${darkMode?'bg-red-900/30':'bg-red-100'}`}>
+              <Trash2 className="w-6 h-6 text-red-500"/>
+            </div>
+            <h3 className="font-serif font-bold text-xl mb-2">Apagar progresso do curso?</h3>
+            <p className={`text-sm mb-5 ${darkMode?'text-gray-400':'text-gray-500'}`}>
+              Isso vai apagar permanentemente:<br/>
+              • Todas as aulas marcadas como assistidas<br/>
+              • Todas as questões geradas no curso<br/>
+              • Toda a fila de revisão espaçada<br/><br/>
+              <strong>A biblioteca do Oráculo não será afetada.</strong>
+            </p>
+            <p className={`text-xs font-bold mb-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>
+              Digite <strong>APAGAR</strong> para confirmar:
+            </p>
+            <input
+              value={resetCourseInput}
+              onChange={e=>setResetCourseInput(e.target.value.toUpperCase())}
+              placeholder="APAGAR"
+              className={`w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-red-500 mb-5 font-mono ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-300'}`}
+            />
+            <div className="flex gap-3">
+              <button onClick={()=>{setResetCourseModal(false);setResetCourseInput('');}}
+                className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
+                Cancelar
+              </button>
+              <button
+                onClick={resetCourseProgress}
+                disabled={resetCourseInput !== RESET_CONFIRM_WORD}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold disabled:opacity-40 transition-all">
+                Apagar tudo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── ACADEMIA EXTRA BATTERY MODAL ── */}
       {academiaExtraModal&&(

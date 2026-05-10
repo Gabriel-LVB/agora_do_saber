@@ -84,13 +84,14 @@ REGRAS DO ENUNCIADO:
 const REGRAS_ALTERNATIVAS = `
 REGRAS DAS ALTERNATIVAS — AS MAIS IMPORTANTES DESTE PROMPT:
 
-REGRA 1 — COMPRIMENTO UNIFORME (CRÍTICO):
-Meça mentalmente o comprimento de cada alternativa. A correta NÃO pode ser a mais longa nem a mais curta.
-Todas as alternativas devem ter comprimento similar (variação máxima de ±20% em número de palavras).
-Se a correta precisar de mais palavras para estar correta, encurte-a ou reformule-a.
-Se os distratores forem muito curtos, alongue-os com especificações plausíveis.
-EXEMPLO PROIBIDO: A) Não / B) Não / C) Não / D) Sim, porque X, Y e Z são características que comprovam...
-EXEMPLO CORRETO: todas as alternativas com frases completas de tamanho similar.
+REGRA 1 — ALTERNATIVA A É SEMPRE A CORRETA (CRÍTICO):
+Coloque a resposta correta como alternativa A, sempre. O site embaralha automaticamente.
+Isso permite que você use a alternativa A como âncora para calibrar os distratores:
+- Escreva A (correta) com o nível de detalhe ideal
+- Escreva B, C, D (e E) com comprimento similar ao de A (±10 palavras), alterando apenas o elemento que torna cada um incorreto
+- Distratores devem parecer tão plausíveis quanto A para quem estudou superficialmente
+EXEMPLO PROIBIDO: A) Sim, pela inibição da bomba de Na/K e ação sobre canais de Ca²⁺ / B) Não / C) Sim / D) Nunca
+EXEMPLO CORRETO: A) [resposta correta, 12 palavras] / B) [mesmo comprimento, mecanismo errado] / C) [mesmo comprimento, órgão errado] / D) [mesmo comprimento, dose/classe errada]
 
 REGRA 2 — DISTRATORES SOFISTICADOS (CRÍTICO):
 Cada distrator deve ser uma afirmação que um estudante que estudou superficialmente poderia confundir com a resposta correta.
@@ -127,7 +128,16 @@ ${alts}
 Alternativa correta: [Letra]
 Explicação:
 [Explicação]
----`;
+---
+
+INSTRUÇÃO CRÍTICA SOBRE AS ALTERNATIVAS:
+Coloque SEMPRE a alternativa CORRETA como alternativa A.
+Depois crie os distratores (B, C, D e E se houver) baseando-se na alternativa A:
+- Use a alternativa A como referência de comprimento — os distratores devem ter comprimento similar (±10 palavras)
+- Crie distratores alterando elementos específicos da alternativa A: troque doses, mecanismos, órgãos, fármacos por versões plausíveis mas incorretas
+- Distratores devem parecer igualmente corretos para quem não domina o assunto
+- O site embaralha as alternativas automaticamente antes de exibir — você não precisa se preocupar com isso
+Resultado esperado: 5 alternativas com comprimento quase idêntico, onde só quem domina o conteúdo consegue identificar a correta.`;
 
 // ─── PROMPT: GERAÇÃO DE QUESTÕES DO ORÁCULO ──────────────────────────────────
 
