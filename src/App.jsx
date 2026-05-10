@@ -1647,6 +1647,296 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 };
 
 // ─── EXPORT MODAL ─────────────────────────────────────────────────────────────
+
+// ─── ACADEMIA EXPORT MODAL ───────────────────────────────────────────────────
+
+const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
+  const [lessonMode,  setLessonMode]  = useState('interleaved'); // 'interleaved'|'end'
+  const [qPlace,      setQPlace]      = useState('topic');        // 'topic'|'end'
+  const [answerMode,  setAnswerMode]  = useState('after');        // 'after'|'end'|'none'
+  const [hideSubtitles, setHideSubtitles] = useState(false);
+  const [fmt, setFmt] = useState('pdf');
+
+  const boundaries = topic._topicBoundaries || [];
+  const isFolder   = boundaries.length > 0;
+  const subtopics  = topic.subtopics || [];
+
+  const escape = s => (s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+
+  const mdToHtml = (md) => {
+    if (!md) return '';
+    const lines = md.split('\n');
+    let html = ''; let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^\s*\|.+\|\s*$/.test(line)) {
+        const tLines = [];
+        while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) { tLines.push(lines[i]); i++; }
+        const rows = tLines.filter(l => !/^\s*\|[-:\s|]+\|\s*$/.test(l));
+        const cells = row => row.replace(/^\s*\|\s*/,'').replace(/\s*\|\s*$/,'').split(/\s*\|\s*/);
+        if (rows.length > 0) {
+          html += '<table style="border-collapse:collapse;width:100%;margin:10px 0;font-size:13px">';
+          html += '<thead><tr>' + cells(rows[0]).map(c=>`<th style="border:1px solid #aaa;padding:6px 10px;text-align:left;background:#f5f5f5">${escape(c)}</th>`).join('') + '</tr></thead>';
+          html += '<tbody>' + rows.slice(1).map((r,ri)=>`<tr>${cells(r).map(c=>`<td style="border:1px solid #ccc;padding:5px 10px">${escape(c)}</td>`).join('')}</tr>`).join('') + '</tbody>';
+          html += '</table>';
+        }
+        continue;
+      }
+      if (/^\s*[-*•]\s/.test(line)) {
+        html += '<ul style="margin:4px 0 4px 18px;padding:0">';
+        while (i < lines.length && /^\s*[-*•]\s/.test(lines[i])) {
+          html += `<li style="margin:2px 0;font-size:14px;line-height:1.6">${escape(lines[i].replace(/^\s*[-*•]\s/,''))}</li>`; i++;
+        }
+        html += '</ul>'; continue;
+      }
+      if (!line.trim()) { html += '<br>'; i++; continue; }
+      html += `<p style="margin:0 0 6px;font-size:14px;line-height:1.7">${escape(line)}</p>`; i++;
+    }
+    return html;
+  };
+
+  // Renders a single question. showAnswer controls whether gabarito appears.
+  const renderQ = (q, localIdx, showAnswer) => {
+    const opts = q.options||[];
+    return `<div style="margin-bottom:18px;page-break-inside:avoid">
+<p style="font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 3px">Questão ${localIdx+1}</p>
+<p style="font-size:14px;margin:4px 0 8px;line-height:1.6">${escape(q.statement||'')}</p>
+${opts.map(o=>`<div style="margin:2px 0;padding:5px 10px;border-radius:5px;font-size:13px;border:1px solid #ddd${showAnswer&&o.isCorrect?';border-color:#333;font-weight:bold':''}">${o.letter}) ${escape(o.text||'')}</div>`).join('')}
+${showAnswer?`<div style="background:#f5f5f5;border-left:3px solid #555;padding:8px 12px;margin-top:8px;font-size:13px;line-height:1.5">${escape(q.explanation||'')}</div>`:''}
+</div>`;
+  };
+
+  // Renders a gabarito block (for answerMode='end')
+  const renderGabarito = (questions) => {
+    let html = '';
+    questions.forEach((q, qi) => {
+      const corr = q.options?.find(o=>o.isCorrect);
+      html += `<div style="padding:8px 12px;border-left:3px solid #555;margin-bottom:10px;font-size:13px">
+<p style="font-weight:bold;margin:0 0 3px">Q${qi+1}. ${escape(corr?.letter||'')}. ${escape(corr?.text||'')}</p>
+<p style="margin:0;color:#444;line-height:1.5">${escape(q.explanation||'')}</p>
+</div>`;
+    });
+    return html;
+  };
+
+  const buildHtml = () => {
+    const styles = `body{font-family:Georgia,serif;max-width:820px;margin:0 auto;padding:24px;color:#111}
+h1{color:#92400e;border-bottom:3px solid #92400e;padding-bottom:8px;margin-bottom:4px}
+h2{color:#374151;margin:28px 0 12px;border-bottom:1px solid #e5e7eb;padding-bottom:5px}
+h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
+.sub{color:#d97706;font-weight:bold;margin-right:6px}
+.pb{page-break-before:always}
+@media print{body{padding:8px}}`;
+
+    let body = `<h1>${escape(topic.title)}</h1>
+<p style="color:#888;font-size:13px;font-family:sans-serif;margin:0 0 20px">${escape(subject?.title||'')} • Ágora do Saber</p>`;
+
+    const allFixqs = subtopics.flatMap((_,i) => topic.fixationQuestions?.[i]||[]);
+    const extraQs  = (topic.extraBattery||[]).flatMap(b => b.questions||b);
+
+    // Helper: render one block of subtopics (either whole topic or single tópico in folder)
+    // localOffset: the index of the first subtopic in this block (for numbering restart per tópico)
+    const renderExplanations = (subStart, subEnd, localOffset=0) => {
+      let h = '';
+      for (let si = subStart; si < subEnd; si++) {
+        const section = topic.lessonSections?.[si];
+        const localNum = String(si - subStart + 1).padStart(2,'0');
+        if (!hideSubtitles) {
+          h += `<h3><span class="sub">${localNum}.</span>${escape(section?.title || subtopics[si] || '')}</h3>`;
+        }
+        h += mdToHtml(section?.content || '');
+      }
+      return h;
+    };
+
+    const renderQBlock = (fixqs, label, showAns) => {
+      if (!fixqs.length) return '';
+      let h = label ? `<h3 style="margin-top:20px">${label}</h3>` : '';
+      fixqs.forEach((q,qi) => { h += renderQ(q, qi, showAns); });
+      return h;
+    };
+
+    if (!isFolder) {
+      // ── SINGLE TOPIC ─────────────────────────────────────────────────────
+      if (lessonMode === 'interleaved') {
+        // Explanation per subtopic, then optionally its fixation q
+        for (let si = 0; si < subtopics.length; si++) {
+          const section = topic.lessonSections?.[si];
+          const localNum = String(si + 1).padStart(2,'0');
+          if (!hideSubtitles) {
+            body += `<h3><span class="sub">${localNum}.</span>${escape(section?.title || subtopics[si] || '')}</h3>`;
+          }
+          body += mdToHtml(section?.content || '');
+          if (answerMode !== 'end') {
+            const fixqs = topic.fixationQuestions?.[si]||[];
+            if (fixqs.length) body += renderQBlock(fixqs, null, answerMode==='after');
+          }
+        }
+        if (answerMode === 'end' && allFixqs.length) {
+          body += `<div class="pb"><h2>Questões de Fixação</h2>`;
+          body += renderQBlock(allFixqs, null, false);
+          body += `<div class="pb"><h2>Gabarito</h2>` + renderGabarito(allFixqs) + `</div>`;
+          body += `</div>`;
+        }
+      } else {
+        // lessonMode = 'end': all explanations first, then questions
+        body += renderExplanations(0, subtopics.length);
+        if (allFixqs.length) {
+          body += `<div class="pb"><h2>Questões de Fixação</h2>`;
+          body += renderQBlock(allFixqs, null, answerMode==='after');
+          if (answerMode === 'end') {
+            body += `<div class="pb"><h2>Gabarito</h2>` + renderGabarito(allFixqs) + `</div>`;
+          }
+          body += `</div>`;
+        }
+      }
+    } else {
+      // ── FOLDER EXPORT ────────────────────────────────────────────────────
+      boundaries.forEach((b, bi) => {
+        const topicFixqs = Array.from({length: b.end-b.start}, (_,i)=>topic.fixationQuestions?.[b.start+i]||[]).flat();
+        const isFirst = bi === 0;
+
+        body += `${isFirst?'':'<div class="pb">'}`;
+        body += `<h2>${escape(b.title)}</h2>`;
+
+        if (lessonMode === 'interleaved') {
+          for (let si = b.start; si < b.end; si++) {
+            const section = topic.lessonSections?.[si];
+            const localNum = String(si - b.start + 1).padStart(2,'0');
+            if (!hideSubtitles) {
+              body += `<h3><span class="sub">${localNum}.</span>${escape(section?.title || subtopics[si] || '')}</h3>`;
+            }
+            body += mdToHtml(section?.content || '');
+            // In interleaved mode, if qPlace=topic, questões appear after each subtopic
+            if (qPlace === 'topic' && answerMode !== 'end') {
+              const fixqs = topic.fixationQuestions?.[si]||[];
+              if (fixqs.length) body += renderQBlock(fixqs, null, answerMode==='after');
+            }
+          }
+        } else {
+          // All explanations of this topic first
+          body += renderExplanations(b.start, b.end);
+        }
+
+        // Questions after this topic block (if qPlace='topic')
+        if (qPlace === 'topic' && topicFixqs.length && !(lessonMode==='interleaved' && answerMode!=='end')) {
+          body += `<h3 style="margin-top:20px">Questões — ${escape(b.title)}</h3>`;
+          topicFixqs.forEach((q,qi) => { body += renderQ(q, qi, answerMode==='after'); });
+          if (answerMode === 'end') {
+            body += `<h3>Gabarito — ${escape(b.title)}</h3>` + renderGabarito(topicFixqs);
+          }
+        }
+
+        body += `${isFirst?'':'</div>'}`;
+      });
+
+      // If qPlace='end', dump all questions at the end
+      if (qPlace === 'end' && allFixqs.length) {
+        body += `<div class="pb"><h2>Questões de Fixação</h2>`;
+        body += renderQBlock(allFixqs, null, answerMode==='after');
+        if (answerMode === 'end') {
+          body += `<div class="pb"><h2>Gabarito</h2>` + renderGabarito(allFixqs) + `</div>`;
+        }
+        body += `</div>`;
+      }
+    }
+
+    if (extraQs.length) {
+      body += `<div class="pb"><h2>Baterias Extras</h2>`;
+      extraQs.forEach((q,qi) => { body += renderQ(q, qi, answerMode!=='none'); });
+      body += `</div>`;
+    }
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body>${body}</body></html>`;
+  };
+
+  const handleExport = () => {
+    const html = buildHtml();
+    if (fmt==='pdf') {
+      const w = window.open('','_blank'); w.document.write(html); w.document.close(); w.print();
+    } else {
+      const blob = new Blob([`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'></head><body>${html}</body></html>`],{type:'application/msword'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download=`${(topic.title||'Academia').substring(0,40)}.doc`; a.click();
+    }
+    onClose();
+  };
+
+  const dm = darkMode;
+  const rc = (active) => `flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${active?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-700 hover:border-gray-600':'border-gray-200 hover:border-gray-300')}`;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4">
+      <div className={`w-full max-w-lg rounded-2xl border overflow-y-auto p-8 ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'90vh'}}>
+        <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar {isFolder?'Pasta':'Aula'}</h3>
+
+        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Disposição da explicação</p>
+        <div className="space-y-2 mb-5">
+          {[{k:'interleaved',title:'Intercalada',desc:'Explicação de cada subtópico seguida das suas questões'},
+            {k:'end',title:'Explicação depois questões',desc:'Toda a explicação primeiro, questões separadas ao final'}
+          ].map(o=>(
+            <label key={o.k} className={rc(lessonMode===o.k)}>
+              <input type="radio" name="lm" value={o.k} checked={lessonMode===o.k} onChange={()=>setLessonMode(o.k)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
+              <div><p className="font-bold text-sm">{o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
+            </label>
+          ))}
+        </div>
+
+        {isFolder&&(
+          <>
+            <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Questões por</p>
+            <div className="space-y-2 mb-5">
+              {[{k:'topic',title:'Após cada tópico',desc:'Questões + gabarito após o bloco de cada tópico'},
+                {k:'end',title:'Ao final de tudo',desc:'Todas as questões reunidas em seção única no final'}
+              ].map(o=>(
+                <label key={o.k} className={rc(qPlace===o.k)}>
+                  <input type="radio" name="qp" value={o.k} checked={qPlace===o.k} onChange={()=>setQPlace(o.k)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
+                  <div><p className="font-bold text-sm">{o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+
+        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Gabarito e explicações</p>
+        <div className="space-y-2 mb-5">
+          {[{k:'after',title:'Logo após cada questão',desc:'Resposta e explicação abaixo de cada questão'},
+            {k:'end',title:'No final (modo simulado)',desc:'Questões sem resposta + gabarito em página separada'},
+            {k:'none',title:'Sem gabarito',desc:'Só enunciados e alternativas — para responder no papel'}
+          ].map(o=>(
+            <label key={o.k} className={rc(answerMode===o.k)}>
+              <input type="radio" name="am" value={o.k} checked={answerMode===o.k} onChange={()=>setAnswerMode(o.k)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
+              <div><p className="font-bold text-sm">{o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
+            </label>
+          ))}
+        </div>
+
+        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Outros</p>
+        <label className={`${rc(hideSubtitles)} mb-5 cursor-pointer`}>
+          <input type="checkbox" checked={hideSubtitles} onChange={e=>setHideSubtitles(e.target.checked)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
+          <div><p className="font-bold text-sm">Ocultar títulos dos subtópicos</p><p className="text-xs opacity-50 mt-0.5">Remove os títulos e números — o texto flui como prosa contínua</p></div>
+        </label>
+
+        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Formato</p>
+        <div className="flex gap-3 mb-8">
+          {[{k:'pdf',l:'📄 PDF'},{k:'word',l:'📘 Word (.doc)'}].map(f=>(
+            <button key={f.k} onClick={()=>setFmt(f.k)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${fmt===f.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400':'border-gray-200 text-gray-600')}`}>{f.l}</button>
+          ))}
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold ${dm?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+          <button onClick={handleExport} className="flex-1 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Exportar</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ─── EXPORT MODAL ─────────────────────────────────────────────────────────────
 const ExportModal = ({ topic, subject, onClose, darkMode }) => {
   const [mode, setMode] = useState('study');   // 'study'|'exam'|'blank'
   const [fmt, setFmt]   = useState('pdf');     // 'pdf'|'word'
@@ -2041,7 +2331,7 @@ function AcademiaTopicView({
   academiaQMode, setAcademiaQMode,
   academiaTopicAnswers, setAcademiaTopicAnswers,
   academiaExtraBusy, settings, updateSubject,
-  generateAcademiaLesson, setAcademiaExtraModal, setDeleteId,
+  generateAcademiaLesson, setAcademiaExtraModal, setAcademiaExportModal, setDeleteId,
   setOpenAnswerModal, getKey, callWithRotation, parseHtmlText, onBack,
 }) {
   const subtopics = topic.subtopics || [];
@@ -2157,15 +2447,21 @@ function AcademiaTopicView({
         <h1 className={`text-3xl font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{topic.title}</h1>
         <p className={`text-sm ${darkMode?'text-gray-500':'text-gray-400'}`}>{subtopics.length} subtópicos</p>
         {hasLesson && (
-          <div className={`flex items-center gap-1 mt-4 p-1 rounded-lg w-fit ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
-            {[{k:'interleaved',label:'Fixação intercalada'},{k:'end',label:'Fixação no final'}].map(opt => (
-              <button key={opt.k} onClick={()=>setAcademiaQMode(opt.k)}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${academiaQMode===opt.k
-                  ?(darkMode?'bg-gray-700 text-yellow-400 shadow':'bg-white text-yellow-600 shadow')
-                  :(darkMode?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600')}`}>
-                {opt.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 mt-4 flex-wrap">
+            <div className={`flex items-center gap-1 p-1 rounded-lg ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
+              {[{k:'interleaved',label:'Fixação intercalada'},{k:'end',label:'Fixação no final'}].map(opt => (
+                <button key={opt.k} onClick={()=>setAcademiaQMode(opt.k)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${academiaQMode===opt.k
+                    ?(darkMode?'bg-gray-700 text-yellow-400 shadow':'bg-white text-yellow-600 shadow')
+                    :(darkMode?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600')}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={()=>setAcademiaExportModal({topic, subject})}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
+              <Printer className="w-3.5 h-3.5"/>Exportar
+            </button>
           </div>
         )}
       </div>
@@ -2200,10 +2496,7 @@ function AcademiaTopicView({
             const fixqs   = topic.fixationQuestions?.[idx] || [];
             return (
               <div key={idx} className="mb-8">
-                <div className="flex items-baseline gap-3 mb-5">
-                  <span className={`text-sm font-bold tabular-nums mr-1 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>
-                  <h2 className={`text-base font-semibold leading-snug ${darkMode?'text-gray-100':'text-gray-900'}`}>{section?.title || subtopic}</h2>
-                </div>
+                <h2 className={`text-base font-semibold leading-snug mb-5 ${darkMode?'text-gray-100':'text-gray-900'}`}><span className={`text-sm font-bold tabular-nums mr-2 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
                 {section?.content ? (
                   <div className="space-y-3 mb-8">{renderLesson(section.content)}</div>
                 ) : (
@@ -2361,6 +2654,7 @@ export default function QuestionBankApp() {
   const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
   const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
   const [academiaQMode, setAcademiaQMode]             = useState('interleaved'); // 'interleaved' | 'end'
+  const [academiaExportModal, setAcademiaExportModal] = useState(null); // { topic, subject }
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
@@ -4106,9 +4400,50 @@ export default function QuestionBankApp() {
                   <span className="text-sm font-bold text-yellow-600">{subjectProgress(activeSubject)}% concluído</span>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
+                {activeSubject.source==='academia'&&(()=>{
+                  const allGenerated = activeSubject.topics.length > 0 && activeSubject.topics.every(t=>t.lessonGenerated);
+                  const pendingCount = activeSubject.topics.filter(t=>!t.lessonGenerated).length;
+                  return (
+                    <button
+                      onClick={allGenerated ? ()=>{
+                        const topics = activeSubject.topics;
+                        // Compute per-topic subtopic offsets for boundary tracking
+                        const boundaries = [];
+                        let offset = 0;
+                        topics.forEach(t => {
+                          boundaries.push({title: t.title, start: offset, end: offset+(t.subtopics||[]).length});
+                          offset += (t.subtopics||[]).length;
+                        });
+                        const merged = {
+                          title: activeSubject.title,
+                          subtopics: topics.flatMap(t=>t.subtopics||[]),
+                          lessonSections: Object.assign({}, ...topics.map((t,ti)=>{
+                            const off = boundaries[ti].start;
+                            return Object.fromEntries(Object.entries(t.lessonSections||{}).map(([k,v])=>[Number(k)+off,v]));
+                          })),
+                          fixationQuestions: Object.assign({}, ...topics.map((t,ti)=>{
+                            const off = boundaries[ti].start;
+                            return Object.fromEntries(Object.entries(t.fixationQuestions||{}).map(([k,v])=>[Number(k)+off,v]));
+                          })),
+                          answers: Object.assign({}, ...topics.map(t=>t.answers||{})),
+                          favorites: topics.flatMap(t=>t.favorites||[]),
+                          extraBattery: topics.flatMap(t=>t.extraBattery||[]),
+                          lessonGenerated: true,
+                          _topicBoundaries: boundaries,
+                        };
+                        setAcademiaExportModal({topic: merged, subject: activeSubject});
+                      } : undefined}
+                      disabled={!allGenerated}
+                      title={allGenerated ? 'Exportar toda a pasta' : `${pendingCount} aula${pendingCount!==1?'s':''} ainda não gerada${pendingCount!==1?'s':''}`}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all ${allGenerated?(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'):'opacity-40 cursor-not-allowed '+(darkMode?'border-gray-700 text-gray-500':'border-gray-200 text-gray-400')}`}>
+                      <Printer className="w-4 h-4"/>
+                      {allGenerated ? 'Exportar pasta' : `Exportar (${pendingCount} pendente${pendingCount!==1?'s':''})`}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4211,6 +4546,7 @@ export default function QuestionBankApp() {
             generateAcademiaLesson={generateAcademiaLesson}
             setAcademiaExtraModal={setAcademiaExtraModal}
             setDeleteId={setDeleteId}
+            setAcademiaExportModal={setAcademiaExportModal}
             setOpenAnswerModal={setOpenAnswerModal}
             getKey={getKey}
             callWithRotation={callWithRotation}
@@ -6149,6 +6485,7 @@ export default function QuestionBankApp() {
 
       {/* ── EXPORT MODAL ── */}
       {exportModal&&<ExportModal topic={exportModal.topic} subject={exportModal.subject} onClose={()=>setExportModal(null)} darkMode={darkMode}/>}
+      {academiaExportModal&&<AcademiaExportModal topic={academiaExportModal.topic} subject={academiaExportModal.subject} onClose={()=>setAcademiaExportModal(null)} darkMode={darkMode}/>}
 
       {/* ── INSIGHTS MODAL ── */}
       {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
