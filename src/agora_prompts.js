@@ -342,40 +342,71 @@ Gere TODAS as ${total} questões sem interromper ou comentar.`;
 
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
 
-export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false, maxSubtopics = 100) => {
+export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false, maxSubtopics = 0) => {
+  const hasLimit = autoMode && maxSubtopics > 0;
+
+  const limiteBlock = hasLimit ? `
+⛔ LIMITE ABSOLUTO: ${maxSubtopics} SUBTÓPICOS NO TOTAL ⛔
+Este número não é uma sugestão. É um teto rígido definido pelo usuário.
+Enquanto você escreve, vá contando. Se chegar em ${maxSubtopics}, PARE imediatamente — não escreva mais nenhum subtópico mesmo que ainda haja tópicos sobrando. Respeitar este limite é obrigatório.
+` : '';
+
   const estrutura = autoMode
-    ? `Você tem liberdade para definir a quantidade de tópicos e subtópicos.
-LIMITES por tópico: mínimo 6 e máximo 20 subtópicos.
-LIMITE GLOBAL: o sumário completo NÃO pode ultrapassar ${maxSubtopics} subtópicos no total — distribua os tópicos dentro desse limite.
-Prefira MAIS subtópicos menores a MENOS subtópicos maiores.`
-    : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.
-LIMITE GLOBAL: máximo de ${maxSubtopics} subtópicos no total.`;
+    ? `Você tem liberdade para definir a quantidade de tópicos e subtópicos com base no material fornecido.
+Prefira MAIS subtópicos menores a MENOS subtópicos maiores.
+Mínimo 6 subtópicos por tópico.`
+    : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
-  return `Você é o Arquiteto de Alexandria, construindo o esqueleto de um curso sobre "${subjectName}".
-
-⛔ LIMITE ABSOLUTO E INEGOCIÁVEL: ${maxSubtopics} SUBTÓPICOS NO TOTAL ⛔
-Conte mentalmente enquanto escreve. Se atingir ${maxSubtopics} subtópicos, PARE — não adicione mais, mesmo que o assunto tenha mais conteúdo. Este limite não pode ser ignorado ou justificado pelo conteúdo.
-
+  return `Você é o Arquiteto de Alexandria, construindo o sumário de um curso sobre "${subjectName}".
+${limiteBlock}
 ${estrutura}
 
-GRANULARIDADE: cada subtópico = 1 conceito → 1 parágrafo → 1 questão de múltipla escolha.
-Títulos com vírgula separando conceitos distintos são proibidos — quebre em subtópicos separados.
-Exemplo errado: "Organização, Segmentação e Sistema Porta" → exemplo certo: três subtópicos distintos.
+FONTE OBRIGATÓRIA — SIGA O MATERIAL:
+O sumário deve ser um índice fiel do material fornecido. Siga a ordem e o agrupamento do material.
+Não reordene, não generalize, não extrapole. Se o material agrupa "causas A, B e C" numa seção,
+o sumário tem um subtópico "Causas: A, B e C" — não três subtópicos separados.
 
-REGRAS:
-- Títulos descritivos e específicos
-- Ordem: definição → mecanismo → diagnóstico → tratamento → complicações
-- Baseie-se no material fornecido
-- Nada de "Introdução" ou "Generalidades"
+COMO CALIBRAR O TAMANHO DE UM SUBTÓPICO:
+Cada subtópico deve corresponder a um bloco de conteúdo que, no material original, ocupa
+aproximadamente 3 a 10 linhas (ou 1 a 2 parágrafos curtos).
 
+EXEMPLOS DE CALIBRAÇÃO (use como referência de tamanho):
+
+ERRADO — granularidade excessiva (cada item é apenas uma frase do material):
+  - Hérnias: distinção entre hérnia e evisceração
+  - Hérnias: fisiopatologia do aprisionamento venoso
+  - Hérnias: comprometimento arterial e venoso
+  - Hérnias: incidência de hérnias incisionais
+  - Hérnias: risco em cirurgias contaminadas
+
+CERTO — agrupado como o material apresenta:
+  - Hérnias: fisiopatologia (aprisionamento venoso, estrangulamento, infarto)
+  - Hérnias: tipos especiais (incisional, umbilical, inguinal congênita)
+  - Hérnias: clínica e tratamento
+
+ERRADO — lista de causas quebrada em subtópicos individuais:
+  - Causas de obstrução vascular aguda: aterosclerose grave
+  - Causas de obstrução vascular aguda: aneurisma aórtico
+  - Causas de obstrução vascular aguda: estado hipercoagulável
+  - Causas de obstrução vascular aguda: uso de contraceptivos orais
+  - Causas de obstrução vascular aguda: embolização de vegetações cardíacas
+
+CERTO — lista mantida unida como no material:
+  - Obstrução vascular aguda: causas (aterosclerose, aneurisma, hipercoagulabilidade, ACO, êmbolos)
+
+REGRA GERAL: se o material trata vários itens na mesma seção ou lista, agrupe-os em um subtópico.
+Só separe quando o material dedica blocos independentes a cada um.
+
+Proibido: títulos vagos como "Introdução", "Generalidades", "Aspectos gerais".
+Proibido: subtópico que descreve apenas 1 frase do material.
+${hasLimit ? `\n⛔ CONFIRME ANTES DE RESPONDER: você gerou no máximo ${maxSubtopics} subtópicos no total?` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - [Subtópico específico]
-  - [Subtópico específico]
+  - [Subtópico]
+  - [Subtópico]
 Tópico 2: [Nome]
-  - [Subtópico específico]
+  - [Subtópico]
 
-⛔ LEMBRE-SE: máximo ${maxSubtopics} subtópicos no total. Conte antes de responder.
 Responda APENAS o sumário.`;
 };
 
@@ -408,7 +439,7 @@ ${exampleOutput}
 ... (continue para todos os ${subtopics.length} subtópicos)
 
 REGRAS DE CONTEÚDO:
-- Tamanho por seção: 1 a 2 parágrafos. NÃO escreva 4+ parágrafos por subtópico atômico.
+- Tamanho por seção: proporcional ao que o subtópico agrupou. Um subtópico que reúne fisiopatologia + causas + clínica merece 3-5 parágrafos. Um que cobre apenas uma clínica simples pode ter 1-2.
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
 - Comece com o conceito central, depois mecanismo ou critério relevante.
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.

@@ -2729,7 +2729,7 @@ export default function QuestionBankApp() {
   const [academiaTopicAnswers, setAcademiaTopicAnswers] = useState({});
   const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
   const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
-  const [academiaMaxSubtopics, setAcademiaMaxSubtopics] = useState(100);
+  const [academiaMaxSubtopics, setAcademiaMaxSubtopics] = useState(0);
   const [academiaQMode, setAcademiaQMode]             = useState('interleaved'); // 'interleaved' | 'end'
   const [academiaExportModal, setAcademiaExportModal] = useState(null); // { topic, subject }
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
@@ -4900,15 +4900,16 @@ export default function QuestionBankApp() {
                       </div>
                     ))}
                   </div>
-                  {/* Max subtopics — sempre visível, inclusive no autoMode */}
-                  <div className="mt-3">
-                    <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Limite máximo de subtópicos no sumário</label>
-                    <input type="number" min={10} max={500} value={academiaMaxSubtopics}
-                      onChange={e=>setAcademiaMaxSubtopics(e.target.value)}
-                      onBlur={()=>{let v=parseInt(academiaMaxSubtopics);if(isNaN(v)||v<10)v=10;if(v>500)v=500;setAcademiaMaxSubtopics(v);}}
-                      className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                    <p className="text-xs opacity-40 mt-1">Padrão: 100 — evita sumários excessivamente longos</p>
-                  </div>
+                  {/* Max subtopics — só aparece no autoMode */}
+                  {settings.autoMode&&(
+                    <div className="mt-3">
+                      <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Limite máximo de subtópicos <span className="normal-case font-normal opacity-70">(0 = sem limite)</span></label>
+                      <input type="number" min={0} max={999} value={academiaMaxSubtopics}
+                        onChange={e=>setAcademiaMaxSubtopics(e.target.value)}
+                        onBlur={()=>{let v=parseInt(academiaMaxSubtopics);if(isNaN(v)||v<0)v=0;setAcademiaMaxSubtopics(v);}}
+                        className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                    </div>
+                  )}
                   {/* Alternativas — sempre visível, independente do autoMode */}
                   <div className="mt-3">
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
