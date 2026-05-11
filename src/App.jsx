@@ -92,25 +92,78 @@ const MAX_MATERIAL_CHARS = 180000;
 const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 
+const cleanSyllabusLine = (line = '') => line
+  .replace(/\r/g, '')
+  .replace(/`/g, '')
+  .replace(/\*\*/g, '')
+  .trim();
+
+const getSyllabusTopicTitle = (line = '') => {
+  const clean = cleanSyllabusLine(line);
+  if (!clean || /^[-–—]{3,}$/.test(clean)) return null;
+
+  const patterns = [
+    /^\s*#{0,6}\s*(?:[-*•]\s*)?T[óo]pico\s*\d{0,3}\s*[:.)\-–—]?\s*(.+)$/i,
+    /^\s*#{0,6}\s*(?:Bloco|M[oó]dulo|Unidade|Parte|Se[cç][aã]o)\s*\d{0,3}\s*[:.)\-–—]\s*(.+)$/i,
+    /^\s*#{0,6}\s*(\d{1,3})\s*[.)]\s+(.+)$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = clean.match(pattern);
+    const title = (match?.[2] || match?.[1] || '').trim();
+    if (title.length > 2 && !/^\[?nome\]?$/i.test(title)) return title;
+  }
+  return null;
+};
+
+const cleanSyllabusSubtopic = (line = '') => cleanSyllabusLine(line)
+  .replace(/^\s*#{1,6}\s*/, '')
+  .replace(/^\s*(?:[-*•]|[a-zA-Z]\)|[a-zA-Z]\.|[ivxlcdmIVXLCDM]+\)|[ivxlcdmIVXLCDM]+\.|\d{1,3}[.)])\s+/, '')
+  .replace(/^Subt[óo]pico\s*\d{0,3}\s*[:.)\-–—]?\s*/i, '')
+  .trim();
+
 const parseSyllabusTopics = (syllabusText) => {
   const lines = (syllabusText || '').split('\n');
-  const topicLineIndices = lines.reduce((acc, line, index) => {
-    if (/^\s*(?:[#*\s-]*)?T[óo]pico\s*\d+/i.test(line)) acc.push(index);
-    return acc;
-  }, []);
+  const topics = [];
+  let current = null;
 
-  return topicLineIndices.map((lineIdx, topicPos) => {
-    const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
-    const subtopics = lines
-      .slice(lineIdx + 1, nextTopicIdx)
-      .map(line => line.replace(/^[\s*#\-–•]+/, '').trim())
-      .filter(line => line.length > 3 && !/^T[óo]pico\s*\d+/i.test(line));
+  const pushCurrent = () => {
+    if (current?.subtopics?.length) topics.push(current);
+    current = null;
+  };
 
-    return {
-      title: lines[lineIdx].replace(/[*#]/g, '').trim(),
-      subtopics,
-    };
-  }).filter(topic => topic.subtopics.length > 0);
+  lines.forEach((rawLine) => {
+    const clean = cleanSyllabusLine(rawLine);
+    if (!clean || /^sum[áa]rio\b/i.test(clean)) return;
+
+    const indent = (rawLine.match(/^\s*/)?.[0] || '').replace(/\t/g, '  ').length;
+    const topicTitle = getSyllabusTopicTitle(rawLine);
+    const bulletLike = /^\s*(?:[-*•]|[a-zA-Z]\)|[a-zA-Z]\.|[ivxlcdmIVXLCDM]+\)|[ivxlcdmIVXLCDM]+\.)\s+/.test(clean);
+    const numbered = /^\s*\d{1,3}[.)]\s+/.test(clean);
+
+    if (topicTitle && (!current || indent <= 2)) {
+      pushCurrent();
+      current = { title: topicTitle, subtopics: [] };
+      return;
+    }
+
+    const subtopic = cleanSyllabusSubtopic(rawLine);
+    if (!subtopic || subtopic.length <= 3) return;
+    if (/^(subt[óo]picos?|t[óo]picos?)\s*:?\s*$/i.test(subtopic)) return;
+
+    if (current) {
+      current.subtopics.push(subtopic);
+    } else if (numbered || bulletLike) {
+      current = { title: 'Tópico 1', subtopics: [subtopic] };
+    }
+  });
+
+  pushCurrent();
+
+  return topics.map((topic, index) => ({
+    title: /^T[óo]pico\s*\d+/i.test(topic.title) ? topic.title : `Tópico ${index + 1}: ${topic.title}`,
+    subtopics: [...new Set(topic.subtopics)],
+  }));
 };
 
 const formatSyllabusTopics = (topics) => topics.map((topic, index) => {
@@ -3952,7 +4005,7 @@ export default function QuestionBankApp() {
   const finalizeSub = async () => {
     const parsedTopics = parseSyllabusTopics(syllabus);
     if (!parsedTopics.length) {
-      setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos no formato "Tópico 1: ...". Ajuste o sumário antes de criar.', isAlert: true });
+      setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
       return;
     }
 
@@ -4158,7 +4211,7 @@ export default function QuestionBankApp() {
   const finalizeAcademia = async () => {
     const parsedTopics = mergeShortAcademiaTopics(parseSyllabusTopics(academiaSyllabus));
     if (!parsedTopics.length) {
-      setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos no formato "Tópico 1: ...". Ajuste o sumário antes de criar.', isAlert: true });
+      setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
       return;
     }
 
