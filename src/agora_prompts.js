@@ -387,6 +387,8 @@ FAIXA DE REFERÊNCIA, NÃO TETO:
 - ${l.minTopics} a ${l.targetMaxTopics} tópicos costuma funcionar bem
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma funcionar bem
 - Para materiais longos, pode passar disso para cobrir tudo, mas evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total sem necessidade real
+- Evite tópicos com poucos subtópicos. Se dois tópicos consecutivos somados tiverem 20 subtópicos ou menos, una-os em um tópico maior.
+- Regra prática: prefira tópicos com 8 a 20 subtópicos. Só deixe um tópico com menos de 8 se ele for realmente independente e não combinar bem com o anterior ou o próximo.
 Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render cerca de 1 a 2 parágrafos fortes de explicação.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
 Também não agrupe demais: se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
@@ -435,6 +437,7 @@ Proibido: títulos vagos como "Introdução", "Generalidades", "Aspectos gerais"
 Proibido: subtópico que descreve apenas 1 frase do material.
 Proibido: sumário enciclopédico que transforma cada bullet do material em um subtópico.
 Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber em uma quantidade fixa.
+Obrigatório: antes de responder, revise os tópicos curtos e una tópicos vizinhos quando a soma ficar com 20 subtópicos ou menos.
 FORMATO:
 Tópico 1: [Nome]
   - [Subtópico]

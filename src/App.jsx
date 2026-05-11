@@ -113,6 +113,50 @@ const parseSyllabusTopics = (syllabusText) => {
   }).filter(topic => topic.subtopics.length > 0);
 };
 
+const formatSyllabusTopics = (topics) => topics.map((topic, index) => {
+  const cleanTitle = topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
+  return `Tópico ${index + 1}: ${cleanTitle || topic.title}\n${topic.subtopics.map(sub => `  - ${sub}`).join('\n')}`;
+}).join('\n\n');
+
+const mergeShortAcademiaTopics = (topics, maxSubtopics = 20) => {
+  const merged = [];
+  let current = null;
+
+  topics.forEach(topic => {
+    if (!current) {
+      current = { ...topic, mergedTitles: [topic.title], subtopics: [...topic.subtopics] };
+      return;
+    }
+
+    const combinedCount = current.subtopics.length + topic.subtopics.length;
+    if (combinedCount <= maxSubtopics) {
+      current = {
+        ...current,
+        title: `${current.title} / ${topic.title}`,
+        mergedTitles: [...current.mergedTitles, topic.title],
+        subtopics: [...current.subtopics, ...topic.subtopics],
+      };
+    } else {
+      merged.push(current);
+      current = { ...topic, mergedTitles: [topic.title], subtopics: [...topic.subtopics] };
+    }
+  });
+
+  if (current) merged.push(current);
+  return merged.map(topic => ({
+    ...topic,
+    title: topic.mergedTitles?.length > 1
+      ? topic.mergedTitles.map(t => t.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim()).join(' + ')
+      : topic.title,
+  }));
+};
+
+const normalizeAcademiaSyllabus = (syllabusText) => {
+  const topics = parseSyllabusTopics(syllabusText);
+  if (!topics.length) return syllabusText;
+  return formatSyllabusTopics(mergeShortAcademiaTopics(topics));
+};
+
 const parseAcademiaLessonSections = (lessonText, subtopics) => {
   const lessonSections = {};
   if (!lessonText) return lessonSections;
@@ -4070,7 +4114,7 @@ export default function QuestionBankApp() {
     for (const { k } of orderedKeys) {
       try {
         const r = await callGemini(userMsg, sys, k, academiaUploadedImages);
-        setAcademiaSyllabus(r);
+        setAcademiaSyllabus(normalizeAcademiaSyllabus(r));
         setAcademiaCreatorStep(2);
         await rotateKey();
         ok = true; break;
@@ -4091,7 +4135,7 @@ export default function QuestionBankApp() {
     for (const { k } of orderedKeys) {
       try {
         const r = await callGemini('Revise.', sys, k);
-        setAcademiaSyllabus(r);
+        setAcademiaSyllabus(normalizeAcademiaSyllabus(r));
         setAcademiaSyllabusFB('');
         await rotateKey(); break;
       } catch (e) {
@@ -4103,7 +4147,7 @@ export default function QuestionBankApp() {
   };
 
   const finalizeAcademia = async () => {
-    const parsedTopics = parseSyllabusTopics(academiaSyllabus);
+    const parsedTopics = mergeShortAcademiaTopics(parseSyllabusTopics(academiaSyllabus));
     if (!parsedTopics.length) {
       setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos no formato "Tópico 1: ...". Ajuste o sumário antes de criar.', isAlert: true });
       return;
