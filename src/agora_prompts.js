@@ -461,6 +461,10 @@ export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', 
 SUBTÓPICOS A COBRIR — gere EXATAMENTE ${subtopics.length} seções, uma por subtópico, nesta ordem:
 ${subtopics.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
+OBJETIVO DE LEITURA:
+Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isolados.
+Os títulos com ## existem só para o sistema separar as seções; o aluno deve conseguir ocultar os títulos e ainda ler o texto como uma explicação fluida.
+
 FORMATO DE SAÍDA OBRIGATÓRIO:
 Cada seção DEVE começar com ## seguido do título do subtópico, exatamente assim:
 
@@ -479,7 +483,10 @@ ${exampleOutput}
 REGRAS DE CONTEÚDO:
 - Tamanho por seção: normalmente 1 a 2 parágrafos fortes. Use 3 parágrafos apenas se o subtópico for realmente denso.
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
-- Comece com o conceito central, depois mecanismo ou critério relevante.
+- Escreva em fluxo narrativo: conecte a seção atual à anterior quando fizer sentido, usando transições naturais.
+- Evite começar toda seção com "[subtópico] é..." ou "[subtópico] refere-se...". Varie a abertura e dê continuidade ao raciocínio.
+- Comece pelo papel daquele conceito dentro do assunto maior, depois explique mecanismo, critério ou consequência relevante.
+- Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
 - Use listas (- item) para enumerações, classificações e doses.
 - Tabelas markdown (| col | col |) são aceitas e encorajadas para comparações.

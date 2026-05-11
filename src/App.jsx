@@ -2541,6 +2541,7 @@ function AcademiaTopicView({
 }) {
   const subtopics = topic.subtopics || [];
   const hasLesson = topic.lessonGenerated;
+  const [hideSubtopicTitles, setHideSubtopicTitles] = useState(false);
 
   // Renderiza markdown da aula com suporte a tabelas, listas e parágrafos
   const renderLesson = (md) => {
@@ -2674,6 +2675,12 @@ function AcademiaTopicView({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
               <Printer className="w-3.5 h-3.5"/>Exportar
             </button>
+            <button onClick={()=>setHideSubtopicTitles(v=>!v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${hideSubtopicTitles
+                ? (darkMode?'border-yellow-600 text-yellow-400 bg-yellow-900/20':'border-yellow-500 text-yellow-700 bg-yellow-50')
+                : (darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600')}`}>
+              <BookOpen className="w-3.5 h-3.5"/>{hideSubtopicTitles?'Com títulos':'Texto contínuo'}
+            </button>
           </div>
         )}
       </div>
@@ -2707,10 +2714,12 @@ function AcademiaTopicView({
             const section = topic.lessonSections?.[idx];
             const fixqs   = topic.fixationQuestions?.[idx] || [];
             return (
-              <div key={idx} className="mb-8">
-                <h2 className={`text-base font-semibold leading-snug mb-5 ${darkMode?'text-gray-100':'text-gray-900'}`}><span className={`text-sm font-bold tabular-nums mr-2 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
+              <div key={idx} className={hideSubtopicTitles ? 'mb-5' : 'mb-8'}>
+                {!hideSubtopicTitles && (
+                  <h2 className={`text-base font-semibold leading-snug mb-5 ${darkMode?'text-gray-100':'text-gray-900'}`}><span className={`text-sm font-bold tabular-nums mr-2 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
+                )}
                 {section?.content ? (
-                  <div className="space-y-3 mb-8">{renderLesson(section.content)}</div>
+                  <div className={`space-y-3 ${hideSubtopicTitles?'mb-5':'mb-8'}`}>{renderLesson(section.content)}</div>
                 ) : (
                   <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este subtópico.</p>
                 )}
