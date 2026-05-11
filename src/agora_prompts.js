@@ -2,6 +2,27 @@
  * ÁGORA DO SABER — PROMPTS
  */
 
+export const SYLLABUS_LIMITS = {
+  oracle: {
+    minTopics: 2,
+    targetMaxTopics: 10,
+    minSubtopicsPerTopic: 2,
+    targetMaxSubtopicsPerTopic: 10,
+    targetMaxTotalSubtopics: 80,
+  },
+  academia: {
+    minTopics: 2,
+    targetMaxTopics: 12,
+    minSubtopicsPerTopic: 2,
+    targetMaxSubtopicsPerTopic: 10,
+    targetMaxTotalSubtopics: 90,
+  },
+  videoaulas: {
+    minSubtopicsPerBlock: 4,
+    maxSubtopicsPerBlock: 12,
+  },
+};
+
 // ─── INSTRUÇÕES POR TIPO DE QUESTÃO ─────────────────────────────────────────
 
 export const TYPE_INST = {
@@ -102,7 +123,7 @@ PROIBIDO: distratores que são apenas a negação direta do enunciado.
 REGRA 3 — SEM PISTAS SINTÁTICAS:
 - A alternativa correta não pode ter estrutura gramatical diferente das erradas
 - Não use "todas as anteriores" ou "nenhuma das anteriores"
-- Distribua a posição da alternativa correta aleatoriamente (não sempre B ou C)
+- Não tente variar a letra correta: escreva a correta em A, pois o site embaralha antes de exibir
 
 REGRA 4 — DIFICULDADE REAL:
 Um estudante que nunca viu o tema deve errar. Um que estudou superficialmente deve hesitar. Só quem domina o conteúdo deve acertar com segurança.`;
@@ -152,11 +173,12 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const estruturaInst = autoMode
     ? `
 ESTRUTURA (modo automático):
-Você define a quantidade ideal de subtópicos por tópico.
-LIMITES ABSOLUTOS: mínimo 5 e máximo 20 subtópicos por tópico — nunca fora dessa faixa.
+Quando uma lista de subtópicos obrigatórios for fornecida, ela substitui esta seção.
+Se NÃO houver lista obrigatória, defina uma estrutura enxuta para revisão rápida.
+FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico.
 Critérios:
-- Tópicos mais amplos podem ter mais subtópicos (15-20); tópicos pontuais, menos (5-10)
-- Quantidade ideal: suficiente para cobrir o assunto sem repetição nem superficialidade
+- Use poucos subtópicos amplos, cada um cobrindo um bloco real de estudo
+- Quantidade ideal: o mínimo necessário para cobrir o essencial sem repetição
 - Cada subtópico deve ser um conceito distinto e testável — não uma variação do anterior
 - Organize do conceito mais fundamental ao mais específico dentro de cada tópico`
     : `
@@ -194,12 +216,18 @@ Gere TODAS as questões sem interromper. Não resuma, não pergunte, não coment
 // ─── PROMPT: SUMÁRIO DO ORÁCULO ───────────────────────────────────────────────
 
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
+  const l = SYLLABUS_LIMITS.oracle;
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
-LIMITES: mínimo 5 e máximo 20 subtópicos por tópico — nunca fora dessa faixa.
+OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
+FAIXA DE REFERÊNCIA, NÃO TETO:
+- Assunto comum: ${l.minTopics} a ${l.targetMaxTopics} tópicos no total
+- ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma ser suficiente
+- Materiais longos podem passar disso quando necessário para cobrir todo o conteúdo
+- Evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total, a menos que o material realmente exija
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
-- Quantidade por tópico: o necessário para cobrir bem aquele tema (entre 5 e 20)
-- Cada subtópico = 1 conceito específico e testável, sem sobreposição com outros`
+- Prefira agrupar listas, detalhes e exceções em subtópicos maiores quando pertencem ao mesmo bloco
+- Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
   return `Você é o Arquiteto de Alexandria. Crie um sumário para "${subjectName}" baseado no material do usuário.
@@ -210,6 +238,7 @@ REGRAS:
 - Baseie os subtópicos no material fornecido — não extrapole para fora do que foi pedido
 - Ordem obrigatória dentro de cada tópico: fundamentos antes de detalhes, mecanismo antes da aplicação clínica, regra antes da exceção
 - Subtópicos concretos e objetivos — nada de "Generalidades", "Introdução" ou "Aspectos gerais"
+- Se o material for muito grande, comprima por importância de prova e agrupe microdetalhes relacionados
 
 FORMATO:
 Tópico 1: [Nome]
@@ -224,6 +253,7 @@ Responda APENAS o sumário.`;
 // ─── PROMPT: REVISÃO DE SUMÁRIO ───────────────────────────────────────────────
 
 export const buildOracleSyllabusRevisePrompt = (currentSyllabus, feedback, s) => {
+  const l = s?.source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
   return `Você é o Arquiteto de Alexandria. Ajuste o sumário abaixo conforme a instrução do usuário.
 
 SUMÁRIO ATUAL:
@@ -236,6 +266,8 @@ REGRAS:
 - Mantenha a estrutura de Tópicos e Subtópicos
 - Preserve a ordem didática (geral → específico, mecanismo → aplicação)
 - Cada subtópico deve ser um conceito testável independente
+- Mantenha o sumário completo, mas enxuto: evite passar de ${l.targetMaxTopics} tópicos e ${l.targetMaxTotalSubtopics} subtópicos no total, salvo se o material exigir ou o usuário pedir
+- Agrupe listas, detalhes curtos e exceções no mesmo subtópico quando pertencem ao mesmo bloco do material
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
 };
 
@@ -249,9 +281,9 @@ export const buildExternalPrompt = (s) => {
 
   const parte1 = s.autoMode
     ? `*** PARTE 1: ESTRUTURA (modo automático) ***
-A IA deve definir a quantidade ideal de tópicos e subtópicos por tópico.
-LIMITES OBRIGATÓRIOS: mínimo 5 e máximo 20 subtópicos por tópico.
-Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 conceito testável único.
+A IA deve definir uma estrutura ENXUTA para estudo rápido.
+FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minTopics} a ${SYLLABUS_LIMITS.oracle.targetMaxTopics} tópicos no total; ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico; tente ficar abaixo de ${SYLLABUS_LIMITS.oracle.targetMaxTotalSubtopics} subtópicos, salvo material muito longo.
+Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 bloco testável. Agrupe listas e microdetalhes relacionados.
 Responda APENAS o sumário. Aguarde confirmação antes de gerar questões.`
     : `*** PARTE 1: ESTRUTURA ***
 Crie um sumário sobre [INSERIR TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.
@@ -280,11 +312,14 @@ ${TEMPLATE_QUESTAO(alts)}`;
 // ─── PROMPT: SUMÁRIO DAS AULAS (VIDEOAULAS) ──────────────────────────────────
 
 export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, extraPrompt = '') => {
+  const minPerBlock = SYLLABUS_LIMITS.videoaulas.minSubtopicsPerBlock;
+  const maxPerBlock = SYLLABUS_LIMITS.videoaulas.maxSubtopicsPerBlock;
+  const idealPerBlock = Math.max(minPerBlock, Math.min(maxPerBlock, qPerBlock || 6));
   return `Você é um especialista em avaliações médicas. Sua tarefa é criar um guia de questões para a aula "${aula.title}".
 
 ESTRUTURA OBRIGATÓRIA:
 - ${numBlocks} bloco(s) de questões
-- Entre 5 e 20 subtópicos por bloco (ideal: ${qPerBlock})
+- Entre ${minPerBlock} e ${maxPerBlock} subtópicos por bloco (ideal: ${idealPerBlock})
 - Ordem OBRIGATORIAMENTE didática dentro de cada bloco: conceitos gerais → específicos, mecanismo → clínica → tratamento
 - Nunca coloque um detalhe, exceção ou efeito adverso antes de ter coberto o conceito principal
 
@@ -295,6 +330,7 @@ REGRAS DOS SUBTÓPICOS:
 - Não repita conceitos entre subtópicos
 - Não coloque exceções ou complicações antes de cobrir o conceito principal
 - Priorize o que é cobrado em provas de residência médica
+- Agrupe detalhes curtos no mesmo subtópico; não transforme cada frase da aula em uma questão
 
 ${extraPrompt ? `FOCO SOLICITADO PELO USUÁRIO: ${extraPrompt}\n` : ''}
 
@@ -342,23 +378,21 @@ Gere TODAS as ${total} questões sem interromper ou comentar.`;
 
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
 
-export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false, maxSubtopics = 0) => {
-  const hasLimit = autoMode && maxSubtopics > 0;
-
-  const limiteBlock = hasLimit ? `
-⛔ LIMITE ABSOLUTO: ${maxSubtopics} SUBTÓPICOS NO TOTAL ⛔
-Este número não é uma sugestão. É um teto rígido definido pelo usuário.
-Enquanto você escreve, vá contando. Se chegar em ${maxSubtopics}, PARE imediatamente — não escreva mais nenhum subtópico mesmo que ainda haja tópicos sobrando. Respeitar este limite é obrigatório.
-` : '';
-
+export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) => {
+  const l = SYLLABUS_LIMITS.academia;
   const estrutura = autoMode
-    ? `Você tem liberdade para definir a quantidade de tópicos e subtópicos com base no material fornecido.
-Prefira MAIS subtópicos menores a MENOS subtópicos maiores.
-Mínimo 6 subtópicos por tópico.`
+    ? `Defina uma estrutura completa para uma aula eficiente.
+O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria 1 a 3 questões de fixação para aquela seção conforme a densidade.
+FAIXA DE REFERÊNCIA, NÃO TETO:
+- ${l.minTopics} a ${l.targetMaxTopics} tópicos costuma funcionar bem
+- ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma funcionar bem
+- Para materiais longos, pode passar disso para cobrir tudo, mas evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total sem necessidade real
+Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render cerca de 1 a 2 parágrafos fortes de explicação.
+Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
+Também não agrupe demais: se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
   return `Você é o Arquiteto de Alexandria, construindo o sumário de um curso sobre "${subjectName}".
-${limiteBlock}
 ${estrutura}
 
 FONTE OBRIGATÓRIA — SIGA O MATERIAL:
@@ -399,7 +433,8 @@ Só separe quando o material dedica blocos independentes a cada um.
 
 Proibido: títulos vagos como "Introdução", "Generalidades", "Aspectos gerais".
 Proibido: subtópico que descreve apenas 1 frase do material.
-${hasLimit ? `\n⛔ CONFIRME ANTES DE RESPONDER: você gerou no máximo ${maxSubtopics} subtópicos no total?` : ''}
+Proibido: sumário enciclopédico que transforma cada bullet do material em um subtópico.
+Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber em uma quantidade fixa.
 FORMATO:
 Tópico 1: [Nome]
   - [Subtópico]
@@ -439,7 +474,7 @@ ${exampleOutput}
 ... (continue para todos os ${subtopics.length} subtópicos)
 
 REGRAS DE CONTEÚDO:
-- Tamanho por seção: proporcional ao que o subtópico agrupou. Um subtópico que reúne fisiopatologia + causas + clínica merece 3-5 parágrafos. Um que cobre apenas uma clínica simples pode ter 1-2.
+- Tamanho por seção: normalmente 1 a 2 parágrafos fortes. Use 3 parágrafos apenas se o subtópico for realmente denso.
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
 - Comece com o conceito central, depois mecanismo ou critério relevante.
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
@@ -457,7 +492,7 @@ Gere a aula COMPLETA para todos os ${subtopics.length} subtópicos, começando p
 
 // ─── PROMPT: QUESTÕES DE FIXAÇÃO DA ACADEMIA ──────────────────────────────────
 
-export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText = '') => {
+export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText = '', questionPlan = null) => {
   const na = s.numAlternatives || 5;
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
@@ -466,17 +501,24 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
+  const plan = Array.isArray(questionPlan) && questionPlan.length === subtopicsArr.length
+    ? questionPlan.map(n => Math.max(1, Math.min(3, parseInt(n, 10) || 1)))
+    : subtopicsArr.map(() => 1);
+  const total = plan.reduce((acc, n) => acc + n, 0);
 
   return `Você é um examinador de residência médica criando questões de fixação para "${topicTitle}".
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
-ESTRUTURA — EXATAMENTE 1 questão por subtópico, nesta ordem:
-${subtopicsArr.map((s, i) => `${i + 1}. "${s}"`).join('\n')}
-Total: EXATAMENTE ${subtopicsArr.length} questões.
+ESTRUTURA — questões proporcionais à densidade de cada seção:
+${subtopicsArr.map((s, i) => `${i + 1}. "${s}" → EXATAMENTE ${plan[i]} questão(ões)`).join('\n')}
+Total: EXATAMENTE ${total} questões.
 
-REGRA DE ESCOPO (CRÍTICA): cada questão cobre APENAS o conceito do subtópico mapeado para ela.
-A questão 2 não pode abordar conteúdo da questão 1, 3 ou qualquer outro.
+REGRA DE ESCOPO (CRÍTICA):
+- Cada questão deve cobrar APENAS conteúdo do subtópico indicado.
+- Se um subtópico tiver 2 ou 3 questões, cada uma deve testar um ponto diferente daquela seção.
+- Não repita a mesma ideia com palavras diferentes.
+- Não crie questão sobre conteúdo que não apareceu na aula/material.
 
 ${REGRAS_ENUNCIADO}
 ${REGRAS_ALTERNATIVAS}
@@ -487,11 +529,14 @@ REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
 - PROIBIDO: referir-se a letras A, B, C, D, E
 ${TEMPLATE_QUESTAO(alts)}
 
-Use IDs sequenciais simples (1, 2, 3...).
+Use IDs no formato [SUBTOPICO.QUESTAO] para permitir o mapeamento correto:
+## Questão 1.1
+## Questão 1.2
+## Questão 2.1
 
 ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
-Gere TODAS as ${subtopicsArr.length} questões sem interromper.`;
+Gere TODAS as ${total} questões sem interromper.`;
 };
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────

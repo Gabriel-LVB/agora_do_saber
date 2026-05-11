@@ -91,6 +91,98 @@ const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obste
 const MAX_MATERIAL_CHARS = 180000;
 const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
+
+const parseSyllabusTopics = (syllabusText) => {
+  const lines = (syllabusText || '').split('\n');
+  const topicLineIndices = lines.reduce((acc, line, index) => {
+    if (/^\s*(?:[#*\s-]*)?T[óo]pico\s*\d+/i.test(line)) acc.push(index);
+    return acc;
+  }, []);
+
+  return topicLineIndices.map((lineIdx, topicPos) => {
+    const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
+    const subtopics = lines
+      .slice(lineIdx + 1, nextTopicIdx)
+      .map(line => line.replace(/^[\s*#\-–•]+/, '').trim())
+      .filter(line => line.length > 3 && !/^T[óo]pico\s*\d+/i.test(line));
+
+    return {
+      title: lines[lineIdx].replace(/[*#]/g, '').trim(),
+      subtopics,
+    };
+  }).filter(topic => topic.subtopics.length > 0);
+};
+
+const parseAcademiaLessonSections = (lessonText, subtopics) => {
+  const lessonSections = {};
+  if (!lessonText) return lessonSections;
+
+  const sectionRegex = /^##\s+(.+)$/gm;
+  const positions = [];
+  let match;
+  while ((match = sectionRegex.exec(lessonText)) !== null) {
+    const rawTitle = match[1].replace(/\*+/g, '').trim();
+    if (rawTitle.length >= 3) positions.push({ title: rawTitle, index: match.index, end: match.index + match[0].length });
+  }
+
+  if (positions.length >= subtopics.length) {
+    positions.slice(0, subtopics.length).forEach((pos, i) => {
+      const start = pos.end;
+      const end = positions[i + 1]?.index ?? lessonText.length;
+      lessonSections[i] = { title: pos.title, content: lessonText.slice(start, end).trim() };
+    });
+    return lessonSections;
+  }
+
+  if (positions.length > 0 && positions.length < subtopics.length) {
+    positions.forEach((pos, pi) => {
+      const start = pos.end;
+      const end = positions[pi + 1]?.index ?? lessonText.length;
+      const sectionContent = lessonText.slice(start, end).trim();
+      const subStart = Math.round(pi * subtopics.length / positions.length);
+      const subEnd = Math.round((pi + 1) * subtopics.length / positions.length);
+      for (let si = subStart; si < subEnd; si++) {
+        lessonSections[si] = { title: si === subStart ? pos.title : subtopics[si], content: sectionContent };
+      }
+    });
+    return lessonSections;
+  }
+
+  const paras = lessonText.split(/\n\n+/).filter(p => p.trim().length > 10);
+  subtopics.forEach((sub, i) => {
+    const from = Math.floor(i * paras.length / subtopics.length);
+    const to = Math.max(from + 1, Math.floor((i + 1) * paras.length / subtopics.length));
+    lessonSections[i] = { title: sub, content: paras.slice(from, to).join('\n\n') };
+  });
+  return lessonSections;
+};
+
+const buildAcademiaFixationPlan = (subtopics, lessonSections = {}) => subtopics.map((_, i) => {
+  const len = (lessonSections[i]?.content || '').length;
+  if (len > 2200) return 3;
+  if (len > 1100) return 2;
+  return 1;
+});
+
+const distributeAcademiaFixQuestions = (questions, plan) => {
+  const bySubtopic = Object.fromEntries(plan.map((_, i) => [i, []]));
+  const leftovers = [];
+
+  questions.forEach(q => {
+    const m = String(q.id || '').match(/_(\d+)\.(\d+)$/);
+    const idx = m ? parseInt(m[1], 10) - 1 : -1;
+    if (idx >= 0 && idx < plan.length) bySubtopic[idx].push(q);
+    else leftovers.push(q);
+  });
+
+  let cursor = 0;
+  leftovers.forEach(q => {
+    while ((bySubtopic[cursor]?.length || 0) >= (plan[cursor] || 1) && cursor < plan.length - 1) cursor++;
+    bySubtopic[cursor] = [...(bySubtopic[cursor] || []), q];
+  });
+
+  return bySubtopic;
+};
 // Extract unique ID from Bunny embed_url
 const getAulaId = (aula) => {
   if (!aula) return null;
@@ -2729,7 +2821,6 @@ export default function QuestionBankApp() {
   const [academiaTopicAnswers, setAcademiaTopicAnswers] = useState({});
   const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
   const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
-  const [academiaMaxSubtopics, setAcademiaMaxSubtopics] = useState(0);
   const [academiaQMode, setAcademiaQMode]             = useState('interleaved'); // 'interleaved' | 'end'
   const [academiaExportModal, setAcademiaExportModal] = useState(null); // { topic, subject }
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
@@ -3806,22 +3897,13 @@ export default function QuestionBankApp() {
     setIsBusy(false);
   };
   const finalizeSub = async () => {
-    const lines = syllabus.split('\n');
-    // Identify which lines are topic headers
-    const topicLineIndices = lines.reduce((acc, l, i) => {
-      if (/T[óo]pico\s*\d+/i.test(l)) acc.push(i);
-      return acc;
-    }, []);
+    const parsedTopics = parseSyllabusTopics(syllabus);
+    if (!parsedTopics.length) {
+      setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos no formato "Tópico 1: ...". Ajuste o sumário antes de criar.', isAlert: true });
+      return;
+    }
 
-    const topics = topicLineIndices.map((lineIdx, topicPos) => {
-      const title = lines[lineIdx].replace(/[*#]/g,'').trim();
-      // Collect subtopic lines: everything between this topic header and the next one
-      const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
-      const subtopics = lines
-        .slice(lineIdx + 1, nextTopicIdx)
-        .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
-        .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
-        .slice(0, 20); // enforça máximo de 20 subtópicos por tópico
+    const topics = parsedTopics.map(({ title, subtopics }, topicPos) => {
       return {
         id: `t-${topicPos}-${Date.now()}`,
         title,
@@ -3975,7 +4057,7 @@ export default function QuestionBankApp() {
     if (!checkKey()) return;
     setIsBusy(true);
     const s = settingsRef.current;
-    const sys = buildAcademiaSyllabusPrompt(academiaSubName, s, s.autoMode || false, academiaMaxSubtopics);
+    const sys = buildAcademiaSyllabusPrompt(academiaSubName, s, s.autoMode || false);
     const matText   = academiaMaterialText.trim();
     const filesText = academiaUploadedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n');
     const userMsg = [
@@ -4004,7 +4086,7 @@ export default function QuestionBankApp() {
   const reviseAcademiaSyllabus = async () => {
     if (!academiaSyllabusFB.trim() || !checkKey()) return;
     setIsBusy(true);
-    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, settingsRef.current);
+    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, {...settingsRef.current, source: 'academia'});
     const orderedKeys = getOrderedKeys();
     for (const { k } of orderedKeys) {
       try {
@@ -4021,21 +4103,13 @@ export default function QuestionBankApp() {
   };
 
   const finalizeAcademia = async () => {
-    // Parseia o sumário igual ao finalizeSub, mas salva com source:'academia'
-    const lines = academiaSyllabus.split('\n');
-    const topicLineIndices = lines.reduce((acc, l, i) => {
-      if (/T[óo]pico\s*\d+/i.test(l)) acc.push(i);
-      return acc;
-    }, []);
+    const parsedTopics = parseSyllabusTopics(academiaSyllabus);
+    if (!parsedTopics.length) {
+      setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos no formato "Tópico 1: ...". Ajuste o sumário antes de criar.', isAlert: true });
+      return;
+    }
 
-    const topics = topicLineIndices.map((lineIdx, topicPos) => {
-      const title = lines[lineIdx].replace(/[*#]/g, '').trim();
-      const nextTopicIdx = topicLineIndices[topicPos + 1] ?? lines.length;
-      const subtopics = lines
-        .slice(lineIdx + 1, nextTopicIdx)
-        .map(l => l.replace(/^[\s*#\-–]+/, '').trim())
-        .filter(l => l.length > 3 && !/^T[óo]pico\s*\d+/i.test(l))
-        .slice(0, 20);
+    const topics = parsedTopics.map(({ title, subtopics }, topicPos) => {
       return {
         id: `ac-${topicPos}-${Date.now()}`,
         title,
@@ -4111,10 +4185,13 @@ export default function QuestionBankApp() {
       }
     }
 
-    // Requisição B: questões de fixação (1 por subtópico, indexadas por subtópico)
+    const lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
+    const fixationPlan = buildAcademiaFixationPlan(subtopics, lessonSections);
+
+    // Requisição B: questões de fixação proporcionais ao tamanho de cada seção
     setAcademiaGenProgress('Gerando questões de fixação...');
     const fixPrompt = buildAcademiaFixationPrompt(
-      subtopics, topic.title, s, lessonText
+      subtopics, topic.title, s, lessonText, fixationPlan
     );
     let fixText = '';
     const orderedKeys2 = getOrderedKeys();
@@ -4130,74 +4207,9 @@ export default function QuestionBankApp() {
       }
     }
 
-    // Parsear a aula em seções por subtópico
-    // O prompt instrui a IA a usar ## para cada subtópico.
-    // O parser detecta ## e mapeia sequencialmente. Se a IA desobedecer, há fallbacks.
-    const lessonSections = {};
-    if (lessonText) {
-      // Log do texto cru para diagnóstico
-      console.log('[Academia Parser] lessonText cru (primeiros 3000 chars):\n', lessonText?.substring(0, 3000));
-
-      // Detecta ## (o que o prompt pede)
-      const sectionRegex = /^##\s+(.+)$/gm;
-      const positions = [];
-      let match;
-      while ((match = sectionRegex.exec(lessonText)) !== null) {
-        const rawTitle = match[1].replace(/\*+/g, '').trim();
-        if (rawTitle.length >= 3) {
-          positions.push({ title: rawTitle, index: match.index, end: match.index + match[0].length });
-        }
-      }
-      console.log('[Academia Parser] ## encontrados:', positions.length, '| Subtópicos:', subtopics.length);
-
-      if (positions.length >= subtopics.length) {
-        // Caso ideal: IA seguiu o formato — mapeia por posição sequencial
-        positions.slice(0, subtopics.length).forEach((pos, i) => {
-          const start = pos.end;
-          const end = positions[i + 1]?.index ?? lessonText.length;
-          lessonSections[i] = { title: pos.title, content: lessonText.slice(start, end).trim() };
-        });
-
-      } else if (positions.length > 0 && positions.length < subtopics.length) {
-        // IA gerou poucos ## — pode ter agrupado subtópicos. Distribui proporcionalmente.
-        console.warn('[Academia Parser] IA gerou menos ## que subtópicos. Distribuindo proporcionalmente.');
-        positions.forEach((pos, pi) => {
-          const start = pos.end;
-          const end = positions[pi + 1]?.index ?? lessonText.length;
-          const sectionContent = lessonText.slice(start, end).trim();
-          const subStart = Math.round(pi * subtopics.length / positions.length);
-          const subEnd   = Math.round((pi + 1) * subtopics.length / positions.length);
-          for (let si = subStart; si < subEnd; si++) {
-            lessonSections[si] = { title: si === subStart ? pos.title : subtopics[si], content: sectionContent };
-          }
-        });
-
-      } else {
-        // Fallback total: IA não usou ## — divide o texto em blocos por parágrafo
-        console.warn('[Academia Parser] Nenhum ## encontrado. Usando fallback por parágrafo.');
-        console.log('[Academia Parser] Texto COMPLETO:\n', lessonText);
-        const paras = lessonText.split(/\n\n+/).filter(p => p.trim().length > 10);
-        subtopics.forEach((sub, i) => {
-          const from = Math.floor(i * paras.length / subtopics.length);
-          const to   = Math.max(from + 1, Math.floor((i + 1) * paras.length / subtopics.length));
-          lessonSections[i] = { title: sub, content: paras.slice(from, to).join('\n\n') };
-        });
-      }
-
-      console.log('[Academia Parser] Seções mapeadas:', Object.keys(lessonSections).length,
-        Object.keys(lessonSections).map(k => `[${k}] ${lessonSections[k]?.content?.substring(0,40)}...`));
-    }
-
     // Parsear as questões de fixação
     const fixQuestions = fixText ? parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions : [];
-
-    // Distribuir questões por subtópico (sequencialmente)
-    const fixationBySubtopic = {};
-    let qIdx = 0;
-    subtopics.forEach((_, i) => {
-      fixationBySubtopic[i] = fixQuestions[qIdx] ? [fixQuestions[qIdx]] : [];
-      qIdx++;
-    });
+    const fixationBySubtopic = distributeAcademiaFixQuestions(fixQuestions, fixationPlan);
 
     // Salvar no tópico
     const updatedTopic = {
@@ -4900,16 +4912,6 @@ export default function QuestionBankApp() {
                       </div>
                     ))}
                   </div>
-                  {/* Max subtopics — só aparece no autoMode */}
-                  {settings.autoMode&&(
-                    <div className="mt-3">
-                      <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Limite máximo de subtópicos <span className="normal-case font-normal opacity-70">(0 = sem limite)</span></label>
-                      <input type="number" min={0} max={999} value={academiaMaxSubtopics}
-                        onChange={e=>setAcademiaMaxSubtopics(e.target.value)}
-                        onBlur={()=>{let v=parseInt(academiaMaxSubtopics);if(isNaN(v)||v<0)v=0;setAcademiaMaxSubtopics(v);}}
-                        className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                    </div>
-                  )}
                   {/* Alternativas — sempre visível, independente do autoMode */}
                   <div className="mt-3">
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
@@ -4952,7 +4954,7 @@ export default function QuestionBankApp() {
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura da Aula</h2>
                 <p className={`text-sm rounded-xl p-3 ${darkMode?'bg-blue-900/20 text-blue-300 border border-blue-800/30':'bg-blue-50 text-blue-800 border border-blue-200'}`}>
-                  ✅ Revise os tópicos e subtópicos. Cada subtópico vai virar uma seção da aula com questões de fixação.
+                  ✅ Revise os tópicos e subtópicos. Cada subtópico vira uma seção da aula; se a seção ficar mais densa, ela recebe mais questões de fixação.
                 </p>
                 <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>
                 <div className="relative">
