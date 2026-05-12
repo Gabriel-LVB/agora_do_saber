@@ -7,15 +7,15 @@ export const SYLLABUS_LIMITS = {
     minTopics: 2,
     targetMaxTopics: 10,
     minSubtopicsPerTopic: 2,
-    targetMaxSubtopicsPerTopic: 10,
-    targetMaxTotalSubtopics: 80,
+    targetMaxSubtopicsPerTopic: 20,
+    targetMaxTotalSubtopics: 120,
   },
   academia: {
     minTopics: 2,
     targetMaxTopics: 12,
     minSubtopicsPerTopic: 2,
-    targetMaxSubtopicsPerTopic: 10,
-    targetMaxTotalSubtopics: 90,
+    targetMaxSubtopicsPerTopic: 20,
+    targetMaxTotalSubtopics: 140,
   },
   videoaulas: {
     minSubtopicsPerBlock: 4,
@@ -52,7 +52,7 @@ REGRAS:
 TIPO: RESPOSTA CURTA
 Cada questão deve pedir uma resposta objetiva de 1 a 3 linhas.
 FORMATO OBRIGATÓRIO (siga à risca, sem variações):
-## Questão [N]
+## Questão N
 [Enunciado — pergunta direta sobre um conceito]
 Resposta esperada: [resposta em 1-2 frases]
 Explicação: [explicação didática em 2-3 frases]
@@ -63,7 +63,7 @@ NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa corr
 TIPO: DISSERTATIVA
 Cada questão deve pedir uma resposta de 1 parágrafo (5-8 linhas).
 FORMATO OBRIGATÓRIO (siga à risca, sem variações):
-## Questão [N]
+## Questão N
 [Enunciado — pede para explicar, discutir ou relacionar conceitos]
 Resposta esperada: [resposta completa cobrindo os pontos principais, em 4-6 frases]
 Explicação: [feedback sobre o que uma boa resposta deve conter]
@@ -141,9 +141,43 @@ As alternativas serão EMBARALHADAS antes de serem exibidas ao aluno — as letr
 JAMAIS escreva "a alternativa A", "a opção B", "a letra C" na explicação.
 Refira-se SEMPRE pelo conteúdo: "a opção que menciona X", "confundir Y com Z é um erro comum pois..."`;
 
+const ACADEMIA_LESSON_LENGTH_RULES = {
+  essential: `
+PROFUNDIDADE DA AULA: Nível 1
+- MODO RESUMO DE PROVA: cada subtópico deve ter NO MÁXIMO 55 palavras.
+- Use 2 a 4 bullets curtos OU 1 microparágrafo de até 3 frases. Nunca use parágrafo longo.
+- Corte introduções, contextualizações amplas e frases de transição.
+- Priorize apenas: definição operacional, mecanismo-chave, achado/conduta cobrável e pegadinha.
+- Se houver muitos detalhes no material, agrupe com ponto e vírgula; não explique tudo em prosa.`,
+  balanced: `
+PROFUNDIDADE DA AULA: Nível 2
+- Cada subtópico deve ter 1 parágrafo curto; use 2 apenas se houver critério/lista importante.
+- Preserve exemplos, mecanismos e critérios cobrados em prova, mas retire aberturas longas e repetição.`,
+  complete: `
+PROFUNDIDADE DA AULA: Nível 3
+- Cada subtópico deve ter 1 a 2 parágrafos fortes; use 3 apenas se o subtópico for realmente denso.
+- Contextualize melhor o raciocínio, conectando mecanismo, clínica, critérios e exemplos quando isso ajudar o aprendizado.`
+};
+
+const ACADEMIA_LESSON_OBJECTIVE = {
+  essential: `
+OBJETIVO DE LEITURA:
+Escreva como revisão rápida de prova, no estilo "First Aid/Pathoma em português".
+O aluno deve bater o olho e capturar o que cai: nada de introdução, nada de aula discursiva, nada de fechamento elegante.
+Os títulos com ## existem só para o sistema separar as seções.`,
+  balanced: `
+OBJETIVO DE LEITURA:
+Escreva como uma aula enxuta, com raciocínio suficiente para o aluno entender e revisar sem excesso.
+Os títulos com ## existem só para o sistema separar as seções; o aluno deve conseguir ocultar os títulos e ainda ler o texto como uma explicação fluida.`,
+  complete: `
+OBJETIVO DE LEITURA:
+Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isolados.
+Os títulos com ## existem só para o sistema separar as seções; o aluno deve conseguir ocultar os títulos e ainda ler o texto como uma explicação fluida.`
+};
+
 const TEMPLATE_QUESTAO = (alts) => `
 FORMATO OBRIGATÓRIO (uma questão por bloco ---):
-## Questão [ID]
+## Questão 1.1.1
 [Enunciado]
 ${alts}
 Alternativa correta: [Letra]
@@ -194,7 +228,7 @@ ESTRUTURA OBRIGATÓRIA:
 
   const templateBlock = onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
-## Questão [N]
+## Questão 1.1.1
 [Enunciado]
 Resposta esperada: [resposta objetiva]
 Explicação: [explicação didática]
@@ -208,7 +242,7 @@ ${typeInst ? typeInst + '\n' : ''}${estruturaInst}
 ${REGRAS_ENUNCIADO}
 ${templateBlock}
 
-Use o ID no formato [TOPICO.SUBTOPICO.QUESTAO] (ex: 3.2.1).
+Use o ID no formato TOPICO.SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 3.2.1).
 ${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` : ''}
 Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.`;
 };
@@ -220,14 +254,15 @@ export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
 OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
-FAIXA DE REFERÊNCIA, NÃO TETO:
+FAIXA DE REFERÊNCIA:
 - Assunto comum: ${l.minTopics} a ${l.targetMaxTopics} tópicos no total
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma ser suficiente
-- Materiais longos podem passar disso quando necessário para cobrir todo o conteúdo
+- Materiais longos devem virar MAIS TÓPICOS, não tópicos gigantes
 - Evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total, a menos que o material realmente exija
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
 - Prefira agrupar listas, detalhes e exceções em subtópicos maiores quando pertencem ao mesmo bloco
-- Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros`
+- Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros
+- PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
   return `Você é o Arquiteto de Alexandria. Crie um sumário para "${subjectName}" baseado no material do usuário.
@@ -383,12 +418,13 @@ export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) =>
   const estrutura = autoMode
     ? `Defina uma estrutura completa para uma aula eficiente.
 O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria 1 a 3 questões de fixação para aquela seção conforme a densidade.
-FAIXA DE REFERÊNCIA, NÃO TETO:
+FAIXA DE REFERÊNCIA:
 - ${l.minTopics} a ${l.targetMaxTopics} tópicos costuma funcionar bem
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma funcionar bem
-- Para materiais longos, pode passar disso para cobrir tudo, mas evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total sem necessidade real
-- Evite tópicos com poucos subtópicos. Se dois tópicos consecutivos somados tiverem 20 subtópicos ou menos, una-os em um tópico maior.
-- Regra prática: prefira tópicos com 8 a 20 subtópicos. Só deixe um tópico com menos de 8 se ele for realmente independente e não combinar bem com o anterior ou o próximo.
+- Para materiais longos, crie mais tópicos em vez de inchar um único tópico
+- Evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total sem necessidade real
+- PROIBIDO: tópico com dezenas de subtópicos. Se um tópico passaria de 30 subtópicos, divida esse bloco em tópicos menores.
+- Regra prática: prefira tópicos com 6 a ${l.targetMaxSubtopicsPerTopic} subtópicos. Só una tópicos vizinhos se a soma continuar razoável.
 Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render cerca de 1 a 2 parágrafos fortes de explicação.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
 Também não agrupe demais: se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
@@ -437,7 +473,7 @@ Proibido: títulos vagos como "Introdução", "Generalidades", "Aspectos gerais"
 Proibido: subtópico que descreve apenas 1 frase do material.
 Proibido: sumário enciclopédico que transforma cada bullet do material em um subtópico.
 Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber em uma quantidade fixa.
-Obrigatório: antes de responder, revise os tópicos curtos e una tópicos vizinhos quando a soma ficar com 20 subtópicos ou menos.
+Obrigatório: antes de responder, revise tópicos gigantes e divida qualquer tópico que passe de 30 subtópicos.
 FORMATO:
 Tópico 1: [Nome]
   - [Subtópico]
@@ -450,10 +486,13 @@ Responda APENAS o sumário.`;
 
 // ─── PROMPT: AULA DA ACADEMIA ─────────────────────────────────────────────────
 
-export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', subjectName = '') => {
+export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', subjectName = '', explanationLength = 'complete', extraInstruction = '') => {
+  const lengthMode = ACADEMIA_LESSON_LENGTH_RULES[explanationLength] ? explanationLength : 'complete';
   // Gera exemplo de saída esperada com os 2 primeiros subtópicos para a IA imitar o padrão
   const exampleOutput = subtopics.slice(0, 2).map((s, i) =>
-    `## ${s}\n[explicação aqui]`
+    lengthMode === 'essential'
+      ? `## ${s}\n- [conceito-chave em frase curta]\n- [mecanismo/achado/conduta cobrável]\n- [pegadinha ou exceção se houver]`
+      : `## ${s}\n[explicação aqui]`
   ).join('\n\n');
 
   return `Você é um professor de medicina da Ágora do Saber, criando uma aula sobre "${topicTitle}"${subjectName ? ` (${subjectName})` : ''}.
@@ -461,9 +500,7 @@ export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', 
 SUBTÓPICOS A COBRIR — gere EXATAMENTE ${subtopics.length} seções, uma por subtópico, nesta ordem:
 ${subtopics.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-OBJETIVO DE LEITURA:
-Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isolados.
-Os títulos com ## existem só para o sistema separar as seções; o aluno deve conseguir ocultar os títulos e ainda ler o texto como uma explicação fluida.
+${ACADEMIA_LESSON_OBJECTIVE[lengthMode]}
 
 FORMATO DE SAÍDA OBRIGATÓRIO:
 Cada seção DEVE começar com ## seguido do título do subtópico, exatamente assim:
@@ -481,12 +518,20 @@ ${exampleOutput}
 ... (continue para todos os ${subtopics.length} subtópicos)
 
 REGRAS DE CONTEÚDO:
-- Tamanho por seção: normalmente 1 a 2 parágrafos fortes. Use 3 parágrafos apenas se o subtópico for realmente denso.
+${ACADEMIA_LESSON_LENGTH_RULES[lengthMode]}
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
-- Escreva em fluxo narrativo: conecte a seção atual à anterior quando fizer sentido, usando transições naturais.
-- Evite começar toda seção com "[subtópico] é..." ou "[subtópico] refere-se...". Varie a abertura e dê continuidade ao raciocínio.
-- Comece pelo papel daquele conceito dentro do assunto maior, depois explique mecanismo, critério ou consequência relevante.
-- Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.
+- ${lengthMode === 'essential'
+    ? 'Não escreva em fluxo narrativo. Entregue síntese escaneável, objetiva e de alta densidade.'
+    : 'Escreva em fluxo narrativo: conecte a seção atual à anterior quando fizer sentido, usando transições naturais.'}
+- ${lengthMode === 'essential'
+    ? 'Pode começar direto no fato cobrável; não precisa contextualizar o papel do conceito.'
+    : 'Evite começar toda seção com "[subtópico] é..." ou "[subtópico] refere-se...". Varie a abertura e dê continuidade ao raciocínio.'}
+- ${lengthMode === 'essential'
+    ? 'Não use frases como "é fundamental observar", "desempenha papéis cruciais" ou similares; elas inflam o texto.'
+    : 'Comece pelo papel daquele conceito dentro do assunto maior, depois explique mecanismo, critério ou consequência relevante.'}
+- ${lengthMode === 'essential'
+    ? 'Se passar de 4 bullets ou 55 palavras em uma seção, reescreva mais curto antes de responder.'
+    : 'Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.'}
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
 - Use listas (- item) para enumerações, classificações e doses.
 - Tabelas markdown (| col | col |) são aceitas e encorajadas para comparações.
@@ -495,9 +540,12 @@ REGRAS DE CONTEÚDO:
 IMPORTANTE: NÃO use ###, ####, numeração (1.) ou qualquer outro marcador de seção.
 Use APENAS ## para separar os subtópicos. O sistema depende disso para funcionar corretamente.
 
-${material ? `MATERIAL BASE:\n${material.substring(0, 40000)}` : '[Sem material — baseie-se no título e subtópicos]'}
+${extraInstruction ? `PEDIDO ESPECÍFICO DO USUÁRIO PARA ESTA GERAÇÃO:\n${extraInstruction}\n` : ''}
 
-Gere a aula COMPLETA para todos os ${subtopics.length} subtópicos, começando pelo ## do primeiro.`;
+${material ? `MATERIAL BASE:\n${material.substring(0, 120000)}` : '[Sem material — baseie-se no título e subtópicos]'}
+
+Gere a aula no Nível ${lengthMode === 'essential' ? '1' : lengthMode === 'balanced' ? '2' : '3'} para todos os ${subtopics.length} subtópicos, começando pelo ## do primeiro.
+Antes de responder, confira se cada seção respeita o limite do nível escolhido.`;
 };
 
 // ─── PROMPT: QUESTÕES DE FIXAÇÃO DA ACADEMIA ──────────────────────────────────
@@ -539,7 +587,7 @@ REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
 - PROIBIDO: referir-se a letras A, B, C, D, E
 ${TEMPLATE_QUESTAO(alts)}
 
-Use IDs no formato [SUBTOPICO.QUESTAO] para permitir o mapeamento correto:
+Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, para permitir o mapeamento correto:
 ## Questão 1.1
 ## Questão 1.2
 ## Questão 2.1
@@ -573,6 +621,6 @@ ${REGRAS_ALTERNATIVAS}
 ${REGRAS_EXPLICACAO}
 ${TEMPLATE_QUESTAO(alts)}
 
-Use o ID no formato [SUBTOPICO.QUESTAO] (ex: 1.1, 2.1...).
+Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 2.1...).
 Gere TODAS as questões sem interromper.`;
 };

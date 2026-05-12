@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 import {
+  SYLLABUS_LIMITS,
   buildOracleQuestionPrompt,
   buildOracleSyllabusPrompt,
   buildOracleSyllabusRevisePrompt,
@@ -89,8 +90,68 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obstetricia','Pediatria','Reumatologia','Hematologia','Gastrologia','Hepatologia','Cardiologia','Endocrinologia','Pneumologia','Infectologia','Neurologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'];
 
 const MAX_MATERIAL_CHARS = 180000;
+const MATERIAL_CHUNK_CHARS = 170000;
 const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
+const EXPLANATION_LENGTHS = [
+  { k:'essential', label:'Nível 1', desc:'Resumo ultra-direto com pontos essenciais' },
+  { k:'balanced', label:'Nível 2', desc:'Explicação enxuta com raciocínio e exemplos' },
+  { k:'complete', label:'Nível 3', desc:'Explicação mais aprofundada e contextualizada' },
+];
+
+const buildAcademiaMaterialText = (text = '', files = [], maxChars = MAX_MATERIAL_CHARS) => {
+  const sections = [];
+  const intro = text.trim();
+  const safeFiles = files.filter(f => (f.content || '').trim());
+  if (intro) sections.push(`INSTRUÇÃO/ANOTAÇÕES DO USUÁRIO:\n${intro}`);
+  safeFiles.forEach((f, i) => sections.push(`ARQUIVO ${i + 1}/${safeFiles.length}: ${f.name}\n${(f.content || '').trim()}`));
+  const out = sections.join('\n\n---\n\n');
+  return out.length > maxChars ? `${out.substring(0, maxChars)}\n[TRUNCADO]` : out;
+};
+
+const estimateMaterialRequestCount = (text = '', files = [], maxChunkChars = MATERIAL_CHUNK_CHARS) => {
+  return buildAcademiaMaterialChunks(text, files, maxChunkChars).length;
+};
+
+const buildAcademiaMaterialChunks = (text = '', files = [], maxChunkChars = MATERIAL_CHUNK_CHARS) => {
+  const items = [];
+  const intro = text.trim();
+  const safeFiles = files.filter(f => (f.content || '').trim());
+  if (intro) items.push({ title:'INSTRUÇÃO/ANOTAÇÕES DO USUÁRIO', content:intro });
+  safeFiles.forEach((f, i) => items.push({ title:`ARQUIVO ${i + 1}/${safeFiles.length}: ${f.name}`, content:(f.content || '').trim() }));
+  if (!items.length) return [];
+
+  const chunks = [];
+  let current = '';
+  const pushCurrent = () => {
+    if (current.trim()) chunks.push(current.trim());
+    current = '';
+  };
+
+  items.forEach(item => {
+    const header = `\n\n---\n\n${item.title}\n`;
+    const content = item.content;
+    if ((header + content).length <= maxChunkChars) {
+      if (current && current.length + header.length + content.length > maxChunkChars) pushCurrent();
+      current += header + content;
+      return;
+    }
+
+    if (current) pushCurrent();
+    let offset = 0;
+    let part = 1;
+    const sliceSize = Math.max(10000, maxChunkChars - header.length - 80);
+    while (offset < content.length) {
+      const slice = content.slice(offset, offset + sliceSize);
+      chunks.push(`${item.title} — parte ${part}\n${slice}`.trim());
+      offset += sliceSize;
+      part += 1;
+    }
+  });
+
+  pushCurrent();
+  return chunks;
+};
 
 const cleanSyllabusLine = (line = '') => line
   .replace(/\r/g, '')
@@ -116,8 +177,14 @@ const getSyllabusTopicTitle = (line = '') => {
   return null;
 };
 
+const isExplicitSyllabusTopicLine = (line = '') => {
+  const clean = cleanSyllabusLine(line);
+  return /^\s*#{0,6}\s*(?:[-*•]\s*)?(?:T[óo]pico|Bloco|M[oó]dulo|Unidade|Parte|Se[cç][aã]o)\b/i.test(clean);
+};
+
 const cleanSyllabusSubtopic = (line = '') => cleanSyllabusLine(line)
   .replace(/^\s*#{1,6}\s*/, '')
+  .replace(/^\s*\d{1,3}(?:\.\d{1,3})+[.)]?\s+/, '')
   .replace(/^\s*(?:[-*•]|[a-zA-Z]\)|[a-zA-Z]\.|[ivxlcdmIVXLCDM]+\)|[ivxlcdmIVXLCDM]+\.|\d{1,3}[.)])\s+/, '')
   .replace(/^Subt[óo]pico\s*\d{0,3}\s*[:.)\-–—]?\s*/i, '')
   .trim();
@@ -140,8 +207,9 @@ const parseSyllabusTopics = (syllabusText) => {
     const topicTitle = getSyllabusTopicTitle(rawLine);
     const bulletLike = /^\s*(?:[-*•]|[a-zA-Z]\)|[a-zA-Z]\.|[ivxlcdmIVXLCDM]+\)|[ivxlcdmIVXLCDM]+\.)\s+/.test(clean);
     const numbered = /^\s*\d{1,3}[.)]\s+/.test(clean);
+    const explicitTopic = isExplicitSyllabusTopicLine(rawLine);
 
-    if (topicTitle && (!current || indent <= 2)) {
+    if (topicTitle && (!current || explicitTopic || (numbered && indent === 0))) {
       pushCurrent();
       current = { title: topicTitle, subtopics: [] };
       return;
@@ -170,6 +238,83 @@ const formatSyllabusTopics = (topics) => topics.map((topic, index) => {
   const cleanTitle = topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
   return `Tópico ${index + 1}: ${cleanTitle || topic.title}\n${topic.subtopics.map(sub => `  - ${sub}`).join('\n')}`;
 }).join('\n\n');
+
+const cleanTopicTitle = (title = '') => title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
+
+const isLikelySyllabusGroupTitle = (subtopic = '') => {
+  const clean = cleanSyllabusSubtopic(subtopic);
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 7) return false;
+  if (/[.;:]/.test(clean) || /\([^)]{12,}\)/.test(clean)) return false;
+  if (/^(defini[çc][aã]o|etiologia|epidemiologia|fatores? de risco|cl[íi]nica|sintomas?|diagn[óo]stico|tratamento|complica[çc][õo]es|patogenia|fisiopatologia|morfologia|caracter[íi]sticas|tipos?|causas?|papel|risco|rela[çc][aã]o)\b/i.test(clean)) return false;
+  if (/^(doen[çc]as?|c[aâ]ncer|carcinoma|tumores?|neoplasias?|s[íi]ndrome|anatomia|fisiologia|inflama[çc][aã]o|infec[çc][õo]es?|anomalias?|obstru[çc][aã]o|m[áa] absor[çc][aã]o|p[oó]lipos?|apendicite|ureter|bexiga|pr[óo]stata|uretra|p[eê]nis|test[íi]culos|intestino|c[óo]lon|retocolite|diverticulite|salpingite|salmonelose|tuberculose|ameb[íi]ase)\b/i.test(clean)) return true;
+  return words.length <= 4 && words.every(w => /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9]/.test(w) || /^(de|da|do|das|dos|e|em|por|para|com|sem)$/i.test(w));
+};
+
+const splitOversizedSyllabusTopics = (topics, maxSubtopics = 20, splitThreshold = 30) => {
+  const hardMax = Math.max(31, splitThreshold);
+  const out = [];
+
+  topics.forEach(topic => {
+    const subs = [...new Set(topic.subtopics || [])].filter(Boolean);
+    const baseTitle = cleanTopicTitle(topic.title);
+    if (subs.length <= splitThreshold) {
+      out.push({ title: baseTitle || topic.title, subtopics: subs });
+      return;
+    }
+
+    const segments = [];
+    let current = { title: baseTitle || topic.title, subtopics: [] };
+    const pushCurrent = () => {
+      if (current.subtopics.length) segments.push(current);
+    };
+
+    subs.forEach((sub) => {
+      const shouldPromote = current.subtopics.length >= 6 && isLikelySyllabusGroupTitle(sub);
+      const shouldChunk = current.subtopics.length >= hardMax;
+      if ((shouldPromote || shouldChunk) && current.subtopics.length) {
+        pushCurrent();
+        current = {
+          title: shouldPromote ? cleanSyllabusSubtopic(sub) : `${baseTitle || topic.title} (continuação)`,
+          subtopics: shouldPromote ? [] : [sub],
+        };
+        return;
+      }
+      current.subtopics.push(sub);
+    });
+    pushCurrent();
+
+    segments.forEach(segment => {
+      if (segment.subtopics.length <= splitThreshold) {
+        out.push(segment);
+        return;
+      }
+      for (let i = 0; i < segment.subtopics.length; i += maxSubtopics) {
+        out.push({
+          title: `${cleanTopicTitle(segment.title) || baseTitle} ${i === 0 ? '' : `(parte ${Math.floor(i / maxSubtopics) + 1})`}`.trim(),
+          subtopics: segment.subtopics.slice(i, i + maxSubtopics),
+        });
+      }
+    });
+  });
+
+  return out;
+};
+
+const normalizeSyllabusByLimits = (syllabusText, source = 'oracle', settings = {}) => {
+  const topics = parseSyllabusTopics(syllabusText);
+  if (!topics.length) return syllabusText;
+  const limits = source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
+  const manual = !settings.autoMode;
+  const configuredMax = manual && Number(settings.numSubtopics)
+    ? Number(settings.numSubtopics)
+    : limits.targetMaxSubtopicsPerTopic;
+  const maxSubtopics = manual
+    ? Math.max(3, Math.min(30, configuredMax || limits.targetMaxSubtopicsPerTopic))
+    : Math.max(8, Math.min(20, configuredMax || limits.targetMaxSubtopicsPerTopic));
+  const split = splitOversizedSyllabusTopics(topics, maxSubtopics, 30);
+  return formatSyllabusTopics(source === 'academia' ? mergeShortAcademiaTopics(split, maxSubtopics) : split);
+};
 
 const mergeShortAcademiaTopics = (topics, maxSubtopics = 20) => {
   const merged = [];
@@ -204,10 +349,53 @@ const mergeShortAcademiaTopics = (topics, maxSubtopics = 20) => {
   }));
 };
 
-const normalizeAcademiaSyllabus = (syllabusText) => {
-  const topics = parseSyllabusTopics(syllabusText);
-  if (!topics.length) return syllabusText;
-  return formatSyllabusTopics(mergeShortAcademiaTopics(topics));
+const normalizeOracleSyllabus = (syllabusText, settings = {}) =>
+  normalizeSyllabusByLimits(syllabusText, 'oracle', settings);
+
+const normalizeAcademiaSyllabus = (syllabusText, settings = {}) =>
+  normalizeSyllabusByLimits(syllabusText, 'academia', settings);
+
+const buildChunkedSyllabusMessage = ({ chunk, index, total, accumulated, subjectTitle, settings = {}, source = 'oracle' }) => {
+  const limits = source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
+  const manual = !settings.autoMode;
+  const shapeRule = manual
+    ? `MOLDE FINAL OBRIGATÓRIO: ${settings.numTopics || limits.targetMaxTopics} tópicos, com no máximo ${settings.numSubtopics || limits.targetMaxSubtopicsPerTopic} subtópicos por tópico. Se o material for maior, agrupe detalhes relacionados dentro do mesmo subtópico.`
+    : `MOLDE FINAL: tópicos podem ter até cerca de ${limits.targetMaxSubtopicsPerTopic} subtópicos quando o bloco for grande. Só divida obrigatoriamente se um tópico passaria de 30 subtópicos.`;
+  const antiHugeTopicRule = `REGRA CRÍTICA: NÃO crie um tópico gigante como "Urologia" ou "Intestino" com 40, 60 ou 80 subtópicos. Tópico é bloco didático; subtópico é item testável.`;
+
+  if (total <= 1) {
+    return `ASSUNTO: ${subjectTitle}
+
+${shapeRule}
+${antiHugeTopicRule}
+
+MATERIAL BASE:
+${chunk}`;
+  }
+
+  if (index === 0) {
+    return `ASSUNTO: ${subjectTitle}
+MATERIAL BASE — PARTE 1/${total}:
+${chunk}
+
+Crie um sumário parcial fiel apenas desta parte.
+${shapeRule}
+${antiHugeTopicRule}`;
+  }
+
+  return `ASSUNTO: ${subjectTitle}
+
+SUMÁRIO ACUMULADO ATÉ AGORA:
+${accumulated}
+
+MATERIAL BASE — PARTE ${index + 1}/${total}:
+${chunk}
+
+Atualize o sumário acumulado incorporando esta nova parte.
+Responda com o SUMÁRIO CONSOLIDADO COMPLETO.
+${shapeRule}
+${antiHugeTopicRule}
+Ao consolidar, reorganize os blocos: se algum tópico ficar grande demais, quebre-o em tópicos menores; se houver microdetalhes, agrupe-os.`;
 };
 
 const parseAcademiaLessonSections = (lessonText, subtopics) => {
@@ -390,7 +578,7 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
     if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
     if (!res.ok) throw new Error("CONNECTION_ERROR");
     const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('');
     if (!text) throw new Error("CONNECTION_ERROR");
     return text;
   } catch(e) {
@@ -421,16 +609,27 @@ const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let full = '';
+    let pending = '';
+    const consumeLine = (line) => {
+      if (!line.startsWith('data: ') || line.includes('[DONE]')) return;
+      try {
+        const j = JSON.parse(line.slice(6));
+        const t = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+        if (t) {
+          full += t;
+          onProgress?.(full, (full.match(/##\s*Quest[aã]o\s*\[?\d/gi) || []).length);
+        }
+      } catch(e) {}
+    };
     while (true) {
       const {done,value} = await reader.read();
       if (done) break;
-      const lines = dec.decode(value,{stream:true}).split('\n');
-      for (const line of lines) {
-        if (line.startsWith('data: ')&&!line.includes('[DONE]')) {
-          try { const j=JSON.parse(line.slice(6)); const t=j.candidates?.[0]?.content?.parts?.[0]?.text||''; if(t){full+=t; onProgress(full,(full.match(/##\s*Quest[aã]o\s*\d/gi)||[]).length);} } catch(e){}
-        }
-      }
+      pending += dec.decode(value,{stream:true});
+      const lines = pending.split('\n');
+      pending = lines.pop() || '';
+      lines.forEach(consumeLine);
     }
+    if (pending.trim()) consumeLine(pending.trim());
     clearTimeout(timeout);
     return full;
   } catch(e) {
@@ -447,6 +646,7 @@ const extractDocxText = async (ab) => { const m = await loadScript('https://cdnj
 
 const parseData = (text, namespace = '') => {
   const norm = text.replace(/\r\n/g,'\n');
+  const questionStartRe = /(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im;
 
   // Legacy summary
   let summary = '';
@@ -454,28 +654,28 @@ const parseData = (text, namespace = '') => {
   if (sm?.[1]) summary = sm[1].replace(/\n---.*/g,'').trim();
 
   const questions = [];
-  const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o[ \t]*\d|(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t])/im)
+  const blocks = norm.split(questionStartRe)
     .filter(b => b.trim());
 
   let qCount = 0;
 
   blocks.forEach((block) => {
     if (!block.trim()) return;
-    const hasOptions = /(?:^|\n)[ \t]*[A-Ea-e][ \t]*[).][ \t]*\S/.test(block);
+    const hasOptions = /(?:^|\n)[ \t]*[A-Ea-e][ \t]*[).:\-–—][ \t]*\S/.test(block);
     if (!hasOptions) return;
 
     try {
-      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*([0-9.]+)/i) ||
-                  block.match(/(?:^|\n)[ \t]*(\d{1,2})[ \t]*[).]/m);
+      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i) ||
+                  block.match(/(?:^|\n)[ \t]*(\d{1,3})[ \t]*[).]/m);
       const rawId = idM ? idM[1] : `${++qCount}`;
       // ID único: combina namespace (topicId/blockId) com o id da questão
       const id = namespace ? `${namespace}_${rawId}` : rawId;
 
-      const firstOptMatch = block.match(/(?:^|\n)([ \t]*[Aa][ \t]*[).][ \t]*\S)/);
+      const firstOptMatch = block.match(/(?:^|\n)([ \t]*[A-Ea-e][ \t]*[).:\-–—][ \t]*\S)/);
       if (!firstOptMatch) return;
       const firstOptIdx = block.indexOf(firstOptMatch[0]);
 
-      const inlineM = block.match(/(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t]*([^\n]{5,})/m);
+      const inlineM = block.match(/(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t]*([^\n]{5,})/m);
       const qHeaderM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[^\n]*\n/i);
       let stmt = '';
       if (inlineM && inlineM.index <= firstOptIdx) {
@@ -491,7 +691,7 @@ const parseData = (text, namespace = '') => {
       if (!stmt || stmt.length < 5) return;
 
       const ansM =
-        block.match(/(?:[Aa]lternativa[ \t]+correta|[Gg]abarito|[Rr]esposta(?:[ \t]+correta)?)[ \t]*[:\-][ \t]*\*{0,2}[ \t]*\(?([A-Ea-e])\)?/im);
+        block.match(/(?:[Aa]lternativa[ \t]+correta|[Gg]abarito(?:[ \t]+oficial)?|[Rr]esposta(?:[ \t]+correta)?|[Cc]orreta)[ \t]*[:\-–—][ \t]*(?:\*{0,2}[ \t]*)?(?:letra[ \t]*)?\(?([A-Ea-e])\)?/im);
 
       let correct = null;
       let optionsEnd = block.length;
@@ -509,7 +709,7 @@ const parseData = (text, namespace = '') => {
 
       const optText = block.substring(firstOptIdx, optionsEnd);
       const options = [];
-      const optRe = /(?:^|\n)[ \t]*\(?([A-Ea-e])[ \t]*[).][ \t]*([\s\S]*?)(?=(?:\n[ \t]*\(?[A-Ea-e][ \t]*[).])|\n[ \t]*$|$)/gim;
+      const optRe = /(?:^|\n)[ \t]*\(?([A-Ea-e])[ \t]*[).:\-–—][ \t]*([\s\S]*?)(?=(?:\n[ \t]*\(?[A-Ea-e][ \t]*[).:\-–—])|\n[ \t]*$|$)/gim;
       let m;
       while ((m = optRe.exec(optText)) !== null) {
         const letter = m[1].toUpperCase();
@@ -519,7 +719,7 @@ const parseData = (text, namespace = '') => {
       if (options.length < 2) return;
 
       let exp = '';
-      const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio)[ \t]*:?([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*##|\n[ \t]*Quest[aã]o|$)/i);
+      const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio)[ \t]*:?([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*##|\n[ \t]*(?:(?:\*\*)?[ \t]*)?Quest[aã]o|$)/i);
       if (expM?.[1]?.trim().length > 5) {
         exp = expM[1].trim();
       } else if (ansM) {
@@ -568,24 +768,25 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
   const questions = [];
   let qCount = 0;
 
-  // Dividir por ## Questão N ou N) ou N.
-  const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o[ \t]*\d|(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][ \t])/im).filter(b=>b.trim());
+  // Dividir por ## Questão N, ## Questão [1.2.1], N) ou N.
+  const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im).filter(b=>b.trim());
 
   blocks.forEach(block => {
     if (!block.trim()) return;
     try {
-      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*([0-9.]+)/i) || block.match(/(?:^|\n)[ \t]*(\d{1,2})[ \t]*[).]/m);
+      const respMatch = block.match(/Resposta esperada:\s*([\s\S]*?)(?:\nExplica[çc][aã]o:|\nAlternativa correta:|\n---|$)/i);
+      if (!respMatch) return;
+      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i) || block.match(/(?:^|\n)[ \t]*(\d{1,3})[ \t]*[).]/m);
       const rawId = idM ? idM[1] : `${++qCount}`;
       const id = namespace ? `${namespace}_${rawId}` : rawId;
 
       // Extrai enunciado: tudo antes de "Resposta esperada:"
-      const respMatch = block.match(/Resposta esperada:\s*([\s\S]*?)(?:\nAlternativa correta:|$)/i);
       const stmtEnd = respMatch ? block.indexOf(respMatch[0]) : block.length;
 
       // Limpa cabeçalho da questão do enunciado
       let stmt = block.substring(0, stmtEnd)
-        .replace(/(?:\*\*|##)?[ \t]*Quest[aã]o[ \t]*\d+[^\n]*\n?/i, '')
-        .replace(/(?:^|\n)[ \t]*\d{1,2}[ \t]*[).][^\n]*\n?/, '')
+        .replace(/(?:\*\*|##)?[ \t]*Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d+(?:\.\d+)*\]?[^\n]*\n?/i, '')
+        .replace(/(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][^\n]*\n?/, '')
         .trim();
       if (!stmt || stmt.length < 5) return;
 
@@ -593,7 +794,7 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
 
       // Extrai explicação
       let exp = '';
-      const expM = block.match(/Explica[çc][aã]o[:\s]+([\s\S]*?)$/i);
+      const expM = block.match(/Explica[çc][aã]o[:\s]+([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o|$)/i);
       if (expM) exp = expM[1].trim();
 
       questions.push({ id, statement: stmt, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay });
@@ -841,10 +1042,10 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode });
 
   return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4" onClick={handleClose}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={handleClose}>
       <div
-        className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
-        style={{isolation:'isolate', maxHeight:'90vh'}}
+        className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
+        style={{isolation:'isolate', maxHeight:'calc(100dvh - 6rem)'}}
         onClick={e=>e.stopPropagation()}
       >
         {/* Header fixo */}
@@ -973,7 +1174,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           <button
             disabled={loading || metaLoading}
             onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes})}
-            className="flex-[2] py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
+            className="flex-[2] px-5 py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
               ? <><Spinner className="w-4 h-4 text-white"/>Gerando sumário...</>
@@ -1266,7 +1467,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-end sm:items-center justify-center overflow-hidden bg-black bg-opacity-80 p-4" onClick={onClose}>
       <div className={`w-full max-w-sm rounded-2xl border shadow-2xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
         onClick={e=>e.stopPropagation()}>
         <div className={`flex items-center justify-between px-5 py-4 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
@@ -1313,7 +1514,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
           </div>
         </div>
         <div className="px-5 pb-5">
-          <button onClick={confirm} className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
+          <button onClick={confirm} className="w-full px-5 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
             Confirmar
           </button>
         </div>
@@ -1365,9 +1566,9 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
   const hasChanges = addCount > 0 || removeCount > 0;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
-        style={{maxHeight:'88vh'}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={onClose}>
+      <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
+        style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
 
         <div className={`px-5 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-lg text-yellow-600 flex items-center gap-2">
@@ -1447,7 +1648,7 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
             Cancelar
           </button>
           <button onClick={handleConfirm} disabled={!hasChanges}
-            className="flex-[2] py-3 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-40 flex items-center justify-center gap-2">
+            className="flex-[2] px-5 py-3 rounded-xl font-bold text-sm bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-40 flex items-center justify-center gap-2">
             <RepeatIcon className="w-4 h-4"/>
             {addCount>0 && removeCount>0 ? `+${addCount} / −${removeCount}` :
              addCount>0 ? `Adicionar ${addCount} questão${addCount!==1?'s':''}` :
@@ -1637,16 +1838,16 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
   const color = result ? (result.nota >= 70 ? 'green' : result.nota >= 40 ? 'yellow' : 'red') : null;
 
   return (
-    <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
-        style={{maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={onClose}>
+      <div className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}
+        style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
         <div className={`flex items-center justify-between px-5 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-yellow-600 flex items-center gap-2">
             {isEssay ? '📝 Dissertativa' : '✏️ Resposta Curta'}
           </h3>
           <button onClick={onClose} className={`text-xl ${dm?'text-gray-400':'text-gray-400'}`}>×</button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+        <div className="px-5 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
           <p className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</p>
 
           {isDaytime() && !result && (
@@ -1737,6 +1938,24 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false })
               <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
               <p className="text-xs opacity-50">{t.desc}</p>
             </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const ExplanationLengthSelector = ({ value='complete', onChange, darkMode }) => {
+  const dm = darkMode;
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {EXPLANATION_LENGTHS.map(opt => {
+        const on = value === opt.k;
+        return (
+          <button key={opt.k} type="button" onClick={()=>onChange(opt.k)}
+            className={`py-3 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${on?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
+            {opt.label}
+            <p className="font-normal opacity-60 mt-1 leading-snug">{opt.desc}</p>
           </button>
         );
       })}
@@ -2126,8 +2345,8 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
   const rc = (active) => `flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${active?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-700 hover:border-gray-600':'border-gray-200 hover:border-gray-300')}`;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4">
-      <div className={`w-full max-w-lg rounded-2xl border overflow-y-auto p-8 ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'90vh'}}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
+      <div className={`w-full max-w-lg rounded-2xl border overflow-y-auto p-8 ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar {isFolder?'Pasta':'Aula'}</h3>
 
         <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Disposição da explicação</p>
@@ -2186,7 +2405,7 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
 
         <div className="flex gap-3">
           <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold ${dm?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
-          <button onClick={handleExport} className="flex-1 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Exportar</button>
+          <button onClick={handleExport} className="flex-1 px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Exportar</button>
         </div>
       </div>
     </div>
@@ -2248,7 +2467,7 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
       });
       body += '<div style="page-break-before:always"><h2 style="font-family:Georgia,serif;color:#92400e;border-bottom:2px solid #92400e;padding-bottom:8px">GABARITO E COMENTÁRIOS</h2>';
       qs.forEach(q => {
-        const corr = q.options.find(o=>o.isCorrect);
+      const corr = (q.options || []).find(o=>o.isCorrect);
         body += `<div style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb">
 <p style="font-weight:bold;margin:0 0 4px;font-size:13px">Questão ${q.id}: <span style="color:#065f46">${corr?.letter}) ${escape(corr?.text||'')}</span></p>
 <p style="font-size:12px;margin:0;color:#374151;line-height:1.5">${escape(q.explanation)}</p>
@@ -2279,8 +2498,8 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4">
-      <div className={`w-full max-w-md rounded-2xl border overflow-y-auto p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'90vh'}}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
+      <div className={`w-full max-w-md rounded-2xl border overflow-y-auto p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar</h3>
         <div className="space-y-3 mb-6">
           {opts.map(o=>(
@@ -2297,7 +2516,7 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
         </div>
         <div className="flex gap-3">
           <button onClick={onClose} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
-          <button onClick={handleExport} className="flex-1 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700">Exportar</button>
+          <button onClick={handleExport} className="flex-1 px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700">Exportar</button>
         </div>
       </div>
     </div>
@@ -2328,7 +2547,7 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
           if (tc.questions.length > 0) {
             // Has questions — use them
             const qLines = tc.questions.slice(0, 10).map((q, i) =>
-              `  ${i+1}. ${q.statement.substring(0,100).replace(/\n/g,' ')}...\n     ✓ ${q.options.find(o=>o.isCorrect)?.text||''} | ${q.explanation.substring(0,200).replace(/\n/g,' ')}...`
+              `  ${i+1}. ${q.statement.substring(0,100).replace(/\n/g,' ')}...\n     ✓ ${(q.options||[]).find(o=>o.isCorrect)?.text||q.expectedAnswer||''} | ${q.explanation.substring(0,200).replace(/\n/g,' ')}...`
             ).join('\n');
             return `TÓPICO: ${tc.title}\n${qLines}`;
           } else if (tc.subtopics.length > 0) {
@@ -2340,7 +2559,7 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
       } else if (questions.length > 0) {
         // Single topic with questions
         contextBlock = questions.slice(0, 15).map((q, i) =>
-          `${i+1}. ${q.statement.substring(0,120).replace(/\n/g,' ')}...\n   ✓ ${q.options.find(o=>o.isCorrect)?.text||''}\n   ${q.explanation.substring(0,300).replace(/\n/g,' ')}...`
+          `${i+1}. ${q.statement.substring(0,120).replace(/\n/g,' ')}...\n   ✓ ${(q.options||[]).find(o=>o.isCorrect)?.text||q.expectedAnswer||''}\n   ${q.explanation.substring(0,300).replace(/\n/g,' ')}...`
         ).join('\n\n');
       } else if (subtopics.length > 0) {
         // Single topic, no questions — use subtopics
@@ -2381,10 +2600,10 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
   useEffect(() => { if (!cachedText) generate(); }, []); // eslint-disable-line
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={onClose}>
       <div
-        className={`w-full max-w-2xl rounded-2xl border flex flex-col ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
-        style={{maxHeight:'85vh'}}
+        className={`w-full max-w-2xl rounded-2xl border flex flex-col overflow-hidden ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
+        style={{maxHeight:'calc(100dvh - 6rem)'}}
         onClick={e=>e.stopPropagation()}
       >
         <div className={`flex items-center justify-between p-5 border-b flex-shrink-0 ${darkMode?'border-gray-700':'border-gray-200'}`}>
@@ -2459,8 +2678,8 @@ const ERROR_CONFIGS = {
 };
 
 const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMode, children, isAlert=false, actionLabel, onAction, link }) => (
-  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4">
-    <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'90vh'}}>
+  <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
+    <div className={`w-full max-w-md rounded-2xl shadow-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
       <div className="flex flex-col items-center text-center">
         <div className={`p-4 rounded-full mb-4 ${darkMode?'bg-yellow-900/30':'bg-yellow-100'}`}><Flame className="w-8 h-8 text-yellow-600"/></div>
         <h3 className="text-xl font-serif font-bold mb-3">{title}</h3>
@@ -2470,8 +2689,8 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
         <div className="flex gap-3 w-full mt-2">
           {!isAlert&&<button onClick={onCancel} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>}
           {actionLabel&&onAction
-            ?<button onClick={onAction} className="flex-1 py-3 text-white rounded-xl font-bold bg-yellow-600 hover:bg-yellow-700">{actionLabel}</button>
-            :<button onClick={onConfirm} className={`flex-1 py-3 text-white rounded-xl font-bold ${isAlert?'bg-yellow-600 hover:bg-yellow-700':'bg-red-600 hover:bg-red-700'}`}>{confirmText}</button>}
+            ?<button onClick={onAction} className="flex-1 px-5 py-3 text-white rounded-xl font-bold bg-yellow-600 hover:bg-yellow-700">{actionLabel}</button>
+            :<button onClick={onConfirm} className={`flex-1 px-5 py-3 text-white rounded-xl font-bold ${isAlert?'bg-yellow-600 hover:bg-yellow-700':'bg-red-600 hover:bg-red-700'}`}>{confirmText}</button>}
         </div>
       </div>
     </div>
@@ -2500,14 +2719,14 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
-        style={{maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={onClose}>
+      <div className={`w-full max-w-md rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${dm?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`}
+        style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
         <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-lg text-yellow-600">Configurar Prompt Externo</h3>
           <button onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-400 hover:text-gray-200':'text-gray-400 hover:text-gray-600'}`}>×</button>
         </div>
-        <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1">
+        <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
           {/* AutoMode */}
           <button onClick={()=>setCfg(p=>({...p,autoMode:!p.autoMode}))}
             className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.autoMode?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-gray-50')}`}>
@@ -2568,7 +2787,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
         </div>
         <div className="px-6 pb-6 pt-4 flex gap-3 flex-shrink-0 border-t border-gray-700/30">
           <button onClick={onClose} className={`flex-1 py-3.5 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
-          <button onClick={copy} className={`flex-[2] py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${copied?'bg-green-600 text-white':'bg-yellow-600 hover:bg-yellow-700 text-white'}`}>
+          <button onClick={copy} className={`flex-[2] px-5 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${copied?'bg-green-600 text-white':'bg-yellow-600 hover:bg-yellow-700 text-white'}`}>
             {copied?<><CheckCircle2 className="w-4 h-4"/>Copiado!</>:<><Copy className="w-4 h-4"/>Copiar Prompt</>}
           </button>
         </div>
@@ -2578,7 +2797,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'] };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete' };
 
 
 // ─── ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────────
@@ -2589,12 +2808,18 @@ function AcademiaTopicView({
   academiaQMode, setAcademiaQMode,
   academiaTopicAnswers, setAcademiaTopicAnswers,
   academiaExtraBusy, settings, updateSubject,
-  generateAcademiaLesson, setAcademiaExtraModal, setAcademiaExportModal, setDeleteId,
+  setSettings, saveSettings,
+  generateAcademiaLesson, setAcademiaExtraModal, setAcademiaRegenModal, setAcademiaExportModal, setDeleteId,
   setOpenAnswerModal, getKey, callWithRotation, parseHtmlText, onBack,
 }) {
   const subtopics = topic.subtopics || [];
   const hasLesson = topic.lessonGenerated;
   const [hideSubtopicTitles, setHideSubtopicTitles] = useState(false);
+  const setLessonLength = (length) => {
+    const ns = { ...settings, explanationLength: length };
+    setSettings(ns);
+    saveSettings(ns);
+  };
 
   // Renderiza markdown da aula com suporte a tabelas, listas e parágrafos
   const renderLesson = (md) => {
@@ -2740,13 +2965,27 @@ function AcademiaTopicView({
 
       {/* Aula não gerada */}
       {!hasLesson && !academiaGenerating && (
-        <div className={`py-16 text-center ${darkMode?'text-gray-500':'text-gray-400'}`}>
+        <div className={`py-16 ${darkMode?'text-gray-500':'text-gray-400'}`}>
+          <div className="text-center">
           <p className="font-bold text-lg mb-1">Aula não gerada</p>
           <p className="text-sm opacity-70 mb-6 max-w-xs mx-auto">Clique abaixo para gerar a explicação e as questões de fixação.</p>
+          </div>
           {canUseAcademia && (
+            <div className="max-w-xl mx-auto mb-6">
+              <div className="text-xs font-bold uppercase mb-2 opacity-50 text-left">Tamanho da aula</div>
+              <ExplanationLengthSelector
+                value={settings.explanationLength || 'complete'}
+                onChange={setLessonLength}
+                darkMode={darkMode}
+              />
+            </div>
+          )}
+          {canUseAcademia && (
+            <div className="text-center">
             <button onClick={()=>generateAcademiaLesson(topic, subject)} className="bg-yellow-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-700">
               Gerar Aula
             </button>
+            </div>
           )}
         </div>
       )}
@@ -2828,7 +3067,7 @@ function AcademiaTopicView({
           {/* Regenerar */}
           {canUseAcademia && (
             <div className="mt-6 text-center">
-              <button onClick={()=>generateAcademiaLesson(topic, subject)} disabled={academiaGenerating}
+              <button onClick={()=>setAcademiaRegenModal({topic, subject})} disabled={academiaGenerating}
                 className={`text-xs opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1.5 mx-auto ${darkMode?'text-gray-400':'text-gray-500'}`}>
                 <RotateCcw className="w-3 h-3"/>Regenerar aula
               </button>
@@ -2927,11 +3166,17 @@ export default function QuestionBankApp() {
   const [academiaTopicAnswers, setAcademiaTopicAnswers] = useState({});
   const [academiaExtraBusy, setAcademiaExtraBusy]     = useState(false);
   const [academiaExtraModal, setAcademiaExtraModal]   = useState(null); // { topic, subject } — modal de config da bateria extra
+  const [academiaRegenModal, setAcademiaRegenModal]   = useState(null); // { topic, subject }
+  const [academiaRegenReason, setAcademiaRegenReason] = useState('');
   const [academiaQMode, setAcademiaQMode]             = useState('interleaved'); // 'interleaved' | 'end'
   const [academiaExportModal, setAcademiaExportModal] = useState(null); // { topic, subject }
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
+  const [academiaRegenLength, setAcademiaRegenLength] = useState('complete');
+  const [academiaRegenQStyle, setAcademiaRegenQStyle] = useState('mixed');
+  const [academiaRegenQTypes, setAcademiaRegenQTypes] = useState(['direct']);
+  const [academiaRegenQAlts, setAcademiaRegenQAlts]   = useState(5);
 
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
@@ -3537,7 +3782,9 @@ export default function QuestionBankApp() {
 
   // ── Material helpers ───────────────────────────────────────────────────────
   const getMaterial = () => { const c=materialText+'\n'+uploadedFiles.map(f=>`[${f.name}]\n${f.content}`).join('\n'); return c.length>MAX_MATERIAL_CHARS?c.substring(0,MAX_MATERIAL_CHARS)+'\n[TRUNCADO]':c; };
-  const isBig = () => (materialText+uploadedFiles.map(f=>f.content).join('')).length>MAX_MATERIAL_CHARS;
+  const materialRequestCount = () => estimateMaterialRequestCount(materialText, uploadedFiles);
+  const academiaMaterialRequestCount = () => estimateMaterialRequestCount(academiaMaterialText, academiaUploadedFiles);
+  const isBig = () => materialRequestCount() > 1;
   // Build focus instructions from stored focus area IDs on the subject
   const getFocusInst = (areas=[]) => {
     if (!areas || areas.length === 0) return '';
@@ -3852,11 +4099,25 @@ export default function QuestionBankApp() {
   };
 
   const handleAnswer = async (qId, letter) => {
-    const q=activeTopic.questions.find(x=>x.id===qId); const isRight=q?.options.find(o=>o.isCorrect)?.letter===letter;
-    const now=Date.now(); const sr={...(activeTopic.spacedReview||{})};
+    const q = activeTopic.questions.find(x=>x.id===qId);
+    const now = Date.now();
+    const sr = { ...(activeTopic.spacedReview || {}) };
+    let isRight = false;
+
+    if (q?.isOpen) {
+      try {
+        const parsed = JSON.parse(letter);
+        isRight = (parsed?.score ?? 0) >= 70;
+      } catch(e) {
+        isRight = false;
+      }
+    } else {
+      isRight = q?.options?.find(o=>o.isCorrect)?.letter === letter;
+    }
+
     if(!isRight) sr[qId]={dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
     else if(sr[qId]){const ni=Math.min((sr[qId].interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id!==activeTopicId?t:{...t,answers:{...t.answers,[qId]:letter},spacedReview:sr})});
+    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id!==activeTopicId?t:{...t,answers:{...(t.answers||{}),[qId]:letter},spacedReview:sr})});
   };
 
   const handleFavorite = async (qId) => {
@@ -3886,7 +4147,12 @@ export default function QuestionBankApp() {
   // Bug 1: also clear cached insights — they're based on old answers and would be stale
   const resetAnswers = async () => { await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},bizuario:null}:t)}); };
   const resetOnlyWrong = async () => {
-    const wrong=(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).map(q=>q.id);
+    const wrong=(activeTopic.questions||[]).filter(q=>{
+      const a=activeTopic.answers?.[q.id];
+      if (!a) return false;
+      if (q.isOpen) { try { return (JSON.parse(a)?.score ?? 0) < 70; } catch(e) { return false; } }
+      return a!==q.options?.find(o=>o.isCorrect)?.letter;
+    }).map(q=>q.id);
     const na=Object.fromEntries(Object.entries(activeTopic.answers||{}).filter(([k])=>!wrong.includes(k)));
     await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:na}:t)});setShowOnlyWrong(false);
   };
@@ -3904,9 +4170,13 @@ export default function QuestionBankApp() {
     const topicStyle = topic.questionStyle || settingsRef.current.questionStyle || 'mixed';
 
     const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
-    const total = subtopicsArr.length > 0 ? subtopicsArr.length * settingsRef.current.qPerSub : settingsRef.current.numSubtopics * settingsRef.current.qPerSub;
+    const qPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
+    const promptSubtopicCount = subtopicsArr.length > 0
+      ? subtopicsArr.length
+      : Math.max(1, parseInt(settingsRef.current.numSubtopics, 10) || 1);
+    const total = promptSubtopicCount * qPerSub;
     const subtopicsBlock = subtopicsArr.length > 0
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, um por questão, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: Cada questão = 1 subtópico da lista. NÃO repita. NÃO invente. Total: EXATAMENTE ${total} questões.`
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
       : '';
 
     // Material base como instrução PRIORITÁRIA — vem antes de tudo no system prompt
@@ -3914,7 +4184,13 @@ export default function QuestionBankApp() {
       ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
       : '';
 
-    const s = {...settingsRef.current, questionStyle: topicStyle, questionTypes: topic.questionTypes || settingsRef.current.questionTypes || ['direct']};
+    const s = {
+      ...settingsRef.current,
+      numSubtopics: promptSubtopicCount,
+      qPerSub,
+      questionStyle: topicStyle,
+      questionTypes: topic.questionTypes || settingsRef.current.questionTypes || ['direct'],
+    };
     const na = s.numAlternatives || 5;
     const types = s.questionTypes || ['direct'];
     const hasOpen   = types.includes('open');
@@ -3960,30 +4236,64 @@ export default function QuestionBankApp() {
 
   // Creator
   const startCreation = async () => {
+    const subjectTitle = newSubName.trim();
+    if (!subjectTitle) {
+      setErrorModal({ title: 'Título obrigatório', message: 'Digite o nome do assunto antes de gerar a estrutura.', isAlert: true });
+      return;
+    }
     if(!checkKey())return;setIsBusy(true);
     const s = settingsRef.current;
-    const sys = buildOracleSyllabusPrompt(newSubName, s, s.autoMode || false);
+    const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const orderedKeys = getOrderedKeys();
-    // Material base como instrução prioritária separada do conteúdo
-    const matText = materialText.trim();
-    const filesText = uploadedFiles.map(f=>`[${f.name}]\n${f.content}`).join('\n');
-    const userMsg = [
-      matText ? `INSTRUÇÃO PRIORITÁRIA DO USUÁRIO (siga à risca):\n${matText}` : '',
-      filesText ? `\nMATERIAL BASE:\n${filesText}` : '',
-    ].filter(Boolean).join('\n\n') || `Crie o sumário para: ${newSubName}`;
-    let ok=false;
-    for (const {k} of orderedKeys) {
-      try {
-        const r=await callGemini(userMsg, sys, k, uploadedImages);
-        setSyllabus(r);setCreatorStep(2);
-        await rotateKey();
-        ok=true; break;
-      } catch(e) {
-        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        showApiError(e.message); break;
-      }
+    const chunks = buildAcademiaMaterialChunks(materialText, uploadedFiles);
+    if (chunks.length > 1) {
+      addToast(`Material grande: vou processar em ${chunks.length} partes. Isso usa ${chunks.length} requests.`, 'info', 7000);
     }
-    if (!ok && !errorModal) showApiError('QUOTA_EXCEEDED');
+
+    let ok=false;
+    let accumulated = '';
+    const totalChunks = chunks.length || 1;
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = chunks[i] || `Crie o sumário para: ${subjectTitle}`;
+      const userMsg = buildChunkedSyllabusMessage({
+        chunk,
+        index: i,
+        total: totalChunks,
+        accumulated,
+        subjectTitle,
+        settings: s,
+        source: 'oracle',
+      });
+
+      setSyllabus(chunks.length > 1 ? `Processando material ${i + 1}/${totalChunks}...` : '');
+      let chunkOk = false;
+      for (const {k} of orderedKeys) {
+        try {
+          const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : []);
+          accumulated = normalizeOracleSyllabus(r, s);
+          await rotateKey();
+          chunkOk = true;
+          break;
+        } catch(e) {
+          if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          showApiError(e.message);
+          setIsBusy(false);
+          return;
+        }
+      }
+      if (!chunkOk) {
+        showApiError('QUOTA_EXCEEDED');
+        setIsBusy(false);
+        return;
+      }
+      ok = true;
+    }
+
+    if (ok) {
+      setSyllabus(accumulated);
+      setCreatorStep(2);
+    }
     setIsBusy(false);
   };
   const reviseSyllabus = async () => {
@@ -3993,7 +4303,7 @@ export default function QuestionBankApp() {
     for (const {k} of orderedKeys) {
       try {
         const r=await callGemini('Revise.',sys,k);
-        setSyllabus(r);setSyllabusFB('');
+        setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
         await rotateKey(); break;
       } catch(e) {
         if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
@@ -4154,38 +4464,69 @@ export default function QuestionBankApp() {
   // ── ACADEMIA: funções de criação ──────────────────────────────────────────
 
   const getAcademiaMaterial = () => {
-    const filesText = academiaUploadedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n');
-    const imgText   = academiaMaterialText.trim();
-    return [imgText, filesText].filter(Boolean).join('\n\n');
+    return buildAcademiaMaterialText(academiaMaterialText, academiaUploadedFiles);
   };
 
   const startAcademiaCreation = async () => {
+    const subjectTitle = academiaSubName.trim();
+    if (!subjectTitle) {
+      setErrorModal({ title: 'Título obrigatório', message: 'Digite o nome da aula antes de gerar a estrutura.', isAlert: true });
+      return;
+    }
     if (!checkKey()) return;
     setIsBusy(true);
     const s = settingsRef.current;
-    const sys = buildAcademiaSyllabusPrompt(academiaSubName, s, s.autoMode || false);
-    const matText   = academiaMaterialText.trim();
-    const filesText = academiaUploadedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n');
-    const userMsg = [
-      matText   ? `INSTRUÇÃO PRIORITÁRIA DO USUÁRIO:\n${matText}` : '',
-      filesText ? `\nMATERIAL BASE:\n${filesText}` : '',
-    ].filter(Boolean).join('\n\n') || `Crie o sumário para: ${academiaSubName}`;
-
-    const orderedKeys = getOrderedKeys();
-    let ok = false;
-    for (const { k } of orderedKeys) {
-      try {
-        const r = await callGemini(userMsg, sys, k, academiaUploadedImages);
-        setAcademiaSyllabus(normalizeAcademiaSyllabus(r));
-        setAcademiaCreatorStep(2);
-        await rotateKey();
-        ok = true; break;
-      } catch (e) {
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        showApiError(e.message); break;
-      }
+    const sys = buildAcademiaSyllabusPrompt(subjectTitle, s, s.autoMode || false);
+    const chunks = buildAcademiaMaterialChunks(academiaMaterialText, academiaUploadedFiles);
+    if (chunks.length > 1) {
+      addToast(`Material grande: vou processar em ${chunks.length} partes. Isso usa ${chunks.length} requests.`, 'info', 7000);
     }
-    if (!ok && !errorModal) showApiError('QUOTA_EXCEEDED');
+
+    let ok = false;
+    let accumulated = '';
+    const totalChunks = chunks.length || 1;
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = chunks[i] || `Crie o sumário para: ${subjectTitle}`;
+      const userMsg = buildChunkedSyllabusMessage({
+        chunk,
+        index: i,
+        total: totalChunks,
+        accumulated,
+        subjectTitle,
+        settings: s,
+        source: 'academia',
+      });
+
+      setAcademiaSyllabus(chunks.length > 1 ? `Processando material ${i + 1}/${totalChunks}...` : '');
+      let chunkOk = false;
+      const orderedKeys = getOrderedKeys();
+      for (const { k } of orderedKeys) {
+        try {
+          const r = await callGemini(userMsg, sys, k, i === 0 ? academiaUploadedImages : []);
+          accumulated = normalizeAcademiaSyllabus(r, s);
+          await rotateKey();
+          chunkOk = true;
+          break;
+        } catch (e) {
+          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          showApiError(e.message);
+          setIsBusy(false);
+          return;
+        }
+      }
+      if (!chunkOk) {
+        showApiError('QUOTA_EXCEEDED');
+        setIsBusy(false);
+        return;
+      }
+      ok = true;
+    }
+
+    if (ok) {
+      setAcademiaSyllabus(accumulated);
+      setAcademiaCreatorStep(2);
+    }
     setIsBusy(false);
   };
 
@@ -4197,7 +4538,7 @@ export default function QuestionBankApp() {
     for (const { k } of orderedKeys) {
       try {
         const r = await callGemini('Revise.', sys, k);
-        setAcademiaSyllabus(normalizeAcademiaSyllabus(r));
+        setAcademiaSyllabus(normalizeAcademiaSyllabus(r, settingsRef.current));
         setAcademiaSyllabusFB('');
         await rotateKey(); break;
       } catch (e) {
@@ -4257,12 +4598,12 @@ export default function QuestionBankApp() {
 
   // ── ACADEMIA: geração da aula ─────────────────────────────────────────────
 
-  const generateAcademiaLesson = async (topic, subject) => {
+  const generateAcademiaLesson = async (topic, subject, lessonSettings = {}) => {
     if (!checkKey()) return;
     setAcademiaGenerating(true);
     setAcademiaGenProgress('Gerando aula e questões de fixação...');
 
-    const s = settingsRef.current;
+    const s = { ...settingsRef.current, ...lessonSettings };
     const material = subject.sourceMaterials || '';
     const subtopics = topic.subtopics || [];
 
@@ -4275,11 +4616,23 @@ export default function QuestionBankApp() {
 
     // Requisição A: aula em markdown
     let lessonText = '';
-    const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title);
+    const lessonLevel = s.explanationLength || 'complete';
+    const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, s.regenReason || '');
+    const lessonSystemPrompt = lessonLevel === 'essential'
+      ? 'Você é professor de medicina. Escreva em português. Modo Nível 1: seja extremamente conciso; use síntese de prova, bullets curtos e não ultrapasse o limite por subtópico.'
+      : 'Você é professor de medicina. Escreva em português.';
     setAcademiaGenProgress('📝 Gerando explicação dos subtópicos...');
     for (const { k } of orderedKeys) {
       try {
-        lessonText = await callGemini(lessonPrompt, 'Você é professor de medicina. Escreva em português.', k);
+        lessonText = await callGemini(
+          lessonPrompt,
+          lessonSystemPrompt,
+          k,
+          [],
+          lessonLevel === 'essential'
+            ? { maxTokens: Math.min(8192, Math.max(1024, subtopics.length * 150)) }
+            : {}
+        );
         await rotateKey();
         break;
       } catch (e) {
@@ -4337,75 +4690,79 @@ export default function QuestionBankApp() {
   const generateAcademiaExtraBattery = async (topic, subject, extraSettings = null) => {
     if (!checkKey()) return;
     setAcademiaExtraBusy(true);
-    const s = extraSettings || settingsRef.current;
-    const subtopics = topic.subtopics || [];
-    const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s);
-    const orderedKeys = getOrderedKeys();
-    let extraText = '';
-    for (const { k } of orderedKeys) {
-      try {
-        extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k);
-        await rotateKey();
-        break;
-      } catch (e) {
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        showApiError(e.message);
-        setAcademiaExtraBusy(false);
+    try {
+      const s = extraSettings || settingsRef.current;
+      const subtopics = topic.subtopics || [];
+      const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s);
+      const orderedKeys = getOrderedKeys();
+      let extraText = '';
+      for (const { k } of orderedKeys) {
+        try {
+          extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k);
+          await rotateKey();
+          break;
+        } catch (e) {
+          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          showApiError(e.message);
+          return;
+        }
+      }
+
+      const parsed = parseData(extraText, `extra_${topic.id}_${Date.now()}`);
+      if (!parsed.questions.length) {
+        addToast('Nenhuma questão foi gerada. Tente novamente.', 'info', 4000);
         return;
       }
-    }
 
-    const parsed = parseData(extraText, `extra_${topic.id}_${Date.now()}`);
-    if (!parsed.questions.length) {
-      addToast('Nenhuma questão foi gerada. Tente novamente.', 'info', 4000);
-      setAcademiaExtraBusy(false);
-      return;
-    }
-
-    // Salva no tópico da Academia (campo extraBattery) E cria/atualiza assunto no Oráculo
-    const updatedTopic = {
-      ...topic,
-      extraBattery: [...(topic.extraBattery || []), {
-        id: `eb_${Date.now()}`,
-        title: `Bateria ${(topic.extraBattery||[]).length + 1}`,
-        generatedAt: Date.now(),
-        oracleTopicId: oracleTopic.id,
+      const oracleTopic = {
+        id: `oracle_${topic.id}_${Date.now()}`,
+        title: `${topic.title} (bateria extra)`,
+        subtopics: topic.subtopics || [],
         questions: parsed.questions,
-      }],
-    };
-    const updatedSubject = {
-      ...subject,
-      topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
-    };
-    await updateSubject(updatedSubject);
-
-    // Também salva no Oráculo como assunto separado "Academia — SubjectTitle"
-    const oracleTitle = `Academia — ${subject.title}`;
-    const existingOracle = library.find(s => s.title === oracleTitle && s.source === 'gemini');
-    const oracleTopic = {
-      id: `oracle_${topic.id}_${Date.now()}`,
-      title: `${topic.title} (bateria extra)`,
-      subtopics: topic.subtopics || [],
-      questions: parsed.questions,
-      answers: {}, summary: '', favorites: [], spacedReview: {},
-      questionStyle: s.questionStyle || 'mixed',
-    };
-    if (existingOracle) {
-      const updatedOracle = { ...existingOracle, topics: [...existingOracle.topics, oracleTopic] };
-      await updateSubject(updatedOracle);
-    } else {
-      const newOracle = {
-        id: Date.now(),
-        title: oracleTitle,
-        source: 'gemini',
-        fullSyllabus: '',
-        topics: [oracleTopic],
+        answers: {}, summary: '', favorites: [], spacedReview: {},
+        questionStyle: s.questionStyle || 'mixed',
       };
-      await addSubject(newOracle);
-    }
 
-    setAcademiaExtraBusy(false);
-    addToast(`${parsed.questions.length} questões extras adicionadas ao Oráculo!`, 'success', 5000);
+      // Salva no tópico da Academia (campo extraBattery) E cria/atualiza assunto no Oráculo
+      const updatedTopic = {
+        ...topic,
+        extraBattery: [...(topic.extraBattery || []), {
+          id: `eb_${Date.now()}`,
+          title: `Bateria ${(topic.extraBattery||[]).length + 1}`,
+          generatedAt: Date.now(),
+          oracleTopicId: oracleTopic.id,
+          questions: parsed.questions,
+        }],
+      };
+      const updatedSubject = {
+        ...subject,
+        topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
+      };
+      await updateSubject(updatedSubject);
+
+      // Também salva no Oráculo como assunto separado "Academia — SubjectTitle"
+      const oracleTitle = `Academia — ${subject.title}`;
+      const existingOracle = library.find(s => s.title === oracleTitle && s.source === 'gemini');
+      if (existingOracle) {
+        const updatedOracle = { ...existingOracle, topics: [...existingOracle.topics, oracleTopic] };
+        await updateSubject(updatedOracle);
+      } else {
+        const newOracle = {
+          id: Date.now(),
+          title: oracleTitle,
+          source: 'gemini',
+          fullSyllabus: '',
+          topics: [oracleTopic],
+        };
+        await addSubject(newOracle);
+      }
+
+      addToast(`${parsed.questions.length} questões extras adicionadas ao Oráculo!`, 'success', 5000);
+    } catch (e) {
+      showApiError(e.message || 'CONNECTION_ERROR');
+    } finally {
+      setAcademiaExtraBusy(false);
+    }
   };
 
   // ── FIM ACADEMIA ──────────────────────────────────────────────────────────
@@ -4413,7 +4770,12 @@ export default function QuestionBankApp() {
   const isAdmin         = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
   const canUseAcademia   = isAdmin || canSeeVideoaulas;
-  const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{const a=activeTopic.answers?.[q.id];return a&&a!==q.options.find(o=>o.isCorrect)?.letter;}).length:0;
+  const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{
+    const a=activeTopic.answers?.[q.id];
+    if (!a) return false;
+    if (q.isOpen) { try { return (JSON.parse(a)?.score ?? 0) < 70; } catch(e) { return false; } }
+    return a!==q.options?.find(o=>o.isCorrect)?.letter;
+  }).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
   // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -4466,6 +4828,33 @@ export default function QuestionBankApp() {
   // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${bg}`}>
+      <style>{`
+        .modal-scroll,
+        .modal-scroll * {
+          scrollbar-width: thin;
+          scrollbar-color: #d97706 ${darkMode ? '#1f2937' : '#f5f5f4'};
+        }
+        .modal-scroll::-webkit-scrollbar,
+        .modal-scroll *::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .modal-scroll::-webkit-scrollbar-track,
+        .modal-scroll *::-webkit-scrollbar-track {
+          background: ${darkMode ? '#111827' : '#f5f5f4'};
+          border-radius: 999px;
+        }
+        .modal-scroll::-webkit-scrollbar-thumb,
+        .modal-scroll *::-webkit-scrollbar-thumb {
+          background: #b45309;
+          border-radius: 999px;
+          border: 2px solid ${darkMode ? '#111827' : '#f5f5f4'};
+        }
+        .modal-scroll::-webkit-scrollbar-thumb:hover,
+        .modal-scroll *::-webkit-scrollbar-thumb:hover {
+          background: #d97706;
+        }
+      `}</style>
       {/* HEADER */}
       <header className={`${hdr} border-b sticky top-0 z-20 shadow-sm transition-transform duration-300 ${headerVisible?'translate-y-0':'-translate-y-full'}`}>
         <div className="max-w-5xl mx-auto flex items-center justify-between px-4 py-3">
@@ -4535,7 +4924,7 @@ export default function QuestionBankApp() {
               <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Não são admitidos ignorantes em geometria</h2>
               <p className="opacity-60 mb-6">Gerencie seus blocos de estudo e invoque novas questões.</p>
               <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
-                <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
+                <button onClick={()=>setView('creator')} className="flex-1 bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><Sparkles className="w-5 h-5"/>Gerar Assunto</button>
                 <button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border ${darkMode?'bg-gray-800 text-white hover:bg-gray-700 border-gray-700':'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'}`}><Feather className="w-5 h-5 text-yellow-600"/>Importar</button>
                 <button onClick={()=>setExamSetup({})} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border ${darkMode?'bg-gray-800 text-white hover:bg-gray-700 border-gray-700':'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'}`}><Zap className="w-5 h-5 text-yellow-600"/>Modo Prova</button>
               </div>
@@ -4783,9 +5172,19 @@ export default function QuestionBankApp() {
             setAcademiaTopicAnswers={setAcademiaTopicAnswers}
             academiaExtraBusy={academiaExtraBusy}
             settings={settings}
+            setSettings={setSettings}
+            saveSettings={saveSettings}
             updateSubject={updateSubject}
             generateAcademiaLesson={generateAcademiaLesson}
             setAcademiaExtraModal={setAcademiaExtraModal}
+            setAcademiaRegenModal={(payload)=>{
+              setAcademiaRegenLength(settings.explanationLength || 'complete');
+              setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
+              setAcademiaRegenQTypes(settings.questionTypes || ['direct']);
+              setAcademiaRegenQAlts(settings.numAlternatives || 5);
+              setAcademiaRegenReason('');
+              setAcademiaRegenModal(payload);
+            }}
             setDeleteId={setDeleteId}
             setAcademiaExportModal={setAcademiaExportModal}
             setOpenAnswerModal={setOpenAnswerModal}
@@ -4835,7 +5234,9 @@ export default function QuestionBankApp() {
                   <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx"/>
                   <input type="file" ref={imageInputRef} onChange={handleImageUpload} multiple className="hidden" accept="image/*"/>
                 </div>
-                {isBig()&&<div className={`text-xs p-3 rounded-lg flex gap-2 ${darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'}`}>⚠️ Material extenso — os primeiros ~45k tokens serão usados.</div>}
+                {isBig()&&<div className={`text-xs p-3 rounded-lg flex gap-2 ${darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'}`}>
+                  Material extenso — será processado em cerca de {materialRequestCount()} partes/requests.
+                </div>}
 
                 {/* Parâmetros de geração */}
                 <div>
@@ -4902,7 +5303,7 @@ export default function QuestionBankApp() {
                   </div>
                 )}
 
-                <button onClick={startCreation} disabled={isBusy||isUploading||!newSubName} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                <button onClick={startCreation} disabled={isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura')}
                 </button>
               </div>
@@ -4916,7 +5317,7 @@ export default function QuestionBankApp() {
                 </div>
                 <div className="flex gap-4">
                   <button onClick={()=>setCreatorStep(1)} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
-                  <button onClick={finalizeSub} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700">Confirmar e Salvar</button>
+                  <button onClick={finalizeSub} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700">Confirmar e Salvar</button>
                 </div>
               </div>
             )}
@@ -4964,9 +5365,9 @@ export default function QuestionBankApp() {
                     <button onClick={()=>academiaImageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
                     <button onClick={()=>academiaFileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
                   </div>
-                  <input type="file" ref={academiaFileInputRef} onChange={async(e)=>{
-                    const files=Array.from(e.target.files||[]);
-                    setIsUploading(true);
+	                  <input type="file" ref={academiaFileInputRef} onChange={async(e)=>{
+	                    const files=Array.from(e.target.files||[]);
+	                    setIsUploading(true);
                     const loaded=[];
                     for(const f of files){
                       try{
@@ -4975,14 +5376,14 @@ export default function QuestionBankApp() {
                         if(f.name.endsWith('.pdf')) content=await extractPdfText(ab);
                         else if(f.name.endsWith('.docx')) content=await extractDocxText(ab);
                         else content=await f.text();
-                        loaded.push({name:f.name,content:content.substring(0,MAX_MATERIAL_CHARS)});
+                        loaded.push({name:f.name,content});
                       }catch(err){loaded.push({name:f.name,content:`[Erro ao ler ${f.name}]`});}
                     }
                     setAcademiaUploadedFiles(p=>[...p,...loaded]);
                     setIsUploading(false);
                     e.target.value='';
-                  }} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx"/>
-                  <input type="file" ref={academiaImageInputRef} onChange={async(e)=>{
+	                  }} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx"/>
+	                  <input type="file" ref={academiaImageInputRef} onChange={async(e)=>{
                     const files=Array.from(e.target.files||[]);
                     const loaded=[];
                     for(const f of files){
@@ -4991,10 +5392,13 @@ export default function QuestionBankApp() {
                     }
                     setAcademiaUploadedImages(p=>[...p,...loaded]);
                     e.target.value='';
-                  }} multiple className="hidden" accept="image/*"/>
-                </div>
+	                  }} multiple className="hidden" accept="image/*"/>
+	                </div>
+	                {academiaMaterialRequestCount()>1&&<div className={`text-xs p-3 rounded-lg flex gap-2 ${darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'}`}>
+	                  Material extenso — será processado em cerca de {academiaMaterialRequestCount()} partes/requests.
+	                </div>}
 
-                {/* Parâmetros */}
+	                {/* Parâmetros */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros da Aula</div>
                   <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
@@ -5017,6 +5421,14 @@ export default function QuestionBankApp() {
                           className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-xs font-bold uppercase mb-2 opacity-40">Tamanho da aula gerada</label>
+                    <ExplanationLengthSelector
+                      value={settings.explanationLength || 'complete'}
+                      onChange={(length)=>{const ns={...settings,explanationLength:length};setSettings(ns);saveSettings(ns);}}
+                      darkMode={darkMode}
+                    />
                   </div>
                   {/* Alternativas — sempre visível, independente do autoMode */}
                   <div className="mt-3">
@@ -5052,7 +5464,7 @@ export default function QuestionBankApp() {
                   </div>
                 )}
 
-                <button onClick={startAcademiaCreation} disabled={isBusy||isUploading||!academiaSubName.trim()} className="w-full bg-yellow-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                <button onClick={startAcademiaCreation} disabled={isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy?<Spinner className="w-5 h-5 text-white"/>:<AcademiaIcon className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura da Aula')}
                 </button>
               </div>
@@ -5069,7 +5481,7 @@ export default function QuestionBankApp() {
                 </div>
                 <div className="flex gap-4">
                   <button onClick={()=>setAcademiaCreatorStep(1)} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
-                  <button onClick={finalizeAcademia} className="flex-[2] bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><AcademiaIcon className="w-5 h-5"/>Criar Academia</button>
+                  <button onClick={finalizeAcademia} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2"><AcademiaIcon className="w-5 h-5"/>Criar Academia</button>
                 </div>
               </div>
             )}
@@ -5093,7 +5505,7 @@ export default function QuestionBankApp() {
               <input value={pasteTopic} onChange={e=>setPasteTopic(e.target.value)} placeholder="Nome do Bloco — ex: Bloco 1" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
             </div>
             <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder="Cole as questões aqui..." className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-white border-gray-200'}`}/>
-            <button onClick={handlePasteImport} disabled={!pasteText.trim()} className="mt-4 w-full bg-yellow-600 text-white py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Salvar Importação</button>
+            <button onClick={handlePasteImport} disabled={!pasteText.trim()} className="mt-4 w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Salvar Importação</button>
           </div>
         )}
 
@@ -5107,7 +5519,11 @@ export default function QuestionBankApp() {
           })));
 
           const totalAnswered = favItems.filter(({topic,question})=>topic.answers?.[question.id]).length;
-          const totalCorrect  = favItems.filter(({topic,question})=>topic.answers?.[question.id]===question.options.find(o=>o.isCorrect)?.letter).length;
+          const totalCorrect  = favItems.filter(({topic,question})=>{
+            const answer = topic.answers?.[question.id];
+            if (question.isOpen) { try { return (JSON.parse(answer)?.score ?? 0) >= 70; } catch(e) { return false; } }
+            return answer===(question.options||[]).find(o=>o.isCorrect)?.letter;
+          }).length;
           const pct = totalAnswered>0 ? Math.round(totalCorrect/totalAnswered*100) : 0;
 
           const handleFavAnswer = async (subject, topic, qId, letter) => {
@@ -6009,7 +6425,7 @@ export default function QuestionBankApp() {
                       {/* MOBILE BOTTOM SHEET: 3 níveis */}
                       {mobileNavOpen&&(
                         <div className="fixed inset-0 z-[300] md:hidden" onClick={()=>setMobileNavOpen(false)}>
-                          <div className="absolute inset-0 bg-black/60"/>
+                          <div className="absolute inset-0 bg-black bg-opacity-80"/>
                           <div className={`absolute bottom-0 left-0 right-0 rounded-t-2xl overflow-hidden ${dm?'bg-gray-800':'bg-white'}`}
                             onClick={e=>e.stopPropagation()}>
                             <div className="flex justify-center pt-3 pb-1">
@@ -6456,8 +6872,9 @@ export default function QuestionBankApp() {
         {/* ── EXAM SETUP MODAL ── */}
         {examSetup!==null&&(
           // Bug 4: backdrop click closes modal
-          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 p-4" onClick={()=>{setExamSetup(null);setExamTopics([]);}}>
-            <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
+          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{setExamSetup(null);setExamTopics([]);}}>
+            <div className={`w-full max-w-2xl overflow-y-auto rounded-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
+              style={{maxHeight:'calc(100dvh - 6rem)'}}
               onClick={e=>e.stopPropagation()} // Bug 4: prevent backdrop close when clicking inside
             >
               <h2 className="text-2xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Zap className="w-7 h-7"/>Configurar Prova</h2>
@@ -6491,7 +6908,7 @@ export default function QuestionBankApp() {
                 <button onClick={()=>{setExamSetup(null);setExamTopics([]);}} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
                 <button
                   disabled={!examTopics.length}
-                  className="flex-1 bg-yellow-600 text-white py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50"
+                  className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!examTopics.length) return;
@@ -6532,14 +6949,20 @@ export default function QuestionBankApp() {
                 <Award className="w-16 h-16 mx-auto text-yellow-500 mb-4"/>
                 <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-4">{activeExam.timeLeft<=0?'Tempo Esgotado!':'Prova Encerrada!'}</h3>
                 {(()=>{
-                  const correct=activeExam.questions.filter(q=>activeExam.answers[q.id]===q.options.find(o=>o.isCorrect)?.letter).length;
+                  const correct=activeExam.questions.filter(q=>{
+                    const answer = activeExam.answers[q.id];
+                    if (q.isOpen) { try { return (JSON.parse(answer)?.score ?? 0) >= 70; } catch(e) { return false; } }
+                    return answer===(q.options||[]).find(o=>o.isCorrect)?.letter;
+                  }).length;
                   const skipped=activeExam.questions.filter(q=>activeExam.answers[q.id]==='SKIPPED').length;
                   const total=activeExam.questions.length; const pct=Math.round(correct/total*100);
                   const byTopic={};
                   activeExam.questions.forEach(q=>{
                     if(!byTopic[q._topicTitle])byTopic[q._topicTitle]={c:0,t:0,s:0};
                     byTopic[q._topicTitle].t++;
-                    if(activeExam.answers[q.id]===q.options.find(o=>o.isCorrect)?.letter) byTopic[q._topicTitle].c++;
+                    if(q.isOpen) {
+                      try { if ((JSON.parse(activeExam.answers[q.id])?.score ?? 0) >= 70) byTopic[q._topicTitle].c++; } catch(e) {}
+                    } else if(activeExam.answers[q.id]===(q.options||[]).find(o=>o.isCorrect)?.letter) byTopic[q._topicTitle].c++;
                     if(activeExam.answers[q.id]==='SKIPPED') byTopic[q._topicTitle].s++;
                   });
                   // Build data for insights
@@ -6571,7 +6994,7 @@ export default function QuestionBankApp() {
                           ))}
                         </div>
                       )}
-                      <button onClick={()=>{setActiveExam(null);setView('library');}} className="w-full bg-yellow-600 text-white py-3 rounded-xl font-bold hover:bg-yellow-700">Voltar</button>
+                      <button onClick={()=>{setActiveExam(null);setView('library');}} className="w-full bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700">Voltar</button>
                     </div>
                   );
                 })()}
@@ -6678,7 +7101,7 @@ export default function QuestionBankApp() {
               </div>
             )}
 
-            <button onClick={()=>{saveSettings(settings);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-4 rounded-xl font-bold">Salvar</button>
+            <button onClick={()=>{saveSettings(settings);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold">Salvar</button>
           </div>
         )}
       </main>
@@ -6764,8 +7187,8 @@ export default function QuestionBankApp() {
 
       {/* ── RESET COURSE MODAL ── */}
       {resetCourseModal&&(
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 p-4">
-          <div className={`w-full max-w-sm rounded-2xl border p-8 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+        <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
+          <div className={`w-full max-w-sm rounded-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
             <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${darkMode?'bg-red-900/30':'bg-red-100'}`}>
               <Trash2 className="w-6 h-6 text-red-500"/>
             </div>
@@ -6802,10 +7225,84 @@ export default function QuestionBankApp() {
         </div>
       )}
 
+      {/* ── ACADEMIA REGENERATE MODAL ── */}
+      {academiaRegenModal&&(
+        <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setAcademiaRegenModal(null)}>
+          <div onClick={e=>e.stopPropagation()} className={`w-full max-w-lg rounded-2xl p-7 border overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
+            <h3 className="text-xl font-serif font-bold text-yellow-600 mb-1 flex items-center gap-2"><RotateCcw className="w-5 h-5"/>Regenerar aula</h3>
+            <p className="text-sm mb-6 opacity-60">A aula e as questões de fixação atuais serão substituídas.</p>
+            <div className="space-y-5">
+              <div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">Profundidade da aula</div>
+                <ExplanationLengthSelector value={academiaRegenLength} onChange={setAcademiaRegenLength} darkMode={darkMode}/>
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">Por que regenerar? <span className="normal-case font-normal opacity-70">(opcional)</span></div>
+                <textarea
+                  value={academiaRegenReason}
+                  onChange={e=>setAcademiaRegenReason(e.target.value)}
+                  placeholder="Ex: ficou prolixo, faltaram exemplos de prova, quero mais foco em tratamento..."
+                  className={`w-full h-24 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}
+                />
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo das questões de fixação</div>
+                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true}/>
+              </div>
+              {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
+                      <button key={opt.k} onClick={()=>setAcademiaRegenQStyle(opt.k)}
+                        className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${academiaRegenQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                <div className="flex gap-2">
+                  {[4,5].map(n=>(
+                    <button key={n} onClick={()=>setAcademiaRegenQAlts(n)}
+                      className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${academiaRegenQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                      {n} (A-{n===4?'D':'E'})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-7">
+              <button onClick={()=>setAcademiaRegenModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+              <button onClick={()=>{
+                const regenSettings = {
+                  explanationLength: academiaRegenLength,
+                  regenReason: academiaRegenReason.trim(),
+                  questionStyle: academiaRegenQStyle,
+                  questionTypes: academiaRegenQTypes,
+                  numAlternatives: academiaRegenQAlts,
+                };
+                const { regenReason, ...persistedSettings } = regenSettings;
+                const ns = { ...settings, ...persistedSettings };
+                saveSettings(ns);
+                const { topic, subject } = academiaRegenModal;
+                setAcademiaRegenModal(null);
+                setAcademiaRegenReason('');
+                generateAcademiaLesson(topic, subject, regenSettings);
+              }} className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2">
+                <Sparkles className="w-4 h-4"/>Regenerar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── ACADEMIA EXTRA BATTERY MODAL ── */}
       {academiaExtraModal&&(
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 p-4">
-          <div className={`w-full max-w-md rounded-2xl p-8 border overflow-y-auto max-h-[90vh] ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`}>
+        <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
+          <div className={`w-full max-w-md rounded-2xl p-8 border overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
             <h3 className="text-xl font-serif font-bold text-yellow-600 mb-1">Bateria Extra</h3>
             <p className={`text-sm mb-6 opacity-60`}>Gera novas questões sobre todos os subtópicos de <strong>{academiaExtraModal.topic.title}</strong>.</p>
             <div className="space-y-5">
@@ -6846,7 +7343,7 @@ export default function QuestionBankApp() {
                 const {topic,subject} = academiaExtraModal;
                 setAcademiaExtraModal(null);
                 generateAcademiaExtraBattery(topic, subject, extraSettings);
-              }} className="flex-[2] py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2">
+              }} className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2">
                 <Zap className="w-4 h-4"/>Gerar
               </button>
             </div>
@@ -6856,8 +7353,8 @@ export default function QuestionBankApp() {
 
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
-          <div className={`w-full max-w-md rounded-2xl p-8 border-2 border-yellow-600 overflow-y-auto ${darkMode?'bg-gray-900 text-white':'bg-white text-gray-900'}`} style={{maxHeight:'90vh'}}>
+        <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
+          <div className={`w-full max-w-md rounded-2xl p-8 border-2 border-yellow-600 overflow-y-auto ${darkMode?'bg-gray-900 text-white':'bg-white text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
             <div className="flex flex-col items-center text-center">
               <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4"><RotateCcw className="w-8 h-8 text-yellow-600"/></div>
               <h3 className="text-2xl font-serif font-bold mb-2">Recriar Bloco</h3>
@@ -6865,7 +7362,7 @@ export default function QuestionBankApp() {
               <textarea value={regenPrompt} onChange={e=>setRegenPrompt(e.target.value)} placeholder="Foco específico (opcional)..." className={`w-full h-20 p-3 rounded-lg border resize-none outline-none mb-6 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
               <div className="flex gap-4 w-full">
                 <button onClick={()=>setRegenModal(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800':'bg-gray-100'}`}>Cancelar</button>
-                <button onClick={()=>{setRegenModal(false);generateBatch(activeTopic.id,regenPrompt);setRegenPrompt('');}} className="flex-1 py-3 bg-yellow-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"><Sparkles className="w-4 h-4"/>Recriar</button>
+                <button onClick={()=>{setRegenModal(false);generateBatch(activeTopic.id,regenPrompt);setRegenPrompt('');}} className="flex-1 px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"><Sparkles className="w-4 h-4"/>Recriar</button>
               </div>
             </div>
           </div>
