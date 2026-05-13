@@ -33,7 +33,7 @@ const db   = getFirestore(app);
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
 const Landmark    = ic('<polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/>');
 const Flame       = ic('<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>');
-const ScrollText  = ic('<path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5"/><path d="M15 12h-5"/>');
+const BlockIcon   = ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>');
 const FolderIcon  = ic('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>');
 const Feather     = ic('<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="6.5"/>');
 const CheckCircle2= ic('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>');
@@ -75,6 +75,7 @@ const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><po
 const PlayIcon    = ic('<polygon points="5 3 19 12 5 21 5 3"/>');
 const GraduationCap = ic('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>');
 const CheckIcon   = ic('<polyline points="20 6 9 17 4 12"/>');
+const GripIcon    = ic('<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>');
 const VideoIcon   = ic('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>');
 const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>');
 const SkipBack    = ic('<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>');
@@ -644,6 +645,265 @@ const loadScript = (src, gv) => new Promise((res,rej)=>{ if(window[gv]) return r
 const extractPdfText = async (ab) => { const lib = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js','pdfjsLib'); lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; const pdf=await lib.getDocument({data:ab}).promise; let t=''; for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const c=await pg.getTextContent();t+=c.items.map(x=>x.str).join(' ')+'\n';} return t; };
 const extractDocxText = async (ab) => { const m = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js','mammoth'); const r=await m.extractRawText({arrayBuffer:ab}); return r.value; };
 
+const makeGeminiKeyId = () => `gemini_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const uniqueGeminiValues = (items = []) => {
+  const seen = new Set();
+  return items
+    .map(v => String(v || '').trim())
+    .filter(v => {
+      if (!v || seen.has(v)) return false;
+      seen.add(v);
+      return true;
+    });
+};
+const normalizeGeminiKeys = (settings = {}) => {
+  const fromArray = Array.isArray(settings.geminiKeys) ? settings.geminiKeys : [];
+  const legacyKeys = uniqueGeminiValues([
+    settings.apiKey1 || settings.apiKey || '',
+    settings.apiKey2 || '',
+    settings.apiKey3 || '',
+    ...(Array.isArray(settings.geminiKeysBackup) ? settings.geminiKeysBackup.map(k => k?.value || k?.key || k) : []),
+  ]);
+  const fromArrayHasValues = fromArray.some(item => {
+    const obj = typeof item === 'string' ? { value:item } : (item || {});
+    return String(obj.value || obj.key || '').trim();
+  });
+
+  let keys = (!fromArrayHasValues && legacyKeys.length ? [] : fromArray).map((item, i) => {
+    const obj = typeof item === 'string' ? { value:item } : (item || {});
+    return {
+      id: obj.id || `gemini_${i + 1}`,
+      name: obj.name || `Chave ${i + 1}`,
+      value: obj.value || obj.key || '',
+    };
+  });
+
+  if (!keys.length && legacyKeys.length) {
+    keys = legacyKeys.map((value, i) => ({ id:`gemini_${i + 1}`, name:`Chave ${i + 1}`, value }));
+  }
+
+  if (!keys.length) {
+    keys = [
+      { id:'gemini_1', name:'Chave 1', value:settings.apiKey1 || settings.apiKey || '' },
+      { id:'gemini_2', name:'Chave 2', value:settings.apiKey2 || '' },
+      { id:'gemini_3', name:'Chave 3', value:settings.apiKey3 || '' },
+    ];
+  }
+
+  keys = keys
+    .map((k, i) => ({ id:k.id || `gemini_${i + 1}`, name:k.name || `Chave ${i + 1}`, value:k.value || '' }))
+    .filter(k => k.value.trim());
+
+  return keys.length ? keys : [{ id:'gemini_1', name:'Chave 1', value:'' }];
+};
+const readLocalGeminiKeyBackup = (name = '') => {
+  if (!name) return [];
+  const candidates = [
+    `qb_settings_${name}`,
+    `qb_settings_${name.toLowerCase()}`,
+    `qb_settings_${name.toUpperCase()}`,
+  ];
+  for (const key of candidates) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const keys = getConfiguredGeminiKeys(parsed).map(k => k.value);
+      if (keys.length) return keys.map((value, i) => ({ id:`gemini_backup_${i + 1}`, name:`Chave ${i + 1}`, value }));
+    } catch(e) {}
+  }
+  return [];
+};
+const buildSettingsWithGeminiRecovery = (rawSettings = {}, topLevelApiKey = '', usernameForBackup = '') => {
+  const localBackup = readLocalGeminiKeyBackup(usernameForBackup);
+  const topLevelKeys = topLevelApiKey ? [{ id:'gemini_doc_api_key', name:'Chave 1', value:topLevelApiKey }] : [];
+  return withGeminiKeys({ ...defaultSettings, ...rawSettings, apiKey:rawSettings.apiKey || topLevelApiKey }, [
+    ...normalizeGeminiKeys({ ...rawSettings, apiKey:rawSettings.apiKey || topLevelApiKey }),
+    ...topLevelKeys,
+    ...localBackup,
+  ]);
+};
+const getActiveGeminiKeyId = (settings = {}, keys = normalizeGeminiKeys(settings)) => {
+  if (settings.activeKeyId && keys.some(k => k.id === settings.activeKeyId)) return settings.activeKeyId;
+  const idx = Math.max(0, Number(settings.activeKeyIndex || 1) - 1);
+  return keys[idx]?.id || keys.find(k => k.value.trim())?.id || keys[0]?.id;
+};
+const withGeminiKeys = (settings = {}, keys = normalizeGeminiKeys(settings), requestedActiveId = null) => {
+  const seenValues = new Set();
+  const cleaned = keys
+    .map((k, i) => ({
+      id: k.id && k.id !== 'new' ? k.id : makeGeminiKeyId(),
+      name: k.name || `Chave ${i + 1}`,
+      value: k.value || '',
+    }))
+    .filter(k => {
+      const value = k.value.trim();
+      if (!value || seenValues.has(value)) return false;
+      seenValues.add(value);
+      return true;
+    });
+  const finalKeys = cleaned.length ? cleaned : [{ id:'gemini_1', name:'Chave 1', value:'' }];
+  const currentActive = requestedActiveId || getActiveGeminiKeyId(settings, finalKeys);
+  const activeHasValue = finalKeys.some(k => k.id === currentActive && k.value.trim());
+  const activeKeyId = activeHasValue ? currentActive : (finalKeys.find(k => k.value.trim())?.id || finalKeys[0].id);
+  const activeKeyIndex = Math.max(1, finalKeys.findIndex(k => k.id === activeKeyId) + 1);
+  return {
+    ...settings,
+    geminiKeys: finalKeys,
+    activeKeyId,
+    activeKeyIndex,
+    apiKey: finalKeys[0]?.value || '',
+    apiKey1: finalKeys[0]?.value || '',
+    apiKey2: finalKeys[1]?.value || '',
+    apiKey3: finalKeys[2]?.value || '',
+  };
+};
+const getConfiguredGeminiKeys = (settings = {}) =>
+  normalizeGeminiKeys(settings).filter(k => k.value.trim()).map((k, i) => ({ ...k, n:i + 1, k:k.value.trim() }));
+const getGeminiKeyRows = (settings = {}) => {
+  const rows = normalizeGeminiKeys(settings);
+  const last = rows[rows.length - 1];
+  return last?.value.trim() ? [...rows, { id:'new', name:'', value:'', isNew:true }] : rows;
+};
+
+const escapeXml = (s = '') => String(s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+const htmlishToText = (s = '') => String(s)
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/p>/gi, '\n')
+  .replace(/<[^>]+>/g, '')
+  .replace(/\*\*/g, '')
+  .trim();
+const sanitizeFileName = (name = 'export') =>
+  (name || 'export').substring(0, 70).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() || 'export';
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+const docxRuns = (text = '', opts = {}) => {
+  const chunks = String(text).split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+  return chunks.map(chunk => {
+    const bold = opts.bold || (/^\*\*[^*]+\*\*$/.test(chunk));
+    const clean = chunk.replace(/^\*\*|\*\*$/g, '');
+    const props = [
+      bold ? '<w:b/>' : '',
+      opts.color ? `<w:color w:val="${opts.color}"/>` : '',
+      opts.size ? `<w:sz w:val="${opts.size}"/>` : '',
+      opts.italic ? '<w:i/>' : '',
+    ].join('');
+    return `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ''}<w:t xml:space="preserve">${escapeXml(clean)}</w:t></w:r>`;
+  }).join('');
+};
+const docxParagraph = (text = '', opts = {}) => {
+  const lines = String(text || '').split(/\n+/).filter(line => line.trim());
+  if (!lines.length && !opts.pageBreakBefore) return '';
+  return lines.map((line, idx) => {
+    const pPr = [
+      opts.pageBreakBefore && idx === 0 ? '<w:pageBreakBefore/>' : '',
+      opts.heading ? `<w:outlineLvl w:val="${opts.heading - 1}"/>` : '',
+      opts.center ? '<w:jc w:val="center"/>' : '',
+      `<w:spacing w:after="${opts.after ?? 120}" w:line="276" w:lineRule="auto"/>`,
+      opts.border ? '<w:pBdr><w:bottom w:val="single" w:sz="8" w:space="4" w:color="E5E7EB"/></w:pBdr>' : '',
+    ].join('');
+    return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ''}${docxRuns(line, opts)}</w:p>`;
+  }).join('');
+};
+const docxBullet = (text = '') =>
+  `<w:p><w:pPr><w:ind w:left="720" w:hanging="360"/><w:spacing w:after="60"/></w:pPr><w:r><w:t xml:space="preserve">• ${escapeXml(htmlishToText(text))}</w:t></w:r></w:p>`;
+const docxTable = (rows = []) => {
+  if (!rows.length) return '';
+  return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="C7C7C7"/><w:left w:val="single" w:sz="4" w:color="C7C7C7"/><w:bottom w:val="single" w:sz="4" w:color="C7C7C7"/><w:right w:val="single" w:sz="4" w:color="C7C7C7"/><w:insideH w:val="single" w:sz="4" w:color="C7C7C7"/><w:insideV w:val="single" w:sz="4" w:color="C7C7C7"/></w:tblBorders></w:tblPr>${rows.map(row => `<w:tr>${row.map(cell => `<w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>${docxParagraph(cell, { after:60 })}</w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`;
+};
+const markdownToDocx = (md = '') => {
+  const lines = String(md || '').split('\n');
+  let xml = '';
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    if (/^\s*\|.+\|\s*$/.test(line)) {
+      const tableLines = [];
+      while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) tableLines.push(lines[i++]);
+      const rows = tableLines
+        .filter(l => !/^\s*\|[-:\s|]+\|\s*$/.test(l))
+        .map(row => row.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').split(/\s*\|\s*/).map(htmlishToText));
+      xml += docxTable(rows);
+      continue;
+    }
+    if (/^\s*[-*•]\s/.test(line)) {
+      while (i < lines.length && /^\s*[-*•]\s/.test(lines[i])) xml += docxBullet(lines[i++].replace(/^\s*[-*•]\s/, ''));
+      continue;
+    }
+    if (!line.trim()) { i++; continue; }
+    xml += docxParagraph(line, { after:80 });
+    i++;
+  }
+  return xml;
+};
+let crcTable = null;
+const makeCrcTable = () => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+};
+const crc32 = (bytes) => {
+  crcTable = crcTable || makeCrcTable();
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+};
+const u16 = (n) => [n & 255, (n >>> 8) & 255];
+const u32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+const createZipBlob = (entries, type) => {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  entries.forEach(entry => {
+    const name = enc.encode(entry.name);
+    const data = enc.encode(entry.content);
+    const crc = crc32(data);
+    const local = new Uint8Array([
+      ...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0),
+    ]);
+    chunks.push(local, name, data);
+    central.push({ name, crc, size:data.length, offset });
+    offset += local.length + name.length + data.length;
+  });
+  const centralStart = offset;
+  central.forEach(entry => {
+    const head = new Uint8Array([
+      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(entry.crc), ...u32(entry.size), ...u32(entry.size), ...u16(entry.name.length),
+      ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(entry.offset),
+    ]);
+    chunks.push(head, entry.name);
+    offset += head.length + entry.name.length;
+  });
+  const centralSize = offset - centralStart;
+  chunks.push(new Uint8Array([
+    ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length),
+    ...u32(centralSize), ...u32(centralStart), ...u16(0),
+  ]));
+  return new Blob(chunks, { type });
+};
+const createDocxBlob = (bodyXml) => {
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyXml}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  return createZipBlob([
+    { name:'[Content_Types].xml', content:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>` },
+    { name:'_rels/.rels', content:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name:'word/document.xml', content:documentXml },
+  ], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+};
+
 const parseData = (text, namespace = '') => {
   const norm = text.replace(/\r\n/g,'\n');
   const questionStartRe = /(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im;
@@ -952,6 +1212,15 @@ const sortSubjects = (subjects) =>
     const bi = SUBJECT_ORDER.findIndex(s => b.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(b.toLowerCase()));
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
+
+const libraryOrderValue = (item) => Number.isFinite(Number(item?.sortOrder))
+  ? Number(item.sortOrder)
+  : -(Number(item?.createdAt || item?.id) || 0);
+const sortLibraryItems = (items) => [...items].sort((a,b)=>{
+  const d = libraryOrderValue(a) - libraryOrderValue(b);
+  if (d) return d;
+  return String(a?.title || '').localeCompare(String(b?.title || ''), 'pt');
+});
 
 // Short display name for a topic key: "GIN 6 - IST" → "Ist"
 const shortTopicName = (key) => {
@@ -2329,14 +2598,98 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body>${body}</body></html>`;
   };
 
+  const buildDocx = () => {
+    let body = '';
+    body += docxParagraph(topic.title || 'Academia', { bold:true, size:32, color:'92400E', after:80, border:true });
+    body += docxParagraph(`${subject?.title || ''} • Ágora do Saber`, { size:20, color:'6B7280', after:260 });
+
+    const allFixqs = subtopics.flatMap((_,i) => topic.fixationQuestions?.[i]||[]);
+    const extraQs  = (topic.extraBattery||[]).flatMap(b => b.questions||b);
+
+    const renderQuestion = (q, idx, showAnswer) => {
+      let xml = docxParagraph(`Questão ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
+      xml += docxParagraph(q.statement || '', { after:120 });
+      (q.options || []).forEach(o => {
+        xml += docxParagraph(`${o.letter}) ${o.text || ''}`, {
+          after:60,
+          bold: showAnswer && o.isCorrect,
+          color: showAnswer && o.isCorrect ? '065F46' : undefined,
+        });
+      });
+      if (showAnswer) {
+        const corr = (q.options || []).find(o => o.isCorrect);
+        if (corr) xml += docxParagraph(`Gabarito: ${corr.letter}) ${corr.text || ''}`, { bold:true, color:'15803D', after:80 });
+        xml += docxParagraph(q.explanation || q.expectedAnswer || '', { color:'374151', after:220 });
+      }
+      return xml;
+    };
+    const renderGabaritoDocx = (questions) => questions.map((q, qi) => {
+      const corr = (q.options || []).find(o => o.isCorrect);
+      return docxParagraph(`Q${qi + 1}. ${corr ? `${corr.letter}) ${corr.text || ''}` : ''}`, { bold:true, color:'065F46', after:40 }) +
+        docxParagraph(q.explanation || q.expectedAnswer || '', { color:'374151', after:160 });
+    }).join('');
+    const renderSections = (start, end) => {
+      let xml = '';
+      for (let si = start; si < end; si++) {
+        const section = topic.lessonSections?.[si];
+        if (!hideSubtitles) {
+          xml += docxParagraph(`${String(si - start + 1).padStart(2, '0')}. ${section?.title || subtopics[si] || ''}`, { bold:true, color:'92400E', after:80 });
+        }
+        xml += markdownToDocx(section?.content || '');
+      }
+      return xml;
+    };
+
+    if (!isFolder) {
+      if (lessonMode === 'interleaved') {
+        for (let si = 0; si < subtopics.length; si++) {
+          body += renderSections(si, si + 1);
+          if (answerMode !== 'end') (topic.fixationQuestions?.[si] || []).forEach((q, qi) => { body += renderQuestion(q, qi, answerMode === 'after'); });
+        }
+        if (answerMode === 'end' && allFixqs.length) {
+          body += docxParagraph('Questões de Fixação', { bold:true, size:28, pageBreakBefore:true, color:'92400E' });
+          allFixqs.forEach((q, qi) => { body += renderQuestion(q, qi, false); });
+          body += docxParagraph('Gabarito', { bold:true, size:28, pageBreakBefore:true, color:'92400E' }) + renderGabaritoDocx(allFixqs);
+        }
+      } else {
+        body += renderSections(0, subtopics.length);
+        if (allFixqs.length) {
+          body += docxParagraph('Questões de Fixação', { bold:true, size:28, pageBreakBefore:true, color:'92400E' });
+          allFixqs.forEach((q, qi) => { body += renderQuestion(q, qi, answerMode === 'after'); });
+          if (answerMode === 'end') body += docxParagraph('Gabarito', { bold:true, size:28, pageBreakBefore:true, color:'92400E' }) + renderGabaritoDocx(allFixqs);
+        }
+      }
+    } else {
+      boundaries.forEach((b, bi) => {
+        const topicFixqs = Array.from({length: b.end - b.start}, (_, i) => topic.fixationQuestions?.[b.start + i] || []).flat();
+        body += docxParagraph(b.title, { bold:true, size:28, color:'374151', pageBreakBefore:bi > 0 });
+        body += renderSections(b.start, b.end);
+        if (qPlace === 'topic' && topicFixqs.length) {
+          body += docxParagraph(`Questões — ${b.title}`, { bold:true, color:'92400E' });
+          topicFixqs.forEach((q, qi) => { body += renderQuestion(q, qi, answerMode === 'after'); });
+          if (answerMode === 'end') body += docxParagraph(`Gabarito — ${b.title}`, { bold:true, color:'92400E' }) + renderGabaritoDocx(topicFixqs);
+        }
+      });
+      if (qPlace === 'end' && allFixqs.length) {
+        body += docxParagraph('Questões de Fixação', { bold:true, size:28, pageBreakBefore:true, color:'92400E' });
+        allFixqs.forEach((q, qi) => { body += renderQuestion(q, qi, answerMode === 'after'); });
+        if (answerMode === 'end') body += docxParagraph('Gabarito', { bold:true, size:28, pageBreakBefore:true, color:'92400E' }) + renderGabaritoDocx(allFixqs);
+      }
+    }
+
+    if (extraQs.length) {
+      body += docxParagraph('Baterias Extras', { bold:true, size:28, pageBreakBefore:true, color:'92400E' });
+      extraQs.forEach((q, qi) => { body += renderQuestion(q, qi, answerMode !== 'none'); });
+    }
+    return body;
+  };
+
   const handleExport = () => {
     const html = buildHtml();
     if (fmt==='pdf') {
       const w = window.open('','_blank'); w.document.write(html); w.document.close(); w.print();
     } else {
-      const blob = new Blob([`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'></head><body>${html}</body></html>`],{type:'application/msword'});
-      const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
-      a.download=`${(topic.title||'Academia').substring(0,40)}.doc`; a.click();
+      downloadBlob(createDocxBlob(buildDocx()), `${sanitizeFileName(topic.title || 'Academia')}.docx`);
     }
     onClose();
   };
@@ -2398,7 +2751,7 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
 
         <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Formato</p>
         <div className="flex gap-3 mb-8">
-          {[{k:'pdf',l:'📄 PDF'},{k:'word',l:'📘 Word (.doc)'}].map(f=>(
+          {[{k:'pdf',l:'📄 PDF'},{k:'word',l:'📘 Word (.docx)'}].map(f=>(
             <button key={f.k} onClick={()=>setFmt(f.k)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${fmt===f.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400':'border-gray-200 text-gray-600')}`}>{f.l}</button>
           ))}
         </div>
@@ -2425,11 +2778,11 @@ const ExportModal = ({ topic, subject, onClose, darkMode }) => {
 <p style="color:#6b7280;font-size:13px;font-family:sans-serif">${qs.length} questões • ${subject?.title||''} • Ágora do Saber</p>`;
 
     if (mode==='blank') {
-      qs.forEach(q => {
+      qs.forEach((q, idx) => {
         body += `<div style="margin-bottom:28px;page-break-inside:avoid;border-bottom:1px solid #e5e7eb;padding-bottom:16px">
-<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 4px">Questão ${q.id}</p>
+<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 4px">Questão ${idx + 1}</p>
 <p style="font-size:15px;margin:8px 0 12px;line-height:1.6">${escape(q.statement)}</p>
-${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
+${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
 <div style="height:60px;border-bottom:1px dashed #e5e7eb;margin-top:8px"></div>
 </div>`;
       });
@@ -2440,9 +2793,9 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
       qs.forEach((q, idx) => {
         const isLast = idx === qs.length - 1;
         body += `<div style="margin-bottom:0;page-break-inside:avoid">
-<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 4px">Questão ${q.id}</p>
+<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 4px">Questão ${idx + 1}</p>
 <p style="font-size:15px;margin:8px 0 12px;line-height:1.6">${escape(q.statement)}</p>
-${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
+${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
 </div>`;
         // Spacer — big enough so the answer below isn't accidentally seen
         body += `<div style="border-top:2px dashed #e5e7eb;margin:32px 0 8px;padding-top:8px">
@@ -2450,26 +2803,26 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
 </div>`;
         // Answer + explanation
         body += `<div style="margin-bottom:${isLast?'16px':'48px'};padding:14px 16px;background:#f0fdf4;border-radius:8px;border-left:4px solid #22c55e;page-break-inside:avoid">
-<p style="font-weight:bold;color:#15803d;margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em">✓ Gabarito — Questão ${q.id}</p>
-${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;${o.isCorrect?'background:#d1fae5;font-weight:bold;color:#065f46;border:1px solid #6ee7b7':'border:1px solid transparent;color:#6b7280'}">${o.letter}) ${escape(o.text)}</div>`).join('')}
+<p style="font-weight:bold;color:#15803d;margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em">✓ Gabarito — Questão ${idx + 1}</p>
+${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;${o.isCorrect?'background:#d1fae5;font-weight:bold;color:#065f46;border:1px solid #6ee7b7':'border:1px solid transparent;color:#6b7280'}">${o.letter}) ${escape(o.text)}</div>`).join('')}
 <div style="background:#fef3c7;padding:12px 16px;margin-top:10px;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;font-size:13px;line-height:1.6">${escape(q.explanation)}</div>
 </div>
 ${!isLast ? '<hr style="border:none;border-top:3px solid #e5e7eb;margin:8px 0 40px">' : ''}`;
       });
     } else { // exam mode
       body += '<h2 style="margin-top:24px;font-family:Georgia,serif;color:#374151">QUESTÕES</h2>';
-      qs.forEach(q => {
+      qs.forEach((q, idx) => {
         body += `<div style="margin-bottom:28px;page-break-inside:avoid">
-<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-family:sans-serif;margin:0 0 4px">Questão ${q.id}</p>
+<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-family:sans-serif;margin:0 0 4px">Questão ${idx + 1}</p>
 <p style="font-size:15px;margin:8px 0 12px;line-height:1.6">${escape(q.statement)}</p>
-${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
+${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
 </div>`;
       });
       body += '<div style="page-break-before:always"><h2 style="font-family:Georgia,serif;color:#92400e;border-bottom:2px solid #92400e;padding-bottom:8px">GABARITO E COMENTÁRIOS</h2>';
-      qs.forEach(q => {
+      qs.forEach((q, idx) => {
       const corr = (q.options || []).find(o=>o.isCorrect);
         body += `<div style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb">
-<p style="font-weight:bold;margin:0 0 4px;font-size:13px">Questão ${q.id}: <span style="color:#065f46">${corr?.letter}) ${escape(corr?.text||'')}</span></p>
+<p style="font-weight:bold;margin:0 0 4px;font-size:13px">Questão ${idx + 1}: <span style="color:#065f46">${corr?.letter}) ${escape(corr?.text||'')}</span></p>
 <p style="font-size:12px;margin:0;color:#374151;line-height:1.5">${escape(q.explanation)}</p>
 </div>`;
       });
@@ -2478,15 +2831,55 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Georgia,serif;max-width:800px;margin:0 auto;padding:24px;color:#111}@media print{body{padding:10px}}</style></head><body>${body}</body></html>`;
   };
 
+  const buildDocx = () => {
+    const qs = topic.questions || [];
+    let body = docxParagraph(topic.title || 'Exportar', { bold:true, size:32, color:'92400E', after:80, border:true });
+    body += docxParagraph(`${qs.length} questões • ${subject?.title || ''} • Ágora do Saber`, { size:20, color:'6B7280', after:260 });
+    const renderQuestion = (q, idx, opts = {}) => {
+      let xml = docxParagraph(`Questão ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
+      xml += docxParagraph(q.statement || '', { after:120 });
+      (q.options || []).forEach(o => {
+        xml += docxParagraph(`${o.letter}) ${o.text || ''}`, {
+          after:60,
+          bold: opts.showAnswer && o.isCorrect,
+          color: opts.showAnswer && o.isCorrect ? '065F46' : undefined,
+        });
+      });
+      if (opts.blank) xml += docxParagraph('Resposta: ________________________________________________', { color:'9CA3AF', after:220 });
+      return xml;
+    };
+    const renderAnswer = (q, idx) => {
+      const corr = (q.options || []).find(o => o.isCorrect);
+      let xml = docxParagraph(`Gabarito — Questão ${idx + 1}`, { bold:true, color:'15803D', after:60 });
+      if (corr) xml += docxParagraph(`${corr.letter}) ${corr.text || ''}`, { bold:true, color:'065F46', after:60 });
+      xml += docxParagraph(q.explanation || q.expectedAnswer || '', { color:'374151', after:240 });
+      return xml;
+    };
+
+    if (mode === 'blank') {
+      qs.forEach((q, idx) => { body += renderQuestion(q, idx, { blank:true }); });
+    } else if (mode === 'study') {
+      qs.forEach((q, idx) => {
+        body += renderQuestion(q, idx);
+        body += docxParagraph('GABARITO', { center:true, color:'D1D5DB', size:18, after:80, border:true });
+        body += renderAnswer(q, idx);
+      });
+    } else {
+      body += docxParagraph('QUESTÕES', { bold:true, size:26, color:'374151' });
+      qs.forEach((q, idx) => { body += renderQuestion(q, idx); });
+      body += docxParagraph('GABARITO E COMENTÁRIOS', { bold:true, size:28, color:'92400E', pageBreakBefore:true, border:true });
+      qs.forEach((q, idx) => { body += renderAnswer(q, idx); });
+    }
+    return body;
+  };
+
   const handleExport = () => {
     const html = buildHtml();
     if (fmt==='pdf') {
       const w = window.open('','_blank');
       w.document.write(html); w.document.close(); w.print();
     } else {
-      const blob = new Blob([`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'></head><body>${buildHtml()}</body></html>`],{type:'application/msword'});
-      const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
-      a.download=`${topic.title.substring(0,40)}.doc`; a.click();
+      downloadBlob(createDocxBlob(buildDocx()), `${sanitizeFileName(topic.title || 'questoes')}.docx`);
     }
     onClose();
   };
@@ -2510,7 +2903,7 @@ ${q.options.map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;
           ))}
         </div>
         <div className="flex gap-3 mb-6">
-          {[{k:'pdf',l:'📄 PDF'},{k:'word',l:'📘 Word (.doc)'}].map(f=>(
+          {[{k:'pdf',l:'📄 PDF'},{k:'word',l:'📘 Word (.docx)'}].map(f=>(
             <button key={f.k} onClick={()=>setFmt(f.k)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${fmt===f.k?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400':'border-gray-200 text-gray-600')}`}>{f.l}</button>
           ))}
         </div>
@@ -2797,7 +3190,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete' };
 
 
 // ─── ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────────
@@ -3111,6 +3504,7 @@ export default function QuestionBankApp() {
   // ── Navigation ────────────────────────────────────────────────────────────
   const [view, setView]                 = useState('library');
   const [libFilter, setLibFilter]       = useState('gemini');
+  const [activeFolderId, setActiveFolderId] = useState(null);
   const [activeSubjectId, setActiveSubjectId] = useState(null);
   const [activeTopicId, setActiveTopicId]     = useState(null);
 
@@ -3142,6 +3536,15 @@ export default function QuestionBankApp() {
   const [editingSubName, setEditingSubName] = useState('');
   const [editingTopic, setEditingTopic] = useState(null);
   const [editingTopicName, setEditingTopicName] = useState('');
+  const [newFolderModal, setNewFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderParentId, setNewFolderParentId] = useState(null);
+  const [libraryOpenFolders, setLibraryOpenFolders] = useState({});
+  const [libraryDrag, setLibraryDrag] = useState(null);
+  const [moveNewFolderName, setMoveNewFolderName] = useState('');
+  const [moveSubjectModal, setMoveSubjectModal] = useState(null);
+  const [folderReviewModal, setFolderReviewModal] = useState(null);
+  const [folderReviewConfig, setFolderReviewConfig] = useState({ total:30, perTopic:5, selected:{} });
 
   // ── Paste ─────────────────────────────────────────────────────────────────
   const [pasteText, setPasteText]     = useState('');
@@ -3191,6 +3594,8 @@ export default function QuestionBankApp() {
   const [examTime, setExamTime]         = useState(60);
   const [examQCount, setExamQCount]     = useState(30);
   const [examTopics, setExamTopics]     = useState([]);
+  const [examOpenFolders, setExamOpenFolders] = useState({});
+  const [examOpenSubjects, setExamOpenSubjects] = useState({});
   const [examBlind, setExamBlind]       = useState(false); // show corrections after finish
 
   // Stats
@@ -3666,12 +4071,12 @@ export default function QuestionBankApp() {
         setUser(u);
         if (u.isAnonymous) {
           const ln=localStorage.getItem('qb_username');
-          if (ln) { setUsername(ln.toUpperCase()); try{const s=localStorage.getItem(`qb_settings_${ln}`);if(s)setSettings({...defaultSettings,...JSON.parse(s)});}catch(e){} }
+          if (ln) { setUsername(ln.toUpperCase()); try{const s=localStorage.getItem(`qb_settings_${ln}`);if(s)setSettings(buildSettingsWithGeminiRecovery(JSON.parse(s), '', ln));}catch(e){} }
           else setLoginView('signup');
         } else {
           try {
             const ud=await getDoc(doc(db,'users',u.uid));
-            if(ud.exists()){const d=ud.data();setUsername(d.username.toUpperCase());setSettings({...defaultSettings,...(d.settings||{}),apiKey:d.apiKey||''});}
+            if(ud.exists()){const d=ud.data();const uname=d.username||u.email||'';setUsername(d.username.toUpperCase());setSettings(buildSettingsWithGeminiRecovery(d.settings||{}, d.apiKey||'', uname));}
             else setLoginView('signup');
           } catch(e){}
         }
@@ -3692,17 +4097,72 @@ export default function QuestionBankApp() {
     if(!user||!username) return;
     const defFolder=[{id:'imported-folder',title:'Pergaminhos Diversos',fullSyllabus:'Questões importadas.',source:'external',topics:[]}];
     if(user.isAnonymous){
-      try{const s=localStorage.getItem(`qb_lib_${username}`);setLibrary(s?JSON.parse(s):defFolder);}catch(e){setLibrary(defFolder);}
+      try{const s=localStorage.getItem(`qb_lib_${username}`);setLibrary(s?sortLibraryItems(JSON.parse(s)):defFolder);}catch(e){setLibrary(defFolder);}
       return;
     }
     const libRef=collection(db,'users',user.uid,'library');
-    const u1=onSnapshot(libRef,(snap)=>{const d=snap.docs.map(x=>x.data()).sort((a,b)=>b.id-a.id);setLibrary(d.length?d:defFolder);});
+    const u1=onSnapshot(libRef,(snap)=>{
+      const d=sortLibraryItems(snap.docs.map(x=>x.data()));
+      setLibrary(d.length?d:defFolder);
+    });
     return ()=>u1();
   },[user,username]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeSubject = library.find(s=>s.id===activeSubjectId);
-  const activeTopic   = activeSubject?.topics.find(t=>t.id===activeTopicId);
+  const activeTopic   = activeSubject?.topics?.find(t=>t.id===activeTopicId);
+  const isFolderItem = (item) => item?.itemType === 'folder';
+  const librarySubjects = library.filter(s => !isFolderItem(s));
+  const libraryFolders = library.filter(isFolderItem);
+  const sourceSubjects = (source = libFilter) => librarySubjects.filter(s => s.source === source);
+  const sourceFolders = (source = libFilter) => libraryFolders.filter(f => f.source === source);
+  const activeFolder = activeFolderId ? libraryFolders.find(f => f.id === activeFolderId) : null;
+  const getFolderPath = (folderId) => {
+    const path = [];
+    let cur = libraryFolders.find(f => f.id === folderId);
+    const seen = new Set();
+    while (cur && !seen.has(cur.id)) {
+      path.unshift(cur);
+      seen.add(cur.id);
+      cur = libraryFolders.find(f => f.id === cur.parentFolderId);
+    }
+    return path;
+  };
+  const getFolderLabel = (folderId) => {
+    if (!folderId) return 'Raiz';
+    const path = getFolderPath(folderId);
+    return path.length ? path.map(f => f.title).join(' > ') : 'Raiz';
+  };
+  const isFolderDescendant = (candidateId, parentId) => {
+    let cur = libraryFolders.find(f => f.id === candidateId);
+    const seen = new Set();
+    while (cur && !seen.has(cur.id)) {
+      if (cur.parentFolderId === parentId) return true;
+      seen.add(cur.id);
+      cur = libraryFolders.find(f => f.id === cur.parentFolderId);
+    }
+    return false;
+  };
+  const folderChildren = (folderId) => sourceSubjects(libFilter).filter(s => (s.folderId || null) === folderId);
+  const currentSubjects = sourceSubjects(libFilter).filter(s => (s.folderId || null) === (activeFolderId || null));
+  const currentFolders = sourceFolders(libFilter).filter(f => (f.parentFolderId || null) === (activeFolderId || null));
+  const getSubjectFolderTitle = (subject) => getFolderLabel(subject?.folderId || null);
+  const getFolderParentTitle = (folder) => getFolderLabel(folder?.parentFolderId || null);
+  const getSubjectsInFolderTree = (folder) => {
+    if (!folder) return [];
+    const folderIds = new Set([folder.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      libraryFolders.forEach(f => {
+        if (f.source === folder.source && folderIds.has(f.parentFolderId) && !folderIds.has(f.id)) {
+          folderIds.add(f.id);
+          changed = true;
+        }
+      });
+    }
+    return librarySubjects.filter(s => s.source === folder.source && folderIds.has(s.folderId));
+  };
   const displayedQs   = (() => {
     if (!activeTopic) return [];
     if (showOnlyWrong) return activeTopic.questions.filter(q=>{
@@ -3722,30 +4182,123 @@ export default function QuestionBankApp() {
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.map(x=>x.id===s.id?s:x)));
   };
+  const updateLibraryItems = async (items) => {
+    const changed = new Map(items.map(item=>[item.id,item]));
+    const nextLibrary = sortLibraryItems(library.map(item=>changed.get(item.id)||item));
+    setLibrary(nextLibrary);
+    if(user&&!user.isAnonymous) await Promise.all(items.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
+    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+  };
   const addSubject = async (s) => {
-    setLibrary(p=>[s,...p]);
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([s,...library]));
+    let ns = s;
+    if (!Number.isFinite(Number(ns.sortOrder)) && ns.source) {
+      const parent = isFolderItem(ns) ? (ns.parentFolderId || null) : (ns.folderId || null);
+      const siblings = library.filter(item => item.source === ns.source && (isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null)) === parent);
+      const maxOrder = siblings.reduce((max,item)=>Math.max(max, Number(item.sortOrder)||0), 0);
+      ns = { ...ns, sortOrder:maxOrder+1 };
+    }
+    setLibrary(p=>sortLibraryItems([ns,...p]));
+    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',ns.id.toString()),ns).catch(console.error);
+    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([ns,...library]));
   };
   const removeSubject = async (id) => {
     setLibrary(p=>p.filter(s=>s.id!==id));
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
   };
+  const createLibraryFolder = async (source, title, parentFolderId = activeFolderId || null) => {
+    const clean = (title || '').trim();
+    if (!clean) return null;
+    const parent = parentFolderId || null;
+    const siblings = library.filter(item => item.source === source && (isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null)) === parent);
+    const maxOrder = siblings.reduce((max,item)=>Math.max(max, Number(item.sortOrder)||0), 0);
+    const folder = { id:Date.now(), itemType:'folder', title:clean, source, parentFolderId:parent, createdAt:Date.now(), sortOrder:maxOrder+1, topics:[] };
+    await addSubject(folder);
+    return folder;
+  };
+  const moveSubjectToFolder = async (subject, folderId) => {
+    if (!subject || isFolderItem(subject)) return;
+    await updateSubject({ ...subject, folderId:folderId || null });
+  };
+  const moveFolderToFolder = async (folder, parentFolderId) => {
+    if (!folder || !isFolderItem(folder)) return;
+    const nextParent = parentFolderId || null;
+    if (nextParent === folder.id || isFolderDescendant(nextParent, folder.id)) return;
+    await updateSubject({ ...folder, parentFolderId:nextParent });
+  };
+  const getLibraryItemParentId = (item) => isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null);
+  const reorderLibraryItem = async (item, targetParentId, targetItem = null, position = 'inside') => {
+    if (!item) return;
+    const nextParent = targetParentId || null;
+    if (isFolderItem(item) && (nextParent === item.id || isFolderDescendant(nextParent, item.id))) return;
+    const moved = isFolderItem(item) ? { ...item, parentFolderId:nextParent } : { ...item, folderId:nextParent };
+    const siblings = sortLibraryItems(library.filter(candidate => (
+      candidate.source === item.source &&
+      candidate.id !== item.id &&
+      getLibraryItemParentId(candidate) === nextParent
+    )));
+    let insertAt = siblings.length;
+    if (targetItem) {
+      const idx = siblings.findIndex(candidate => candidate.id === targetItem.id);
+      if (idx >= 0) insertAt = position === 'before' ? idx : idx + 1;
+    }
+    const ordered = [...siblings];
+    ordered.splice(insertAt, 0, moved);
+    await updateLibraryItems(ordered.map((candidate, index) => ({ ...candidate, sortOrder:index+1 })));
+  };
+  const deleteFolderAndKeepContents = async (folder) => {
+    if (!folder) return;
+    const children = librarySubjects.filter(s => s.source === folder.source && s.folderId === folder.id);
+    for (const child of children) await updateSubject({ ...child, folderId:folder.parentFolderId || null });
+    const childFolders = libraryFolders.filter(f => f.source === folder.source && f.parentFolderId === folder.id);
+    for (const childFolder of childFolders) await updateSubject({ ...childFolder, parentFolderId:folder.parentFolderId || null });
+    await removeSubject(folder.id);
+    if (activeFolderId === folder.id) setActiveFolderId(null);
+  };
 
   const saveSettingsTimer = useRef(null);
   const saveSettings = async (s) => {
-    const ns={...s,activeKeyIndex:Number(s.activeKeyIndex||1)};
+    const currentKeys = getConfiguredGeminiKeys(settingsRef.current);
+    let ns=withGeminiKeys({...s,activeKeyIndex:Number(s.activeKeyIndex||1)});
+    const incomingKeys = getConfiguredGeminiKeys(ns);
+    if (!incomingKeys.length && currentKeys.length) {
+      ns = withGeminiKeys(ns, currentKeys.map(({id,name,value}) => ({id,name,value})));
+    }
+    const backupKeys = getConfiguredGeminiKeys(ns).map(({id,name,value}) => ({id,name,value}));
+    ns = { ...ns, geminiKeysBackup: backupKeys };
     setSettings(ns);
     clearTimeout(saveSettingsTimer.current);
     saveSettingsTimer.current = setTimeout(async () => {
-      if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid),{username,apiKey:ns.apiKey1||ns.apiKey||'',settings:ns},{merge:true}).catch(console.error);
-      else if(user?.isAnonymous) localStorage.setItem(`qb_settings_${username}`,JSON.stringify(ns));
+      let finalNs = ns;
+      if(user&&!user.isAnonymous && !getConfiguredGeminiKeys(finalNs).length) {
+        try {
+          const existing = await getDoc(doc(db,'users',user.uid));
+          if (existing.exists()) {
+            const data = existing.data() || {};
+            const recovered = buildSettingsWithGeminiRecovery(data.settings || {}, data.apiKey || '', username || data.username || '');
+            const recoveredKeys = getConfiguredGeminiKeys(recovered);
+            if (recoveredKeys.length) {
+              finalNs = withGeminiKeys(finalNs, recoveredKeys.map(({id,name,value}) => ({id,name,value})));
+              finalNs = { ...finalNs, geminiKeysBackup:getConfiguredGeminiKeys(finalNs).map(({id,name,value}) => ({id,name,value})) };
+              setSettings(finalNs);
+            }
+          }
+        } catch(e) {}
+      }
+      if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid),{username,apiKey:finalNs.apiKey1||finalNs.apiKey||'',settings:finalNs},{merge:true}).catch(console.error);
+      if (username) {
+        try { localStorage.setItem(`qb_settings_${username}`,JSON.stringify(finalNs)); } catch(e) {}
+      }
     }, 800);
   };
 
   // ── API Key helpers ────────────────────────────────────────────────────────
-  const getKey = () => { const s=settingsRef.current; const k=s.activeKeyIndex===2?s.apiKey2:(s.activeKeyIndex===3?s.apiKey3:(s.apiKey1||s.apiKey)); return k||s.apiKey1||s.apiKey2||s.apiKey3||s.apiKey; };
+  const getKey = () => {
+    const s = settingsRef.current;
+    const keys = getConfiguredGeminiKeys(s);
+    const activeId = getActiveGeminiKeyId(s);
+    return keys.find(x => x.id === activeId)?.k || keys[0]?.k || s.apiKey1 || s.apiKey;
+  };
   const checkKey = () => { if (!getKey()?.trim()){showApiError('API_KEY_MISSING');return false;} return true; };
 
   // Show error modal with full context for each API error type
@@ -3757,27 +4310,21 @@ export default function QuestionBankApp() {
   // Build ordered key list starting from current active key
   const getOrderedKeys = () => {
     const s = settingsRef.current;
-    const slots = [
-      { n:1, k: s.apiKey1||s.apiKey },
-      { n:2, k: s.apiKey2 },
-      { n:3, k: s.apiKey3 },
-    ].filter(x => x.k?.trim());
-    const startIdx = Math.max(0, slots.findIndex(x => x.n === (s.activeKeyIndex||1)));
+    const slots = getConfiguredGeminiKeys(s);
+    const activeId = getActiveGeminiKeyId(s);
+    const startIdx = Math.max(0, slots.findIndex(x => x.id === activeId));
     return [...slots.slice(startIdx), ...slots.slice(0, startIdx)];
   };
 
   // Advance to the next available key (called after every request, success or quota fail)
   const rotateKey = async () => {
     const s = settingsRef.current;
-    const slots = [
-      { n:1, k: s.apiKey1||s.apiKey },
-      { n:2, k: s.apiKey2 },
-      { n:3, k: s.apiKey3 },
-    ].filter(x => x.k?.trim());
+    const slots = getConfiguredGeminiKeys(s);
     if (slots.length <= 1) return;
-    const curIdx = slots.findIndex(x => x.n === (s.activeKeyIndex||1));
-    const nextN = slots[(curIdx + 1) % slots.length].n;
-    await saveSettings({ ...s, activeKeyIndex: nextN });
+    const activeId = getActiveGeminiKeyId(s);
+    const curIdx = Math.max(0, slots.findIndex(x => x.id === activeId));
+    const nextId = slots[(curIdx + 1) % slots.length].id;
+    await saveSettings(withGeminiKeys(s, normalizeGeminiKeys(s), nextId));
   };
 
   // ── Material helpers ───────────────────────────────────────────────────────
@@ -4329,7 +4876,7 @@ export default function QuestionBankApp() {
       };
     });
 
-    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', sourceMaterials: getMaterial(), focusAreas, topics };
+    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', folderId:libFilter==='gemini'?activeFolderId:null, sourceMaterials: getMaterial(), focusAreas, topics };
     await addSubject(ns);
     setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1);
     setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]); setFocusAreas([]);
@@ -4343,7 +4890,7 @@ export default function QuestionBankApp() {
     let ts=library.find(s=>s.title.toLowerCase()===sn.toLowerCase()&&s.source==='external'&&s.id!=='imported-folder');
     if(ts){await updateSubject({...ts,topics:[...ts.topics,nt]});setActiveSubjectId(ts.id);}
     else if(!pasteSubName.trim()){const f=library.find(s=>s.id==='imported-folder');if(f)await updateSubject({...f,topics:[...f.topics,nt]});setActiveSubjectId('imported-folder');}
-    else{const ns={id:Date.now(),title:sn,source:'external',fullSyllabus:'Importado',topics:[nt]};await addSubject(ns);setActiveSubjectId(ns.id);}
+    else{const ns={id:Date.now(),title:sn,source:'external',folderId:libFilter==='external'?activeFolderId:null,fullSyllabus:'Importado',topics:[nt]};await addSubject(ns);setActiveSubjectId(ns.id);}
     setPasteText('');setPasteTopic('');setActiveTopicId(nt.id);setView('topic');
   };
 
@@ -4410,7 +4957,24 @@ export default function QuestionBankApp() {
   // Exam
   const startExam = (items,qCount,time) => {
     // Bug 6: include _subjectId and _topicId so favorites can be toggled during exam
-    const all=items.flatMap(({subject,topic})=>(topic.questions||[]).map(q=>({...q,_subjectId:subject.id,_topicId:topic.id,_subjectTitle:subject.title,_topicTitle:topic.title})));
+    const expanded = items.flatMap(item => {
+      if (item.type === 'folder') {
+        return getSubjectsInFolderTree(item.folder)
+          .flatMap(subject => (subject.topics || []).filter(t => (t.questions || []).length > 0).map(topic => ({ subject, topic })));
+      }
+      if (item.type === 'subject') {
+        return (item.subject.topics || []).filter(t => (t.questions || []).length > 0).map(topic => ({ subject:item.subject, topic }));
+      }
+      return item.subject && item.topic ? [{ subject:item.subject, topic:item.topic }] : [];
+    });
+    const seen = new Set();
+    const unique = expanded.filter(({subject, topic}) => {
+      const key = `${subject.id}__${topic.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const all=unique.flatMap(({subject,topic})=>(topic.questions||[]).map(q=>({...q,_subjectId:subject.id,_topicId:topic.id,_subjectTitle:subject.title,_topicTitle:topic.title})));
     const shuffled=all.sort(()=>Math.random()-.5).slice(0,Math.min(qCount,all.length));
     setActiveExam({id:Date.now(),questions:shuffled,answers:{},timeLeft:time*60,finished:false,blindMode:examBlind});
     setView('exam');
@@ -4579,6 +5143,7 @@ export default function QuestionBankApp() {
       title: academiaSubName,
       fullSyllabus: academiaSyllabus,
       source: 'academia',
+      folderId: libFilter==='academia' ? activeFolderId : null,
       sourceMaterials: getAcademiaMaterial(),
       focusAreas: academiaFocusAreas,
       topics,
@@ -4777,6 +5342,97 @@ export default function QuestionBankApp() {
     return a!==q.options?.find(o=>o.isCorrect)?.letter;
   }).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  const getTopicReviewQuestions = (subject, topic) => {
+    if (subject.source === 'academia') {
+      return Object.values(topic.fixationQuestions || {}).flat()
+        .concat((topic.extraBattery || []).flatMap(b => b.questions || b));
+    }
+    return topic.questions || [];
+  };
+  const getFolderReviewSources = (folder) => {
+    const children = getSubjectsInFolderTree(folder);
+    return children.flatMap(subject => (subject.topics || []).map(topic => {
+      const questions = getTopicReviewQuestions(subject, topic);
+      return questions.length ? { subject, topic, questions } : null;
+    }).filter(Boolean));
+  };
+  const openFolderReview = (folder) => {
+    const sources = getFolderReviewSources(folder);
+    const selected = Object.fromEntries(sources.map(({subject, topic}) => [`${subject.id}__${topic.id}`, true]));
+    setFolderReviewConfig({ total:Math.min(30, Math.max(1, sources.reduce((a, s) => a + s.questions.length, 0))), perTopic:5, selected });
+    setFolderReviewModal(folder);
+  };
+  const createFolderReview = async () => {
+    const folder = folderReviewModal;
+    if (!folder) return;
+    const sources = getFolderReviewSources(folder).filter(({subject, topic}) => folderReviewConfig.selected[`${subject.id}__${topic.id}`]);
+    const total = Math.max(1, parseInt(folderReviewConfig.total, 10) || 1);
+    const perTopic = Math.max(1, parseInt(folderReviewConfig.perTopic, 10) || 1);
+    const picked = [];
+    const rest = [];
+    sources.forEach(({subject, topic, questions}) => {
+      const stats = topic.reviewStats || {};
+      const ranked = [...questions].map(q => ({ subject, topic, q, count:stats[q.id] || 0, rand:Math.random() }))
+        .sort((a,b) => (a.count - b.count) || (a.rand - b.rand));
+      picked.push(...ranked.slice(0, perTopic));
+      rest.push(...ranked.slice(perTopic));
+    });
+    const final = [...picked, ...rest.sort((a,b)=>(a.count-b.count)||(a.rand-b.rand))]
+      .slice(0, total)
+      .sort(()=>Math.random()-.5);
+    if (!final.length) return;
+
+    const updates = new Map();
+    final.forEach(({subject, topic, q}) => {
+      if (!updates.has(subject.id)) updates.set(subject.id, { subject, topicIds:new Map() });
+      const subjectUpdate = updates.get(subject.id);
+      if (!subjectUpdate.topicIds.has(topic.id)) subjectUpdate.topicIds.set(topic.id, { topic, ids:[] });
+      subjectUpdate.topicIds.get(topic.id).ids.push(q.id);
+    });
+    for (const {subject, topicIds} of updates.values()) {
+      const updatedTopics = (subject.topics || []).map(t => {
+        const hit = topicIds.get(t.id);
+        if (!hit) return t;
+        const reviewStats = { ...(t.reviewStats || {}) };
+        hit.ids.forEach(id => { reviewStats[id] = (reviewStats[id] || 0) + 1; });
+        return { ...t, reviewStats };
+      });
+      await updateSubject({ ...subject, topics:updatedTopics });
+    }
+
+    const now = Date.now();
+    const reviewTopic = {
+      id:`folder-review-${now}`,
+      title:`Revisão — ${folder.title} (${new Date(now).toLocaleDateString('pt-BR')})`,
+      questions: final.map(({subject, topic, q}, i) => ({
+        ...q,
+        id:`rev_${now}_${i}_${q.id}`,
+        _originSubjectId:subject.id,
+        _originTopicId:topic.id,
+        _originQId:q.id,
+        _subjectTitle:subject.title,
+        _topicTitle:topic.title,
+      })),
+      answers:{}, favorites:[], spacedReview:{},
+      summary:`Bloco de revisão criado a partir da pasta "${folder.title}".`,
+      sourceFolderId:folder.id,
+    };
+    const reviewTitle = 'Revisões de Pastas';
+    const existing = librarySubjects.find(s => s.source === 'gemini' && s.title === reviewTitle);
+    if (existing) {
+      await updateSubject({ ...existing, folderId:folder.source === 'gemini' ? folder.id : existing.folderId, topics:[...(existing.topics || []), reviewTopic] });
+      setActiveSubjectId(existing.id);
+    } else {
+      const ns = { id:Date.now()+1, title:reviewTitle, source:'gemini', folderId:folder.source === 'gemini' ? folder.id : null, fullSyllabus:'Revisões criadas a partir de pastas.', topics:[reviewTopic] };
+      await addSubject(ns);
+      setActiveSubjectId(ns.id);
+    }
+    setActiveTopicId(reviewTopic.id);
+    setFolderReviewModal(null);
+    setLibFilter('gemini');
+    setView('topic');
+    addToast(`${final.length} questões adicionadas ao Oráculo.`, 'success', 5000);
+  };
 
   // ── AUTH ──────────────────────────────────────────────────────────────────
   const handleGoogleLogin = async () => { try{await signInWithPopup(auth,new GoogleAuthProvider());}catch(e){setErrorModal({title:'Erro',message:'Login falhou.',isAlert:true});} };
@@ -4931,19 +5587,19 @@ export default function QuestionBankApp() {
             </div>
             <div className={`grid grid-cols-1 gap-6 md:grid-cols-2`}>
               {[{f:'gemini',icon:<Landmark className="w-12 h-12 text-yellow-600"/>,title:'Acervo do Oráculo',desc:'Assuntos gerados via Gemini'},{f:'external',icon:<FolderIcon className="w-12 h-12 text-yellow-600"/>,title:'Acervo Externo',desc:'Questões importadas'}].map(item=>(
-                <div key={item.f} onClick={()=>{setLibFilter(item.f);setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
+                <div key={item.f} onClick={()=>{setLibFilter(item.f);setActiveFolderId(null);setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform">{item.icon}</div>
                   <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">{item.title}</h3>
                   <p className="text-sm opacity-60">{item.desc}</p>
-                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{library.filter(s=>s.source===item.f).length} Pastas</div>
+                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{sourceSubjects(item.f).length} assuntos · {sourceFolders(item.f).length} pastas</div>
                 </div>
               ))}
               {canUseAcademia&&(
-                <div onClick={()=>{setLibFilter('academia');setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
+                <div onClick={()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} className={`${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'} p-8 rounded-2xl border shadow-sm cursor-pointer transition-all flex flex-col items-center text-center group`}>
                   <div className="p-5 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 group-hover:scale-110 transition-transform"><AcademiaIcon className="w-12 h-12 text-yellow-600"/></div>
                   <h3 className="font-serif font-bold text-2xl text-yellow-600 mb-2">Academia do Saber</h3>
                   <p className="text-sm opacity-60">Aulas + questões de fixação integradas</p>
-                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{library.filter(s=>s.source==='academia').length} Cursos</div>
+                  <div className={`mt-4 text-xs font-bold px-3 py-1 rounded-full ${badge}`}>{sourceSubjects('academia').length} aulas · {sourceFolders('academia').length} pastas</div>
                 </div>
               )}
               {canSeeVideoaulas&&(
@@ -4965,53 +5621,242 @@ export default function QuestionBankApp() {
 
         {/* ── SUB-LIBRARY ── */}
         {view==='sub-library'&&(
-          <div>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
-              <div>
-                <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-4 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-                <h2 className="text-3xl font-serif font-bold text-yellow-600">{libFilter==='gemini'?'Acervo do Oráculo':libFilter==='academia'?'Academia do Saber':'Acervo Externo'}</h2>
-              </div>
-              {libFilter==='gemini'
-                ?<button onClick={()=>setView('creator')} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Sparkles className="w-4 h-4"/>Gerar</button>
-                :libFilter==='academia'
-                  ?canUseAcademia&&<button onClick={()=>{setAcademiaCreatorStep(1);setView('academia-creator');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><AcademiaIcon className="w-4 h-4"/>Nova Aula</button>
-                  :<button onClick={()=>{setPasteSubName('');setPasteTopic('Bloco 1');setView('paste');}} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2"><Feather className="w-4 h-4"/>Importar</button>}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {library.filter(s=>s.source===libFilter).length===0&&<div className="col-span-full py-10 text-center opacity-40 italic">Biblioteca vazia.</div>}
-              {library.filter(s=>s.source===libFilter).map(s=>{
-                const pct=subjectProgress(s);
-                const totalTopics = s.topics.length;
-                const totalQs = s.source==='academia'
-                  ? s.topics.flatMap(t=>Object.values(t.fixationQuestions||{}).flat()).length
-                  : s.topics.reduce((acc,t)=>(t.questions?.length||0)+acc, 0);
-                return (
-                  <div key={s.id} onClick={()=>{setActiveSubjectId(s.id);setView('subject');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-6 rounded-2xl border hover:border-yellow-500 cursor-pointer group transition-all`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <FolderIcon className="w-10 h-10 text-yellow-600"/>
-                      {s.id!=='imported-folder'&&(
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={e=>{e.stopPropagation();setEditingSub(s.id);setEditingSubName(s.title);}} className="p-1.5 text-gray-400 hover:text-yellow-500"><EditIcon className="w-4 h-4"/></button>
-                          <button onClick={e=>{e.stopPropagation();setDeleteId({type:'subject',id:s.id});}} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                        </div>
-                      )}
-                    </div>
-                    <h3 className="font-serif font-bold text-xl mb-3 truncate">{s.title}</h3>
-                    <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
-                      <div className="bg-yellow-500 h-full transition-all" style={{width:`${pct}%`}}/>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-xs opacity-50">
-                        <span>{totalTopics} tópico{totalTopics!==1?'s':''}</span>
-                        {totalQs>0&&<><span>·</span><span>{totalQs} {totalQs===1?'questão':'questões'}</span></>}
+          (()=>{
+            const sourceTitle = libFilter==='gemini'?'Acervo do Oráculo':libFilter==='academia'?'Academia do Saber':'Acervo Externo';
+            const iconBox = darkMode?'bg-gray-800 text-yellow-500':'bg-yellow-50 text-yellow-700';
+            const actionBtn = darkMode?'border-gray-700 text-gray-400 hover:text-yellow-400 hover:border-yellow-700 hover:bg-gray-800':'border-gray-200 text-gray-500 hover:text-yellow-700 hover:border-yellow-400 hover:bg-yellow-50';
+            const primaryLabel = libFilter==='gemini'?'Gerar assunto':libFilter==='academia'?'Nova aula':'Importar';
+            const primaryIcon = libFilter==='gemini'?<Sparkles className="w-4 h-4"/>:libFilter==='academia'?<AcademiaIcon className="w-4 h-4"/>:<Feather className="w-4 h-4"/>;
+            const primaryAction = () => {
+              if (libFilter==='gemini') setView('creator');
+              else if (libFilter==='academia') { setAcademiaCreatorStep(1); setView('academia-creator'); }
+              else { setPasteSubName(''); setPasteTopic('Bloco 1'); setView('paste'); }
+            };
+            const renderIconButton = (label, icon, fn, extra='') => (
+              <button onClick={e=>{e.stopPropagation();fn();}} title={label} aria-label={label} className={`h-9 w-9 rounded-lg border flex items-center justify-center ${actionBtn} ${extra}`}>
+                {icon}
+              </button>
+            );
+            const toggleLibraryFolder = (id) => setLibraryOpenFolders(p=>({...p,[id]:!(p[id] ?? true)}));
+            const countSubjectQuestions = (subject) => subject.source==='academia'
+              ? subject.topics.flatMap(t=>Object.values(t.fixationQuestions||{}).flat()).length
+              : subject.topics.reduce((acc,t)=>acc+(t.questions?.length||0), 0);
+            const countFolderQuestions = (folder) => getSubjectsInFolderTree(folder).reduce((acc,s)=>acc+countSubjectQuestions(s),0);
+            const directFolders = (parentId) => sortLibraryItems(sourceFolders(libFilter).filter(f=>(f.parentFolderId||null)===(parentId||null)));
+            const directSubjects = (folderId) => sortLibraryItems(sourceSubjects(libFilter).filter(s=>(s.folderId||null)===(folderId||null)));
+            const directItems = (parentId) => sortLibraryItems([...directFolders(parentId), ...directSubjects(parentId)]);
+            const treeRootId = activeFolderId || null;
+            const treeItems = directItems(treeRootId);
+            const treeItemCount = treeItems.length;
+            const rowBorder = darkMode?'border-gray-800':'border-gray-100';
+            const rowHover = darkMode?'hover:bg-gray-800/70':'hover:bg-gray-50';
+            const getDropId = (el) => {
+              const raw = el?.dataset?.dropId;
+              if (!raw || raw === 'root') return null;
+              return libraryFolders.find(f=>String(f.id)===raw)?.id ?? raw;
+            };
+            const sameId = (a,b) => (a || null) === null || (b || null) === null ? (a || null) === (b || null) : String(a) === String(b);
+            const getLibraryItemById = (id) => library.find(item=>String(item.id)===String(id));
+            const isValidDrop = (drag, targetId, mode = 'inside', targetItem = null) => {
+              if (!drag) return false;
+              if (mode === 'before' || mode === 'after') {
+                if (!targetItem || sameId(drag.item.id, targetItem.id) || drag.item.source !== targetItem.source) return false;
+                const parentId = getLibraryItemParentId(targetItem);
+                return !isFolderItem(drag.item) || (!sameId(drag.item.id, parentId) && !isFolderDescendant(parentId, drag.item.id));
+              }
+              if (drag.type === 'subject') return !sameId(drag.item.folderId || null, targetId || null);
+              return !sameId(drag.item.id, targetId) && !sameId(drag.item.parentFolderId || null, targetId || null) && !isFolderDescendant(targetId, drag.item.id);
+            };
+            const isDropActive = (targetId) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode === 'inside' && isValidDrop(libraryDrag, targetId) && sameId(libraryDrag.targetId || null, targetId || null);
+            const isItemDropActive = (item, mode) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode === mode && sameId(libraryDrag.targetItem?.id, item.id);
+            const startLibraryDrag = (e, item, type) => {
+              if (e.button !== undefined && e.button !== 0) return;
+              e.stopPropagation();
+              e.preventDefault();
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              setLibraryDrag({ item, type, source:item.source, startX:e.clientX, startY:e.clientY, x:e.clientX, y:e.clientY, active:false, targetId:null, targetItem:null, dropMode:'inside', targetFound:false });
+            };
+            const updateLibraryDrag = (e) => {
+              if (!libraryDrag) return;
+              e.preventDefault();
+              const active = libraryDrag.active || Math.hypot(e.clientX-libraryDrag.startX, e.clientY-libraryDrag.startY) > 5;
+              let targetId = libraryDrag.targetId ?? null;
+              let targetItem = null;
+              let dropMode = 'inside';
+              let targetFound = false;
+              if (active) {
+                const pointEl = document.elementFromPoint(e.clientX, e.clientY);
+                const itemEl = pointEl?.closest?.('[data-library-item]');
+                const dropEl = pointEl?.closest?.('[data-library-drop]');
+                if (itemEl?.dataset?.itemId) {
+                  const itemUnderPointer = getLibraryItemById(itemEl.dataset.itemId);
+                  if (itemUnderPointer && itemUnderPointer.source === libraryDrag.item.source && !sameId(itemUnderPointer.id, libraryDrag.item.id)) {
+                    const rect = itemEl.getBoundingClientRect();
+                    const relativeY = (e.clientY - rect.top) / Math.max(rect.height, 1);
+                    if (relativeY < 0.35) dropMode = 'before';
+                    else if (relativeY > 0.65 || !isFolderItem(itemUnderPointer)) dropMode = 'after';
+                    else dropMode = 'inside';
+                    targetItem = itemUnderPointer;
+                    targetId = dropMode === 'inside' ? itemUnderPointer.id : getLibraryItemParentId(itemUnderPointer);
+                    targetFound = isValidDrop(libraryDrag, targetId, dropMode, targetItem);
+                  }
+                }
+                if (dropEl) {
+                  if (!targetFound) {
+                    targetId = getDropId(dropEl);
+                    targetItem = null;
+                    dropMode = 'inside';
+                    targetFound = isValidDrop(libraryDrag, targetId, dropMode, null);
+                  }
+                  if (!targetFound) targetId = null;
+                }
+                if (targetId) setLibraryOpenFolders(p=>p[targetId]?p:{...p,[targetId]:true});
+              }
+              setLibraryDrag(p=>p?{...p,x:e.clientX,y:e.clientY,active,targetId,targetItem,dropMode,targetFound}:p);
+            };
+            const finishLibraryDrag = async (e) => {
+              if (!libraryDrag) return;
+              e.preventDefault();
+              const drag = libraryDrag;
+              setLibraryDrag(null);
+              if (!drag.active || !drag.targetFound || !isValidDrop(drag, drag.targetId, drag.dropMode, drag.targetItem)) return;
+              await reorderLibraryItem(drag.item, drag.targetId || null, drag.targetItem, drag.dropMode);
+            };
+            const dragHandle = (item, type) => (
+              <button
+                onPointerDown={e=>startLibraryDrag(e,item,type)}
+                onPointerMove={updateLibraryDrag}
+                onPointerUp={finishLibraryDrag}
+                onPointerCancel={()=>setLibraryDrag(null)}
+                title="Arrastar para mover"
+                aria-label="Arrastar para mover"
+                className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 cursor-grab active:cursor-grabbing touch-none ${darkMode?'text-gray-500 hover:text-yellow-400 hover:bg-gray-700':'text-gray-400 hover:text-yellow-700 hover:bg-gray-100'}`}
+              >
+                <GripIcon className="w-4 h-4"/>
+              </button>
+            );
+            const renderTreeSubject = (s, depth=0) => {
+              const pct=subjectProgress(s);
+              const totalTopics = s.topics.length;
+              const totalQs = countSubjectQuestions(s);
+              const dragging = libraryDrag?.item?.id === s.id;
+              const rowTarget = isItemDropActive(s,'before') || isItemDropActive(s,'after');
+              return (
+                <div key={s.id} data-library-item data-item-id={s.id} data-item-type="subject" data-library-drop data-drop-id={s.folderId || 'root'} onClick={()=>{if(!libraryDrag?.active){setActiveSubjectId(s.id);setView('subject');}}} className={`group flex items-center gap-3 py-3 pr-4 border-b last:border-b-0 transition-colors cursor-pointer ${rowBorder} ${rowHover} ${rowTarget?(darkMode?'ring-1 ring-inset ring-yellow-700 bg-yellow-900/20':'ring-1 ring-inset ring-yellow-300 bg-yellow-50'):''} ${dragging?'opacity-40':''}`} style={{paddingLeft:16 + depth*24}}>
+                  {s.id!=='imported-folder'?dragHandle(s,'subject'):<span className="w-8 flex-shrink-0"/>}
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}>{s.source==='academia'?<AcademiaIcon className="w-4 h-4"/>:<BlockIcon className="w-4 h-4"/>}</div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm truncate">{s.title}</h3>
+                    <p className="text-xs opacity-40 md:hidden">{totalTopics} tópico{totalTopics!==1?'s':''}{totalQs>0?` · ${totalQs} questões`:''}</p>
+                  </div>
+                  <div className="hidden md:block w-44 flex-shrink-0 text-sm opacity-60">{totalTopics} tópico{totalTopics!==1?'s':''}{totalQs>0?` · ${totalQs} questões`:''}</div>
+                  <div className="hidden md:flex w-32 flex-shrink-0 items-center gap-2">
+                    <div className="h-1.5 flex-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full" style={{width:`${pct}%`}}/></div>
+                    <span className="text-xs font-bold text-yellow-600">{pct}%</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1.5 flex-shrink-0 md:w-32 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    {s.id!=='imported-folder'&&renderIconButton('Renomear', <EditIcon className="w-3.5 h-3.5"/>, ()=>{setEditingSub(s.id);setEditingSubName(s.title);})}
+                    {s.id!=='imported-folder'&&renderIconButton('Excluir', <Trash2 className="w-3.5 h-3.5"/>, ()=>setDeleteId({type:'subject',id:s.id}), darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300')}
+                  </div>
+                </div>
+              );
+            };
+            const renderTreeFolder = (folder, depth=0) => {
+              const open = libraryOpenFolders[folder.id] ?? true;
+              const totalQs = countFolderQuestions(folder);
+              const totalSubjects = getSubjectsInFolderTree(folder).length;
+              const dropActive = isDropActive(folder.id);
+              const dragging = libraryDrag?.item?.id === folder.id;
+              const rowTarget = isItemDropActive(folder,'before') || isItemDropActive(folder,'after');
+              return (
+                <React.Fragment key={folder.id}>
+                  <div data-library-item data-item-id={folder.id} data-item-type="folder" data-library-drop data-drop-id={folder.id} className={`group flex items-center gap-3 py-3 pr-4 border-b transition-colors ${rowBorder} ${rowHover} ${(dropActive||rowTarget)?(darkMode?'bg-yellow-900/25 ring-1 ring-inset ring-yellow-700':'bg-yellow-50 ring-1 ring-inset ring-yellow-300'):''} ${dragging?'opacity-40':''}`} style={{paddingLeft:16 + depth*24}}>
+                    {dragHandle(folder,'folder')}
+                    <button onClick={e=>{e.stopPropagation();toggleLibraryFolder(folder.id);}} title={open?'Recolher':'Expandir'} className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>
+                      {open?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
+                    </button>
+                    <button onClick={()=>setActiveFolderId(folder.id)} className="min-w-0 flex-1 flex items-center gap-3 text-left">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderIcon className="w-5 h-5"/></div>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-sm truncate">{folder.title}</h3>
+                        <p className="text-xs opacity-40 md:hidden">{totalSubjects} assunto{totalSubjects!==1?'s':''}{totalQs>0?` · ${totalQs} questões`:''}</p>
                       </div>
-                      <p className="text-xs font-bold text-yellow-600 flex-shrink-0">{pct}%</p>
+                    </button>
+                    <div className="hidden md:block w-44 flex-shrink-0 text-sm opacity-60">{totalSubjects} assunto{totalSubjects!==1?'s':''}{totalQs>0?` · ${totalQs} questões`:''}</div>
+                    <div className="hidden md:block w-32 flex-shrink-0 text-xs opacity-40">Pasta</div>
+                    <div className="flex items-center justify-end gap-1.5 flex-shrink-0 md:w-32 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      {renderIconButton('Nova pasta filha', <PlusIcon className="w-3.5 h-3.5"/>, ()=>{setLibraryOpenFolders(p=>({...p,[folder.id]:true}));setNewFolderParentId(folder.id);setNewFolderName('');setNewFolderModal(true);})}
+                      {renderIconButton('Renomear', <EditIcon className="w-3.5 h-3.5"/>, ()=>{setEditingSub(folder.id);setEditingSubName(folder.title);})}
+                      {renderIconButton('Excluir', <Trash2 className="w-3.5 h-3.5"/>, ()=>setDeleteId({type:'folder',id:folder.id}), darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300')}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  {open&&(
+                    <>
+                      {directItems(folder.id).map(item=>renderTreeItem(item, depth+1))}
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            };
+            const renderTreeItem = (item, depth=0) => isFolderItem(item) ? renderTreeFolder(item, depth) : renderTreeSubject(item, depth);
+            return (
+              <div>
+                <div className="mb-6">
+                  <button onClick={()=>activeFolderId?setActiveFolderId(activeFolder?.parentFolderId || null):setView('library')} className={`flex items-center gap-2 mb-4 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                    <ArrowLeft className="w-4 h-4"/>{activeFolderId?'Voltar':'Acervos'}
+                  </button>
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest opacity-40 mb-2 flex-wrap">
+                        <button data-library-drop data-drop-id="root" onClick={()=>setActiveFolderId(null)} className="hover:text-yellow-600">{sourceTitle}</button>
+                        <ChevronRight className="w-3 h-3"/>
+                        <button data-library-drop data-drop-id="root" onClick={()=>setActiveFolderId(null)} className="hover:text-yellow-600">Raiz</button>
+                        {getFolderPath(activeFolderId).map(folder => (
+                          <React.Fragment key={folder.id}>
+                            <ChevronRight className="w-3 h-3"/>
+                            <button data-library-drop data-drop-id={folder.id} onClick={()=>setActiveFolderId(folder.id)} className="hover:text-yellow-600">{folder.title}</button>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                      <h2 className="text-3xl font-serif font-bold text-yellow-600 truncate">{activeFolder?.title || sourceTitle}</h2>
+                      <p className="text-sm opacity-50 mt-1">{treeItemCount} item{treeItemCount!==1?'s':''} nesta pasta</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {activeFolder&&<button onClick={()=>openFolderReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'}`}><RepeatIcon className="w-4 h-4"/>Revisar pasta</button>}
+                      <button onClick={()=>{setNewFolderParentId(activeFolderId || null);setNewFolderName('');setNewFolderModal(true);}} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}><PlusIcon className="w-4 h-4"/>Nova pasta</button>
+                      {(libFilter!=='academia'||canUseAcademia)&&<button onClick={primaryAction} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm">{primaryIcon}{primaryLabel}</button>}
+                    </div>
+                  </div>
+                </div>
+
+                <div data-library-drop data-drop-id={treeRootId || 'root'} className={`rounded-xl border overflow-hidden ${isDropActive(treeRootId)?(darkMode?'ring-2 ring-yellow-700 bg-yellow-900/10':'ring-2 ring-yellow-300 bg-yellow-50/40'):''} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                  <div className={`hidden md:flex items-center gap-3 px-4 py-2 text-[11px] font-bold uppercase tracking-widest border-b ${darkMode?'border-gray-800 text-gray-500 bg-gray-950/40':'border-gray-100 text-gray-400 bg-gray-50'}`}>
+                    <span className="w-8 flex-shrink-0"/>
+                    <span className="flex-1 min-w-0">Nome</span>
+                    <span className="w-44 flex-shrink-0">Conteúdo</span>
+                    <span className="w-32 flex-shrink-0">Progresso</span>
+                    <span className="w-32 flex-shrink-0 text-right">Ações</span>
+                  </div>
+                  {treeItemCount===0&&(
+                    <div className="py-16 text-center opacity-40">
+                      <FolderIcon className="w-12 h-12 mx-auto mb-3"/>
+                      <p className="font-bold">Nada aqui ainda</p>
+                    </div>
+                  )}
+                  {treeItems.map(item=>renderTreeItem(item,0))}
+                </div>
+                {libraryDrag?.active&&(
+                  <div className={`fixed z-[80] pointer-events-none rounded-xl border px-3 py-2 text-sm font-bold shadow-2xl ${darkMode?'bg-gray-800 border-yellow-700 text-yellow-300':'bg-white border-yellow-300 text-yellow-800'}`} style={{left:libraryDrag.x+12,top:libraryDrag.y+12,maxWidth:280}}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {libraryDrag.type==='folder'?<FolderIcon className="w-4 h-4 flex-shrink-0"/>:<BlockIcon className="w-4 h-4 flex-shrink-0"/>}
+                      <span className="truncate">{libraryDrag.item.title}</span>
+                    </div>
+                    <p className="text-[11px] opacity-60 mt-0.5">{libraryDrag.targetFound?(libraryDrag.dropMode==='inside'?'Solte dentro da pasta':'Solte para reordenar'):'Arraste até uma pasta ou linha'}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
 
         {/* ── SUBJECT ── */}
@@ -5088,7 +5933,7 @@ export default function QuestionBankApp() {
                 return (
                   <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex items-center gap-3 flex-1 truncate pr-3">
-                      <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0">{isAcademiaTopic?<AcademiaIcon className="w-5 h-5"/>:<ScrollText className="w-5 h-5"/>}</div>
+                      <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0">{isAcademiaTopic?<AcademiaIcon className="w-5 h-5"/>:<BlockIcon className="w-5 h-5"/>}</div>
                       <div className="truncate">
                         <h4 className="font-bold text-sm truncate">{topic.title}</h4>
                         <div className="flex items-center gap-2 mt-1">
@@ -6892,18 +7737,143 @@ export default function QuestionBankApp() {
                   <span className="absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-200" style={{left: examBlind ? '26px' : '4px'}}/>
                 </button>
               </div>
-              <label className="block text-xs font-bold uppercase mb-3 opacity-50">Tópicos ({examTopics.length} selecionados)</label>
-              <div className="space-y-2 max-h-60 overflow-y-auto mb-6">
-                {library.flatMap(s=>s.topics.filter(t=>t.questions?.length>0).map(t=>({subject:s,topic:t}))).map(({subject,topic},i)=>{
-                  const key=`${subject.id}-${topic.id}`; const checked=examTopics.some(x=>x.key===key);
+              <label className="block text-xs font-bold uppercase mb-3 opacity-50">Conteúdo da prova ({examTopics.length} selecionados)</label>
+              {(()=>{
+                const subjectHasQuestions = (subject) => (subject.topics || []).some(t => (t.questions || []).length > 0);
+                const topicCount = (topics = []) => topics.reduce((acc,t)=>acc+(t.questions?.length||0),0);
+                const qLabel = (count) => `${count} ${count===1?'questão':'questões'}`;
+                const subjectsWithQuestions = librarySubjects.filter(subjectHasQuestions);
+                const sourceRoots = [
+                  {source:'gemini', title:'Oráculo'},
+                  {source:'external', title:'Externo'},
+                  {source:'academia', title:'Academia'},
+                ].map(root => {
+                  const subjects = subjectsWithQuestions.filter(s=>s.source===root.source);
+                  return {
+                    ...root,
+                    subjects,
+                    count:topicCount(subjects.flatMap(s=>s.topics||[])),
+                    directSubjects:subjects.filter(s=>!(s.folderId||null)),
+                    folders:libraryFolders.filter(f=>f.source===root.source&&!(f.parentFolderId||null)),
+                  };
+                }).filter(root=>root.count>0);
+                const isChecked = (key) => examTopics.some(x=>x.key===key);
+                const toggleItem = (item) => setExamTopics(p=>p.some(x=>x.key===item.key)?p.filter(x=>x.key!==item.key):[...p,item]);
+                const toggleFolderOpen = (key) => setExamOpenFolders(p=>({...p,[key]:!(p[key] ?? true)}));
+                const toggleSubjectOpen = (key) => setExamOpenSubjects(p=>({...p,[key]:!p[key]}));
+                const folderSubjects = (folderId, source) => subjectsWithQuestions.filter(s=>s.source===source&&(s.folderId||null)===(folderId||null));
+                const childFolders = (folderId, source) => libraryFolders.filter(f=>f.source===source&&(f.parentFolderId||null)===(folderId||null));
+                const folderQuestionCount = (folder) => topicCount(getSubjectsInFolderTree(folder).flatMap(s=>s.topics||[]));
+                const CheckMark = ({checked}) => (
+                  <span className={`h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${checked?(darkMode?'bg-yellow-500 border-yellow-400 text-gray-950 shadow-sm shadow-yellow-900/40':'bg-yellow-500 border-yellow-500 text-white shadow-sm'):(darkMode?'border-gray-600 bg-gray-900 text-transparent':'border-gray-300 bg-white text-transparent')}`}>
+                    <CheckIcon className="w-3.5 h-3.5"/>
+                  </span>
+                );
+                const SelectButton = ({checked, onClick, title}) => (
+                  <button type="button" onClick={e=>{e.stopPropagation();onClick();}} title={title} aria-pressed={checked} className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${checked?(darkMode?'bg-yellow-900/30':'bg-yellow-50'):(darkMode?'hover:bg-gray-700':'hover:bg-gray-100')}`}>
+                    <CheckMark checked={checked}/>
+                  </button>
+                );
+                const renderSubject = (subject, depth = 0) => {
+                  const topics = (subject.topics || []).filter(t=>(t.questions||[]).length>0);
+                  const subjectItem = {type:'subject', key:`subject-${subject.id}`, subject, count:topicCount(topics)};
+                  const subjectChecked = isChecked(subjectItem.key);
+                  const subjectOpen = !!examOpenSubjects[subjectItem.key];
+                  const left = 34 + depth * 20;
                   return (
-                    <label key={i} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${checked?(darkMode?'border-yellow-600 bg-yellow-900/20':'border-yellow-400 bg-yellow-50'):(darkMode?'border-gray-700 hover:bg-gray-700':'border-gray-200 hover:bg-gray-50')}`}>
-                      <input type="checkbox" checked={checked} onChange={()=>setExamTopics(p=>p.some(x=>x.key===key)?p.filter(x=>x.key!==key):[...p,{key,subject,topic}])} className="accent-yellow-600"/>
-                      <div><p className="text-sm font-bold">{topic.title}</p><p className="text-xs opacity-40">{subject.title} • {topic.questions.length} questões</p></div>
-                    </label>
+                    <div key={subject.id} className={`border-t ${darkMode?'border-gray-700 bg-gray-800/20':'border-gray-100 bg-white'}`}>
+                      <div className={`flex items-center gap-2 py-2.5 pr-3 ${subjectChecked?(darkMode?'bg-yellow-900/10':'bg-yellow-50/70'):''}`} style={{paddingLeft:left}}>
+                        <SelectButton checked={subjectChecked} onClick={()=>toggleItem(subjectItem)} title="Selecionar assunto inteiro"/>
+                        <button onClick={()=>toggleSubjectOpen(subjectItem.key)} className="min-w-0 flex-1 flex items-center gap-2 text-left">
+                          {subjectOpen?<ChevronDown className="w-4 h-4 opacity-40 flex-shrink-0"/>:<ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0"/>}
+                          <BlockIcon className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-bold truncate">{subject.title}</span>
+                            <span className="block text-xs opacity-40">{topics.length} tópico{topics.length!==1?'s':''} • {qLabel(subjectItem.count)}</span>
+                          </span>
+                        </button>
+                      </div>
+                      {subjectOpen&&<div className="pb-2">
+                        {topics.map(topic=>{
+                          const item = {type:'topic', key:`topic-${subject.id}-${topic.id}`, subject, topic, count:topic.questions.length};
+                          const checked = isChecked(item.key);
+                          return (
+                            <button type="button" key={item.key} onClick={()=>toggleItem(item)} className={`mr-3 mb-1 flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors text-left ${checked?(darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'hover:bg-gray-700 text-gray-300':'hover:bg-gray-50 text-gray-700')}`} style={{marginLeft:left + 48, width:`calc(100% - ${left + 60}px)`}}>
+                              <CheckMark checked={checked}/>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold truncate">{topic.title}</p>
+                                <p className="text-xs opacity-40">{qLabel(item.count)}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>}
+                    </div>
                   );
-                })}
-              </div>
+                };
+                const renderFolder = (folder, depth = 0) => {
+                  const folderItem = {type:'folder', key:`folder-${folder.id}`, folder, count:folderQuestionCount(folder)};
+                  const folderChecked = isChecked(folderItem.key);
+                  const folderOpen = examOpenFolders[folderItem.key] ?? true;
+                  const directSubjects = folderSubjects(folder.id, folder.source);
+                  const children = childFolders(folder.id, folder.source).filter(child => folderQuestionCount(child) > 0 || folderSubjects(child.id, child.source).length > 0 || childFolders(child.id, child.source).length > 0);
+                  const left = 12 + depth * 20;
+                      return (
+                    <section key={folder.id} className={`border-t ${darkMode?'border-gray-700':'border-gray-100'}`}>
+                          <div className={`flex items-center gap-2 px-3 py-2.5 ${folderChecked?(darkMode?'bg-yellow-900/10':'bg-yellow-50'):(darkMode?'bg-gray-900/30':'bg-gray-50')}`}>
+                        <div className="flex items-center gap-2 min-w-0 flex-1" style={{paddingLeft:left}}>
+                          <SelectButton checked={folderChecked} onClick={()=>toggleItem(folderItem)} title="Selecionar toda a pasta"/>
+                          <button onClick={()=>toggleFolderOpen(folderItem.key)} className="min-w-0 flex-1 flex items-center gap-2 text-left">
+                              {folderOpen?<ChevronDown className="w-4 h-4 opacity-40 flex-shrink-0"/>:<ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0"/>}
+                              <FolderIcon className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+                              <span className="min-w-0">
+                              <span className="block text-sm font-bold truncate">{folder.title}</span>
+                              <span className="block text-xs opacity-40">{qLabel(folderItem.count)} • inclui subpastas</span>
+                              </span>
+                            </button>
+                        </div>
+                          </div>
+                          {folderOpen&&<div>
+                        {directSubjects.map(subject=>renderSubject(subject, depth + 1))}
+                        {children.map(child=>renderFolder(child, depth + 1))}
+                        {directSubjects.length===0&&children.length===0&&<p className="px-12 py-3 text-xs opacity-40 italic">Nenhuma questão direta nesta pasta.</p>}
+                          </div>}
+                        </section>
+                      );
+                };
+                const totalCount = sourceRoots.reduce((acc,root)=>acc+root.count,0);
+                return (
+                  <div className={`rounded-xl border overflow-hidden max-h-80 overflow-y-auto mb-6 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                    {totalCount===0&&<p className="text-sm opacity-50 italic p-4">Nenhuma questão disponível para prova.</p>}
+                    {sourceRoots.map(root=>{
+                      const rootKey = `source-${root.source}`;
+                      const rootOpen = examOpenFolders[rootKey] ?? true;
+                      const visibleFolders = root.folders.filter(folder => folderQuestionCount(folder) > 0 || folderSubjects(folder.id, root.source).length > 0 || childFolders(folder.id, root.source).length > 0);
+                      return (
+                        <section key={root.source} className={`border-b last:border-b-0 ${darkMode?'border-gray-700':'border-gray-100'}`}>
+                          <div className={`flex items-center gap-2 px-3 py-2.5 ${darkMode?'bg-gray-900/30':'bg-gray-50'}`}>
+                            <span className="w-8"/>
+                            <button onClick={()=>toggleFolderOpen(rootKey)} className="min-w-0 flex-1 flex items-center gap-2 text-left">
+                              {rootOpen?<ChevronDown className="w-4 h-4 opacity-40 flex-shrink-0"/>:<ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0"/>}
+                              <FolderIcon className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+                              <span className="min-w-0">
+                                <span className="block text-sm font-bold truncate">{root.title}</span>
+                                <span className="block text-xs opacity-40">{qLabel(root.count)}</span>
+                              </span>
+                            </button>
+                          </div>
+                          {rootOpen&&(
+                            <div>
+                              {root.directSubjects.map(subject=>renderSubject(subject, 0))}
+                              {visibleFolders.map(folder=>renderFolder(folder, 0))}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               <div className="flex gap-4">
                 <button onClick={()=>{setExamSetup(null);setExamTopics([]);}} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
                 <button
@@ -7030,16 +8000,44 @@ export default function QuestionBankApp() {
               <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/>Chaves API (Gemini)</label>
               <div className={`p-3 rounded-xl mb-3 text-xs leading-relaxed ${darkMode?'bg-blue-900/20 border border-blue-800/40 text-blue-300':'bg-blue-50 border border-blue-200 text-blue-800'}`}>
                 <p className="font-bold mb-1">ℹ️ Sobre as chaves</p>
-                <p>Cada chave gratuita tem limite de ~20 requests/dia. Cadastre até 3 chaves (de contas Google diferentes) para o site alternar automaticamente.</p>
+                <p>Cada chave gratuita tem limite de ~20 requests/dia. Cadastre quantas chaves quiser para o site alternar automaticamente.</p>
                 <p className="mt-1 opacity-80">⚠️ O Gemini funciona melhor à noite. Erros durante o dia geralmente são sobrecarga dos servidores, não problema da sua chave.</p>
                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold block mt-1">Criar nova chave gratuita →</a>
               </div>
-              {[1,2,3].map(n=>{const kv=n===1?(settings.apiKey1!==undefined?settings.apiKey1:settings.apiKey):settings[`apiKey${n}`];const disabled=n>1&&(!kv||!kv.trim());return(
-                <div key={n} className="flex items-center gap-3 mb-3">
-                  <input type="radio" name="ak" checked={(settings.activeKeyIndex||1)===n} onChange={()=>saveSettings({...settings,activeKeyIndex:n})} disabled={disabled} className="w-5 h-5 accent-yellow-600 disabled:opacity-30"/>
-                  <input type="password" value={kv||''} onChange={e=>{const ns={...settings};if(n===1){ns.apiKey1=e.target.value;ns.apiKey=e.target.value;}else{ns[`apiKey${n}`]=e.target.value;}setSettings(ns);}} onBlur={()=>saveSettings(settings)} placeholder={`Chave ${n}...`} className={`flex-1 p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                </div>
-              );})}
+              {(() => {
+                const rows = getGeminiKeyRows(settings);
+                const activeId = getActiveGeminiKeyId(settings);
+                const updateRow = (idx, field, value) => {
+                  const baseRows = getGeminiKeyRows(settingsRef.current);
+                  const updated = baseRows.map((row, i) => i === idx
+                    ? { ...row, id:row.isNew ? makeGeminiKeyId() : row.id, isNew:false, name:`Chave ${idx + 1}`, [field]:value }
+                    : row
+                  ).filter(row => !row.isNew);
+                  setSettings(withGeminiKeys(settingsRef.current, updated));
+                };
+                const removeRow = (idx) => {
+                  const baseRows = getGeminiKeyRows(settingsRef.current);
+                  const updated = baseRows.filter((row, i) => i !== idx && !row.isNew);
+                  saveSettings(withGeminiKeys(settingsRef.current, updated));
+                };
+                return rows.map((row, idx) => {
+                  const disabled = !row.value.trim();
+                  const canRemove = rows.filter(r => !r.isNew).length > 1 && !row.isNew;
+                  return (
+                    <div key={row.id} className={`mb-3 rounded-xl border p-3 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                      <div className="flex items-center gap-3">
+                        <input type="radio" name="ak" checked={!disabled && activeId===row.id} onChange={()=>saveSettings(withGeminiKeys(settingsRef.current, normalizeGeminiKeys(settingsRef.current), row.id))} disabled={disabled} className="w-5 h-5 accent-yellow-600 disabled:opacity-30 flex-shrink-0"/>
+                        <input type="text" value={row.value||''} onChange={e=>updateRow(idx,'value',e.target.value)} onBlur={()=>saveSettings(settingsRef.current)} placeholder={`Chave Gemini ${idx + 1}...`} className={`flex-1 min-w-0 p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-gray-50 border-gray-200'}`}/>
+                        {canRemove&&(
+                          <button onClick={()=>removeRow(idx)} title="Remover chave" className={`p-2 rounded-lg ${darkMode?'text-gray-500 hover:text-red-400 hover:bg-gray-700':'text-gray-400 hover:text-red-500 hover:bg-gray-100'}`}>
+                            <Trash2 className="w-4 h-4"/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
             {/* Oracle Length */}
             <div>
@@ -7370,8 +8368,148 @@ export default function QuestionBankApp() {
       )}
 
       {/* ── STANDARD MODALS ── */}
+      {newFolderModal&&(()=>{
+        const sourceLabel = libFilter==='gemini'?'Oráculo':libFilter==='academia'?'Academia':'Externo';
+        const parentLabel = newFolderParentId ? getFolderLabel(newFolderParentId) : sourceLabel;
+        const cleanName = newFolderName.trim();
+        return (
+          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{setNewFolderModal(false);setNewFolderName('');setNewFolderParentId(null);}}>
+            <div className={`w-full max-w-lg rounded-2xl border p-6 overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-start gap-4 mb-6">
+                <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${darkMode?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>
+                  <FolderIcon className="w-6 h-6"/>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">{newFolderParentId?'Nova pasta filha':'Nova pasta'}</p>
+                  <h3 className="text-2xl font-serif font-bold text-yellow-600">Criar pasta</h3>
+                  <p className="text-sm opacity-60 mt-1">Destino: <span className="font-bold">{parentLabel}</span></p>
+                </div>
+              </div>
+              <label className="block text-xs font-bold uppercase tracking-widest opacity-50 mb-2">Nome da pasta</label>
+              <input value={newFolderName} onChange={e=>setNewFolderName(e.target.value)} onKeyDown={async e=>{if(e.key==='Enter'&&cleanName){await createLibraryFolder(libFilter,cleanName,newFolderParentId);setNewFolderModal(false);setNewFolderName('');setNewFolderParentId(null);}}} placeholder="Ex: Prova 1, AFP, Revisão de cardio..." className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/>
+              <div className={`mt-4 rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
+                <p className="text-[11px] font-bold uppercase tracking-widest opacity-40 mb-2">Vai aparecer como</p>
+                <div className="flex items-center gap-2 min-w-0 text-sm">
+                  <FolderIcon className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+                  <span className="opacity-60 truncate">{parentLabel}</span>
+                  <ChevronRight className="w-3 h-3 opacity-40 flex-shrink-0"/>
+                  <span className="font-bold truncate">{cleanName || 'Nome da pasta'}</span>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={()=>{setNewFolderModal(false);setNewFolderName('');setNewFolderParentId(null);}} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+                <button disabled={!cleanName} onClick={async()=>{await createLibraryFolder(libFilter,cleanName,newFolderParentId);setNewFolderModal(false);setNewFolderName('');setNewFolderParentId(null);}} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Criar pasta</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {moveSubjectModal&&(()=>{
+        const movingFolder = isFolderItem(moveSubjectModal);
+        const currentId = movingFolder ? (moveSubjectModal.parentFolderId || null) : (moveSubjectModal.folderId || null);
+        const selectedDest = Object.prototype.hasOwnProperty.call(moveSubjectModal, '_selectedDest') ? moveSubjectModal._selectedDest : currentId;
+        const setSelectedDest = (id) => setMoveSubjectModal(p=>({...p,_selectedDest:id}));
+        const folderDestinations = sourceFolders(moveSubjectModal.source)
+          .filter(folder => !movingFolder || (folder.id !== moveSubjectModal.id && !isFolderDescendant(folder.id, moveSubjectModal.id)))
+          .map(folder => ({...folder, title:getFolderLabel(folder.id)}));
+        const destinations = [{id:null,title:'Raiz'},...folderDestinations];
+        const selectedDestObj = destinations.find(f=>(f.id||null)===(selectedDest||null)) || destinations[0];
+        const currentLocation = movingFolder ? getFolderParentTitle(moveSubjectModal) : getSubjectFolderTitle(moveSubjectModal);
+        const createMoveFolder = async () => {
+          const created = await createLibraryFolder(moveSubjectModal.source, moveNewFolderName, selectedDest || null);
+          if (!created) return;
+          setMoveNewFolderName('');
+          setSelectedDest(created.id);
+        };
+        return (
+          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{setMoveSubjectModal(null);setMoveNewFolderName('');}}>
+            <div className={`w-full max-w-lg rounded-2xl border p-6 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
+              <div className="mb-5">
+                <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">{movingFolder?'Mover pasta':'Mover assunto'}</p>
+                <h3 className="text-xl font-serif font-bold text-yellow-600">{moveSubjectModal.title}</h3>
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 text-sm`}>
+                  <div className={`rounded-xl border p-3 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+                    <p className="text-[11px] font-bold uppercase tracking-widest opacity-40 mb-1">Está em</p>
+                    <p className="font-bold truncate">{currentLocation}</p>
+                  </div>
+                  <div className={`rounded-xl border p-3 ${darkMode?'border-yellow-700 bg-yellow-900/10':'border-yellow-200 bg-yellow-50'}`}>
+                    <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-1">Vai para</p>
+                    <p className="font-bold text-yellow-600 truncate">{selectedDestObj.title}</p>
+                  </div>
+                </div>
+              </div>
+              <div className={`rounded-xl border overflow-hidden mb-5 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                {destinations.map(folder=> {
+                  const id = folder.id || null;
+                  const selected = (selectedDest || null) === id;
+                  return (
+                    <button key={folder.id||'root'} onClick={()=>setSelectedDest(id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 border-b last:border-b-0 text-left transition-colors ${darkMode?'border-gray-700':'border-gray-100'} ${selected?(darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'hover:bg-gray-700 text-gray-200':'hover:bg-gray-50 text-gray-800')}`}>
+                      <FolderIcon className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
+                      <span className="font-bold text-sm truncate">{folder.title}</span>
+                      {selected&&<CheckIcon className="w-4 h-4 ml-auto text-yellow-600 flex-shrink-0"/>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className={`rounded-xl border p-3 mb-5 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                <p className="text-[11px] font-bold uppercase tracking-widest opacity-40 mb-2">Criar nova pasta em {selectedDestObj.title}</p>
+                <div className="flex gap-2">
+                  <input value={moveNewFolderName} onChange={e=>setMoveNewFolderName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') createMoveFolder();}} placeholder="Nome da pasta" className={`min-w-0 flex-1 px-3 py-2 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 text-sm font-bold ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                  <button onClick={createMoveFolder} disabled={!moveNewFolderName.trim()} className="px-3 py-2 rounded-lg bg-yellow-600 text-white font-bold text-sm hover:bg-yellow-700 disabled:opacity-50">Criar</button>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={()=>{setMoveSubjectModal(null);setMoveNewFolderName('');}} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+                <button onClick={async()=>{movingFolder?await moveFolderToFolder(moveSubjectModal,selectedDest||null):await moveSubjectToFolder(moveSubjectModal,selectedDest||null);setMoveSubjectModal(null);setMoveNewFolderName('');}} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700">Mover</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {folderReviewModal&&(()=>{
+        const sources = getFolderReviewSources(folderReviewModal);
+        const selectedCount = sources.filter(({subject,topic})=>folderReviewConfig.selected[`${subject.id}__${topic.id}`]).length;
+        return (
+          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setFolderReviewModal(null)}>
+            <div className={`w-full max-w-2xl rounded-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Revisão de pasta</p>
+                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><RepeatIcon className="w-6 h-6"/>{folderReviewModal.title}</h3>
+                </div>
+                <button onClick={()=>setFolderReviewModal(null)} className={`p-2 rounded-lg ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Total de questões</label><input type="number" min="1" max="200" value={folderReviewConfig.total} onChange={e=>setFolderReviewConfig(p=>({...p,total:parseInt(e.target.value)||1}))} className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/></div>
+                <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Máx. por tema</label><input type="number" min="1" max="50" value={folderReviewConfig.perTopic} onChange={e=>setFolderReviewConfig(p=>({...p,perTopic:parseInt(e.target.value)||1}))} className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/></div>
+              </div>
+              <label className="block text-xs font-bold uppercase tracking-widest mb-3 opacity-50">Temas ({selectedCount} selecionados)</label>
+              <div className={`rounded-xl border overflow-hidden max-h-72 overflow-y-auto mb-6 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                {sources.length===0&&<p className="text-sm opacity-50 italic p-4">Nenhuma questão encontrada nesta pasta.</p>}
+                {sources.map(({subject, topic, questions})=>{
+                  const key=`${subject.id}__${topic.id}`;
+                  const checked=!!folderReviewConfig.selected[key];
+                  const avg = questions.length ? Math.round(questions.reduce((acc,q)=>acc+((topic.reviewStats||{})[q.id]||0),0)/questions.length*10)/10 : 0;
+                  return (
+                    <label key={key} className={`flex items-center gap-3 p-3 cursor-pointer border-b last:border-b-0 transition-colors ${darkMode?'border-gray-700':'border-gray-100'} ${checked?(darkMode?'bg-yellow-900/20':'bg-yellow-50'):(darkMode?'hover:bg-gray-700':'hover:bg-gray-50')}`}>
+                      <input type="checkbox" checked={checked} onChange={()=>setFolderReviewConfig(p=>({...p,selected:{...p.selected,[key]:!p.selected[key]}}))} className="accent-yellow-600"/>
+                      <div className="min-w-0"><p className="text-sm font-bold truncate">{topic.title}</p><p className="text-xs opacity-40">{subject.title} • {questions.length} questões • média {avg} revisão(ões)</p></div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex gap-3">
+                <button onClick={()=>setFolderReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+                <button onClick={createFolderReview} disabled={!selectedCount} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Criar bloco</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='folder'&&<GModal title="Excluir pasta?" message="Os itens dentro dela serão mantidos na pasta anterior." confirmText="Excluir pasta" onConfirm={async()=>{const folder=libraryFolders.find(f=>f.id===deleteId.id);await deleteFolderAndKeepContents(folder);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='academia-extra-bloco'&&<GModal title="Excluir bloco?" message="As questões deste bloco serão removidas da Academia e do Acervo do Oráculo." confirmText="Excluir" onConfirm={async()=>{
         const {blocoId, topicId, subjectId, oracleTopicId} = deleteId;
         // Remove from Academia subject
