@@ -5678,6 +5678,13 @@ export default function QuestionBankApp() {
             const treeItemCount = treeItems.length;
             const rowBorder = darkMode?'border-gray-800':'border-gray-100';
             const rowHover = darkMode?'hover:bg-gray-800/70':'hover:bg-gray-50';
+            const dropSlot = (position) => (
+              <div className={`absolute left-3 right-3 ${position==='before'?'top-0':'bottom-0'} z-20 pointer-events-none flex items-center gap-1`}>
+                <span className="h-2 w-2 rounded-full bg-yellow-500 shadow-sm shadow-yellow-500/40"/>
+                <span className="h-0.5 flex-1 rounded-full bg-yellow-500 shadow-sm shadow-yellow-500/40"/>
+                <span className="h-2 w-2 rounded-full bg-yellow-500 shadow-sm shadow-yellow-500/40"/>
+              </div>
+            );
             const getDropId = (el) => {
               const raw = el?.dataset?.dropId;
               if (!raw || raw === 'root') return null;
@@ -5696,14 +5703,14 @@ export default function QuestionBankApp() {
               return !sameId(drag.item.id, targetId) && !sameId(drag.item.parentFolderId || null, targetId || null) && !isFolderDescendant(targetId, drag.item.id);
             };
             const isDropActive = (targetId) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode === 'inside' && isValidDrop(libraryDrag, targetId) && sameId(libraryDrag.targetId || null, targetId || null);
-            const isItemDropActive = (item, mode) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode === mode && sameId(libraryDrag.targetItem?.id, item.id);
+            const isSlotActive = (parentId, slotIndex) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode !== 'inside' && sameId(libraryDrag.slotParentId || null, parentId || null) && libraryDrag.slotIndex === slotIndex;
             const startLibraryDrag = (e, item, type) => {
               if (e.button !== undefined && e.button !== 0) return;
               e.stopPropagation();
               e.preventDefault();
               suppressLibraryClickUntil.current = Date.now() + 450;
               e.currentTarget.setPointerCapture?.(e.pointerId);
-              setLibraryDrag({ item, type, source:item.source, startX:e.clientX, startY:e.clientY, x:e.clientX, y:e.clientY, active:false, targetId:null, targetItem:null, dropMode:'inside', targetFound:false });
+              setLibraryDrag({ item, type, source:item.source, startX:e.clientX, startY:e.clientY, x:e.clientX, y:e.clientY, active:false, targetId:null, targetItem:null, dropMode:'inside', targetFound:false, slotParentId:null, slotIndex:null });
             };
             const updateLibraryDrag = (e) => {
               if (!libraryDrag) return;
@@ -5713,6 +5720,8 @@ export default function QuestionBankApp() {
               let targetItem = null;
               let dropMode = 'inside';
               let targetFound = false;
+              let slotParentId = null;
+              let slotIndex = null;
               if (active) {
                 const pointEl = document.elementFromPoint(e.clientX, e.clientY);
                 const itemEl = pointEl?.closest?.('[data-library-item]');
@@ -5728,6 +5737,16 @@ export default function QuestionBankApp() {
                     targetItem = itemUnderPointer;
                     targetId = dropMode === 'inside' ? itemUnderPointer.id : getLibraryItemParentId(itemUnderPointer);
                     targetFound = isValidDrop(libraryDrag, targetId, dropMode, targetItem);
+                    if (targetFound && dropMode !== 'inside') {
+                      slotParentId = targetId || null;
+                      const slotSiblings = sortLibraryItems(library.filter(candidate =>
+                        candidate.source === libraryDrag.item.source &&
+                        candidate.id !== libraryDrag.item.id &&
+                        getLibraryItemParentId(candidate) === (slotParentId || null)
+                      ));
+                      const targetIndex = slotSiblings.findIndex(candidate=>sameId(candidate.id, itemUnderPointer.id));
+                      slotIndex = targetIndex < 0 ? null : (dropMode === 'before' ? targetIndex : targetIndex + 1);
+                    }
                   }
                 }
                 if (dropEl) {
@@ -5735,13 +5754,15 @@ export default function QuestionBankApp() {
                     targetId = getDropId(dropEl);
                     targetItem = null;
                     dropMode = 'inside';
+                    slotParentId = null;
+                    slotIndex = null;
                     targetFound = isValidDrop(libraryDrag, targetId, dropMode, null);
                   }
                   if (!targetFound) targetId = null;
                 }
                 if (targetId) setLibraryOpenFolders(p=>p[targetId]?p:{...p,[targetId]:true});
               }
-              setLibraryDrag(p=>p?{...p,x:e.clientX,y:e.clientY,active,targetId,targetItem,dropMode,targetFound}:p);
+              setLibraryDrag(p=>p?{...p,x:e.clientX,y:e.clientY,active,targetId,targetItem,dropMode,targetFound,slotParentId,slotIndex}:p);
             };
             const finishLibraryDrag = async (e) => {
               if (!libraryDrag) return;
@@ -5766,12 +5787,14 @@ export default function QuestionBankApp() {
                 <GripIcon className="w-4 h-4"/>
               </button>
             );
-            const renderTreeSubject = (s, depth=0) => {
+            const renderTreeSubject = (s, depth=0, siblings=[], index=0) => {
               const pct=subjectProgress(s);
               const totalTopics = s.topics.length;
               const totalQs = countSubjectQuestions(s);
               const dragging = libraryDrag?.item?.id === s.id;
-              const rowTarget = isItemDropActive(s,'before') || isItemDropActive(s,'after');
+              const parentId = getLibraryItemParentId(s);
+              const beforeTarget = isSlotActive(parentId, index);
+              const afterTarget = index === siblings.length - 1 && isSlotActive(parentId, siblings.length);
               const mobilePad = 4 + depth*8;
               const desktopPad = 12 + depth*18;
               const openSubject = () => {
@@ -5784,8 +5807,10 @@ export default function QuestionBankApp() {
                 {label:'Excluir', icon:<Trash2 className="w-3.5 h-3.5"/>, fn:()=>setDeleteId({type:'subject',id:s.id}), extra:darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300', danger:true},
               ];
               return (
-                <div key={s.id} data-library-item data-item-id={s.id} data-item-type="subject" data-library-drop data-drop-id={s.folderId || 'root'} className={`group border-b last:border-b-0 transition-colors relative ${rowBorder} ${rowHover} ${rowTarget?(darkMode?'ring-1 ring-inset ring-yellow-700 bg-yellow-900/20':'ring-1 ring-inset ring-yellow-300 bg-yellow-50'):''} ${dragging?'opacity-40':''}`}>
+                <div key={s.id} data-library-item data-item-id={s.id} data-item-type="subject" data-library-drop data-drop-id={s.folderId || 'root'} className={`group border-b last:border-b-0 transition-colors relative ${rowBorder} ${rowHover} ${(beforeTarget||afterTarget)?(darkMode?'bg-yellow-900/5':'bg-yellow-50/30'):''} ${dragging?'opacity-40':''}`}>
                   {depth>0&&<span className={`absolute left-3 top-0 bottom-0 w-px ${darkMode?'bg-gray-800':'bg-gray-200'}`}/>}
+                  {beforeTarget&&dropSlot('before')}
+                  {afterTarget&&dropSlot('after')}
                   <div className="md:hidden px-2.5 py-2" style={{paddingLeft:mobilePad}}>
                     <div className="flex items-center gap-1.5">
                       {s.id!=='imported-folder'?dragHandle(s,'subject'):<span className="w-6 flex-shrink-0"/>}
@@ -5818,13 +5843,15 @@ export default function QuestionBankApp() {
                 </div>
               );
             };
-            const renderTreeFolder = (folder, depth=0) => {
+            const renderTreeFolder = (folder, depth=0, siblings=[], index=0) => {
               const open = libraryOpenFolders[folder.id] ?? true;
               const totalQs = countFolderQuestions(folder);
               const totalSubjects = getSubjectsInFolderTree(folder).length;
               const dropActive = isDropActive(folder.id);
               const dragging = libraryDrag?.item?.id === folder.id;
-              const rowTarget = isItemDropActive(folder,'before') || isItemDropActive(folder,'after');
+              const parentId = getLibraryItemParentId(folder);
+              const beforeTarget = isSlotActive(parentId, index);
+              const afterTarget = index === siblings.length - 1 && isSlotActive(parentId, siblings.length);
               const mobilePad = 4 + depth*8;
               const desktopPad = 12 + depth*18;
               const openFolderView = () => {
@@ -5838,8 +5865,10 @@ export default function QuestionBankApp() {
               ];
               return (
                 <React.Fragment key={folder.id}>
-                  <div data-library-item data-item-id={folder.id} data-item-type="folder" data-library-drop data-drop-id={folder.id} className={`group border-b transition-colors relative ${rowBorder} ${rowHover} ${(dropActive||rowTarget)?(darkMode?'bg-yellow-900/25 ring-1 ring-inset ring-yellow-700':'bg-yellow-50 ring-1 ring-inset ring-yellow-300'):''} ${dragging?'opacity-40':''}`}>
+                  <div data-library-item data-item-id={folder.id} data-item-type="folder" data-library-drop data-drop-id={folder.id} className={`group border-b transition-colors relative ${rowBorder} ${rowHover} ${dropActive?(darkMode?'bg-yellow-900/25 ring-1 ring-inset ring-yellow-700':'bg-yellow-50 ring-1 ring-inset ring-yellow-300'):''} ${(beforeTarget||afterTarget)?(darkMode?'bg-yellow-900/5':'bg-yellow-50/30'):''} ${dragging?'opacity-40':''}`}>
                     {depth>0&&<span className={`absolute left-3 top-0 bottom-0 w-px ${darkMode?'bg-gray-800':'bg-gray-200'}`}/>}
+                    {beforeTarget&&dropSlot('before')}
+                    {afterTarget&&dropSlot('after')}
                     <div className="md:hidden px-2.5 py-2" style={{paddingLeft:mobilePad}}>
                       <div className="flex items-center gap-1.5">
                         {dragHandle(folder,'folder')}
@@ -5876,13 +5905,13 @@ export default function QuestionBankApp() {
                   </div>
                   {open&&(
                     <>
-                      {directItems(folder.id).map(item=>renderTreeItem(item, depth+1))}
+                      {directItems(folder.id).map((item,index,items)=>renderTreeItem(item, depth+1, items, index))}
                     </>
                   )}
                 </React.Fragment>
               );
             };
-            const renderTreeItem = (item, depth=0) => isFolderItem(item) ? renderTreeFolder(item, depth) : renderTreeSubject(item, depth);
+            const renderTreeItem = (item, depth=0, siblings=[], index=0) => isFolderItem(item) ? renderTreeFolder(item, depth, siblings, index) : renderTreeSubject(item, depth, siblings, index);
             return (
               <div>
                 <div className="mb-6">
@@ -5927,7 +5956,7 @@ export default function QuestionBankApp() {
                       <p className="font-bold">Nada aqui ainda</p>
                     </div>
                   )}
-                  {treeItems.map(item=>renderTreeItem(item,0))}
+                  {treeItems.map((item,index,items)=>renderTreeItem(item,0,items,index))}
                 </div>
                 {libraryDrag?.active&&(
                   <div className={`fixed z-[80] pointer-events-none rounded-xl border px-3 py-2 text-sm font-bold shadow-2xl ${darkMode?'bg-gray-800 border-yellow-700 text-yellow-300':'bg-white border-yellow-300 text-yellow-800'}`} style={{left:libraryDrag.x+12,top:libraryDrag.y+12,maxWidth:280}}>
