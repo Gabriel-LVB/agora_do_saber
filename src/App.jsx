@@ -5761,7 +5761,7 @@ export default function QuestionBankApp() {
                 onClick={e=>{e.preventDefault();e.stopPropagation();suppressLibraryClickUntil.current=Date.now()+650;}}
                 title="Arrastar para mover"
                 aria-label="Arrastar para mover"
-                className={`h-9 w-8 md:h-8 md:w-8 rounded-lg flex items-center justify-center flex-shrink-0 cursor-grab active:cursor-grabbing touch-none ${darkMode?'text-gray-500 hover:text-yellow-400 hover:bg-gray-700':'text-gray-400 hover:text-yellow-700 hover:bg-gray-100'}`}
+                className={`h-8 w-6 md:h-8 md:w-8 rounded-lg flex items-center justify-center flex-shrink-0 cursor-grab active:cursor-grabbing touch-none ${darkMode?'text-gray-500 hover:text-yellow-400 hover:bg-gray-700':'text-gray-400 hover:text-yellow-700 hover:bg-gray-100'}`}
               >
                 <GripIcon className="w-4 h-4"/>
               </button>
@@ -5772,7 +5772,7 @@ export default function QuestionBankApp() {
               const totalQs = countSubjectQuestions(s);
               const dragging = libraryDrag?.item?.id === s.id;
               const rowTarget = isItemDropActive(s,'before') || isItemDropActive(s,'after');
-              const mobilePad = 6 + depth*10;
+              const mobilePad = 4 + depth*8;
               const desktopPad = 12 + depth*18;
               const openSubject = () => {
                 if (Date.now() <= suppressLibraryClickUntil.current) return;
@@ -5788,9 +5788,9 @@ export default function QuestionBankApp() {
                   {depth>0&&<span className={`absolute left-3 top-0 bottom-0 w-px ${darkMode?'bg-gray-800':'bg-gray-200'}`}/>}
                   <div className="md:hidden px-2.5 py-2" style={{paddingLeft:mobilePad}}>
                     <div className="flex items-center gap-1.5">
-                      {s.id!=='imported-folder'?dragHandle(s,'subject'):<span className="w-8 flex-shrink-0"/>}
-                      <span className="w-5 flex-shrink-0"/>
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}>{s.source==='academia'?<AcademiaIcon className="w-3.5 h-3.5"/>:<BlockIcon className="w-3.5 h-3.5"/>}</div>
+                      {s.id!=='imported-folder'?dragHandle(s,'subject'):<span className="w-6 flex-shrink-0"/>}
+                      <span className="w-3 flex-shrink-0"/>
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}>{s.source==='academia'?<AcademiaIcon className="w-3.5 h-3.5"/>:<BlockIcon className="w-3.5 h-3.5"/>}</div>
                       <div className="min-w-0 flex-1 flex items-center gap-1.5">
                         <button onClick={openSubject} className="min-w-0 flex-1 text-left">
                           <h3 className="font-bold text-sm leading-tight truncate">{s.title}</h3>
@@ -5825,7 +5825,7 @@ export default function QuestionBankApp() {
               const dropActive = isDropActive(folder.id);
               const dragging = libraryDrag?.item?.id === folder.id;
               const rowTarget = isItemDropActive(folder,'before') || isItemDropActive(folder,'after');
-              const mobilePad = 6 + depth*10;
+              const mobilePad = 4 + depth*8;
               const desktopPad = 12 + depth*18;
               const openFolderView = () => {
                 if (Date.now() <= suppressLibraryClickUntil.current) return;
@@ -5843,10 +5843,10 @@ export default function QuestionBankApp() {
                     <div className="md:hidden px-2.5 py-2" style={{paddingLeft:mobilePad}}>
                       <div className="flex items-center gap-1.5">
                         {dragHandle(folder,'folder')}
-                        <button onClick={e=>{e.stopPropagation();toggleLibraryFolder(folder.id);}} title={open?'Recolher':'Expandir'} className={`h-9 w-5 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>
+                        <button onClick={e=>{e.stopPropagation();toggleLibraryFolder(folder.id);}} title={open?'Recolher':'Expandir'} className={`h-8 w-4 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>
                           {open?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
                         </button>
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderIcon className="w-4 h-4"/></div>
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderIcon className="w-4 h-4"/></div>
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
                           <button onClick={openFolderView} className="min-w-0 flex-1 text-left">
                             <h3 className="font-bold text-sm leading-tight truncate">{folder.title}</h3>
@@ -5913,7 +5913,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
 
-                <div data-library-drop data-drop-id={treeRootId || 'root'} className={`rounded-xl border overflow-hidden ${isDropActive(treeRootId)?(darkMode?'ring-2 ring-yellow-700 bg-yellow-900/10':'ring-2 ring-yellow-300 bg-yellow-50/40'):''} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                <div data-library-drop data-drop-id={treeRootId || 'root'} className={`rounded-xl border overflow-visible md:overflow-hidden ${isDropActive(treeRootId)?(darkMode?'ring-2 ring-yellow-700 bg-yellow-900/10':'ring-2 ring-yellow-300 bg-yellow-50/40'):''} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
                   <div className={`hidden md:flex items-center gap-3 px-4 py-2 text-[11px] font-bold uppercase tracking-widest border-b ${darkMode?'border-gray-800 text-gray-500 bg-gray-950/40':'border-gray-100 text-gray-400 bg-gray-50'}`}>
                     <span className="w-8 flex-shrink-0"/>
                     <span className="flex-1 min-w-0">Nome</span>
