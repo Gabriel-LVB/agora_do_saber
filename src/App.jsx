@@ -241,6 +241,39 @@ const formatSyllabusTopics = (topics) => topics.map((topic, index) => {
   return `Tópico ${index + 1}: ${cleanTitle || topic.title}\n${topic.subtopics.map(sub => `  - ${sub}`).join('\n')}`;
 }).join('\n\n');
 
+const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
+const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---|\n[ \t]*##|\n[ \t]*(?:(?:\*\*)?[ \t]*)?Quest[aã]o|$/i;
+
+const extractLabeledSection = (text = '', labels = EXPLANATION_LABELS, stopRe = QUESTION_OR_SEPARATOR_RE) => {
+  const labelRe = new RegExp(
+    `(?:^|\\n)[ \\t]*(?:[-*•][ \\t]*)?(?:\\*\\*)?[ \\t]*(?:${labels})[ \\t]*(?:(?:\\*\\*)?[ \\t]*[:\\-–—][ \\t]*(?:\\*\\*)?[ \\t]*|(?:\\*\\*)?[ \\t]*(?:\\n|$))`,
+    'i'
+  );
+  const match = text.match(labelRe);
+  if (!match) return '';
+
+  const start = match.index + match[0].length;
+  const rest = text.substring(start);
+  const stop = rest.search(stopRe);
+  return (stop >= 0 ? rest.substring(0, stop) : rest).trim();
+};
+
+const cleanQuestionExplanation = (explanation = '') => {
+  let exp = String(explanation || '').replace(/\r\n/g, '\n').trim();
+  if (!exp) return '';
+
+  const labeled = extractLabeledSection(exp);
+  if (labeled) exp = labeled;
+
+  exp = exp
+    .replace(/^(?:[Aa]lternativa[ \t]+correta|[Gg]abarito(?:[ \t]+oficial)?|[Rr]esposta(?:[ \t]+correta)?|[Cc]orreta)[ \t]*[:\-–—][^\n]*\n+/i, '')
+    .replace(/^[-–—]+\s*/, '')
+    .replace(/\n---.*$/s, '')
+    .trim();
+
+  return exp;
+};
+
 const cleanTopicTitle = (title = '') => title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
 
 const isLikelySyllabusGroupTitle = (subtopic = '') => {
@@ -980,14 +1013,14 @@ const parseData = (text, namespace = '') => {
       if (options.length < 2) return;
 
       let exp = '';
-      const expM = block.match(/(?:Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio)[ \t]*:?([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*##|\n[ \t]*(?:(?:\*\*)?[ \t]*)?Quest[aã]o|$)/i);
-      if (expM?.[1]?.trim().length > 5) {
-        exp = expM[1].trim();
+      const labeledExp = extractLabeledSection(block);
+      if (labeledExp.length > 5) {
+        exp = labeledExp;
       } else if (ansM) {
         const after = block.substring(ansM.index + ansM[0].length).replace(/^\s*\n/,'').trim();
         if (after.length > 5) exp = after;
       }
-      exp = exp.replace(/^[-–—]+\s*/,'').replace(/\n---.*$/s,'').trim();
+      exp = cleanQuestionExplanation(exp);
 
       if (correct) {
         const ctTxt = options.find(o => o.letter === correct)?.txt;
@@ -1054,9 +1087,7 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
       const expectedAnswer = respMatch ? respMatch[1].trim() : '';
 
       // Extrai explicação
-      let exp = '';
-      const expM = block.match(/Explica[çc][aã]o[:\s]+([\s\S]*?)(?=\n[ \t]*---|\n[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o|$)/i);
-      if (expM) exp = expM[1].trim();
+      let exp = cleanQuestionExplanation(extractLabeledSection(block));
 
       questions.push({ id, statement: stmt, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay });
     } catch(e) {}
@@ -2237,6 +2268,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
   // onCall(prompt, sys) → chama Gemini com rotação de chaves
   // fallback: usa apiKey direto se onCall não for passado
   const callOracle = onCall || ((prompt, sys) => callGemini(prompt, sys, apiKey));
+  const explanation = cleanQuestionExplanation(question.explanation);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -2249,7 +2281,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
     setMessages(p=>[...p,{role:'user',text:msg}]);
     setLoading(true);
     try {
-      const ctx = `Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${question.explanation}`;
+      const ctx = `Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`;
       const sys = `Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Responda com precisão clínica. Contexto:\n${ctx}`;
       const hist = messages.map(m=>`${m.role==='user'?'Estudante':'Oráculo'}: ${m.text}`).join('\n');
       const r = await callOracle(`${hist}\nEstudante: ${msg}`, sys);
@@ -2281,7 +2313,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
             <span className={`text-xs mr-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Explicar:</span>
             {question.options.map(opt=>(
               <button key={opt.letter}
-                onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${question.explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
+                onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
                 className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${opt.isCorrect?(darkMode?'bg-green-800 text-green-200 hover:bg-green-700':'bg-green-100 text-green-700 hover:bg-green-200'):(darkMode?'bg-gray-700 text-gray-300 hover:bg-gray-600':'bg-gray-100 text-gray-500 hover:bg-gray-200')}`}>
                 {opt.letter}
               </button>
@@ -2310,6 +2342,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const showResults = question.isOpen ? false : ((revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped)));
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && correctLetter === effectiveLetter;
+  const explanation = cleanQuestionExplanation(question.explanation);
 
   return (
     <div className={`rounded-xl shadow-sm border p-4 md:p-6 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
@@ -2385,8 +2418,8 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
                 : <span className="text-xs text-red-500 font-bold">✗ Incorreto</span>
             }
           </div>
-          <div className="text-base leading-relaxed">{parseHtmlTextChat(question.explanation)}</div>
-          {apiKey && <ChatBox question={question} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>}
+          <div className="text-base leading-relaxed">{parseHtmlTextChat(explanation)}</div>
+          {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>}
         </div>
       )}
     </div>
