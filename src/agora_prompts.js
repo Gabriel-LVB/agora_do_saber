@@ -556,7 +556,7 @@ Antes de responder, confira se cada seção respeita o limite do nível escolhid
 
 // ─── PROMPT: QUESTÕES DE FIXAÇÃO DA ACADEMIA ──────────────────────────────────
 
-export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText = '', questionPlan = null) => {
+export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText = '', questionPlan = null, previousQuestions = '') => {
   const na = s.numAlternatives || 5;
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
@@ -600,12 +600,14 @@ Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, para permitir o mapeamento 
 
 ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
+${previousQuestions ? `QUESTÕES JÁ EXISTENTES SOBRE ESTA AULA (não copie; varie foco, cenário e distratores):\n${previousQuestions.substring(0, 8000)}` : ''}
+
 Gere TODAS as ${total} questões sem interromper.`;
 };
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
 
-export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s) => {
+export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lessonText = '', previousQuestions = '') => {
   const na = s.numAlternatives || 5;
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
@@ -628,5 +630,7 @@ ${REGRAS_EXPLICACAO}
 ${TEMPLATE_QUESTAO(alts)}
 
 Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 2.1...).
+${lessonText ? `\nCONTEXTO DA AULA/EXPLICAÇÕES (base obrigatória das questões):\n${lessonText.substring(0, 12000)}` : ''}
+${previousQuestions ? `\nQUESTÕES ANTERIORES (faça algo ligeiramente diferente, sem repetir a mesma ideia):\n${previousQuestions.substring(0, 8000)}` : ''}
 Gere TODAS as questões sem interromper.`;
 };
