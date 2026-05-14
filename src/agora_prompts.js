@@ -144,17 +144,22 @@ Refira-se SEMPRE pelo conteúdo: "a opção que menciona X", "confundir Y com Z 
 const ACADEMIA_LESSON_LENGTH_RULES = {
   essential: `
 PROFUNDIDADE DA AULA: Nível 1
-- MODO RESUMO DE PROVA: cada subtópico deve ter NO MÁXIMO 55 palavras.
-- Use 2 a 4 bullets curtos OU 1 microparágrafo de até 3 frases. Nunca use parágrafo longo.
-- Corte introduções, contextualizações amplas e frases de transição.
-- Priorize apenas: definição operacional, mecanismo-chave, achado/conduta cobrável e pegadinha.
-- Se houver muitos detalhes no material, agrupe com ponto e vírgula; não explique tudo em prosa.`,
+- MODO RESUMO DE PROVA: escreva em outline de revisão, como Pathoma/First Aid em português, sem virar texto telegráfico.
+- Cada seção do Nível 1 deve começar com uma linha de título curto em negrito, sem marcador e sem ##, resumindo o bloco em 2 a 5 palavras. Exemplos: "**Tipos de hérnias**", "**Fisiopatologia das hérnias**", "**Causas de aderências**".
+- Use 3 a 5 bullets principais por subtópico; use sub-bullets apenas quando houver classificação, sequência fisiopatológica ou contraste importante.
+- O título curto deve dar o contexto geral; os bullets abaixo detalham itens, etapas ou consequências daquele bloco.
+- Cada bullet deve ser uma frase curta, clara e cobrável. Depois do título curto, rótulos simples como "**Incisionais:**", "**Umbilicais:**", "**Aprisionamento venoso:**" e "**Infarto intestinal:**" são adequados.
+- Não use letras ou números como marcadores internos (A., B., 1., i.). Use apenas "- " e, se necessário, sub-bullets indentados.
+- Priorize definição operacional, mecanismo-chave, achado/conduta cobrável e pegadinha, conectando causa → mecanismo → consequência quando fizer sentido.
+- Corte rodeios, aberturas genéricas e repetição literal do subtópico, mas não sacrifique clareza para economizar palavras.`,
   balanced: `
 PROFUNDIDADE DA AULA: Nível 2
+- Cada seção deve começar com uma linha de título curto em negrito, sem marcador e sem ##, resumindo o bloco em 2 a 5 palavras.
 - Cada subtópico deve ter 1 parágrafo curto; use 2 apenas se houver critério/lista importante.
 - Preserve exemplos, mecanismos e critérios cobrados em prova, mas retire aberturas longas e repetição.`,
   complete: `
 PROFUNDIDADE DA AULA: Nível 3
+- Cada seção deve começar com uma linha de título curto em negrito, sem marcador e sem ##, resumindo o bloco em 2 a 5 palavras.
 - Cada subtópico deve ter 1 a 2 parágrafos fortes; use 3 apenas se o subtópico for realmente denso.
 - Contextualize melhor o raciocínio, conectando mecanismo, clínica, critérios e exemplos quando isso ajudar o aprendizado.`
 };
@@ -162,17 +167,17 @@ PROFUNDIDADE DA AULA: Nível 3
 const ACADEMIA_LESSON_OBJECTIVE = {
   essential: `
 OBJETIVO DE LEITURA:
-Escreva como revisão rápida de prova, no estilo "First Aid/Pathoma em português".
-O aluno deve bater o olho e capturar o que cai: nada de introdução, nada de aula discursiva, nada de fechamento elegante.
-Os títulos com ## existem só para o sistema separar as seções.`,
+Escreva como revisão rápida de prova, no estilo "First Aid/Pathoma em português": outline limpo, denso, hierárquico e fácil de escanear.
+O aluno deve bater o olho, ler o título curto do bloco e capturar o que cai nos bullets.
+Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`,
   balanced: `
 OBJETIVO DE LEITURA:
 Escreva como uma aula enxuta, com raciocínio suficiente para o aluno entender e revisar sem excesso.
-Os títulos com ## existem só para o sistema separar as seções; o aluno deve conseguir ocultar os títulos e ainda ler o texto como uma explicação fluida.`,
+Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`,
   complete: `
 OBJETIVO DE LEITURA:
 Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isolados.
-Os títulos com ## existem só para o sistema separar as seções; o aluno deve conseguir ocultar os títulos e ainda ler o texto como uma explicação fluida.`
+Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`
 };
 
 const TEMPLATE_QUESTAO = (alts) => `
@@ -491,8 +496,8 @@ export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', 
   // Gera exemplo de saída esperada com os 2 primeiros subtópicos para a IA imitar o padrão
   const exampleOutput = subtopics.slice(0, 2).map((s, i) =>
     lengthMode === 'essential'
-      ? `## ${s}\n- [conceito-chave em frase curta]\n- [mecanismo/achado/conduta cobrável]\n- [pegadinha ou exceção se houver]`
-      : `## ${s}\n[explicação aqui]`
+      ? `## ${s}\n**[título curto do bloco]**\n- **[item/etapa principal]:** [frase curta e cobrável]\n- **[item/etapa principal]:** [relação de causa e consequência em linguagem direta]\n- **[ponto de prova]:** [exceção, associação ou conduta quando houver]`
+      : `## ${s}\n**[título curto do bloco]**\n[explicação aqui]`
   ).join('\n\n');
 
   return `Você é um professor de medicina da Ágora do Saber, criando uma aula sobre "${topicTitle}"${subjectName ? ` (${subjectName})` : ''}.
@@ -520,17 +525,18 @@ ${exampleOutput}
 REGRAS DE CONTEÚDO:
 ${ACADEMIA_LESSON_LENGTH_RULES[lengthMode]}
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
+- Logo após o ## obrigatório, crie um título curto em negrito que sintetize o subtópico sem copiar tudo. Errado: repetir "Tipos especiais de hérnias: incisionais, umbilicais e inguinais". Certo: "**Tipos de hérnias**".
 - ${lengthMode === 'essential'
-    ? 'Não escreva em fluxo narrativo. Entregue síntese escaneável, objetiva e de alta densidade.'
+    ? 'Escreva em outline de revisão, com bullets densos e frases completas; não escreva como parágrafo acadêmico.'
     : 'Escreva em fluxo narrativo: conecte a seção atual à anterior quando fizer sentido, usando transições naturais.'}
 - ${lengthMode === 'essential'
-    ? 'Pode começar direto no fato cobrável; não precisa contextualizar o papel do conceito.'
+    ? 'Não comece com fragmentos soltos como "dor, distensão, vômitos". Transforme isso em bullet útil, por exemplo: "A hérnia obstrutiva costuma causar dor, distensão, vômitos e constipação."'
     : 'Evite começar toda seção com "[subtópico] é..." ou "[subtópico] refere-se...". Varie a abertura e dê continuidade ao raciocínio.'}
 - ${lengthMode === 'essential'
     ? 'Não use frases como "é fundamental observar", "desempenha papéis cruciais" ou similares; elas inflam o texto.'
     : 'Comece pelo papel daquele conceito dentro do assunto maior, depois explique mecanismo, critério ou consequência relevante.'}
 - ${lengthMode === 'essential'
-    ? 'Se passar de 4 bullets ou 55 palavras em uma seção, reescreva mais curto antes de responder.'
+    ? 'Evite repetir literalmente o título do subtópico como abertura. Reescreva a ideia em formato de anotação de prova, usando negrito para rótulos clínicos quando ajudar.'
     : 'Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.'}
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
 - Use listas (- item) para enumerações, classificações e doses.

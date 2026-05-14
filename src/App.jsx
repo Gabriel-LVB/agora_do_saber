@@ -3208,7 +3208,7 @@ function AcademiaTopicView({
 }) {
   const subtopics = topic.subtopics || [];
   const hasLesson = topic.lessonGenerated;
-  const [hideSubtopicTitles, setHideSubtopicTitles] = useState(false);
+  const [hideSubtopicTitles, setHideSubtopicTitles] = useState(true);
   const setLessonLength = (length) => {
     const ns = { ...settings, explanationLength: length };
     setSettings(ns);
@@ -3223,6 +3223,17 @@ function AcademiaTopicView({
     let i = 0;
     while (i < mdLines.length) {
       const line = mdLines[i];
+      const blockTitleMatch = line.trim().match(/^\*\*([^*]+?)\*\*:?\s*$/);
+      if (blockTitleMatch) {
+        const blockTitle = blockTitleMatch[1].trim().replace(/:$/, '');
+        elements.push(
+          <h3 key={`h3-${i}`} className={`text-[15px] font-bold mt-2 mb-1 ${darkMode?'text-yellow-300':'text-yellow-700'}`}>
+            {blockTitle}
+          </h3>
+        );
+        i++;
+        continue;
+      }
       // Tabela markdown
       if (/^\s*\|.+\|\s*$/.test(line)) {
         const tableLines = [];
@@ -3548,6 +3559,8 @@ export default function QuestionBankApp() {
   const [moveSubjectModal, setMoveSubjectModal] = useState(null);
   const [folderReviewModal, setFolderReviewModal] = useState(null);
   const [folderReviewConfig, setFolderReviewConfig] = useState({ total:30, perTopic:5, selected:{} });
+  const [bulkGenerateModal, setBulkGenerateModal] = useState(null); // { subjectId }
+  const [bulkGenerateRun, setBulkGenerateRun] = useState({ running:false, current:0, total:0, logs:[] });
 
   // ── Paste ─────────────────────────────────────────────────────────────────
   const [pasteText, setPasteText]     = useState('');
@@ -4390,6 +4403,21 @@ export default function QuestionBankApp() {
   };
   const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
   const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
+  const getBulkGenerateTargets = (subject) => {
+    const topics = subject?.topics || [];
+    if (subject?.source === 'academia') return topics.filter(t => !t.lessonGenerated);
+    if (subject?.source === 'gemini') return topics.filter(t => !(t.questions || []).length);
+    return [];
+  };
+  const createBulkLog = (type, msg) => {
+    const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    return { id:Date.now()+Math.random(), type, msg, time };
+  };
+  const addBulkLog = (type, msg) => {
+    setBulkGenerateRun(p => ({ ...p, logs:[...p.logs, createBulkLog(type, msg)] }));
+  };
+  const getBulkErrorText = (err) => ERROR_CONFIGS[err?.message]?.title || err?.message || 'Erro desconhecido';
+  const isRetryableBulkError = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR'].includes(err?.message);
 
   // ── Gerar questões direto (sem modal) ──────────────────────────────────────
   const gerarQuestoesDireto = async (aula, subject, topic) => {
@@ -4705,6 +4733,76 @@ export default function QuestionBankApp() {
     }).map(q=>q.id);
     const na=Object.fromEntries(Object.entries(activeTopic.answers||{}).filter(([k])=>!wrong.includes(k)));
     await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:na}:t)});setShowOnlyWrong(false);
+  };
+
+  const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress } = {}) => {
+    const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{} } : t) };
+    await updateSubject(cleared);
+    const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
+
+    const topicStyle = clearedTopic.questionStyle || settingsRef.current.questionStyle || 'mixed';
+    const subtopicsArr = clearedTopic.subtopics?.filter(s => s.length > 0) || [];
+    const qPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
+    const promptSubtopicCount = subtopicsArr.length > 0
+      ? subtopicsArr.length
+      : Math.max(1, parseInt(settingsRef.current.numSubtopics, 10) || 1);
+    const total = promptSubtopicCount * qPerSub;
+    const subtopicsBlock = subtopicsArr.length > 0
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
+      : '';
+    const matInst = cleared.sourceMaterials
+      ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
+      : '';
+    const s = {
+      ...settingsRef.current,
+      numSubtopics: promptSubtopicCount,
+      qPerSub,
+      questionStyle: topicStyle,
+      questionTypes: clearedTopic.questionTypes || settingsRef.current.questionTypes || ['direct'],
+    };
+    const na = s.numAlternatives || 5;
+    const types = s.questionTypes || ['direct'];
+    const hasOpen   = types.includes('open');
+    const hasEssay  = types.includes('essay');
+    const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
+    const altSuffix = hasClosed
+      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+      : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
+    const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
+      + matInst + subtopicsBlock
+      + (addPrompt ? `\n\nFoco adicional: ${addPrompt}` : '')
+      + altSuffix;
+
+    const orderedKeys = getOrderedKeys();
+    let lastErr = null;
+    for (const { k } of orderedKeys) {
+      try {
+        const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, PROMPT, k, (acc,qc)=>onProgress?.(qc));
+        let allQuestions = [];
+        if (hasClosed) {
+          const p = parseData(full, `${subject.id}_${clearedTopic.id}`);
+          allQuestions = [...allQuestions, ...p.questions];
+        }
+        if (hasOpen)  { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, false); allQuestions = [...allQuestions, ...p.questions]; }
+        if (hasEssay) { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
+        const summary = parseData(full).summary;
+        const updatedSubject = {
+          ...cleared,
+          topics: cleared.topics.map(t => t.id === clearedTopic.id
+            ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle }
+            : t
+          )
+        };
+        await updateSubject(updatedSubject);
+        await rotateKey();
+        return { subject:updatedSubject, questionCount:allQuestions.length };
+      } catch(e) {
+        lastErr = e;
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        break;
+      }
+    }
+    throw lastErr || new Error('CONNECTION_ERROR');
   };
 
   // Generate questions (streaming)
@@ -5166,11 +5264,7 @@ export default function QuestionBankApp() {
 
   // ── ACADEMIA: geração da aula ─────────────────────────────────────────────
 
-  const generateAcademiaLesson = async (topic, subject, lessonSettings = {}) => {
-    if (!checkKey()) return;
-    setAcademiaGenerating(true);
-    setAcademiaGenProgress('Gerando aula e questões de fixação...');
-
+  const generateAcademiaLessonForSubject = async (topic, subject, lessonSettings = {}, { onProgress } = {}) => {
     const s = { ...settingsRef.current, ...lessonSettings };
     const material = subject.sourceMaterials || '';
     const subtopics = topic.subtopics || [];
@@ -5187,9 +5281,10 @@ export default function QuestionBankApp() {
     const lessonLevel = s.explanationLength || 'complete';
     const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, s.regenReason || '');
     const lessonSystemPrompt = lessonLevel === 'essential'
-      ? 'Você é professor de medicina. Escreva em português. Modo Nível 1: seja extremamente conciso; use síntese de prova, bullets curtos e não ultrapasse o limite por subtópico.'
-      : 'Você é professor de medicina. Escreva em português.';
-    setAcademiaGenProgress('📝 Gerando explicação dos subtópicos...');
+      ? 'Você é professor de medicina. Escreva em português. Modo Nível 1: escreva em outline de revisão tipo Pathoma/First Aid. Após cada ##, comece com um título curto em negrito que dê contexto aos bullets. Use bullets densos e sem letras ou números como marcadores.'
+      : 'Você é professor de medicina. Escreva em português. Após cada ##, comece com um título curto em negrito que dê contexto à explicação.';
+    onProgress?.('📝 Gerando explicação dos subtópicos...');
+    let lessonErr = null;
     for (const { k } of orderedKeys) {
       try {
         lessonText = await callGemini(
@@ -5197,26 +5292,23 @@ export default function QuestionBankApp() {
           lessonSystemPrompt,
           k,
           [],
-          lessonLevel === 'essential'
-            ? { maxTokens: Math.min(8192, Math.max(1024, subtopics.length * 150)) }
-            : {}
+          {}
         );
         await rotateKey();
         break;
       } catch (e) {
+        lessonErr = e;
         if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        showApiError(e.message);
-        setAcademiaGenerating(false);
-        setAcademiaGenProgress('');
-        return;
+        break;
       }
     }
+    if (!lessonText) throw lessonErr || new Error('CONNECTION_ERROR');
 
     const lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
     const fixationPlan = buildAcademiaFixationPlan(subtopics, lessonSections);
 
     // Requisição B: questões de fixação proporcionais ao tamanho de cada seção
-    setAcademiaGenProgress('Gerando questões de fixação...');
+    onProgress?.('Gerando questões de fixação...');
     const fixPrompt = buildAcademiaFixationPrompt(
       subtopics, topic.title, s, lessonText, fixationPlan
     );
@@ -5234,8 +5326,15 @@ export default function QuestionBankApp() {
       }
     }
 
-    // Parsear as questões de fixação
-    const fixQuestions = fixText ? parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions : [];
+    // Parsear as questões de fixação; se falhar, preserva a aula e segue sem questões.
+    let fixQuestions = [];
+    if (fixText) {
+      try {
+        fixQuestions = parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions;
+      } catch(e) {
+        onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
+      }
+    }
     const fixationBySubtopic = distributeAcademiaFixQuestions(fixQuestions, fixationPlan);
 
     // Salvar no tópico
@@ -5250,9 +5349,104 @@ export default function QuestionBankApp() {
       topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
     };
     await updateSubject(updatedSubject);
-    setAcademiaGenerating(false);
-    setAcademiaGenProgress('');
-    addToast('Aula gerada com sucesso!', 'success', 4000);
+    return { subject:updatedSubject, fixationCount:fixQuestions.length };
+  };
+
+  const generateAcademiaLesson = async (topic, subject, lessonSettings = {}) => {
+    if (!checkKey()) return;
+    setAcademiaGenerating(true);
+    setAcademiaGenProgress('Gerando aula e questões de fixação...');
+    try {
+      const result = await generateAcademiaLessonForSubject(topic, subject, lessonSettings, { onProgress:setAcademiaGenProgress });
+      addToast('Aula gerada com sucesso!', 'success', 4000);
+      return result?.subject;
+    } catch(e) {
+      showApiError(e.message || 'CONNECTION_ERROR');
+      return null;
+    } finally {
+      setAcademiaGenerating(false);
+      setAcademiaGenProgress('');
+    }
+  };
+
+  const startBulkGenerate = async () => {
+    const initialSubject = library.find(s => s.id === bulkGenerateModal?.subjectId);
+    if (!initialSubject || bulkGenerateRun.running || !checkKey()) return;
+
+    const targets = getBulkGenerateTargets(initialSubject);
+    if (!targets.length) {
+      setBulkGenerateRun({
+        running:false,
+        current:0,
+        total:0,
+        logs:[createBulkLog('success', 'Nada pendente: todos os blocos desta pasta já foram gerados.')]
+      });
+      return;
+    }
+
+    setBulkGenerateRun({
+      running:true,
+      current:0,
+      total:targets.length,
+      logs:[createBulkLog('info', `Iniciando geração sequencial de ${targets.length} bloco${targets.length!==1?'s':''}.`)]
+    });
+
+    const toastId = addToast(`Gerar tudo: 0/${targets.length} blocos concluídos...`, 'loading', 0);
+    let workingSubject = initialSubject;
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      const topic = workingSubject.topics.find(t => t.id === target.id) || target;
+      setBulkGenerateRun(p => ({ ...p, current:i + 1 }));
+      addBulkLog('loading', `Gerando "${topic.title}" (${i + 1}/${targets.length})...`);
+
+      try {
+        let result = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            if (workingSubject.source === 'academia') {
+              result = await generateAcademiaLessonForSubject(topic, workingSubject, {}, {
+                onProgress: msg => addBulkLog('info', `"${topic.title}": ${msg.replace(/^📝\s*/, '')}`)
+              });
+            } else {
+              result = await generateOracleTopicForSubject(workingSubject, topic, '', {
+                onProgress: count => {
+                  if (count > 0) setStreamCount(count);
+                }
+              });
+            }
+            break;
+          } catch(e) {
+            if (attempt === 1 && isRetryableBulkError(e)) {
+              addBulkLog('info', `"${topic.title}" teve instabilidade (${getBulkErrorText(e)}). Aguardando 3s e tentando de novo...`);
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              continue;
+            }
+            throw e;
+          }
+        }
+
+        workingSubject = result?.subject || workingSubject;
+        successCount++;
+        const detail = workingSubject.source === 'academia'
+          ? `${result?.fixationCount || 0} questões de fixação`
+          : `${result?.questionCount || 0} questões`;
+        addBulkLog('success', `"${topic.title}" concluído (${detail}).`);
+      } catch(e) {
+        errorCount++;
+        addBulkLog('error', `"${topic.title}" falhou: ${getBulkErrorText(e)}. Pulei este bloco e continuei.`);
+      }
+
+      updateToast(toastId, `Gerar tudo: ${successCount}/${targets.length} blocos concluídos${errorCount ? `, ${errorCount} erro${errorCount!==1?'s':''}` : ''}...`, errorCount ? 'info' : 'loading');
+    }
+
+    setStreamCount(0);
+    setBulkGenerateRun(p => ({ ...p, running:false, current:targets.length }));
+    const finalType = errorCount ? 'info' : 'success';
+    updateToast(toastId, `Gerar tudo finalizado: ${successCount} certo${successCount!==1?'s':''}, ${errorCount} erro${errorCount!==1?'s':''}.`, finalType);
+    setTimeout(() => removeToast(toastId), 15000);
   };
 
   const generateAcademiaExtraBattery = async (topic, subject, extraSettings = null) => {
@@ -5986,9 +6180,23 @@ export default function QuestionBankApp() {
                   <div className="h-2 w-40 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full" style={{width:`${subjectProgress(activeSubject)}%`}}/></div>
                   <span className="text-sm font-bold text-yellow-600">{subjectProgress(activeSubject)}% concluído</span>
                 </div>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
+	              </div>
+	              <div className="flex gap-2 flex-wrap">
+	                {['gemini','academia'].includes(activeSubject.source)&&(()=>{
+	                  const pendingCount = getBulkGenerateTargets(activeSubject).length;
+	                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
+	                  return (
+	                    <button
+	                      onClick={()=>{setBulkGenerateModal({subjectId:activeSubject.id});setBulkGenerateRun({running:false,current:0,total:pendingCount,logs:[]});}}
+	                      disabled={runningHere || pendingCount===0}
+	                      title={pendingCount ? `Gerar ${pendingCount} bloco${pendingCount!==1?'s':''} pendente${pendingCount!==1?'s':''}` : 'Todos os blocos já foram gerados'}
+	                      className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all ${pendingCount&&!runningHere?(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'):'opacity-40 cursor-not-allowed '+(darkMode?'border-gray-700 text-gray-500':'border-gray-200 text-gray-400')}`}>
+	                      {runningHere ? <Spinner className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
+	                      {runningHere ? 'Gerando...' : pendingCount ? `Gerar tudo (${pendingCount})` : 'Tudo gerado'}
+	                    </button>
+	                  );
+	                })()}
+	                {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
                 {activeSubject.source==='academia'&&(()=>{
                   const allGenerated = activeSubject.topics.length > 0 && activeSubject.topics.every(t=>t.lessonGenerated);
@@ -8617,10 +8825,66 @@ export default function QuestionBankApp() {
                 <button onClick={createFolderReview} disabled={!selectedCount} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Criar bloco</button>
               </div>
             </div>
-          </div>
-        );
-      })()}
-      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
+	          </div>
+	        );
+	      })()}
+	      {bulkGenerateModal&&(()=>{
+	        const subject = library.find(s => s.id === bulkGenerateModal.subjectId);
+	        const pending = getBulkGenerateTargets(subject);
+	        const isAcademiaBulk = subject?.source === 'academia';
+	        const keyCount = getConfiguredGeminiKeys(settingsRef.current).length;
+	        const closeOrStartBulk = pending.length ? startBulkGenerate : (() => setBulkGenerateModal(null));
+	        return (
+	          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{if(!bulkGenerateRun.running)setBulkGenerateModal(null);}}>
+	            <div className={`w-full max-w-2xl rounded-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
+	              <div className="flex items-start justify-between gap-4 mb-5">
+	                <div>
+	                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Geração em massa</p>
+	                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><Zap className="w-6 h-6"/>Gerar tudo</h3>
+	                </div>
+	                <button disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`p-2 rounded-lg disabled:opacity-30 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+	              </div>
+	              <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'border-yellow-700/60 bg-yellow-900/10 text-yellow-100':'border-yellow-300 bg-yellow-50 text-yellow-900'}`}>
+	                <p className="font-bold mb-2">Use com cuidado.</p>
+	                <p>Isso vai gerar {isAcademiaBulk?'aula + questões de fixação':'questões'} para {pending.length} bloco{pending.length!==1?'s':''} pendente{pending.length!==1?'s':''}, um por vez. Pode demorar bastante, consumir muitas requisições e ainda assim falhar em alguns blocos por quota, instabilidade do Gemini ou resposta malformada.</p>
+	                <p className="mt-2">Recomendação: rode à noite, mantenha a aba aberta, tenha várias chaves cadastradas e evite mexer nos blocos durante o processo. Chaves detectadas agora: <strong>{keyCount}</strong>.</p>
+	              </div>
+	              <div className={`rounded-xl border overflow-hidden mb-5 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+	                <div className={`px-4 py-3 border-b flex items-center justify-between ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-100 bg-gray-50'}`}>
+	                  <span className="text-xs font-bold uppercase tracking-widest opacity-50">Log</span>
+	                  <span className="text-xs font-bold text-yellow-600">{bulkGenerateRun.running ? `${bulkGenerateRun.current}/${bulkGenerateRun.total}` : `${pending.length} pendente${pending.length!==1?'s':''}`}</span>
+	                </div>
+	                <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+	                  {bulkGenerateRun.logs.length===0&&<p className="text-sm opacity-50 italic p-2">Confirme para iniciar. O progresso aparecerá aqui.</p>}
+	                  {bulkGenerateRun.logs.map(log => {
+	                    const cls = log.type==='success'
+	                      ? (darkMode?'text-green-400':'text-green-700')
+	                      : log.type==='error'
+	                        ? (darkMode?'text-red-400':'text-red-700')
+	                        : log.type==='loading'
+	                          ? (darkMode?'text-yellow-300':'text-yellow-700')
+	                          : (darkMode?'text-gray-300':'text-gray-700');
+	                    return (
+	                      <div key={log.id} className={`text-sm rounded-lg px-3 py-2 ${darkMode?'bg-gray-900/40':'bg-gray-50'}`}>
+	                        <span className="opacity-40 font-mono mr-2">{log.time}</span>
+	                        <span className={cls}>{log.msg}</span>
+	                      </div>
+	                    );
+	                  })}
+	                </div>
+	              </div>
+	              <div className="flex gap-3">
+	                <button disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`flex-1 py-3 rounded-xl font-bold disabled:opacity-40 ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>{bulkGenerateRun.running?'Rodando...':'Cancelar'}</button>
+	                <button onClick={closeOrStartBulk} disabled={bulkGenerateRun.running || !subject} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
+	                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Zap className="w-4 h-4"/>}
+	                  {bulkGenerateRun.running ? 'Gerando...' : pending.length ? 'Confirmar e gerar' : 'Nada pendente'}
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        );
+	      })()}
+	      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='folder'&&<GModal title="Excluir pasta?" message="Os itens dentro dela serão mantidos na pasta anterior." confirmText="Excluir pasta" onConfirm={async()=>{const folder=libraryFolders.find(f=>f.id===deleteId.id);await deleteFolderAndKeepContents(folder);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='academia-extra-bloco'&&<GModal title="Excluir bloco?" message="As questões deste bloco serão removidas da Academia e do Acervo do Oráculo." confirmText="Excluir" onConfirm={async()=>{
