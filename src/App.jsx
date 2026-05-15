@@ -1564,10 +1564,13 @@ const QuestionView = ({
   topicType=null,
   onAddToReview=null,
   onGoToAula=null,
+  goToAulaLabel='Assistir aula',
+  onGenerateExtra=null,
   inReviewCount=0,
   displayMode='list',
 }) => {
   const dm = darkMode;
+  const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
 
   // Auto-scroll to first unanswered question when block loads
   useEffect(() => {
@@ -1632,6 +1635,7 @@ const QuestionView = ({
   const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
   const singleMode = displayMode === 'single' && questions.length > 0;
   const [singleIndex, setSingleIndex] = useState(0);
+  const [showCompletion, setShowCompletion] = useState(false);
 
   useEffect(() => {
     if (!singleMode) return;
@@ -1641,6 +1645,17 @@ const QuestionView = ({
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
   const btnNeutral = dm ? `${btnBase} border-gray-600 text-gray-300 hover:bg-gray-700` : `${btnBase} border-gray-200 text-gray-600 hover:bg-gray-50`;
+  const goToAulaIcon = goToAulaLabel.toLowerCase().includes('ler')
+    ? <BookOpen className="w-4 h-4"/>
+    : <VideoIcon className="w-4 h-4"/>;
+  const actionMenuItems = questions.length>0 ? [
+    onGoToAula ? { label:goToAulaLabel, icon:goToAulaIcon, fn:onGoToAula } : null,
+    onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
+    showBizuario&&onBizuario ? { label:bizuarioCached?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:onBizuario, active:bizuarioCached } : null,
+    onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
+    onRegenerate ? { label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:onRegenerate } : null,
+    onReset ? { label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:onReset, danger:true } : null,
+  ].filter(Boolean) : [];
   const currentQuestion = singleMode ? questions[Math.min(singleIndex, questions.length - 1)] : null;
   const navBtn = (disabled, primary=false) => `inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${disabled
     ? (dm?'border-gray-800 text-gray-700 bg-gray-900/40 cursor-default':'border-gray-100 text-gray-300 bg-gray-50 cursor-default')
@@ -1660,16 +1675,109 @@ const QuestionView = ({
         onOpenAnswer={onOpenAnswer}/>
     </div>
   );
+  const renderCompletion = () => {
+    const wrongCount = questions.length - correctCount;
+    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
+    return (
+      <div className={`max-w-2xl mx-auto rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
+        <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
+        <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Bloco encerrado</p>
+        <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Bloco concluído</h3>
+        <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
+        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correctCount}/{questions.length} corretas · {wrongCount} para reforçar</p>
+        <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} Adicione as questões à revisão espaçada para transformar esse resultado em ciclo de retenção.</p>
+        <div className="grid grid-cols-2 gap-3 mb-8 text-left">
+          <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+            <p className="text-2xl font-serif font-bold text-green-500">{correctCount}</p>
+            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>dominadas</p>
+          </div>
+          <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+            <p className="text-2xl font-serif font-bold text-red-500">{wrongCount}</p>
+            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>reforço</p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
+          {onAddToReview&&(
+            <button onClick={()=>onAddToReview(questions, answers)}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700">
+              <RepeatIcon className="w-5 h-5"/>{inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Adicionar à revisão'}
+            </button>
+          )}
+          <button onClick={()=>setShowCompletion(false)}
+            className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+            <ArrowLeft className="w-4 h-4"/>Ver questões
+          </button>
+          {onGoToAula&&(
+            <button onClick={onGoToAula}
+              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+              {goToAulaIcon}{goToAulaLabel}
+            </button>
+          )}
+          {onGenerateExtra&&(
+            <button onClick={onGenerateExtra}
+              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+              <PlusIcon className="w-4 h-4"/>Gerar bloco extra
+            </button>
+          )}
+          {showBizuario&&onBizuario&&(
+            <button onClick={onBizuario}
+              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${bizuarioCached?(dm?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50')}`}>
+              <BrainIcon className="w-4 h-4"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  if (!isGenerating && questions.length > 0 && showCompletion && allDone) {
+    return (
+      <div>
+        <div className={`mb-6 border-b pb-6 ${dm?'border-gray-700':'border-gray-200'}`}>
+          <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+            <ArrowLeft className="w-4 h-4"/>{backLabel}
+          </button>
+          <h2 className="text-2xl font-serif font-bold text-yellow-600">{title}</h2>
+        </div>
+        {renderCompletion()}
+      </div>
+    );
+  }
 
   return (
     <div>
       {/* ── Header ── */}
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b pb-6 ${dm?'border-gray-700':'border-gray-200'}`}>
-        <div>
+        <div className="min-w-0 flex-1">
           <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
             <ArrowLeft className="w-4 h-4"/>{backLabel}
           </button>
-          <h2 className="text-2xl font-serif font-bold text-yellow-600">{title}</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="min-w-0 flex-1 text-2xl font-serif font-bold text-yellow-600 truncate">{title}</h2>
+            {actionMenuItems.length>0&&(
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={()=>setHeaderActionsOpen(v=>!v)}
+                  title="Ações do bloco"
+                  aria-label="Ações do bloco"
+                  className={`h-9 w-9 rounded-xl border flex items-center justify-center transition-colors ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-yellow-700'}`}>
+                  <MoreIcon className="w-5 h-5"/>
+                </button>
+                {headerActionsOpen&&(
+                  <div className={`absolute right-0 top-11 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                    {actionMenuItems.map(item=>(
+                      <button
+                        key={item.label}
+                        onClick={()=>{setHeaderActionsOpen(false);item.fn();}}
+                        className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.danger?(dm?'text-red-400 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):item.active?(dm?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(dm?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                        {item.icon}{item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {answeredCount>0&&<p className="text-sm opacity-60 mt-1">
             {allDone
               ? `${correctCount}/${questions.length} corretas (${pct}%)`
@@ -1677,29 +1785,6 @@ const QuestionView = ({
           </p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {onGoToAula&&(
-            <button onClick={onGoToAula} className={btnNeutral}>
-              <VideoIcon className="w-4 h-4"/>Assistir Aula
-            </button>
-          )}
-          {questions.length>0&&(
-            <>
-              {onExport&&<button onClick={onExport} className={btnNeutral}><Printer className="w-4 h-4"/>Exportar</button>}
-              {showBizuario&&onBizuario&&(
-                <button onClick={onBizuario} className={`${btnBase} ${bizuarioCached?(dm?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}>
-                  <BrainIcon className="w-4 h-4"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
-                </button>
-              )}
-              {onReset&&<button onClick={onReset} className="flex items-center gap-1.5 px-3 py-2 border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-bold"><Eraser className="w-4 h-4"/>Limpar</button>}
-              {onRegenerate&&<button onClick={onRegenerate} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold ${dm?'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50':'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'}`}><RotateCcw className="w-4 h-4"/>Recriar</button>}
-              {onAddToReview&&inReviewCount>0&&(
-                <button onClick={()=>onAddToReview(questions, answers)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                  <RepeatIcon className="w-4 h-4"/>Gerenciar ({inReviewCount})
-                </button>
-              )}
-            </>
-          )}
           {questions.length===0&&!isGenerating&&onGenerate&&(
             <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
               {generateIcon||<Sparkles className="w-5 h-5"/>}{generateLabel}
@@ -1782,34 +1867,21 @@ const QuestionView = ({
                 <button disabled={singleIndex===0} onClick={()=>setSingleIndex(i=>Math.max(0,i-1))} className={navBtn(singleIndex===0)}>
                   <ArrowLeft className="w-4 h-4"/>Voltar
                 </button>
-                <button disabled={singleIndex>=questions.length-1} onClick={()=>setSingleIndex(i=>Math.min(questions.length-1,i+1))} className={navBtn(singleIndex>=questions.length-1, true)}>
-                  Avançar<ChevronRight className="w-4 h-4"/>
+                <button
+                  disabled={singleIndex>=questions.length-1 ? !allDone : false}
+                  onClick={()=>{
+                    if (singleIndex>=questions.length-1) setShowCompletion(true);
+                    else setSingleIndex(i=>Math.min(questions.length-1,i+1));
+                  }}
+                  className={navBtn(singleIndex>=questions.length-1 ? !allDone : false, true)}
+                >
+                  {singleIndex>=questions.length-1 ? <><CheckIcon className="w-4 h-4"/>Concluir</> : <>Avançar<ChevronRight className="w-4 h-4"/></>}
                 </button>
               </div>
             </div>
           ) : questions.map((q,i)=>renderQuestion(q,i))}
           {/* ── Conclusão ── */}
-          {allDone&&(
-            <div className="text-center py-10">
-              <Award className="w-16 h-16 mx-auto text-yellow-500 mb-4"/>
-              <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Provações Concluídas!</h3>
-              <p className="opacity-70 mb-6">{correctCount}/{questions.length} corretas ({pct}%)</p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
-                {showBizuario&&onBizuario&&(
-                  <button onClick={onBizuario} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700">
-                    <BrainIcon className="w-5 h-5"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
-                  </button>
-                )}
-                {onAddToReview&&(
-                <button onClick={()=>onAddToReview(questions, answers)}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold border transition-all ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                    <RepeatIcon className="w-5 h-5"/>
-                    {inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada'}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+          {!singleMode&&allDone&&<div className="py-10">{renderCompletion()}</div>}
         </div>
       )}
     </div>
@@ -3727,6 +3799,7 @@ export default function QuestionBankApp() {
   // ── Library ───────────────────────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const libraryRef = useRef([]);
+  const academiaMirrorSyncRef = useRef(false);
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const [settings, setSettingsS]  = useState(defaultSettings);
@@ -3779,7 +3852,9 @@ export default function QuestionBankApp() {
   const [libraryActionMenu, setLibraryActionMenu] = useState(null);
   const [libraryDrag, setLibraryDrag] = useState(null);
   const libraryDragRef = useRef(null);
+  const libraryDragCleanupRef = useRef(null);
   const suppressLibraryClickUntil = useRef(0);
+  const [blockActionMenu, setBlockActionMenu] = useState(null);
   const [moveNewFolderName, setMoveNewFolderName] = useState('');
   const [moveSubjectModal, setMoveSubjectModal] = useState(null);
   const [folderReviewModal, setFolderReviewModal] = useState(null);
@@ -4683,13 +4758,16 @@ export default function QuestionBankApp() {
     setLibrary(p=>p.map(x=>x.id===s.id?s:x));
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.map(x=>x.id===s.id?s:x)));
+    if (s.source === 'academia') scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const updateLibraryItems = async (items) => {
     const changed = new Map(items.map(item=>[item.id,item]));
     const nextLibrary = sortLibraryItems(library.map(item=>changed.get(item.id)||item));
+    libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
     if(user&&!user.isAnonymous) await Promise.all(items.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    if (items.some(item => item.source === 'academia')) scheduleAcademiaOracleMirrorSync(nextLibrary);
   };
   const addSubject = async (s) => {
     let ns = s;
@@ -4703,12 +4781,15 @@ export default function QuestionBankApp() {
     setLibrary(p=>sortLibraryItems([ns,...p.filter(x=>x.id!==ns.id)]));
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',ns.id.toString()),ns).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([ns,...library]));
+    if (ns.source === 'academia') scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const removeSubject = async (id) => {
+    const removed = libraryRef.current.find(s=>s.id===id);
     libraryRef.current = libraryRef.current.filter(s=>s.id!==id);
     setLibrary(p=>p.filter(s=>s.id!==id));
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
+    if (removed?.source === 'academia') scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const createLibraryFolder = async (source, title, parentFolderId = activeFolderId || null) => {
     localItems = libraryRef.current?.length ? libraryRef.current : localItems;
@@ -4735,10 +4816,275 @@ export default function QuestionBankApp() {
     return { folder, items };
   };
 
+  const ensureFolderPath = async (source, titles = [], parentFolderId = null, localItems = library) => {
+    let items = localItems;
+    let parent = parentFolderId || null;
+    let folder = null;
+    for (const rawTitle of titles) {
+      const title = (rawTitle || '').trim();
+      if (!title) continue;
+      const result = await ensureFolderByTitle(source, title, parent, items);
+      folder = result.folder;
+      items = result.items;
+      parent = folder.id;
+    }
+    return { folder, parentFolderId:parent, items };
+  };
+
+  function scheduleAcademiaOracleMirrorSync(baseItems = libraryRef.current) {
+    if (academiaMirrorSyncRef.current) return;
+    setTimeout(() => syncAcademiaOracleMirror(baseItems).catch(console.error), 0);
+  }
+
+  async function syncAcademiaOracleMirror(baseItems = libraryRef.current) {
+    if (academiaMirrorSyncRef.current) return;
+    const hasAcademiaOracleBlocks = (baseItems || []).some(item =>
+      !isFolderItem(item) &&
+      item.source === 'gemini' &&
+      (item.topics || []).some(t => t.origin?.source === 'academia')
+    );
+    if (!hasAcademiaOracleBlocks) return;
+
+    academiaMirrorSyncRef.current = true;
+    try {
+      let items = sortLibraryItems([...(baseItems || [])]);
+      const changed = new Map();
+      const deletedIds = new Set();
+      const sameIdValue = (a, b) => String(a ?? '') === String(b ?? '');
+      const itemChanged = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+      const folderParentId = (item) => item?.parentFolderId || null;
+      const subjectParentId = (item) => item?.folderId || null;
+      const titleKey = (title) => (title || '').trim().toLocaleLowerCase('pt-BR');
+      const upsert = (item) => {
+        const idx = items.findIndex(x => sameIdValue(x.id, item.id));
+        if (idx >= 0) {
+          if (!itemChanged(items[idx], item)) return items[idx];
+          items = [...items.slice(0, idx), item, ...items.slice(idx + 1)];
+        } else {
+          items = [item, ...items];
+        }
+        changed.set(item.id, item);
+        return item;
+      };
+      const removeItem = (item) => {
+        if (!item) return;
+        deletedIds.add(item.id);
+        changed.delete(item.id);
+        items = items.filter(x => !sameIdValue(x.id, item.id));
+      };
+      const folderPathFromItems = (folderId, source) => {
+        const path = [];
+        let cur = items.find(f => isFolderItem(f) && sameIdValue(f.id, folderId) && f.source === source);
+        const seen = new Set();
+        while (cur && !seen.has(String(cur.id))) {
+          path.unshift(cur);
+          seen.add(String(cur.id));
+          cur = items.find(f => isFolderItem(f) && sameIdValue(f.id, cur.parentFolderId) && f.source === source);
+        }
+        return path;
+      };
+      const siblingsMaxOrder = (source, parentId) => items
+        .filter(item => item.source === source && (isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null)) === (parentId || null))
+        .reduce((max, item) => Math.max(max, Number(item.sortOrder)||0), 0);
+      const ensureMirrorFolder = ({ title, parentFolderId = null, mirrorKey, mirrorValue }) => {
+        const clean = (title || '').trim();
+        if (!clean) return null;
+        let folder = items.find(item =>
+          isFolderItem(item) &&
+          item.source === 'gemini' &&
+          mirrorKey &&
+          sameIdValue(item[mirrorKey], mirrorValue)
+        );
+        if (!folder) {
+          folder = items.find(item =>
+            isFolderItem(item) &&
+            item.source === 'gemini' &&
+            item.title === clean &&
+            (item.parentFolderId || null) === (parentFolderId || null)
+          );
+        }
+        if (!folder) {
+          folder = {
+            id:`mirror_${mirrorKey || 'folder'}_${mirrorValue || Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+            itemType:'folder',
+            source:'gemini',
+            title:clean,
+            parentFolderId:parentFolderId || null,
+            createdAt:Date.now(),
+            sortOrder:siblingsMaxOrder('gemini', parentFolderId || null) + 1,
+            topics:[],
+          };
+        }
+        const updated = {
+          ...folder,
+          title:clean,
+          parentFolderId:parentFolderId || null,
+          ...(mirrorKey ? {[mirrorKey]:mirrorValue} : {}),
+        };
+        return upsert(updated);
+      };
+
+      const root = ensureMirrorFolder({ title:'Academia', parentFolderId:null, mirrorKey:'mirrorRoot', mirrorValue:'academia' });
+      const ensureAcademiaSourcePath = (subject) => {
+        let parentId = root.id;
+        folderPathFromItems(subject.folderId || null, 'academia').forEach(folder => {
+          const mirror = ensureMirrorFolder({
+            title:folder.title,
+            parentFolderId:parentId,
+            mirrorKey:'mirrorOfAcademiaFolderId',
+            mirrorValue:folder.id,
+          });
+          parentId = mirror.id;
+        });
+        const subjectFolder = ensureMirrorFolder({
+          title:subject.title,
+          parentFolderId:parentId,
+          mirrorKey:'mirrorOfAcademiaSubjectId',
+          mirrorValue:subject.id,
+        });
+        return subjectFolder.id;
+      };
+
+      items
+        .filter(item => !isFolderItem(item) && item.source === 'gemini' && (item.topics || []).some(t => t.origin?.source === 'academia'))
+        .forEach(oracleSubject => {
+          const origin = (oracleSubject.topics || []).find(t => t.origin?.source === 'academia')?.origin;
+          if (!origin) return;
+          const academiaSubject = items.find(item => !isFolderItem(item) && item.source === 'academia' && sameIdValue(item.id, origin.subjectId));
+          const academiaTopic = academiaSubject?.topics?.find(t => sameIdValue(t.id, origin.topicId));
+          if (!academiaSubject || !academiaTopic) return;
+          const subjectFolderId = ensureAcademiaSourcePath(academiaSubject);
+          const topicFolder = ensureMirrorFolder({
+            title:academiaTopic.title,
+            parentFolderId:subjectFolderId,
+            mirrorKey:'mirrorOfAcademiaTopicId',
+            mirrorValue:academiaTopic.id,
+          });
+          let targetFolderId = topicFolder.id;
+          if (origin.kind === 'extra') {
+            const extraBucket = ensureMirrorFolder({
+              title:'Baterias extras',
+              parentFolderId:topicFolder.id,
+              mirrorKey:'mirrorOfAcademiaExtraBucketTopicId',
+              mirrorValue:academiaTopic.id,
+            });
+            targetFolderId = extraBucket.id;
+          }
+          if (!sameIdValue(oracleSubject.folderId, targetFolderId)) {
+            upsert({ ...oracleSubject, folderId:targetFolderId });
+          }
+        });
+
+      const academyMirrorTitles = new Set(['academia']);
+      items.forEach(item => {
+        if (item.source === 'academia') {
+          academyMirrorTitles.add(titleKey(item.title));
+          (item.topics || []).forEach(t => academyMirrorTitles.add(titleKey(t.title)));
+        }
+      });
+      const academiaRoot = items.find(item => isFolderItem(item) && item.source === 'gemini' && item.mirrorRoot === 'academia');
+      const academiaRootId = academiaRoot?.id || root.id;
+      const isInsideAcademiaMirror = (folder) => {
+        let cur = folder;
+        const seen = new Set();
+        while (cur && !seen.has(String(cur.id))) {
+          if (sameIdValue(cur.id, academiaRootId)) return true;
+          seen.add(String(cur.id));
+          cur = items.find(item => isFolderItem(item) && sameIdValue(item.id, cur.parentFolderId));
+        }
+        return false;
+      };
+      const folderHasContent = (folderId) => items.some(item =>
+        item.source === 'gemini' &&
+        (isFolderItem(item) ? sameIdValue(folderParentId(item), folderId) : sameIdValue(subjectParentId(item), folderId))
+      );
+      const hasAcademiaOriginSubject = (folderId) => items.some(item =>
+        !isFolderItem(item) &&
+        item.source === 'gemini' &&
+        sameIdValue(item.folderId, folderId) &&
+        (item.topics || []).some(t => t.origin?.source === 'academia')
+      );
+      let mergedSomething = true;
+      while (mergedSomething) {
+        mergedSomething = false;
+        const groups = new Map();
+        items
+          .filter(item => isFolderItem(item) && item.source === 'gemini')
+          .forEach(folder => {
+            const key = `${folderParentId(folder) || 'root'}__${titleKey(folder.title)}`;
+            groups.set(key, [...(groups.get(key) || []), folder]);
+          });
+        for (const group of groups.values()) {
+          if (group.length < 2) continue;
+          const sorted = [...group].sort((a,b) => {
+            const am = Number(!!(a.mirrorRoot || a.mirrorOfAcademiaFolderId || a.mirrorOfAcademiaSubjectId || a.mirrorOfAcademiaTopicId || a.mirrorOfAcademiaExtraBucketTopicId));
+            const bm = Number(!!(b.mirrorRoot || b.mirrorOfAcademiaFolderId || b.mirrorOfAcademiaSubjectId || b.mirrorOfAcademiaTopicId || b.mirrorOfAcademiaExtraBucketTopicId));
+            if (bm - am) return bm - am;
+            return libraryOrderValue(a) - libraryOrderValue(b);
+          });
+          const keeper = sorted[0];
+          sorted.slice(1).forEach(dup => {
+            items.forEach(item => {
+              if (item.source !== 'gemini') return;
+              if (isFolderItem(item) && sameIdValue(item.parentFolderId, dup.id)) upsert({ ...item, parentFolderId:keeper.id });
+              if (!isFolderItem(item) && sameIdValue(item.folderId, dup.id)) upsert({ ...item, folderId:keeper.id });
+            });
+            removeItem(dup);
+            mergedSomething = true;
+          });
+        }
+      }
+
+      let removedEmpty = true;
+      while (removedEmpty) {
+        removedEmpty = false;
+        items
+          .filter(item => isFolderItem(item) && item.source === 'gemini')
+          .forEach(folder => {
+            const mirrorMarked = !!(folder.mirrorOfAcademiaFolderId || folder.mirrorOfAcademiaSubjectId || folder.mirrorOfAcademiaTopicId || folder.mirrorOfAcademiaExtraBucketTopicId);
+            const legacyAcademiaLike = !isInsideAcademiaMirror(folder) && academyMirrorTitles.has(titleKey(folder.title));
+            if (sameIdValue(folder.id, academiaRootId)) return;
+            if ((mirrorMarked || legacyAcademiaLike || hasAcademiaOriginSubject(folder.id)) && !folderHasContent(folder.id)) {
+              removeItem(folder);
+              removedEmpty = true;
+            }
+          });
+      }
+
+      if (!changed.size && !deletedIds.size) return;
+      const nextLibrary = sortLibraryItems(items);
+      libraryRef.current = nextLibrary;
+      setLibrary(nextLibrary);
+      if(user&&!user.isAnonymous) {
+        await Promise.all([
+          ...Array.from(changed.values()).map(item => setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)),
+          ...Array.from(deletedIds).map(id => deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error)),
+        ]);
+      } else if(user?.isAnonymous) {
+        localStorage.setItem(`qb_lib_${username}`, JSON.stringify(nextLibrary));
+      }
+    } finally {
+      academiaMirrorSyncRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    if (!user || !library.length) return;
+    const hasAcademia = library.some(item => item.source === 'academia');
+    const hasAcademiaOracleBlocks = library.some(item =>
+      !isFolderItem(item) &&
+      item.source === 'gemini' &&
+      (item.topics || []).some(t => t.origin?.source === 'academia')
+    );
+    if (hasAcademia && hasAcademiaOracleBlocks) scheduleAcademiaOracleMirrorSync(library);
+  }, [user?.uid, library.length]); // eslint-disable-line
+
   const ensureAcademiaOracleTopic = async ({ subject, topic, kind='fixation', questions=[], title=null, extraId=null, questionStyle='mixed' }) => {
     let items = libraryRef.current?.length ? libraryRef.current : library;
     let r = await ensureFolderByTitle('gemini', 'Academia', null, items); const root = r.folder; items = r.items;
-    r = await ensureFolderByTitle('gemini', subject.title, root.id, items); const subjectFolder = r.folder; items = r.items;
+    const academiaSourcePath = getFolderPath(subject.folderId || null).filter(f => f.source === 'academia').map(f => f.title);
+    r = await ensureFolderPath('gemini', academiaSourcePath, root.id, items); items = r.items;
+    r = await ensureFolderByTitle('gemini', subject.title, r.parentFolderId || root.id, items); const subjectFolder = r.folder; items = r.items;
     r = await ensureFolderByTitle('gemini', topic.title, subjectFolder.id, items); const aulaFolder = r.folder; items = r.items;
     let targetFolder = aulaFolder;
     if (kind === 'extra') {
@@ -4756,7 +5102,19 @@ export default function QuestionBankApp() {
     );
     const syncedFavorites = (topic.favorites || []).filter(id => questionIds.has(id));
     const syncedNotebook = (topic.errorNotebook || []).filter(id => questionIds.has(id));
-    const existingSubject = items.find(item => !isFolderItem(item) && item.source === 'gemini' && item.title === subjectTitle && (item.folderId || null) === targetFolder.id);
+    const findMatchingOracleSubject = () => items.find(item =>
+      !isFolderItem(item) &&
+      item.source === 'gemini' &&
+      (item.topics || []).some(t =>
+        t.id === topicId ||
+        (t.origin?.source === 'academia' &&
+          String(t.origin.subjectId) === String(subject.id) &&
+          String(t.origin.topicId) === String(topic.id) &&
+          t.origin.kind === kind)
+      )
+    );
+    const existingSubject = items.find(item => !isFolderItem(item) && item.source === 'gemini' && item.title === subjectTitle && (item.folderId || null) === targetFolder.id)
+      || findMatchingOracleSubject();
     const oracleTopic = {
       id:topicId,
       title:topicTitle,
@@ -4771,7 +5129,13 @@ export default function QuestionBankApp() {
       origin:{source:'academia', subjectId:subject.id, topicId:topic.id, kind},
     };
     if (existingSubject) {
-      const existingTopic = (existingSubject.topics || []).find(t => t.id === topicId);
+      const existingTopic = (existingSubject.topics || []).find(t =>
+        t.id === topicId ||
+        (t.origin?.source === 'academia' &&
+          String(t.origin.subjectId) === String(subject.id) &&
+          String(t.origin.topicId) === String(topic.id) &&
+          t.origin.kind === kind)
+      );
       const mergedTopic = existingTopic
         ? {
             ...existingTopic,
@@ -4782,7 +5146,12 @@ export default function QuestionBankApp() {
             spacedReview:existingTopic.spacedReview||{},
           }
         : oracleTopic;
-      const updated = {...existingSubject, topics: existingTopic ? existingSubject.topics.map(t=>t.id===topicId?mergedTopic:t) : [...(existingSubject.topics||[]), mergedTopic]};
+      const updated = {
+        ...existingSubject,
+        title:subjectTitle,
+        folderId:targetFolder.id,
+        topics: existingTopic ? existingSubject.topics.map(t=>t===existingTopic?mergedTopic:t) : [...(existingSubject.topics||[]), mergedTopic],
+      };
       await updateSubject(updated);
       return { subject:updated, topic:mergedTopic, folder:targetFolder };
     }
@@ -4835,6 +5204,45 @@ export default function QuestionBankApp() {
     for (const childFolder of childFolders) await updateSubject({ ...childFolder, parentFolderId:folder.parentFolderId || null });
     await removeSubject(folder.id);
     if (activeFolderId === folder.id) setActiveFolderId(null);
+  };
+  const getFolderTreeIds = (folder) => {
+    if (!folder) return new Set();
+    const ids = new Set([folder.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      libraryFolders.forEach(f => {
+        if (f.source === folder.source && ids.has(f.parentFolderId) && !ids.has(f.id)) {
+          ids.add(f.id);
+          changed = true;
+        }
+      });
+    }
+    return ids;
+  };
+  const deleteFolderWithContents = async (folder) => {
+    if (!folder) return;
+    const folderIds = getFolderTreeIds(folder);
+    const idsToDelete = new Set([
+      ...Array.from(folderIds),
+      ...librarySubjects
+        .filter(s => s.source === folder.source && folderIds.has(s.folderId))
+        .map(s => s.id),
+    ]);
+    const nextLibrary = library.filter(item => !idsToDelete.has(item.id));
+    libraryRef.current = nextLibrary;
+    setLibrary(nextLibrary);
+    if(user&&!user.isAnonymous) {
+      await Promise.all(Array.from(idsToDelete).map(id => deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error)));
+    } else if(user?.isAnonymous) {
+      localStorage.setItem(`qb_lib_${username}`, JSON.stringify(nextLibrary));
+    }
+    if (folderIds.has(activeFolderId)) setActiveFolderId(folder.parentFolderId || null);
+    if (idsToDelete.has(activeSubjectId)) {
+      setActiveSubjectId(null);
+      setActiveTopicId(null);
+      setView('sub-library');
+    }
   };
 
   const saveSettingsTimer = useRef(null);
@@ -6651,6 +7059,27 @@ export default function QuestionBankApp() {
               const nextDrag = { item, type, source:item.source, startX:point.clientX, startY:point.clientY, x:point.clientX, y:point.clientY, active:false, targetId:null, targetItem:null, dropMode:'inside', targetFound:false, slotParentId:null, slotIndex:null };
               libraryDragRef.current = nextDrag;
               setLibraryDrag(nextDrag);
+              libraryDragCleanupRef.current?.();
+              const doc = e.currentTarget?.ownerDocument || document;
+              const move = ev => updateLibraryDrag(ev);
+              const end = ev => finishLibraryDrag(ev);
+              const cancel = ev => {
+                stopLibraryDragEvent(ev);
+                if (libraryDragRef.current) setLibraryDrag(p=>p||libraryDragRef.current);
+              };
+              doc.addEventListener('pointermove', move, { passive:false });
+              doc.addEventListener('pointerup', end, { passive:false });
+              doc.addEventListener('touchmove', move, { passive:false });
+              doc.addEventListener('touchend', end, { passive:false });
+              doc.addEventListener('touchcancel', cancel, { passive:false });
+              libraryDragCleanupRef.current = () => {
+                doc.removeEventListener('pointermove', move);
+                doc.removeEventListener('pointerup', end);
+                doc.removeEventListener('touchmove', move);
+                doc.removeEventListener('touchend', end);
+                doc.removeEventListener('touchcancel', cancel);
+                libraryDragCleanupRef.current = null;
+              };
             };
             const updateLibraryDrag = (e) => {
               const drag = libraryDragRef.current || libraryDrag;
@@ -6713,6 +7142,7 @@ export default function QuestionBankApp() {
               if (!drag) return;
               stopLibraryDragEvent(e);
               if (e.pointerId !== undefined) e.currentTarget.releasePointerCapture?.(e.pointerId);
+              libraryDragCleanupRef.current?.();
               libraryDragRef.current = null;
               setLibraryDrag(null);
               suppressLibraryClickUntil.current = Date.now() + 650;
@@ -6720,6 +7150,7 @@ export default function QuestionBankApp() {
               await reorderLibraryItem(drag.item, drag.targetId || null, drag.targetItem, drag.dropMode);
             };
             const cancelLibraryDrag = () => {
+              libraryDragCleanupRef.current?.();
               libraryDragRef.current = null;
               setLibraryDrag(null);
               suppressLibraryClickUntil.current = Date.now() + 650;
@@ -6729,7 +7160,7 @@ export default function QuestionBankApp() {
                 onPointerDown={e=>startLibraryDrag(e,item,type)}
                 onPointerMove={updateLibraryDrag}
                 onPointerUp={finishLibraryDrag}
-                onPointerCancel={cancelLibraryDrag}
+                onPointerCancel={e=>updateLibraryDrag(e)}
                 onTouchStart={e=>startLibraryDrag(e,item,type)}
                 onTouchMove={updateLibraryDrag}
                 onTouchEnd={finishLibraryDrag}
@@ -7091,6 +7522,23 @@ export default function QuestionBankApp() {
                 notebookIds:activeTopic.errorNotebook||[],
                 meta:{source:activeSubject.source||'oraculo',subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:activeSubject.title,blockTitle:activeTopic.title}
               })) : null}
+              onGoToAula={activeTopic.origin?.source==='academia' ? ()=>{
+                const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
+                const originTopic = originSubject?.topics?.find(t => String(t.id) === String(activeTopic.origin.topicId));
+                if (!originSubject || !originTopic) return;
+                setLibFilter('academia');
+                setActiveFolderId(originSubject.folderId || null);
+                setActiveSubjectId(originSubject.id);
+                setActiveTopicId(originTopic.id);
+                setView('academia-topic');
+              } : null}
+              goToAulaLabel={activeTopic.origin?.source==='academia' ? 'Ler aula' : 'Assistir aula'}
+              onGenerateExtra={canUseAcademia && activeTopic.origin?.source==='academia' ? ()=>{
+                const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
+                const originTopic = originSubject?.topics?.find(t => String(t.id) === String(activeTopic.origin.topicId));
+                if (!originSubject || !originTopic) return;
+                setAcademiaExtraModal({topic:originTopic, subject:originSubject});
+              } : null}
               inReviewCount={isAdmin ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}
             />
           </div>
@@ -8949,9 +9397,27 @@ export default function QuestionBankApp() {
                       const allDone = qs.length>0&&answered===qs.length;
                       const hasQs = qs.length>0;
                       const blockNum = blockId.replace('block','');
+                      const blockTitle = block.title||`Bloco ${blockNum}`;
+                      const openBlockBizuario = () => {
+                        if(!checkKey() || !hasQs) return;
+                        const syntheticTopic = {title:blockTitle, questions:qs, subtopics:block.subtopics||[]};
+                        const cachedText = block.bizuario||null;
+                        const onSave = async (txt) => {
+                          await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,bizuario:txt}}});
+                        };
+                        setBizuarioModal({topicTitle:syntheticTopic.title,subjectTitle:vqAula.title,questions:qs,subtopics:block.subtopics||[],cachedText,onSave});
+                      };
+                      const cardActions = hasQs ? [
+                        {label:'Assistir aula', icon:<VideoIcon className="w-4 h-4"/>, fn:()=>{setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}},
+                        {label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:()=>setExportModal({topic:{title:`${vqAula.title} — ${blockTitle}`,questions:qs},subject:null})},
+                        {label:block.bizuario?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:openBlockBizuario, active:!!block.bizuario},
+                        {label:Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length>0?`Gerenciar revisão (${Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle, questions:qs, answers:ans, notebookIds:Array.isArray(block.errorNotebook)?block.errorNotebook:[], meta:{source:'curso',aulaTitle:vqAula.title,blockTitle}})},
+                        {label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:()=>generateVqBlock(aulaIdNew,blockId)},
+                        {label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:()=>saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}}), danger:true},
+                      ] : [];
 
                       return (
-                        <div key={blockId} className={`rounded-2xl border overflow-hidden transition-all ${dm?'bg-gray-800 border-gray-700 hover:border-gray-600':'bg-white border-gray-200 hover:border-gray-300'}`}>
+                        <div key={blockId} className={`relative rounded-2xl border overflow-visible transition-all ${dm?'bg-gray-800 border-gray-700 hover:border-gray-600':'bg-white border-gray-200 hover:border-gray-300'}`}>
                           <button
                             onClick={()=>{
                               if(hasQs) setVqActiveBlockView({blockId,showWrong:false});
@@ -8964,7 +9430,7 @@ export default function QuestionBankApp() {
                               {allDone?<CheckIcon className="w-6 h-6"/>:blockNum}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-bold truncate">{block.title||`Bloco ${blockNum}`}</p>
+                              <p className="font-bold truncate pr-9">{blockTitle}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 {block.generating?(
                                   <span className="text-xs text-yellow-600 font-bold animate-pulse flex items-center gap-1">
@@ -8987,6 +9453,29 @@ export default function QuestionBankApp() {
                             </div>
                             <ChevronRight className={`w-5 h-5 flex-shrink-0 ${dm?'text-gray-600':'text-gray-300'}`}/>
                           </button>
+                          {cardActions.length>0&&(
+                            <div className="absolute right-3 top-3">
+                              <button
+                                onClick={e=>{e.preventDefault();e.stopPropagation();setBlockActionMenu(blockActionMenu===blockId?null:blockId);}}
+                                title="Ações do bloco"
+                                aria-label="Ações do bloco"
+                                className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-yellow-400':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-yellow-700'}`}>
+                                <MoreIcon className="w-4 h-4"/>
+                              </button>
+                              {blockActionMenu===blockId&&(
+                                <div className={`absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                                  {cardActions.map(item=>(
+                                    <button
+                                      key={item.label}
+                                      onClick={e=>{e.preventDefault();e.stopPropagation();setBlockActionMenu(null);item.fn();}}
+                                      className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.danger?(dm?'text-red-400 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):item.active?(dm?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(dm?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                                      {item.icon}{item.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -10002,7 +10491,45 @@ export default function QuestionBankApp() {
 	      })()}
 	      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
-      {deleteId?.type==='folder'&&<GModal title="Excluir pasta?" message="Os itens dentro dela serão mantidos na pasta anterior." confirmText="Excluir pasta" onConfirm={async()=>{const folder=libraryFolders.find(f=>f.id===deleteId.id);await deleteFolderAndKeepContents(folder);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='folder'&&(()=>{
+        const folder = libraryFolders.find(f=>f.id===deleteId.id);
+        const folderIds = getFolderTreeIds(folder);
+        const subjectCount = folder ? librarySubjects.filter(s => s.source === folder.source && folderIds.has(s.folderId)).length : 0;
+        const childFolderCount = Math.max(0, folderIds.size - 1);
+        return (
+          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-80 p-4" onClick={()=>setDeleteId(null)}>
+            <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${darkMode?'bg-gray-900 border-gray-700 text-gray-100':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-start gap-4 mb-5">
+                <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${darkMode?'bg-red-900/30 text-red-400':'bg-red-50 text-red-600'}`}>
+                  <Trash2 className="w-6 h-6"/>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Excluir pasta</p>
+                  <h3 className="text-xl font-serif font-bold text-yellow-600 truncate">{folder?.title || 'Pasta'}</h3>
+                  <p className="text-sm opacity-60 mt-1">
+                    Dentro dela: {childFolderCount} subpasta{childFolderCount!==1?'s':''} e {subjectCount} assunto{subjectCount!==1?'s':''}.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <button onClick={async()=>{await deleteFolderAndKeepContents(folder);setDeleteId(null);}}
+                  className={`w-full p-4 rounded-xl border text-left transition-colors ${darkMode?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50'}`}>
+                  <span className="block font-bold text-sm">Excluir só a pasta</span>
+                  <span className="block text-xs opacity-50 mt-1">Subpastas e assuntos serão movidos para a pasta anterior.</span>
+                </button>
+                <button onClick={async()=>{await deleteFolderWithContents(folder);setDeleteId(null);}}
+                  className={`w-full p-4 rounded-xl border text-left transition-colors ${darkMode?'border-red-800 text-red-300 hover:bg-red-900/20':'border-red-200 text-red-700 hover:bg-red-50'}`}>
+                  <span className="block font-bold text-sm">Excluir pasta e tudo dentro</span>
+                  <span className="block text-xs opacity-60 mt-1">Apaga subpastas, assuntos e questões contidas nela. Ação permanente.</span>
+                </button>
+              </div>
+              <button onClick={()=>setDeleteId(null)} className={`w-full mt-4 py-3 rounded-xl font-bold text-sm ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {deleteId?.type==='academia-extra-bloco'&&<GModal title="Excluir bloco?" message="As questões deste bloco serão removidas da Academia e do Acervo do Oráculo." confirmText="Excluir" onConfirm={async()=>{
         const {blocoId, topicId, subjectId, oracleTopicId} = deleteId;
         // Remove from Academia subject
