@@ -3778,6 +3778,7 @@ export default function QuestionBankApp() {
   const [libraryOpenFolders, setLibraryOpenFolders] = useState({});
   const [libraryActionMenu, setLibraryActionMenu] = useState(null);
   const [libraryDrag, setLibraryDrag] = useState(null);
+  const libraryDragRef = useRef(null);
   const suppressLibraryClickUntil = useRef(0);
   const [moveNewFolderName, setMoveNewFolderName] = useState('');
   const [moveSubjectModal, setMoveSubjectModal] = useState(null);
@@ -6631,44 +6632,58 @@ export default function QuestionBankApp() {
             };
             const isDropActive = (targetId) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode === 'inside' && isValidDrop(libraryDrag, targetId) && sameId(libraryDrag.targetId || null, targetId || null);
             const isSlotActive = (parentId, slotIndex) => libraryDrag?.active && libraryDrag?.targetFound && libraryDrag.dropMode !== 'inside' && sameId(libraryDrag.slotParentId || null, parentId || null) && libraryDrag.slotIndex === slotIndex;
-            const startLibraryDrag = (e, item, type) => {
-              if (e.button !== undefined && e.button !== 0) return;
+            const getDragPoint = (e) => {
+              const touch = e.touches?.[0] || e.changedTouches?.[0];
+              if (touch) return { clientX:touch.clientX, clientY:touch.clientY };
+              return { clientX:e.clientX, clientY:e.clientY };
+            };
+            const stopLibraryDragEvent = (e) => {
               e.stopPropagation();
-              e.preventDefault();
+              if (e.cancelable !== false) e.preventDefault();
+            };
+            const startLibraryDrag = (e, item, type) => {
+              if (libraryDragRef.current) return;
+              if (e.button !== undefined && e.button !== 0) return;
+              stopLibraryDragEvent(e);
+              const point = getDragPoint(e);
               suppressLibraryClickUntil.current = Date.now() + 450;
-              e.currentTarget.setPointerCapture?.(e.pointerId);
-              setLibraryDrag({ item, type, source:item.source, startX:e.clientX, startY:e.clientY, x:e.clientX, y:e.clientY, active:false, targetId:null, targetItem:null, dropMode:'inside', targetFound:false, slotParentId:null, slotIndex:null });
+              if (e.pointerId !== undefined) e.currentTarget.setPointerCapture?.(e.pointerId);
+              const nextDrag = { item, type, source:item.source, startX:point.clientX, startY:point.clientY, x:point.clientX, y:point.clientY, active:false, targetId:null, targetItem:null, dropMode:'inside', targetFound:false, slotParentId:null, slotIndex:null };
+              libraryDragRef.current = nextDrag;
+              setLibraryDrag(nextDrag);
             };
             const updateLibraryDrag = (e) => {
-              if (!libraryDrag) return;
-              e.preventDefault();
-              const active = libraryDrag.active || Math.hypot(e.clientX-libraryDrag.startX, e.clientY-libraryDrag.startY) > 5;
-              let targetId = libraryDrag.targetId ?? null;
+              const drag = libraryDragRef.current || libraryDrag;
+              if (!drag) return;
+              stopLibraryDragEvent(e);
+              const point = getDragPoint(e);
+              const active = drag.active || Math.hypot(point.clientX-drag.startX, point.clientY-drag.startY) > 5;
+              let targetId = drag.targetId ?? null;
               let targetItem = null;
               let dropMode = 'inside';
               let targetFound = false;
               let slotParentId = null;
               let slotIndex = null;
               if (active) {
-                const pointEl = document.elementFromPoint(e.clientX, e.clientY);
+                const pointEl = document.elementFromPoint(point.clientX, point.clientY);
                 const itemEl = pointEl?.closest?.('[data-library-item]');
                 const dropEl = pointEl?.closest?.('[data-library-drop]');
                 if (itemEl?.dataset?.itemId) {
                   const itemUnderPointer = getLibraryItemById(itemEl.dataset.itemId);
-                  if (itemUnderPointer && itemUnderPointer.source === libraryDrag.item.source && !sameId(itemUnderPointer.id, libraryDrag.item.id)) {
+                  if (itemUnderPointer && itemUnderPointer.source === drag.item.source && !sameId(itemUnderPointer.id, drag.item.id)) {
                     const rect = itemEl.getBoundingClientRect();
-                    const relativeY = (e.clientY - rect.top) / Math.max(rect.height, 1);
+                    const relativeY = (point.clientY - rect.top) / Math.max(rect.height, 1);
                     if (relativeY < 0.35) dropMode = 'before';
                     else if (relativeY > 0.65 || !isFolderItem(itemUnderPointer)) dropMode = 'after';
                     else dropMode = 'inside';
                     targetItem = itemUnderPointer;
                     targetId = dropMode === 'inside' ? itemUnderPointer.id : getLibraryItemParentId(itemUnderPointer);
-                    targetFound = isValidDrop(libraryDrag, targetId, dropMode, targetItem);
+                    targetFound = isValidDrop(drag, targetId, dropMode, targetItem);
                     if (targetFound && dropMode !== 'inside') {
                       slotParentId = targetId || null;
                       const slotSiblings = sortLibraryItems(library.filter(candidate =>
-                        candidate.source === libraryDrag.item.source &&
-                        candidate.id !== libraryDrag.item.id &&
+                        candidate.source === drag.item.source &&
+                        candidate.id !== drag.item.id &&
                         getLibraryItemParentId(candidate) === (slotParentId || null)
                       ));
                       const targetIndex = slotSiblings.findIndex(candidate=>sameId(candidate.id, itemUnderPointer.id));
@@ -6683,29 +6698,42 @@ export default function QuestionBankApp() {
                     dropMode = 'inside';
                     slotParentId = null;
                     slotIndex = null;
-                    targetFound = isValidDrop(libraryDrag, targetId, dropMode, null);
+                    targetFound = isValidDrop(drag, targetId, dropMode, null);
                   }
                   if (!targetFound) targetId = null;
                 }
                 if (targetId) setLibraryOpenFolders(p=>p[targetId]?p:{...p,[targetId]:true});
               }
-              setLibraryDrag(p=>p?{...p,x:e.clientX,y:e.clientY,active,targetId,targetItem,dropMode,targetFound,slotParentId,slotIndex}:p);
+              const nextDrag = {...drag,x:point.clientX,y:point.clientY,active,targetId,targetItem,dropMode,targetFound,slotParentId,slotIndex};
+              libraryDragRef.current = nextDrag;
+              setLibraryDrag(nextDrag);
             };
             const finishLibraryDrag = async (e) => {
-              if (!libraryDrag) return;
-              e.preventDefault();
-              const drag = libraryDrag;
+              const drag = libraryDragRef.current || libraryDrag;
+              if (!drag) return;
+              stopLibraryDragEvent(e);
+              if (e.pointerId !== undefined) e.currentTarget.releasePointerCapture?.(e.pointerId);
+              libraryDragRef.current = null;
               setLibraryDrag(null);
               suppressLibraryClickUntil.current = Date.now() + 650;
               if (!drag.active || !drag.targetFound || !isValidDrop(drag, drag.targetId, drag.dropMode, drag.targetItem)) return;
               await reorderLibraryItem(drag.item, drag.targetId || null, drag.targetItem, drag.dropMode);
+            };
+            const cancelLibraryDrag = () => {
+              libraryDragRef.current = null;
+              setLibraryDrag(null);
+              suppressLibraryClickUntil.current = Date.now() + 650;
             };
             const dragHandle = (item, type) => (
               <button
                 onPointerDown={e=>startLibraryDrag(e,item,type)}
                 onPointerMove={updateLibraryDrag}
                 onPointerUp={finishLibraryDrag}
-                onPointerCancel={()=>setLibraryDrag(null)}
+                onPointerCancel={cancelLibraryDrag}
+                onTouchStart={e=>startLibraryDrag(e,item,type)}
+                onTouchMove={updateLibraryDrag}
+                onTouchEnd={finishLibraryDrag}
+                onTouchCancel={cancelLibraryDrag}
                 onClick={e=>{e.preventDefault();e.stopPropagation();suppressLibraryClickUntil.current=Date.now()+650;}}
                 title="Arrastar para mover"
                 aria-label="Arrastar para mover"
