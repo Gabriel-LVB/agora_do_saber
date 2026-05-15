@@ -7553,21 +7553,35 @@ export default function QuestionBankApp() {
 	          });
 
           if (reviewSession) {
-            const { items: sessionItems, index, sessionAnswers, sessionResults = {} } = reviewSession;
+            const { items: sessionItems, index, sessionAnswers, sessionResults = {}, completed = false } = reviewSession;
             const cur = sessionItems[index];
             const total = sessionItems.length;
             const done = Object.keys(sessionAnswers).length;
             const finished = done === total;
             const reviewListMode = isAdmin && (settings.questionDisplayMode || 'list') === 'list';
-            if (finished) {
+            if (finished && completed) {
               const correct = Object.values(sessionResults).filter(Boolean).length;
 	              const pct = Math.round(correct / total * 100);
+              const wrong = total - correct;
+              const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
 	              return (
-	                <div className="max-w-2xl mx-auto text-center py-12">
+	                <div className={`max-w-2xl mx-auto rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
 	                  <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
-	                  <h2 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Revisão concluída</h2>
-	                  <p className={`text-lg font-bold mb-1 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
-                  <p className={`text-sm mb-8 ${dm?'text-gray-400':'text-gray-500'}`}>{correct}/{total} corretas</p>
+	                  <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Sessão encerrada</p>
+	                  <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Revisão concluída</h2>
+	                  <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
+                  <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correct}/{total} corretas · {wrong} para reforçar</p>
+                  <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} As questões acertadas foram empurradas para o próximo intervalo; as erradas voltam para revisão mais cedo.</p>
+                  <div className={`grid grid-cols-2 gap-3 mb-8 text-left`}>
+                    <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+                      <p className="text-2xl font-serif font-bold text-green-500">{correct}</p>
+                      <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>avançaram</p>
+                    </div>
+                    <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+                      <p className="text-2xl font-serif font-bold text-red-500">{wrong}</p>
+                      <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>reforço</p>
+                    </div>
+                  </div>
                   <button onClick={()=>setReviewSession(null)} className="px-8 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
                     Voltar
                   </button>
@@ -7618,7 +7632,14 @@ export default function QuestionBankApp() {
 	                />
                 <div className="flex items-center justify-between gap-3 mt-4">
                   <button onClick={()=>setReviewSession(p=>({...p,index:Math.max(0,index-1)}))} disabled={index===0} className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${index===0?(dm?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-                  <button onClick={()=>setReviewSession(p=>({...p,index:Math.min(total-1,index+1)}))} disabled={index===total-1} className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${index===total-1?(dm?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')}`}>Avançar<ChevronRight className="w-4 h-4"/></button>
+                  <button
+                    onClick={()=>setReviewSession(p=>(index===total-1?{...p,completed:true}:{...p,index:Math.min(total-1,index+1)}))}
+                    disabled={index===total-1 && !finished}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${(index===total-1 && !finished)?(dm?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')}`}
+                  >
+                    {index===total-1?'Concluir':'Avançar'}
+                    {index===total-1?<CheckIcon className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
+                  </button>
                 </div>
 	              </div>
 	            );
@@ -7987,22 +8008,36 @@ export default function QuestionBankApp() {
                   }
 
                   // Sessão de revisão ativa
-                  const { items: sessionItems, index, sessionAnswers, sessionResults = {} } = reviewSession;
+                  const { items: sessionItems, index, sessionAnswers, sessionResults = {}, completed = false } = reviewSession;
                   const cur = sessionItems[index];
                   const total = sessionItems.length;
                   const done = Object.keys(sessionAnswers).length;
                   const finished = done === total;
                   const reviewListMode = isAdmin && (settings.questionDisplayMode || 'list') === 'list';
 
-                  if (finished) {
+                  if (finished && completed) {
                     const correct = Object.values(sessionResults).filter(Boolean).length;
                     const pct = Math.round(correct / total * 100);
+                    const wrong = total - correct;
+                    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
                     return (
-                      <div className="text-center py-12">
+                      <div className={`rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
                         <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
-                        <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-2">Revisão Concluída!</h3>
-                        <p className={`text-lg font-bold mb-1 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
-                        <p className={`text-sm mb-8 ${dm?'text-gray-400':'text-gray-500'}`}>{correct}/{total} corretas</p>
+                        <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Sessão encerrada</p>
+                        <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Revisão concluída</h3>
+                        <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
+                        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correct}/{total} corretas · {wrong} para reforçar</p>
+                        <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} As questões acertadas foram empurradas para o próximo intervalo; as erradas voltam para revisão mais cedo.</p>
+                        <div className="grid grid-cols-2 gap-3 mb-8 text-left">
+                          <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+                            <p className="text-2xl font-serif font-bold text-green-500">{correct}</p>
+                            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>avançaram</p>
+                          </div>
+                          <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+                            <p className="text-2xl font-serif font-bold text-red-500">{wrong}</p>
+                            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>reforço</p>
+                          </div>
+                        </div>
 	                        <button onClick={()=>setReviewSession(null)} className="px-8 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
 	                          Voltar
 	                        </button>
@@ -8038,6 +8073,13 @@ export default function QuestionBankApp() {
                             apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
                           />
                         ))}
+                        {finished&&(
+                          <div className="text-center mt-2">
+                            <button onClick={()=>setReviewSession(p=>({...p,completed:true}))} className="inline-flex items-center gap-2 px-8 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
+                              Concluir<CheckIcon className="w-4 h-4"/>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   }
@@ -8091,9 +8133,12 @@ export default function QuestionBankApp() {
 	                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${index===0?(dm?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
 	                          <ArrowLeft className="w-4 h-4"/>Voltar
 	                        </button>
-	                        <button onClick={()=>setReviewSession(p=>({...p,index:Math.min(total-1,index+1)}))} disabled={index===total-1}
-	                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${index===total-1?(dm?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')}`}>
-	                          Avançar<ChevronRight className="w-4 h-4"/>
+	                        <button
+                            onClick={()=>setReviewSession(p=>(index===total-1?{...p,completed:true}:{...p,index:Math.min(total-1,index+1)}))}
+                            disabled={index===total-1 && !finished}
+	                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${(index===total-1 && !finished)?(dm?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')}`}>
+	                          {index===total-1?'Concluir':'Avançar'}
+                            {index===total-1?<CheckIcon className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
 	                        </button>
 	                      </div>
                     </div>
@@ -9504,7 +9549,7 @@ export default function QuestionBankApp() {
 
 	      {/* Toasts */}
 	      <ToastContainer toasts={toasts} onRemove={removeToast}/>
-	      {['topic','academia-topic','videoquestions','curso','favorites'].includes(view)&&!reviewSession&&<BackToTopButton darkMode={darkMode}/>}
+	      {['topic','academia-topic','videoquestions','curso','favorites'].includes(view)&&!reviewSession&&!(isAdmin&&(settings.questionDisplayMode||'list')==='single'&&(['topic','videoquestions'].includes(view)||(view==='curso'&&vqActiveBlockView)))&&<BackToTopButton darkMode={darkMode}/>}
 
 	      {/* Spaced Review Modal */}
       {srModal&&<SRModal
