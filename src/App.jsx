@@ -320,6 +320,8 @@ const getDailyLessonSeconds = (stats = {}) =>
   Object.values(stats.lessonIntervals || {}).reduce((acc, intervals) => acc + sumIntervalsSeconds(intervals), 0);
 
 const cleanTopicTitle = (title = '') => title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
+const isAcademiaMirrorRootFolder = (item) =>
+  item?.itemType === 'folder' && item.source === 'gemini' && item.mirrorRoot === 'academia';
 
 const isLikelySyllabusGroupTitle = (subtopic = '') => {
   const clean = cleanSyllabusSubtopic(subtopic);
@@ -392,41 +394,7 @@ const normalizeSyllabusByLimits = (syllabusText, source = 'oracle', settings = {
   const maxSubtopics = manual
     ? Math.max(3, Math.min(30, configuredMax || limits.targetMaxSubtopicsPerTopic))
     : Math.max(8, Math.min(20, configuredMax || limits.targetMaxSubtopicsPerTopic));
-  const split = splitOversizedSyllabusTopics(topics, maxSubtopics, 30);
-  return formatSyllabusTopics(source === 'academia' ? mergeShortAcademiaTopics(split, maxSubtopics) : split);
-};
-
-const mergeShortAcademiaTopics = (topics, maxSubtopics = 20) => {
-  const merged = [];
-  let current = null;
-
-  topics.forEach(topic => {
-    if (!current) {
-      current = { ...topic, mergedTitles: [topic.title], subtopics: [...topic.subtopics] };
-      return;
-    }
-
-    const combinedCount = current.subtopics.length + topic.subtopics.length;
-    if (combinedCount <= maxSubtopics) {
-      current = {
-        ...current,
-        title: `${current.title} / ${topic.title}`,
-        mergedTitles: [...current.mergedTitles, topic.title],
-        subtopics: [...current.subtopics, ...topic.subtopics],
-      };
-    } else {
-      merged.push(current);
-      current = { ...topic, mergedTitles: [topic.title], subtopics: [...topic.subtopics] };
-    }
-  });
-
-  if (current) merged.push(current);
-  return merged.map(topic => ({
-    ...topic,
-    title: topic.mergedTitles?.length > 1
-      ? topic.mergedTitles.map(t => t.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim()).join(' + ')
-      : topic.title,
-  }));
+  return formatSyllabusTopics(splitOversizedSyllabusTopics(topics, maxSubtopics, 30));
 };
 
 const normalizeOracleSyllabus = (syllabusText, settings = {}) =>
@@ -439,7 +407,7 @@ const buildChunkedSyllabusMessage = ({ chunk, index, total, accumulated, subject
   const limits = source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
   const manual = !settings.autoMode;
   const shapeRule = manual
-    ? `MOLDE FINAL OBRIGATÓRIO: ${settings.numTopics || limits.targetMaxTopics} tópicos, com no máximo ${settings.numSubtopics || limits.targetMaxSubtopicsPerTopic} subtópicos por tópico. Se o material for maior, agrupe detalhes relacionados dentro do mesmo subtópico.`
+    ? `MOLDE FINAL OBRIGATÓRIO: ${settings.numTopics || limits.targetMaxTopics} tópicos, com no máximo ${settings.numSubtopics || limits.targetMaxSubtopicsPerTopic} subtópicos por tópico. Se o material for maior, priorize cobertura fiel e divida em tópicos menores quando necessário.`
     : `MOLDE FINAL: tópicos podem ter até cerca de ${limits.targetMaxSubtopicsPerTopic} subtópicos quando o bloco for grande. Só divida obrigatoriamente se um tópico passaria de 30 subtópicos.`;
   const antiHugeTopicRule = `REGRA CRÍTICA: NÃO crie um tópico gigante como "Urologia" ou "Intestino" com 40, 60 ou 80 subtópicos. Tópico é bloco didático; subtópico é item testável.`;
 
@@ -475,7 +443,7 @@ Atualize o sumário acumulado incorporando esta nova parte.
 Responda com o SUMÁRIO CONSOLIDADO COMPLETO.
 ${shapeRule}
 ${antiHugeTopicRule}
-Ao consolidar, reorganize os blocos: se algum tópico ficar grande demais, quebre-o em tópicos menores; se houver microdetalhes, agrupe-os.`;
+Ao consolidar, reorganize os blocos: se algum tópico ficar grande demais, quebre-o em tópicos menores e preserve subtópicos relevantes.`;
 };
 
 const parseAcademiaLessonSections = (lessonText, subtopics) => {
@@ -522,11 +490,22 @@ const parseAcademiaLessonSections = (lessonText, subtopics) => {
   return lessonSections;
 };
 
-const buildAcademiaFixationPlan = (subtopics, lessonSections = {}) => subtopics.map((_, i) => {
-  const len = (lessonSections[i]?.content || '').length;
-  if (len > 2200) return 3;
-  if (len > 1100) return 2;
-  return 1;
+const countAcademiaTeachingUnits = (text = '') => {
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+  const labeledLines = lines.filter(line =>
+    /^[-*•]?\s*(defini[çc][aã]o|diagn[óo]stico|achados?|causas?|classifica[çc][aã]o|complica[çc][õo]es|cl[íi]nica|fisiopatologia|mecanismo|morfologia|epidemiologia|localiza[çc][aã]o|risco|tratamento|avalia[çc][aã]o|exames?)\b\s*:/i.test(line)
+  ).length;
+  const colonBlocks = (String(text).match(/(?:^|\n)\s*[^:\n]{3,70}:/g) || []).length;
+  return Math.max(labeledLines, colonBlocks);
+};
+
+const buildAcademiaFixationPlan = (subtopics, lessonSections = {}) => subtopics.map((subtopic, i) => {
+  const content = lessonSections[i]?.content || '';
+  const len = content.length;
+  const teachingUnits = countAcademiaTeachingUnits(`${subtopic}\n${content}`);
+  if (len > 2600 || teachingUnits >= 6) return 4;
+  if (len > 1300 || teachingUnits >= 3) return 3;
+  return 2;
 });
 
 const distributeAcademiaFixQuestions = (questions, plan) => {
@@ -4785,6 +4764,7 @@ export default function QuestionBankApp() {
   };
   const removeSubject = async (id) => {
     const removed = libraryRef.current.find(s=>s.id===id);
+    if (isAcademiaMirrorRootFolder(removed)) return;
     libraryRef.current = libraryRef.current.filter(s=>s.id!==id);
     setLibrary(p=>p.filter(s=>s.id!==id));
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
@@ -4796,6 +4776,8 @@ export default function QuestionBankApp() {
     const clean = (title || '').trim();
     if (!clean) return null;
     const parent = parentFolderId || null;
+    const parentFolder = parent ? libraryRef.current.find(item => String(item.id) === String(parent)) : null;
+    if (isAcademiaMirrorRootFolder(parentFolder)) return null;
     const siblings = library.filter(item => item.source === source && (isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null)) === parent);
     const maxOrder = siblings.reduce((max,item)=>Math.max(max, Number(item.sortOrder)||0), 0);
     const folder = { id:Date.now(), itemType:'folder', title:clean, source, parentFolderId:parent, createdAt:Date.now(), sortOrder:maxOrder+1, topics:[] };
@@ -5228,10 +5210,13 @@ export default function QuestionBankApp() {
   };
   const moveSubjectToFolder = async (subject, folderId) => {
     if (!subject || isFolderItem(subject)) return;
+    if (isAcademiaMirrorRootFolder(libraryFolders.find(f => String(f.id) === String(folderId)))) return;
     await updateSubject({ ...subject, folderId:folderId || null });
   };
   const moveFolderToFolder = async (folder, parentFolderId) => {
     if (!folder || !isFolderItem(folder)) return;
+    if (isAcademiaMirrorRootFolder(folder)) return;
+    if (isAcademiaMirrorRootFolder(libraryFolders.find(f => String(f.id) === String(parentFolderId)))) return;
     const nextParent = parentFolderId || null;
     if (nextParent === folder.id || isFolderDescendant(nextParent, folder.id)) return;
     await updateSubject({ ...folder, parentFolderId:nextParent });
@@ -5239,6 +5224,9 @@ export default function QuestionBankApp() {
   const getLibraryItemParentId = (item) => isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null);
   const reorderLibraryItem = async (item, targetParentId, targetItem = null, position = 'inside') => {
     if (!item) return;
+    if (isAcademiaMirrorRootFolder(item)) return;
+    if (isAcademiaMirrorRootFolder(targetItem)) return;
+    if (isAcademiaMirrorRootFolder(libraryFolders.find(f => String(f.id) === String(targetParentId)))) return;
     const nextParent = targetParentId || null;
     if (isFolderItem(item) && (nextParent === item.id || isFolderDescendant(nextParent, item.id))) return;
     const moved = isFolderItem(item) ? { ...item, parentFolderId:nextParent } : { ...item, folderId:nextParent };
@@ -5258,6 +5246,7 @@ export default function QuestionBankApp() {
   };
   const deleteFolderAndKeepContents = async (folder) => {
     if (!folder) return;
+    if (isAcademiaMirrorRootFolder(folder)) return;
     const children = librarySubjects.filter(s => s.source === folder.source && s.folderId === folder.id);
     for (const child of children) await updateSubject({ ...child, folderId:folder.parentFolderId || null });
     const childFolders = libraryFolders.filter(f => f.source === folder.source && f.parentFolderId === folder.id);
@@ -5282,6 +5271,7 @@ export default function QuestionBankApp() {
   };
   const deleteFolderWithContents = async (folder) => {
     if (!folder) return;
+    if (isAcademiaMirrorRootFolder(folder)) return;
     const folderIds = getFolderTreeIds(folder);
     const idsToDelete = new Set([
       ...Array.from(folderIds),
@@ -6298,7 +6288,7 @@ export default function QuestionBankApp() {
   };
 
   const finalizeAcademia = async () => {
-    const parsedTopics = mergeShortAcademiaTopics(parseSyllabusTopics(academiaSyllabus));
+    const parsedTopics = parseSyllabusTopics(academiaSyllabus);
     if (!parsedTopics.length) {
       setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
       return;
@@ -7045,7 +7035,7 @@ export default function QuestionBankApp() {
                 )}
               </div>
             );
-            const toggleLibraryFolder = (id) => setLibraryOpenFolders(p=>({...p,[id]:!(p[id] ?? true)}));
+            const toggleLibraryFolder = (id) => setLibraryOpenFolders(p=>({...p,[id]:!(p[id] ?? false)}));
             const countSubjectQuestions = (subject) => subject.source==='academia'
               ? subject.topics.flatMap(t=>Object.values(t.fixationQuestions||{}).flat()).length
               : subject.topics.reduce((acc,t)=>acc+(t.questions?.length||0), 0);
@@ -7056,6 +7046,7 @@ export default function QuestionBankApp() {
             const treeRootId = activeFolderId || null;
             const treeItems = directItems(treeRootId);
             const treeItemCount = treeItems.length;
+            const activeFolderLocked = isAcademiaMirrorRootFolder(activeFolder);
             const collectTreeFolderIds = (parentId) => {
               const ids = [];
               const walk = (id) => directFolders(id).forEach(folder => {
@@ -7066,7 +7057,7 @@ export default function QuestionBankApp() {
               return ids;
             };
             const treeFolderIds = collectTreeFolderIds(treeRootId);
-            const allTreeFoldersOpen = treeFolderIds.length > 0 && treeFolderIds.every(id => libraryOpenFolders[id] ?? true);
+            const allTreeFoldersOpen = treeFolderIds.length > 0 && treeFolderIds.every(id => libraryOpenFolders[id] ?? false);
             const setAllTreeFoldersOpen = (open) => setLibraryOpenFolders(p => {
               const next = {...p};
               treeFolderIds.forEach(id => { next[id] = open; });
@@ -7090,11 +7081,15 @@ export default function QuestionBankApp() {
             const getLibraryItemById = (id) => library.find(item=>String(item.id)===String(id));
             const isValidDrop = (drag, targetId, mode = 'inside', targetItem = null) => {
               if (!drag) return false;
+              if (isAcademiaMirrorRootFolder(drag.item)) return false;
               if (mode === 'before' || mode === 'after') {
                 if (!targetItem || sameId(drag.item.id, targetItem.id) || drag.item.source !== targetItem.source) return false;
+                if (isAcademiaMirrorRootFolder(targetItem)) return false;
                 const parentId = getLibraryItemParentId(targetItem);
+                if (isAcademiaMirrorRootFolder(libraryFolders.find(f => sameId(f.id, parentId)))) return false;
                 return !isFolderItem(drag.item) || (!sameId(drag.item.id, parentId) && !isFolderDescendant(parentId, drag.item.id));
               }
+              if (isAcademiaMirrorRootFolder(libraryFolders.find(f => sameId(f.id, targetId)))) return false;
               if (drag.type === 'subject') return !sameId(drag.item.folderId || null, targetId || null);
               return !sameId(drag.item.id, targetId) && !sameId(drag.item.parentFolderId || null, targetId || null) && !isFolderDescendant(targetId, drag.item.id);
             };
@@ -7290,7 +7285,9 @@ export default function QuestionBankApp() {
               );
             };
             const renderTreeFolder = (folder, depth=0, siblings=[], index=0) => {
-              const open = libraryOpenFolders[folder.id] ?? true;
+              const open = libraryOpenFolders[folder.id] ?? false;
+              const lockedAcademiaRoot = isAcademiaMirrorRootFolder(folder);
+              const FolderGlyph = lockedAcademiaRoot ? AcademiaIcon : FolderIcon;
               const totalQs = countFolderQuestions(folder);
               const totalSubjects = getSubjectsInFolderTree(folder).length;
               const dropActive = isDropActive(folder.id);
@@ -7304,7 +7301,7 @@ export default function QuestionBankApp() {
                 if (Date.now() <= suppressLibraryClickUntil.current) return;
                 setActiveFolderId(folder.id);
               };
-              const actions = [
+              const actions = lockedAcademiaRoot ? [] : [
                 {label:'Nova filha', icon:<PlusIcon className="w-3.5 h-3.5"/>, fn:()=>{setLibraryOpenFolders(p=>({...p,[folder.id]:true}));setNewFolderParentId(folder.id);setNewFolderName('');setNewFolderModal(true);}},
                 {label:'Renomear', icon:<EditIcon className="w-3.5 h-3.5"/>, fn:()=>{setEditingSub(folder.id);setEditingSubName(folder.title);}},
                 {label:'Excluir', icon:<Trash2 className="w-3.5 h-3.5"/>, fn:()=>setDeleteId({type:'folder',id:folder.id}), extra:darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300', danger:true},
@@ -7317,27 +7314,27 @@ export default function QuestionBankApp() {
                     {afterTarget&&dropSlot('after')}
                     <div className="md:hidden px-2.5 py-2" style={{paddingLeft:mobilePad}}>
                       <div className="flex items-center gap-1.5">
-                        {dragHandle(folder,'folder')}
+                        {lockedAcademiaRoot?<span className="w-6 flex-shrink-0"/>:dragHandle(folder,'folder')}
                         <button onClick={e=>{e.stopPropagation();toggleLibraryFolder(folder.id);}} title={open?'Recolher':'Expandir'} className={`h-8 w-4 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>
                           {open?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
                         </button>
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderIcon className="w-4 h-4"/></div>
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderGlyph className="w-4 h-4"/></div>
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
                           <button onClick={openFolderView} className="min-w-0 flex-1 text-left">
                             <h3 className="font-bold text-sm leading-tight truncate">{folder.title}</h3>
                             <p className="text-xs opacity-50 mt-0.5 leading-snug truncate">{totalSubjects} assunto{totalSubjects!==1?'s':''}{totalQs>0?` · ${totalQs} questões`:''}</p>
                           </button>
-                          <div className="flex-shrink-0">{mobileActionsMenu(`folder-${folder.id}`, actions)}</div>
+                          {actions.length>0&&<div className="flex-shrink-0">{mobileActionsMenu(`folder-${folder.id}`, actions)}</div>}
                         </div>
                       </div>
                     </div>
                     <div className="hidden md:flex items-center gap-3 py-3 pr-4" style={{paddingLeft:desktopPad}}>
-                      {dragHandle(folder,'folder')}
+                      {lockedAcademiaRoot?<span className="w-8 flex-shrink-0"/>:dragHandle(folder,'folder')}
                       <button onClick={e=>{e.stopPropagation();toggleLibraryFolder(folder.id);}} title={open?'Recolher':'Expandir'} className={`h-8 w-5 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>
                         {open?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
                       </button>
                       <button onClick={openFolderView} className="min-w-0 flex-1 flex items-center gap-3 text-left">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderIcon className="w-5 h-5"/></div>
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBox}`}><FolderGlyph className="w-5 h-5"/></div>
                         <div className="min-w-0">
                           <h3 className="font-bold text-sm truncate">{folder.title}</h3>
                         </div>
@@ -7384,7 +7381,7 @@ export default function QuestionBankApp() {
 	                      {activeFolder&&<button onClick={()=>openFolderReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'}`}><RepeatIcon className="w-4 h-4"/>Revisar pasta</button>}
 	                      {libFilter==='external'&&<button onClick={()=>setExternalPromptModal(true)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>{copiedPrompt?<CheckCircle2 className="w-4 h-4 text-yellow-500"/>:<Copy className="w-4 h-4"/>}{copiedPrompt?'Copiado':'Prompt'}</button>}
 	                      {treeFolderIds.length>0&&<button onClick={()=>setAllTreeFoldersOpen(!allTreeFoldersOpen)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{allTreeFoldersOpen?<ChevronUp className="w-4 h-4"/>:<ChevronDown className="w-4 h-4"/>}{allTreeFoldersOpen?'Recolher tudo':'Expandir tudo'}</button>}
-	                      <button onClick={()=>{setNewFolderParentId(activeFolderId || null);setNewFolderName('');setNewFolderModal(true);}} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}><PlusIcon className="w-4 h-4"/>Nova pasta</button>
+	                      {!activeFolderLocked&&<button onClick={()=>{setNewFolderParentId(activeFolderId || null);setNewFolderName('');setNewFolderModal(true);}} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}><PlusIcon className="w-4 h-4"/>Nova pasta</button>}
                       {(libFilter!=='academia'||canUseAcademia)&&<button onClick={primaryAction} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm">{primaryIcon}{primaryLabel}</button>}
                     </div>
                   </div>
@@ -7409,7 +7406,7 @@ export default function QuestionBankApp() {
                 {libraryDrag?.active&&(
                   <div className={`fixed z-[80] pointer-events-none rounded-xl border px-3 py-2 text-sm font-bold shadow-2xl ${darkMode?'bg-gray-800 border-yellow-700 text-yellow-300':'bg-white border-yellow-300 text-yellow-800'}`} style={{left:libraryDrag.x+12,top:libraryDrag.y+12,maxWidth:280}}>
                     <div className="flex items-center gap-2 min-w-0">
-                      {libraryDrag.type==='folder'?<FolderIcon className="w-4 h-4 flex-shrink-0"/>:<BlockIcon className="w-4 h-4 flex-shrink-0"/>}
+                      {libraryDrag.type==='folder'?(isAcademiaMirrorRootFolder(libraryDrag.item)?<AcademiaIcon className="w-4 h-4 flex-shrink-0"/>:<FolderIcon className="w-4 h-4 flex-shrink-0"/>):<BlockIcon className="w-4 h-4 flex-shrink-0"/>}
                       <span className="truncate">{libraryDrag.item.title}</span>
                     </div>
                     <p className="text-[11px] opacity-60 mt-0.5">{libraryDrag.targetFound?(libraryDrag.dropMode==='inside'?'Solte dentro da pasta':'Solte para reordenar'):'Arraste até uma pasta ou linha'}</p>
@@ -7925,7 +7922,7 @@ export default function QuestionBankApp() {
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura da Aula</h2>
                 <p className={`text-sm rounded-xl p-3 ${darkMode?'bg-blue-900/20 text-blue-300 border border-blue-800/30':'bg-blue-50 text-blue-800 border border-blue-200'}`}>
-                  ✅ Revise os tópicos e subtópicos. Cada subtópico vira uma seção da aula; se a seção ficar mais densa, ela recebe mais questões de fixação.
+                  ✅ Revise os tópicos e subtópicos. Cada subtópico vira uma seção da aula e recebe pelo menos 2 questões de fixação, chegando a 4 quando a seção for mais densa.
                 </p>
                 <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>
                 <div className="relative">
@@ -9686,7 +9683,7 @@ export default function QuestionBankApp() {
                 }).filter(root=>root.count>0);
                 const isChecked = (key) => examTopics.some(x=>x.key===key);
                 const toggleItem = (item) => setExamTopics(p=>p.some(x=>x.key===item.key)?p.filter(x=>x.key!==item.key):[...p,item]);
-                const toggleFolderOpen = (key) => setExamOpenFolders(p=>({...p,[key]:!(p[key] ?? true)}));
+                const toggleFolderOpen = (key) => setExamOpenFolders(p=>({...p,[key]:!(p[key] ?? false)}));
                 const toggleSubjectOpen = (key) => setExamOpenSubjects(p=>({...p,[key]:!p[key]}));
                 const folderSubjects = (folderId, source) => subjectsWithQuestions.filter(s=>s.source===source&&(s.folderId||null)===(folderId||null));
                 const childFolders = (folderId, source) => libraryFolders.filter(f=>f.source===source&&(f.parentFolderId||null)===(folderId||null));
@@ -9741,7 +9738,7 @@ export default function QuestionBankApp() {
                 const renderFolder = (folder, depth = 0) => {
                   const folderItem = {type:'folder', key:`folder-${folder.id}`, folder, count:folderQuestionCount(folder)};
                   const folderChecked = isChecked(folderItem.key);
-                  const folderOpen = examOpenFolders[folderItem.key] ?? true;
+                  const folderOpen = examOpenFolders[folderItem.key] ?? false;
                   const directSubjects = folderSubjects(folder.id, folder.source);
                   const children = childFolders(folder.id, folder.source).filter(child => folderQuestionCount(child) > 0 || folderSubjects(child.id, child.source).length > 0 || childFolders(child.id, child.source).length > 0);
                   const left = 12 + depth * 20;
@@ -9774,7 +9771,7 @@ export default function QuestionBankApp() {
                     {totalCount===0&&<p className="text-sm opacity-50 italic p-4">Nenhuma questão disponível para prova.</p>}
                     {sourceRoots.map(root=>{
                       const rootKey = `source-${root.source}`;
-                      const rootOpen = examOpenFolders[rootKey] ?? true;
+                      const rootOpen = examOpenFolders[rootKey] ?? false;
                       const visibleFolders = root.folders.filter(folder => folderQuestionCount(folder) > 0 || folderSubjects(folder.id, root.source).length > 0 || childFolders(folder.id, root.source).length > 0);
                       return (
                         <section key={root.source} className={`border-b last:border-b-0 ${darkMode?'border-gray-700':'border-gray-100'}`}>
@@ -10396,13 +10393,17 @@ export default function QuestionBankApp() {
         const selectedDest = Object.prototype.hasOwnProperty.call(moveSubjectModal, '_selectedDest') ? moveSubjectModal._selectedDest : currentId;
         const setSelectedDest = (id) => setMoveSubjectModal(p=>({...p,_selectedDest:id}));
         const folderDestinations = sourceFolders(moveSubjectModal.source)
+          .filter(folder => !isAcademiaMirrorRootFolder(folder))
           .filter(folder => !movingFolder || (folder.id !== moveSubjectModal.id && !isFolderDescendant(folder.id, moveSubjectModal.id)))
           .map(folder => ({...folder, title:getFolderLabel(folder.id)}));
         const destinations = [{id:null,title:'Raiz'},...folderDestinations];
         const selectedDestObj = destinations.find(f=>(f.id||null)===(selectedDest||null)) || destinations[0];
+        const selectedDestId = selectedDestObj.id || null;
+        const selectedDestLocked = isAcademiaMirrorRootFolder(libraryFolders.find(f=>String(f.id)===String(selectedDestId)));
         const currentLocation = movingFolder ? getFolderParentTitle(moveSubjectModal) : getSubjectFolderTitle(moveSubjectModal);
         const createMoveFolder = async () => {
-          const created = await createLibraryFolder(moveSubjectModal.source, moveNewFolderName, selectedDest || null);
+          if (selectedDestLocked) return;
+          const created = await createLibraryFolder(moveSubjectModal.source, moveNewFolderName, selectedDestId);
           if (!created) return;
           setMoveNewFolderName('');
           setSelectedDest(created.id);
@@ -10438,16 +10439,16 @@ export default function QuestionBankApp() {
                   );
                 })}
               </div>
-              <div className={`rounded-xl border p-3 mb-5 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+              {!selectedDestLocked&&<div className={`rounded-xl border p-3 mb-5 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
                 <p className="text-[11px] font-bold uppercase tracking-widest opacity-40 mb-2">Criar nova pasta em {selectedDestObj.title}</p>
                 <div className="flex gap-2">
                   <input value={moveNewFolderName} onChange={e=>setMoveNewFolderName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') createMoveFolder();}} placeholder="Nome da pasta" className={`min-w-0 flex-1 px-3 py-2 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 text-sm font-bold ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <button onClick={createMoveFolder} disabled={!moveNewFolderName.trim()} className="px-3 py-2 rounded-lg bg-yellow-600 text-white font-bold text-sm hover:bg-yellow-700 disabled:opacity-50">Criar</button>
                 </div>
-              </div>
+              </div>}
               <div className="flex gap-3">
                 <button onClick={()=>{setMoveSubjectModal(null);setMoveNewFolderName('');}} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
-                <button onClick={async()=>{movingFolder?await moveFolderToFolder(moveSubjectModal,selectedDest||null):await moveSubjectToFolder(moveSubjectModal,selectedDest||null);setMoveSubjectModal(null);setMoveNewFolderName('');}} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700">Mover</button>
+                <button onClick={async()=>{movingFolder?await moveFolderToFolder(moveSubjectModal,selectedDestId):await moveSubjectToFolder(moveSubjectModal,selectedDestId);setMoveSubjectModal(null);setMoveNewFolderName('');}} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700">Mover</button>
               </div>
             </div>
           </div>
@@ -10553,6 +10554,9 @@ export default function QuestionBankApp() {
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='folder'&&(()=>{
         const folder = libraryFolders.find(f=>f.id===deleteId.id);
+        if (isAcademiaMirrorRootFolder(folder)) {
+          return null;
+        }
         const folderIds = getFolderTreeIds(folder);
         const subjectCount = folder ? librarySubjects.filter(s => s.source === folder.source && folderIds.has(s.folderId)).length : 0;
         const childFolderCount = Math.max(0, folderIds.size - 1);
@@ -10610,7 +10614,13 @@ export default function QuestionBankApp() {
         setDeleteId(null);
       }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
-      {editingSub&&<GModal title="Renomear" message="" confirmText="Renomear" onConfirm={async()=>{const s=library.find(x=>x.id===editingSub);if(s)await updateSubject({...s,title:editingSubName.trim()});setEditingSub(null);}} onCancel={()=>setEditingSub(null)} darkMode={darkMode}><input value={editingSubName} onChange={e=>setEditingSubName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}
+      {editingSub&&(()=>{
+        const editableItem = library.find(x=>x.id===editingSub);
+        if (isAcademiaMirrorRootFolder(editableItem)) {
+          return null;
+        }
+        return <GModal title="Renomear" message="" confirmText="Renomear" onConfirm={async()=>{if(editableItem)await updateSubject({...editableItem,title:editingSubName.trim()});setEditingSub(null);}} onCancel={()=>setEditingSub(null)} darkMode={darkMode}><input value={editingSubName} onChange={e=>setEditingSubName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>;
+      })()}
       {editingTopic&&<GModal title="Renomear Bloco" message="" confirmText="Renomear" onConfirm={async()=>{if(!activeSubject)return;await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===editingTopic?{...t,title:editingTopicName.trim()}:t)});setEditingTopic(null);}} onCancel={()=>setEditingTopic(null)} darkMode={darkMode}><input value={editingTopicName} onChange={e=>setEditingTopicName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}
     </div>
   );

@@ -213,11 +213,11 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
     ? `
 ESTRUTURA (modo automático):
 Quando uma lista de subtópicos obrigatórios for fornecida, ela substitui esta seção.
-Se NÃO houver lista obrigatória, defina uma estrutura enxuta para revisão rápida.
+Se NÃO houver lista obrigatória, defina uma estrutura completa para revisão.
 FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico.
 Critérios:
-- Use poucos subtópicos amplos, cada um cobrindo um bloco real de estudo
-- Quantidade ideal: o mínimo necessário para cobrir o essencial sem repetição
+- Use subtópicos suficientes para cobrir os blocos reais de estudo
+- Quantidade ideal: a necessária para cobrir o essencial sem repetição
 - Cada subtópico deve ser um conceito distinto e testável — não uma variação do anterior
 - Organize do conceito mais fundamental ao mais específico dentro de cada tópico`
     : `
@@ -263,9 +263,8 @@ FAIXA DE REFERÊNCIA:
 - Assunto comum: ${l.minTopics} a ${l.targetMaxTopics} tópicos no total
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma ser suficiente
 - Materiais longos devem virar MAIS TÓPICOS, não tópicos gigantes
-- Evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total, a menos que o material realmente exija
+- Use mais subtópicos quando o material realmente exigir cobertura própria
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
-- Prefira agrupar listas, detalhes e exceções em subtópicos maiores quando pertencem ao mesmo bloco
 - Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros
 - PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
@@ -278,7 +277,7 @@ REGRAS:
 - Baseie os subtópicos no material fornecido — não extrapole para fora do que foi pedido
 - Ordem obrigatória dentro de cada tópico: fundamentos antes de detalhes, mecanismo antes da aplicação clínica, regra antes da exceção
 - Subtópicos concretos e objetivos — nada de "Generalidades", "Introdução" ou "Aspectos gerais"
-- Se o material for muito grande, comprima por importância de prova e agrupe microdetalhes relacionados
+- Se o material for muito grande, preserve a cobertura por importância de prova e crie mais tópicos/subtópicos quando necessário
 
 FORMATO:
 Tópico 1: [Nome]
@@ -306,8 +305,8 @@ REGRAS:
 - Mantenha a estrutura de Tópicos e Subtópicos
 - Preserve a ordem didática (geral → específico, mecanismo → aplicação)
 - Cada subtópico deve ser um conceito testável independente
-- Mantenha o sumário completo, mas enxuto: evite passar de ${l.targetMaxTopics} tópicos e ${l.targetMaxTotalSubtopics} subtópicos no total, salvo se o material exigir ou o usuário pedir
-- Agrupe listas, detalhes curtos e exceções no mesmo subtópico quando pertencem ao mesmo bloco do material
+- Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
+- Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
 };
 
@@ -321,9 +320,9 @@ export const buildExternalPrompt = (s) => {
 
   const parte1 = s.autoMode
     ? `*** PARTE 1: ESTRUTURA (modo automático) ***
-A IA deve definir uma estrutura ENXUTA para estudo rápido.
-FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minTopics} a ${SYLLABUS_LIMITS.oracle.targetMaxTopics} tópicos no total; ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico; tente ficar abaixo de ${SYLLABUS_LIMITS.oracle.targetMaxTotalSubtopics} subtópicos, salvo material muito longo.
-Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 bloco testável. Agrupe listas e microdetalhes relacionados.
+A IA deve definir uma estrutura completa para estudo.
+FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minTopics} a ${SYLLABUS_LIMITS.oracle.targetMaxTopics} tópicos no total; ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico, ampliando quando o material exigir.
+Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 bloco testável independente.
 Responda APENAS o sumário. Aguarde confirmação antes de gerar questões.`
     : `*** PARTE 1: ESTRUTURA ***
 Crie um sumário sobre [INSERIR TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.
@@ -370,7 +369,7 @@ REGRAS DOS SUBTÓPICOS:
 - Não repita conceitos entre subtópicos
 - Não coloque exceções ou complicações antes de cobrir o conceito principal
 - Priorize o que é cobrado em provas de residência médica
-- Agrupe detalhes curtos no mesmo subtópico; não transforme cada frase da aula em uma questão
+- Separe detalhes com potencial de cobrança própria; evite apenas repetir frases da aula sem transformar em conceito testável
 
 ${extraPrompt ? `FOCO SOLICITADO PELO USUÁRIO: ${extraPrompt}\n` : ''}
 
@@ -422,26 +421,25 @@ export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) =>
   const l = SYLLABUS_LIMITS.academia;
   const estrutura = autoMode
     ? `Defina uma estrutura completa para uma aula eficiente.
-O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria 1 a 3 questões de fixação para aquela seção conforme a densidade.
+O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria 2 a 4 questões de fixação para aquela seção conforme a densidade.
 FAIXA DE REFERÊNCIA:
 - ${l.minTopics} a ${l.targetMaxTopics} tópicos costuma funcionar bem
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma funcionar bem
 - Para materiais longos, crie mais tópicos em vez de inchar um único tópico
-- Evite ultrapassar ${l.targetMaxTotalSubtopics} subtópicos no total sem necessidade real
+- Use mais subtópicos quando o material trouxer blocos independentes
 - PROIBIDO: tópico com dezenas de subtópicos. Se um tópico passaria de 30 subtópicos, divida esse bloco em tópicos menores.
-- Regra prática: prefira tópicos com 6 a ${l.targetMaxSubtopicsPerTopic} subtópicos. Só una tópicos vizinhos se a soma continuar razoável.
 Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render cerca de 1 a 2 parágrafos fortes de explicação.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
-Também não agrupe demais: se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
+Não crie subtópicos guarda-chuva que misturem definição, diagnóstico, classificação, complicações, exames e tratamento quando esses blocos renderem cobranças próprias.
+Se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
   return `Você é o Arquiteto de Alexandria, construindo o sumário de um curso sobre "${subjectName}".
 ${estrutura}
 
 FONTE OBRIGATÓRIA — SIGA O MATERIAL:
-O sumário deve ser um índice fiel do material fornecido. Siga a ordem e o agrupamento do material.
-Não reordene, não generalize, não extrapole. Se o material agrupa "causas A, B e C" numa seção,
-o sumário tem um subtópico "Causas: A, B e C" — não três subtópicos separados.
+O sumário deve ser um índice fiel do material fornecido. Siga a ordem do material.
+Não reordene, não generalize, não extrapole. Não junte tópicos vizinhos apenas para economizar geração.
 
 COMO CALIBRAR O TAMANHO DE UM SUBTÓPICO:
 Cada subtópico deve corresponder a um bloco de conteúdo que, no material original, ocupa
@@ -449,30 +447,20 @@ aproximadamente 3 a 10 linhas (ou 1 a 2 parágrafos curtos).
 
 EXEMPLOS DE CALIBRAÇÃO (use como referência de tamanho):
 
-ERRADO — granularidade excessiva (cada item é apenas uma frase do material):
+ERRADO — granularidade excessiva sem conceito próprio (cada item é apenas uma frase solta do material):
   - Hérnias: distinção entre hérnia e evisceração
   - Hérnias: fisiopatologia do aprisionamento venoso
   - Hérnias: comprometimento arterial e venoso
   - Hérnias: incidência de hérnias incisionais
   - Hérnias: risco em cirurgias contaminadas
 
-CERTO — agrupado como o material apresenta:
-  - Hérnias: fisiopatologia (aprisionamento venoso, estrangulamento, infarto)
-  - Hérnias: tipos especiais (incisional, umbilical, inguinal congênita)
-  - Hérnias: clínica e tratamento
+CERTO — unidade ensinável, específica e suficiente para uma seção:
+  - Hérnias: fisiopatologia do encarceramento e estrangulamento
+  - Hérnias incisionais: fatores de risco e prevenção
+  - Hérnias inguinais congênitas: fisiopatologia e conduta
 
-ERRADO — lista de causas quebrada em subtópicos individuais:
-  - Causas de obstrução vascular aguda: aterosclerose grave
-  - Causas de obstrução vascular aguda: aneurisma aórtico
-  - Causas de obstrução vascular aguda: estado hipercoagulável
-  - Causas de obstrução vascular aguda: uso de contraceptivos orais
-  - Causas de obstrução vascular aguda: embolização de vegetações cardíacas
-
-CERTO — lista mantida unida como no material:
-  - Obstrução vascular aguda: causas (aterosclerose, aneurisma, hipercoagulabilidade, ACO, êmbolos)
-
-REGRA GERAL: se o material trata vários itens na mesma seção ou lista, agrupe-os em um subtópico.
-Só separe quando o material dedica blocos independentes a cada um.
+REGRA GERAL: separe blocos independentes sempre que eles renderem uma explicação própria.
+Não una temas vizinhos apenas porque a soma ficaria abaixo de um limite de subtópicos.
 
 Proibido: títulos vagos como "Introdução", "Generalidades", "Aspectos gerais".
 Proibido: subtópico que descreve apenas 1 frase do material.
@@ -566,8 +554,8 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length === subtopicsArr.length
-    ? questionPlan.map(n => Math.max(1, Math.min(3, parseInt(n, 10) || 1)))
-    : subtopicsArr.map(() => 1);
+    ? questionPlan.map(n => Math.max(2, Math.min(4, parseInt(n, 10) || 2)))
+    : subtopicsArr.map(() => 2);
   const total = plan.reduce((acc, n) => acc + n, 0);
 
   return `Você é um examinador de residência médica criando questões de fixação para "${topicTitle}".
@@ -580,7 +568,7 @@ Total: EXATAMENTE ${total} questões.
 
 REGRA DE ESCOPO (CRÍTICA):
 - Cada questão deve cobrar APENAS conteúdo do subtópico indicado.
-- Se um subtópico tiver 2 ou 3 questões, cada uma deve testar um ponto diferente daquela seção.
+- Se um subtópico tiver 2, 3 ou 4 questões, cada uma deve testar um ponto diferente daquela seção.
 - Não repita a mesma ideia com palavras diferentes.
 - Não crie questão sobre conteúdo que não apareceu na aula/material.
 
