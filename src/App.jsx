@@ -4975,6 +4975,66 @@ export default function QuestionBankApp() {
           }
         });
 
+      const academiaOriginKey = (subject) => {
+        const origin = (subject.topics || []).find(t => t.origin?.source === 'academia')?.origin;
+        if (!origin) return null;
+        return `${origin.subjectId}__${origin.topicId}__${origin.kind || 'fixation'}`;
+      };
+      const questionCountOfSubject = (subject) => (subject.topics || []).reduce((acc,t)=>acc+(t.questions||[]).length,0);
+      const answerCountOfSubject = (subject) => (subject.topics || []).reduce((acc,t)=>acc+Object.keys(t.answers||{}).length,0);
+      const mergeTopicData = (base, incoming) => ({
+        ...incoming,
+        ...base,
+        questions:(base.questions || []).length ? base.questions : (incoming.questions || []),
+        answers:{...(incoming.answers||{}), ...(base.answers||{})},
+        favorites:[...new Set([...(incoming.favorites||[]), ...(base.favorites||[])])],
+        errorNotebook:[...new Set([...(incoming.errorNotebook||[]), ...(base.errorNotebook||[])])],
+        spacedReview:{...(incoming.spacedReview||{}), ...(base.spacedReview||{})},
+        summary:base.summary || incoming.summary || '',
+        bizuario:base.bizuario || incoming.bizuario || null,
+      });
+      const subjectsByOrigin = new Map();
+      items
+        .filter(item => !isFolderItem(item) && item.source === 'gemini')
+        .forEach(subject => {
+          const key = academiaOriginKey(subject);
+          if (!key) return;
+          subjectsByOrigin.set(key, [...(subjectsByOrigin.get(key) || []), subject]);
+        });
+      subjectsByOrigin.forEach(group => {
+        if (group.length < 2) return;
+        const sorted = [...group].sort((a,b) => {
+          const ans = answerCountOfSubject(b) - answerCountOfSubject(a);
+          if (ans) return ans;
+          const qs = questionCountOfSubject(b) - questionCountOfSubject(a);
+          if (qs) return qs;
+          return libraryOrderValue(a) - libraryOrderValue(b);
+        });
+        let keeper = sorted[0];
+        sorted.slice(1).forEach(dup => {
+          const nextTopics = [...(keeper.topics || [])];
+          (dup.topics || []).forEach(dupTopic => {
+            const idx = nextTopics.findIndex(t =>
+              t.id === dupTopic.id ||
+              (t.origin?.source === 'academia' &&
+                dupTopic.origin?.source === 'academia' &&
+                sameIdValue(t.origin.subjectId, dupTopic.origin.subjectId) &&
+                sameIdValue(t.origin.topicId, dupTopic.origin.topicId) &&
+                (t.origin.kind || 'fixation') === (dupTopic.origin.kind || 'fixation'))
+            );
+            if (idx >= 0) nextTopics[idx] = mergeTopicData(nextTopics[idx], dupTopic);
+            else nextTopics.push(dupTopic);
+          });
+          keeper = upsert({
+            ...keeper,
+            title:keeper.title || dup.title,
+            fullSyllabus:keeper.fullSyllabus || dup.fullSyllabus,
+            topics:nextTopics,
+          });
+          removeItem(dup);
+        });
+      });
+
       const academyMirrorTitles = new Set(['academia']);
       items.forEach(item => {
         if (item.source === 'academia') {
