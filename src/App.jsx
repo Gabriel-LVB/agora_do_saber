@@ -1448,7 +1448,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
             </h3>
             <p className={`text-sm mt-0.5 truncate max-w-xs ${dm?'text-gray-400':'text-gray-500'}`}>{aula.title}</p>
           </div>
-          <button onClick={handleClose} className={`p-2 rounded-full ${dm?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+          <button type="button" aria-label="Fechar" onClick={handleClose} className={`p-2 rounded-full ${dm?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
         </div>
 
         <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1 min-h-0">
@@ -1485,7 +1485,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
 
           {/* Configuração numérica */}
-          <div className={`grid grid-cols-3 gap-4 transition-opacity ${autoMode?'opacity-30 pointer-events-none':''}`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity ${autoMode?'opacity-30 pointer-events-none':''}`}>
             {[
               {label:'Total',sub:'questões',val:totalQ,fn:handleTotalChange},
               {label:`Por bloco (máx ${MAX_PER_BLOCK})`,sub:'questões',val:qPerBlock,fn:handlePerBlockChange},
@@ -1516,7 +1516,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           {(questionTypes.includes('direct') || questionTypes.includes('vof') || questionTypes.includes('cespe')) && (
             <div>
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
                   <button key={opt.k} onClick={()=>setQuestionStyle(opt.k)}
                     className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${questionStyle===opt.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
@@ -1949,10 +1949,15 @@ const ToastContainer = ({ toasts, onRemove }) => {
   return (
     <React.Fragment>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      <div className="fixed top-20 right-4 z-[500] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)]">
+      <div
+        className="fixed bottom-4 right-4 sm:bottom-auto sm:top-20 z-[500] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)]"
+        role="status"
+        aria-live="polite"
+      >
         {toasts.map(t => (
           <div key={t.id}
             onClick={t.onClick || (() => onRemove(t.id))}
+            role={t.type === 'error' ? 'alert' : 'status'}
             className={`flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl border cursor-pointer select-none transition-all
               ${t.type==='success' ? 'bg-gray-900 border-green-700/50' :
                 t.type==='error'   ? 'bg-gray-900 border-red-700/50' :
@@ -1961,7 +1966,7 @@ const ToastContainer = ({ toasts, onRemove }) => {
             style={{animation:'slideUp 0.25s ease both'}}>
             {icons[t.type]||icons.info}
             <p className="text-sm font-medium text-gray-100 flex-1 leading-snug">{t.msg}</p>
-            {t.type!=='loading'&&<button onClick={e=>{e.stopPropagation();onRemove(t.id);}} className="text-gray-500 hover:text-gray-300 text-lg leading-none flex-shrink-0">×</button>}
+            {t.type!=='loading'&&<button type="button" aria-label="Fechar aviso" onClick={e=>{e.stopPropagation();onRemove(t.id);}} className="text-gray-500 hover:text-gray-300 text-lg leading-none flex-shrink-0">×</button>}
           </div>
         ))}
       </div>
@@ -1979,6 +1984,29 @@ const BackToTopButton = ({ darkMode }) => (
   >
     <ChevronUp className="w-5 h-5"/>
   </button>
+);
+
+const EmptyState = ({ icon, title, message, action, darkMode }) => (
+  <div className={`empty-state rounded-2xl border border-dashed px-5 py-12 text-center ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-white/80'}`}>
+    <div className={`mx-auto mb-4 h-14 w-14 rounded-2xl flex items-center justify-center ${darkMode?'bg-gray-800 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>
+      {icon}
+    </div>
+    <p className={`font-serif font-bold text-lg ${darkMode?'text-gray-100':'text-gray-900'}`}>{title}</p>
+    {message&&<p className={`text-sm mt-2 max-w-sm mx-auto leading-relaxed ${darkMode?'text-gray-400':'text-gray-500'}`}>{message}</p>}
+    {action&&<div className="mt-6">{action}</div>}
+  </div>
+);
+
+const LoadingState = ({ label='Carregando...', darkMode }) => (
+  <div className={`rounded-2xl border p-5 ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`} role="status" aria-live="polite">
+    <div className="flex items-center gap-3 mb-5">
+      <Spinner className="w-5 h-5 text-yellow-600"/>
+      <span className={`text-sm font-bold ${darkMode?'text-gray-300':'text-gray-700'}`}>{label}</span>
+    </div>
+    <div className="space-y-3">
+      {[0,1,2].map(i => <div key={i} className="skeleton-line rounded-xl" style={{width:`${92 - i * 13}%`}}/>)}
+    </div>
+  </div>
 );
 
 // ─── VQ CONFIG MODAL ──────────────────────────────────────────────────────────
@@ -2000,7 +2028,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
         onClick={e=>e.stopPropagation()}>
         <div className={`flex items-center justify-between px-5 py-4 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-base text-yellow-600">Configurações das Questões</h3>
-          <button onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>×</button>
+          <button type="button" aria-label="Fechar" onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-600'}`}>×</button>
         </div>
         <div className="px-5 py-4 space-y-5">
           {/* Auto mode */}
@@ -2018,7 +2046,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
           {/* Estilo */}
           <div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
                 <button key={o.k} onClick={()=>setStyle(o.k)}
                   className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${style===o.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
@@ -2375,7 +2403,7 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
           <h3 className="font-serif font-bold text-yellow-600 flex items-center gap-2">
             {isEssay ? '📝 Dissertativa' : '✏️ Resposta Curta'}
           </h3>
-          <button onClick={onClose} className={`text-xl ${dm?'text-gray-400':'text-gray-400'}`}>×</button>
+          <button type="button" aria-label="Fechar" onClick={onClose} className={`text-xl ${dm?'text-gray-400':'text-gray-400'}`}>×</button>
         </div>
         <div className="px-5 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
           <p className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</p>
@@ -2478,7 +2506,7 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false })
 const ExplanationLengthSelector = ({ value='complete', onChange, darkMode }) => {
   const dm = darkMode;
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
       {EXPLANATION_LENGTHS.map(opt => {
         const on = value === opt.k;
         return (
@@ -2493,11 +2521,12 @@ const ExplanationLengthSelector = ({ value='complete', onChange, darkMode }) => 
   );
 };
 
-const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) => {
+const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, selectedLetter=null }) => {
   // onCall(prompt, sys) → chama Gemini com rotação de chaves
   // fallback: usa apiKey direto se onCall não for passado
   const callOracle = onCall || ((prompt, sys) => callGemini(prompt, sys, apiKey));
   const explanation = cleanQuestionExplanation(question.explanation);
+  const chatOptions = question.options || [];
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -2510,7 +2539,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
     setMessages(p=>[...p,{role:'user',text:msg}]);
     setLoading(true);
     try {
-      const ctx = `Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`;
+      const ctx = `Questão: ${question.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`;
       const sys = `Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Responda com precisão clínica. Contexto:\n${ctx}`;
       const hist = messages.map(m=>`${m.role==='user'?'Estudante':'Oráculo'}: ${m.text}`).join('\n');
       const r = await callOracle(`${hist}\nEstudante: ${msg}`, sys);
@@ -2524,7 +2553,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
         <MessageCircle className="w-4 h-4 text-yellow-600"/>{open?'Fechar Chat':'Perguntar ao Oráculo'}
       </button>
       {open && (
-        <div className={`mt-3 rounded-xl border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
+        <div className={`mt-3 rounded-xl border overflow-hidden min-w-0 ${darkMode?'border-gray-700':'border-gray-200'}`}>
           <div className={`p-4 h-64 overflow-y-auto space-y-3 ${darkMode?'bg-gray-900':'bg-gray-50'}`}>
             {!messages.length && <p className="text-sm opacity-40 text-center pt-6">Faça uma pergunta sobre esta questão...</p>}
             {messages.map((m,i)=>(
@@ -2538,19 +2567,32 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall }) 
             <div ref={bottomRef}/>
           </div>
           {/* Compact alternative explanation buttons */}
-          <div className={`flex items-center gap-1.5 px-3 pt-2 pb-1 border-t ${darkMode?'border-gray-700 bg-gray-800':'border-gray-100 bg-white'}`}>
-            <span className={`text-xs mr-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Explicar:</span>
-            {question.options.map(opt=>(
-              <button key={opt.letter}
-                onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${question.options.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
-                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${opt.isCorrect?(darkMode?'bg-green-800 text-green-200 hover:bg-green-700':'bg-green-100 text-green-700 hover:bg-green-200'):(darkMode?'bg-gray-700 text-gray-300 hover:bg-gray-600':'bg-gray-100 text-gray-500 hover:bg-gray-200')}`}>
-                {opt.letter}
-              </button>
+          {chatOptions.length > 0 && <div className={`px-3 py-3 border-t ${darkMode?'border-gray-700 bg-gray-800':'border-gray-100 bg-white'}`}>
+            <span className={`block text-xs font-bold uppercase mb-2 ${darkMode?'text-gray-400':'text-gray-500'}`}>Explicar alternativa</span>
+            <div className="flex items-center gap-2 flex-wrap">
+            {chatOptions.map(opt=>(
+              (() => {
+                const isWrongSelected = selectedLetter && selectedLetter !== 'SKIPPED' && selectedLetter === opt.letter && !opt.isCorrect;
+                const tone = opt.isCorrect
+                  ? (darkMode?'bg-green-800 text-green-100 border-green-700 hover:bg-green-700':'bg-green-100 text-green-800 border-green-200 hover:bg-green-200')
+                  : isWrongSelected
+                    ? (darkMode?'bg-red-900/70 text-red-100 border-red-700 hover:bg-red-900':'bg-red-100 text-red-800 border-red-200 hover:bg-red-200')
+                    : (darkMode?'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600':'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200');
+                return (
+                  <button key={opt.letter}
+                    onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
+                    title={opt.isCorrect ? 'Alternativa correta' : isWrongSelected ? 'Sua resposta' : `Explicar alternativa ${opt.letter}`}
+                    className={`h-8 min-w-8 px-3 rounded-lg border text-sm font-bold transition-colors flex-shrink-0 ${tone}`}>
+                    {opt.letter}
+                  </button>
+                );
+              })()
             ))}
-          </div>
-          <div className={`flex gap-2 p-3 ${darkMode?'bg-gray-800':'bg-white'}`}>
-            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Digite sua dúvida..." className={`flex-1 text-sm p-2 rounded-lg outline-none ${darkMode?'bg-gray-700 text-white placeholder-gray-500':'bg-gray-50 text-gray-800'}`}/>
-            <button onClick={send} disabled={!input.trim()||loading} className="p-2 bg-yellow-600 text-white rounded-lg disabled:opacity-40 hover:bg-yellow-700"><Send className="w-4 h-4"/></button>
+            </div>
+          </div>}
+          <div className={`flex gap-2 p-3 min-w-0 ${darkMode?'bg-gray-800':'bg-white'}`}>
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Digite sua dúvida..." className={`min-w-0 flex-1 text-sm p-2 rounded-lg outline-none ${darkMode?'bg-gray-700 text-white placeholder-gray-500':'bg-gray-50 text-gray-800'}`}/>
+            <button onClick={send} disabled={!input.trim()||loading} className="h-10 w-10 flex-shrink-0 inline-flex items-center justify-center bg-yellow-600 text-white rounded-lg disabled:opacity-40 hover:bg-yellow-700"><Send className="w-4 h-4"/></button>
           </div>
         </div>
       )}
@@ -2666,7 +2708,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             }
           </div>
           <div className="text-base leading-relaxed">{parseHtmlTextChat(explanation)}</div>
-          {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}/>}
+          {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
         </div>
       )}
     </div>
@@ -3294,7 +3336,7 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
                 Refazer
               </button>
             )}
-            <button onClick={onClose} className={`p-2 rounded-full font-bold text-lg leading-none transition-colors ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+            <button type="button" aria-label="Fechar" onClick={onClose} className={`p-2 rounded-full font-bold text-lg leading-none transition-colors ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
           </div>
         </div>
 
@@ -3398,7 +3440,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
         style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
         <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-lg text-yellow-600">Configurar Prompt Externo</h3>
-          <button onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-400 hover:text-gray-200':'text-gray-400 hover:text-gray-600'}`}>×</button>
+          <button type="button" aria-label="Fechar" onClick={onClose} className={`text-xl leading-none ${dm?'text-gray-400 hover:text-gray-200':'text-gray-400 hover:text-gray-600'}`}>×</button>
         </div>
         <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
           {/* AutoMode */}
@@ -3414,7 +3456,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
           </button>
 
           {/* Estrutura */}
-          <div className={`grid grid-cols-3 gap-3 transition-opacity ${cfg.autoMode?'opacity-30 pointer-events-none':''}`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 transition-opacity ${cfg.autoMode?'opacity-30 pointer-events-none':''}`}>
             {[{l:'Tópicos',k:'numTopics',mn:1,mx:20},{l:'Subtóp./Tópico',k:'numSubtopics',mn:1,mx:30},{l:'Q./Subtópico',k:'qPerSub',mn:1,mx:10}].map(f=>(
               <div key={f.k}>
                 <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
@@ -3428,7 +3470,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
           {/* Estilo */}
           <div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
                 <button key={o.k} onClick={()=>setCfg(p=>({...p,questionStyle:o.k}))}
                   className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
@@ -4128,11 +4170,14 @@ export default function QuestionBankApp() {
     const u = { ...watchedAulas };
     if (already) { delete u[bunnyId]; } else { u[bunnyId] = true; recordLessonInterval(bunnyId, 0, aula?.duration_seconds || 0, true); }
     setWatchedAulas(u);
+    addToast(already ? 'Aula desmarcada como assistida.' : 'Aula marcada como assistida.', already ? 'info' : 'success', 2500);
     // Atualizar cache local imediatamente
     if (user) try { localStorage.setItem(`agora_watched_${user.uid}`, JSON.stringify(u)); } catch(e) {}
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
-    } catch(e) {}
+    } catch(e) {
+      addToast('Não consegui sincronizar agora, mas salvei no aparelho.', 'info', 3500);
+    }
   };
 
   const resetWatchedProgress = async () => {
@@ -4648,9 +4693,7 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     const scale = Math.max(90, Math.min(130, Number(settings.fontScale) || 100));
-    document.documentElement.style.fontSize = `${scale}%`;
     try { localStorage.setItem('qb_font_scale', String(scale)); } catch(e) {}
-    return () => { document.documentElement.style.fontSize = ''; };
   }, [settings.fontScale]);
 
   // Android/browser back button — navigates within the app instead of leaving
@@ -6297,18 +6340,36 @@ export default function QuestionBankApp() {
     }).length;
   };
 
+  const isCompleteAnswerValue = (value) => {
+    if (!value || value === 'SKIPPED') return false;
+    if (typeof value === 'string' && value.trim().startsWith('{')) {
+      try { return !!JSON.parse(value)?.answer; } catch(e) { return true; }
+    }
+    return true;
+  };
+
+  const getAcademiaQuestionAnswer = (subject, topic, qId) => {
+    const own = (topic.answers || {})[qId];
+    if (isCompleteAnswerValue(own)) return own;
+    const mirrorTopic = librarySubjects
+      .filter(s => s.source === 'gemini')
+      .flatMap(s => s.topics || [])
+      .find(t =>
+        t.origin?.source === 'academia' &&
+        String(t.origin.subjectId) === String(subject.id) &&
+        String(t.origin.topicId) === String(topic.id)
+      );
+    return mirrorTopic?.answers?.[qId];
+  };
+
   const subjectProgress = (s) => {
     if (s.source === 'academia') {
-      // For academia: count answered fixation questions across all topics
+      // Academia progress tracks required fixation only; extra batteries are optional practice.
       const allFixqs = s.topics.flatMap(t =>
-        Object.values(t.fixationQuestions||{}).flat()
-          .concat((t.extraBattery||[]).flatMap(b=>b.questions||b))
+        Object.values(t.fixationQuestions||{}).flat().map(q => ({ q, topic:t }))
       );
-      if (allFixqs.length === 0) return s.topics.every(t=>t.lessonGenerated) ? 50 : 0;
-      const answered = allFixqs.filter(q => {
-        const v = s.topics.reduce((acc,t)=>acc||(t.answers||{})[q.id], null);
-        return !!v && v !== 'SKIPPED';
-      }).length;
+      if (allFixqs.length === 0) return s.topics.every(t=>t.lessonGenerated) ? 100 : 0;
+      const answered = allFixqs.filter(({q, topic}) => isCompleteAnswerValue(getAcademiaQuestionAnswer(s, topic, q.id))).length;
       return Math.round(answered / allFixqs.length * 100);
     }
     const all = s.topics.flatMap(t=>t.questions||[]);
@@ -7061,18 +7122,27 @@ export default function QuestionBankApp() {
   // MAIN RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className={`agora-shell min-h-screen font-sans transition-colors duration-300 ${bg}`} data-theme={darkMode ? 'dark' : 'light'} style={{'--font-scale':`${fontScale}%`}}>
+    <div
+      className={`agora-shell min-h-screen font-sans transition-colors duration-300 ${bg}`}
+      data-theme={darkMode ? 'dark' : 'light'}
+      style={{
+        '--font-xs':`${0.75 * fontScale / 100}rem`,
+        '--font-sm':`${0.875 * fontScale / 100}rem`,
+        '--font-base':`${fontScale / 100}rem`,
+        '--font-lg':`${1.125 * Math.min(fontScale, 112) / 100}rem`,
+      }}
+    >
       <style>{`
         .agora-shell {
           --bg: ${darkMode ? '#0b1118' : '#f6f3ea'};
           --bg-soft: ${darkMode ? '#101923' : '#fbfaf5'};
-          --surface: ${darkMode ? 'rgba(17, 24, 39, .86)' : 'rgba(255, 255, 255, .9)'};
+          --surface: ${darkMode ? '#111827' : 'rgba(255, 255, 255, .94)'};
           --surface-strong: ${darkMode ? '#111827' : '#ffffff'};
-          --surface-muted: ${darkMode ? 'rgba(31, 41, 55, .72)' : 'rgba(248, 246, 238, .9)'};
-          --line: ${darkMode ? 'rgba(148, 163, 184, .16)' : 'rgba(120, 113, 108, .18)'};
+          --surface-muted: ${darkMode ? '#172131' : 'rgba(248, 246, 238, .94)'};
+          --line: ${darkMode ? 'rgba(148, 163, 184, .24)' : 'rgba(120, 113, 108, .18)'};
           --line-strong: ${darkMode ? 'rgba(217, 119, 6, .42)' : 'rgba(180, 83, 9, .3)'};
-          --text: ${darkMode ? '#e5edf6' : '#1f2933'};
-          --muted: ${darkMode ? '#9aa7b7' : '#667085'};
+          --text: ${darkMode ? '#f1f5f9' : '#1f2933'};
+          --muted: ${darkMode ? '#cbd5e1' : '#667085'};
           --accent: #b45309;
           --accent-2: #0f766e;
           --accent-3: #1d4ed8;
@@ -7085,9 +7155,11 @@ export default function QuestionBankApp() {
             radial-gradient(circle at top left, ${darkMode ? 'rgba(15, 118, 110, .16)' : 'rgba(15, 118, 110, .08)'} 0%, ${darkMode ? 'rgba(15, 118, 110, .16)' : 'rgba(15, 118, 110, .08)'} 24rem, transparent 24.5rem),
             linear-gradient(135deg, var(--bg), var(--bg-soft));
           min-height: 100vh;
+          overflow-x: hidden;
         }
         .agora-shell * {
           letter-spacing: 0;
+          box-sizing: border-box;
         }
         .agora-shell header {
           background: ${darkMode ? 'rgba(11, 17, 24, .82)' : 'rgba(255, 255, 255, .78)'} !important;
@@ -7097,6 +7169,14 @@ export default function QuestionBankApp() {
         }
         .agora-shell main {
           position: relative;
+        }
+        .agora-shell main,
+        .agora-shell section,
+        .agora-shell article,
+        .agora-shell aside,
+        .agora-shell .grid,
+        .agora-shell .flex {
+          min-width: 0;
         }
         .agora-shell .bg-white,
         .agora-shell .bg-gray-50 {
@@ -7130,6 +7210,15 @@ export default function QuestionBankApp() {
         .agora-shell .text-gray-300 {
           color: var(--muted) !important;
         }
+        .agora-shell .opacity-40 {
+          opacity: ${darkMode ? '.7' : '.62'} !important;
+        }
+        .agora-shell .opacity-50 {
+          opacity: ${darkMode ? '.82' : '.68'} !important;
+        }
+        .agora-shell .opacity-60 {
+          opacity: ${darkMode ? '.9' : '.78'} !important;
+        }
         .agora-shell .text-yellow-600,
         .agora-shell .text-yellow-700,
         .agora-shell .text-yellow-500,
@@ -7154,6 +7243,7 @@ export default function QuestionBankApp() {
         .agora-shell textarea,
         .agora-shell select {
           transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease, opacity .18s ease;
+          touch-action: manipulation;
         }
         .agora-shell button:not(:disabled):hover {
           transform: translateY(-1px);
@@ -7163,9 +7253,28 @@ export default function QuestionBankApp() {
         }
         .agora-shell input,
         .agora-shell textarea {
-          background: ${darkMode ? 'rgba(15, 23, 42, .72)' : 'rgba(255, 255, 255, .82)'} !important;
+          background: ${darkMode ? '#0f172a' : 'rgba(255, 255, 255, .88)'} !important;
           border-color: var(--line) !important;
           color: var(--text) !important;
+          font-size: var(--font-base);
+          line-height: 1.45;
+          min-width: 0;
+        }
+        .agora-shell select {
+          font-size: var(--font-base);
+          min-width: 0;
+        }
+        .agora-shell .text-xs {
+          font-size: var(--font-xs) !important;
+        }
+        .agora-shell .text-sm {
+          font-size: var(--font-sm) !important;
+        }
+        .agora-shell .text-base {
+          font-size: var(--font-base) !important;
+        }
+        .agora-shell .text-lg {
+          font-size: var(--font-lg) !important;
         }
         .agora-shell input:focus,
         .agora-shell textarea:focus,
@@ -7204,14 +7313,88 @@ export default function QuestionBankApp() {
           box-shadow: var(--shadow-md);
         }
         .agora-shell .glass-panel {
-          background: ${darkMode ? 'rgba(15, 23, 42, .64)' : 'rgba(255, 255, 255, .64)'};
+          background: ${darkMode ? '#101827' : 'rgba(255, 255, 255, .86)'};
           border: 1px solid var(--line);
-          backdrop-filter: blur(14px) saturate(1.2);
+          backdrop-filter: ${darkMode ? 'none' : 'blur(14px) saturate(1.2)'};
+        }
+        .agora-shell .modal-scroll > div {
+          background-color: ${darkMode ? '#111827' : '#ffffff'} !important;
+          border-color: var(--line) !important;
+          max-height: calc(100dvh - 2rem);
+          overflow-y: auto;
+          overscroll-behavior: contain;
+        }
+        .agora-shell button:disabled,
+        .agora-shell input:disabled,
+        .agora-shell textarea:disabled {
+          cursor: not-allowed;
+          filter: saturate(.78);
+        }
+        .agora-shell .skeleton-line {
+          height: .9rem;
+          background: linear-gradient(90deg, ${darkMode ? '#182233' : '#f1eee5'}, ${darkMode ? '#243246' : '#faf8ef'}, ${darkMode ? '#182233' : '#f1eee5'});
+          background-size: 220% 100%;
+          animation: agoraShimmer 1.35s ease-in-out infinite;
+        }
+        .agora-shell .empty-state {
+          box-shadow: ${darkMode ? 'inset 0 1px 0 rgba(255,255,255,.03)' : 'inset 0 1px 0 rgba(255,255,255,.75)'};
+        }
+        .agora-shell .empty-state button {
+          min-height: 2.75rem;
+        }
+        .agora-shell [class*="truncate"] {
+          min-width: 0;
+        }
+        .agora-shell .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .agora-shell textarea::placeholder,
+        .agora-shell input::placeholder {
+          color: ${darkMode ? '#94a3b8' : '#8a8178'} !important;
+          opacity: 1;
+        }
+        @keyframes agoraShimmer {
+          0% { background-position: 180% 0; }
+          100% { background-position: -80% 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .agora-shell *,
+          .agora-shell *::before,
+          .agora-shell *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
+            transition-duration: .01ms !important;
+          }
         }
         @media (max-width: 640px) {
+          .agora-shell .modal-scroll {
+            padding: .75rem !important;
+            overflow-y: auto !important;
+            align-items: flex-end !important;
+          }
+          .agora-shell .modal-scroll > div {
+            width: 100%;
+            max-height: calc(100dvh - 1.5rem);
+          }
           .agora-shell main:not(:empty) {
             padding-left: .9rem;
             padding-right: .9rem;
+          }
+          .agora-shell button {
+            min-height: 2.5rem;
+          }
+          .agora-shell .fixed.bottom-5.right-5 {
+            bottom: 1rem;
+            right: 1rem;
           }
           .agora-shell h1,
           .agora-shell h2 {
@@ -7265,7 +7448,7 @@ export default function QuestionBankApp() {
               {icon:darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>, action:()=>setDarkMode(!darkMode), title:'Tema'},
               {icon:<LogOut className="w-4 h-4"/>,        action:handleLogout,             title:'Sair', danger:true},
             ].map((btn,i)=>(
-              <button key={i} onClick={btn.action} title={btn.title} className={`relative h-10 w-10 rounded-xl border flex items-center justify-center transition-all ${btn.danger?(darkMode?'border-red-900/60 bg-red-950/20 text-red-400 hover:bg-red-900/30':'border-red-200 bg-red-50 text-red-500 hover:bg-red-100'):(darkMode?'border-gray-700 bg-gray-900 text-yellow-500 hover:bg-gray-800':'border-gray-200 bg-white text-yellow-700 hover:bg-yellow-50')}`}>
+              <button key={i} type="button" onClick={btn.action} title={btn.title} aria-label={btn.title} className={`relative h-10 w-10 rounded-xl flex items-center justify-center transition-all ${btn.danger?(darkMode?'border border-gray-700 bg-gray-900 text-red-400 hover:border-red-500/50 hover:bg-red-950/30':'border border-red-200 bg-red-50 text-red-500 hover:bg-red-100'):(darkMode?'border border-gray-700 bg-gray-900 text-yellow-500 hover:bg-gray-800':'border border-gray-200 bg-white text-yellow-700 hover:bg-yellow-50')}`}>
                 {btn.icon}
                 {(btn.badge||0)>0&&<span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{btn.badge>9?'9+':btn.badge}</span>}
               </button>
@@ -7274,10 +7457,10 @@ export default function QuestionBankApp() {
 
           {/* Mobile right: theme + hamburger */}
           <div className="flex md:hidden items-center gap-1">
-            <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-xl border ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`}>
+            <button type="button" onClick={()=>setDarkMode(!darkMode)} aria-label="Alternar tema" className={`p-2 rounded-xl border ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`}>
               {darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>}
             </button>
-            <button onClick={()=>setMenuOpen(!menuOpen)} className={`p-2 rounded-xl border ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`} aria-label="Menu">
+            <button type="button" onClick={()=>setMenuOpen(!menuOpen)} className={`p-2 rounded-xl border ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`} aria-label="Menu">
               {menuOpen
                 ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
@@ -7809,9 +7992,13 @@ export default function QuestionBankApp() {
                     <span className="w-32 flex-shrink-0 text-right">Ações</span>
                   </div>
                   {treeItemCount===0&&(
-                    <div className="py-16 text-center opacity-40">
-                      <FolderIcon className="w-12 h-12 mx-auto mb-3"/>
-                      <p className="font-bold">Nada aqui ainda</p>
+                    <div className="p-4">
+                      <EmptyState
+                        darkMode={darkMode}
+                        icon={<FolderIcon className="w-7 h-7"/>}
+                        title="Nada aqui ainda"
+                        message="Crie uma pasta ou adicione um assunto para começar a organizar este acervo."
+                      />
                     </div>
                   )}
                   {treeItems.map((item,index,items)=>renderTreeItem(item,0,items,index))}
@@ -7908,12 +8095,12 @@ export default function QuestionBankApp() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...activeSubject.topics].map(topic=>{
                 const isAcademiaTopic = activeSubject.source==='academia';
-                const fixAll = isAcademiaTopic ? Object.values(topic.fixationQuestions||{}).flat().concat((topic.extraBattery||[]).flatMap(b=>b.questions||b)) : [];
+                const fixAll = isAcademiaTopic ? Object.values(topic.fixationQuestions||{}).flat() : [];
                 const fixTotal = fixAll.length;
-                const fixAnswered = fixAll.filter(q=>(topic.answers||{})[q.id]).length;
+                const fixAnswered = fixAll.filter(q=>isCompleteAnswerValue(getAcademiaQuestionAnswer(activeSubject, topic, q.id))).length;
                 const due=Object.values(topic.spacedReview||{}).filter(r=>r.dueDate<=Date.now()).length;
                 const pct=isAcademiaTopic
-                  ?(topic.lessonGenerated?(fixTotal>0?Math.round(fixAnswered/fixTotal*100):50):0)
+                  ?(topic.lessonGenerated?(fixTotal>0?Math.round(fixAnswered/fixTotal*100):100):0)
                   :(topic.questions?.length?Math.round(countValidAnswers(topic)/topic.questions.length*100):0);
                 return (
                   <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
@@ -8093,12 +8280,12 @@ export default function QuestionBankApp() {
                 </div>
                 <div className="relative">
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base</div>
-                  {uploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button onClick={()=>setUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
-                  {uploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button onClick={()=>setUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div>}
+                  {uploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button type="button" aria-label={`Remover ${f.name}`} onClick={()=>setUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
+                  {uploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button type="button" aria-label={`Remover imagem ${i + 1}`} onClick={()=>setUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-100 sm:opacity-0 sm:group-hover:opacity-100">×</button></div>)}</div>}
                   <textarea value={materialText} onChange={e=>setMaterialText(e.target.value)} placeholder="Insira textos base, anotações, transcrições..." className={`w-full h-48 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <div className="absolute bottom-4 right-4 flex gap-2">
-                    <button onClick={()=>imageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
-                    <button onClick={()=>fileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
+                    <button type="button" aria-label="Adicionar imagem" onClick={()=>imageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
+                    <button type="button" aria-label="Adicionar arquivo" onClick={()=>fileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
                   </div>
                   <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx"/>
                   <input type="file" ref={imageInputRef} onChange={handleImageUpload} multiple className="hidden" accept="image/*"/>
@@ -8160,7 +8347,7 @@ export default function QuestionBankApp() {
                 {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t))) && (
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
                         <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
                           className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
@@ -8227,12 +8414,12 @@ export default function QuestionBankApp() {
                 {/* Material */}
                 <div className="relative">
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base <span className="opacity-60 normal-case font-normal">(quanto mais completo, melhor a aula)</span></div>
-                  {academiaUploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button onClick={()=>setAcademiaUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
-                  {academiaUploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button onClick={()=>setAcademiaUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div>}
+                  {academiaUploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button type="button" aria-label={`Remover ${f.name}`} onClick={()=>setAcademiaUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
+                  {academiaUploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button type="button" aria-label={`Remover imagem ${i + 1}`} onClick={()=>setAcademiaUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-100 sm:opacity-0 sm:group-hover:opacity-100">×</button></div>)}</div>}
                   <textarea value={academiaMaterialText} onChange={e=>setAcademiaMaterialText(e.target.value)} placeholder="Cole slides, transcrições, resumos, anotações..." className={`w-full h-48 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <div className="absolute bottom-4 right-4 flex gap-2">
-                    <button onClick={()=>academiaImageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
-                    <button onClick={()=>academiaFileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
+                    <button type="button" aria-label="Adicionar imagem" onClick={()=>academiaImageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
+                    <button type="button" aria-label="Adicionar arquivo" onClick={()=>academiaFileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
                   </div>
 	                  <input type="file" ref={academiaFileInputRef} onChange={async(e)=>{
 	                    const files=Array.from(e.target.files||[]);
@@ -8322,7 +8509,7 @@ export default function QuestionBankApp() {
                 {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
                         <button key={opt.k} onClick={()=>{const ns={...settings,questionStyle:opt.k};setSettings(ns);saveSettings(ns);}}
                           className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
@@ -8366,7 +8553,7 @@ export default function QuestionBankApp() {
               <div>
                 <input value={pasteSubName} onChange={e=>{setPasteSubName(e.target.value);setShowSubSugs(true);}} onFocus={()=>setShowSubSugs(true)} onBlur={()=>setTimeout(()=>setShowSubSugs(false),200)} placeholder="Assunto Principal (opcional)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                 {showSubSugs&&library.filter(s=>s.source==='external'&&s.id!=='imported-folder'&&s.title.toLowerCase().includes(pasteSubName.toLowerCase())).length>0&&(
-                  <ul className={`absolute z-20 w-[calc(50%-0.5rem)] mt-1 rounded-xl border shadow-lg overflow-hidden ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  <ul className={`absolute z-20 w-full md:w-[calc(50%-0.5rem)] mt-1 rounded-xl border shadow-lg overflow-hidden ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                     {library.filter(s=>s.source==='external'&&s.id!=='imported-folder'&&s.title.toLowerCase().includes(pasteSubName.toLowerCase())).map((s,i)=><li key={i} onMouseDown={()=>setPasteSubName(s.title)} className={`p-3 cursor-pointer ${darkMode?'hover:bg-gray-700':'hover:bg-gray-50'}`}>{s.title}</li>)}
                   </ul>
                 )}
@@ -8447,11 +8634,12 @@ export default function QuestionBankApp() {
               </div>
 
               {favItems.length===0&&(
-                <div className="text-center py-16 opacity-40">
-                  <Heart className="w-16 h-16 mx-auto mb-4"/>
-                  <p className="font-bold">Nenhuma questão favoritada ainda.</p>
-                  <p className="text-sm mt-2">Use o ♥ em qualquer questão para favoritar.</p>
-                </div>
+                <EmptyState
+                  darkMode={darkMode}
+                  icon={<Heart className="w-7 h-7"/>}
+                  title="Nenhuma questão favoritada ainda"
+                  message="Use o coração em qualquer questão para montar uma lista rápida do que merece voltar depois."
+                />
               )}
 
               {/* Group by subject › topic */}
@@ -8615,11 +8803,12 @@ export default function QuestionBankApp() {
 	              </div>
 
 	              {dueItems.length === 0 ? (
-	                <div className={`text-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
-	                  <RepeatIcon className="w-14 h-14 mx-auto mb-4 text-yellow-500"/>
-	                  <p className={`font-bold text-lg ${dm?'text-gray-400':'text-gray-500'}`}>Nenhuma revisão pendente.</p>
-	                  <p className={`text-sm mt-2 ${dm?'text-gray-500':'text-gray-400'}`}>Quando terminar blocos, adicione as questões à fila.</p>
-	                </div>
+	                <EmptyState
+	                  darkMode={dm}
+	                  icon={<RepeatIcon className="w-7 h-7"/>}
+	                  title="Nenhuma revisão pendente"
+	                  message="Quando terminar blocos, adicione as questões à fila para manter a memória em dia."
+	                />
 	              ) : (
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -8724,12 +8913,14 @@ export default function QuestionBankApp() {
 
                 {/* ── ABA VIDEOAULAS ── */}
                 {cursoTab==='videoaulas'&&(()=>{
-                  if(videoaulasLoading) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
+                  if(videoaulasLoading) return <LoadingState darkMode={dm} label="Carregando videoaulas..."/>;
                   if(!videoaulasData||Object.keys(videoaulasData).length===0) return (
-                    <div className={`text-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
-                      <VideoIcon className={`w-12 h-12 mx-auto mb-3 ${dm?'text-gray-600':'text-gray-300'}`}/>
-                      <p className={`font-bold ${dm?'text-gray-400':'text-gray-500'}`}>Carregando videoaulas...</p>
-                    </div>
+                    <EmptyState
+                      darkMode={dm}
+                      icon={<VideoIcon className="w-7 h-7"/>}
+                      title="Nenhuma videoaula carregada"
+                      message="Quando o conteúdo estiver disponível, ele aparece aqui organizado por assunto e tópico."
+                    />
                   );
                   const parsedData = parseVideoaulasData(videoaulasData);
                   const subjects   = sortSubjects(Object.keys(parsedData));
@@ -8800,7 +8991,7 @@ export default function QuestionBankApp() {
 
                 {/* ── ABA QUESTÕES ── */}
                 {cursoTab==='questoes'&&(()=>{
-                  if(!videoaulasData) return <div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-yellow-600"/></div>;
+                  if(!videoaulasData) return <LoadingState darkMode={dm} label="Carregando questões do curso..."/>;
 
                   const parsedData = parseVideoaulasData(videoaulasData);
                   const subjects   = sortSubjects(Object.keys(parsedData));
@@ -8909,11 +9100,12 @@ export default function QuestionBankApp() {
                     return (
                       <div>
                         {dueItems.length === 0 ? (
-                          <div className={`text-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
-                            <RepeatIcon className="w-14 h-14 mx-auto mb-4 text-yellow-500"/>
-                            <p className={`font-bold text-lg ${dm?'text-gray-400':'text-gray-500'}`}>Nenhuma revisão pendente!</p>
-                            <p className={`text-sm mt-2 ${dm?'text-gray-500':'text-gray-400'}`}>Quando terminar um bloco de questões, adicione-o à revisão espaçada.</p>
-                          </div>
+                          <EmptyState
+                            darkMode={dm}
+                            icon={<RepeatIcon className="w-7 h-7"/>}
+                            title="Nenhuma revisão pendente"
+                            message="Quando terminar um bloco de questões, adicione-o à revisão espaçada."
+                          />
                         ) : (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between mb-2">
@@ -9534,7 +9726,7 @@ export default function QuestionBankApp() {
                             </div>
                             <div className={`flex items-center justify-between px-4 py-3 border-b ${dm?'border-gray-700':'border-gray-100'}`}>
                               <span className="font-bold text-sm text-yellow-600">Navegar</span>
-                              <button onClick={()=>setMobileNavOpen(false)} className={`text-lg leading-none font-bold ${dm?'text-gray-400':'text-gray-400'}`}>✕</button>
+                              <button type="button" aria-label="Fechar lista de aulas" onClick={()=>setMobileNavOpen(false)} className={`text-lg leading-none font-bold ${dm?'text-gray-400':'text-gray-400'}`}>✕</button>
                             </div>
                             <div className="overflow-y-auto" style={{maxHeight:'65vh'}}>
                               {subjects.map(subj=>{
@@ -9619,11 +9811,12 @@ export default function QuestionBankApp() {
                                 const docId=(effAula.title||'').replace(/\//g,'-');
                                 const snap=await getDoc(doc(db,'lessons',docId));
                                 const transcript=snap.exists()?snap.data().transcript:'';
-                                if(!transcript){alert('Transcrição não disponível para esta aula.');return;}
+                                if(!transcript){addToast('Transcrição não disponível para esta aula.', 'info', 3500);return;}
                                 const blob=new Blob([`${effAula.title}\n${'='.repeat(effAula.title.length)}\n\n${transcript}`],{type:'text/plain;charset=utf-8'});
                                 const a=document.createElement('a');a.href=URL.createObjectURL(blob);
                                 a.download=`${effAula.title.substring(0,60).replace(/[^a-zA-Z0-9\s\-]/g,'')}.txt`;a.click();
-                              } catch(e){alert('Erro ao exportar transcrição.');}
+                                addToast('Transcrição exportada.', 'success', 2500);
+                              } catch(e){addToast('Erro ao exportar transcrição.', 'error', 3500);}
                             }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-gray-600 text-gray-400 hover:bg-gray-700':'border-gray-200 text-gray-500 hover:bg-gray-50'}`} title="Exportar transcrição">
                               <DownloadIcon className="w-4 h-4"/>
                             </button>
@@ -9856,15 +10049,18 @@ export default function QuestionBankApp() {
 
                 {/* Vazio */}
                 {!hasSetup&&blockList.length===0&&(
-                  <div className={`flex flex-col items-center py-20 rounded-2xl border-2 border-dashed ${dm?'border-gray-700':'border-gray-200'}`}>
-                    <GraduationCap className={`w-16 h-16 mb-4 ${dm?'text-gray-600':'text-gray-300'}`}/>
-                    <p className="font-serif font-bold text-lg opacity-50 mb-2">Nenhuma questão ainda</p>
-                    <p className="text-sm opacity-40 mb-6 text-center max-w-xs">Clique em "Gerar Questões" para o Oráculo criar uma bateria baseada nesta aula.</p>
-                    <button onClick={()=>setVqGenModal({aula:vqAula,aulaId:aulaIdNew,suggestedQ})}
-                      className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
-                      <Sparkles className="w-5 h-5"/>Gerar Questões
-                    </button>
-                  </div>
+                  <EmptyState
+                    darkMode={dm}
+                    icon={<GraduationCap className="w-7 h-7"/>}
+                    title="Nenhuma questão ainda"
+                    message="Clique em Gerar Questões para o Oráculo criar uma bateria baseada nesta aula."
+                    action={
+                      <button onClick={()=>setVqGenModal({aula:vqAula,aulaId:aulaIdNew,suggestedQ})}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
+                        <Sparkles className="w-5 h-5"/>Gerar Questões
+                      </button>
+                    }
+                  />
                 )}
 
                 {/* Cards de bloco */}
@@ -10073,7 +10269,7 @@ export default function QuestionBankApp() {
               onClick={e=>e.stopPropagation()} // Bug 4: prevent backdrop close when clicking inside
             >
               <h2 className="text-2xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Zap className="w-7 h-7"/>Configurar Prova</h2>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões</label><input type="number" value={examQCount} onChange={e=>setExamQCount(parseInt(e.target.value)||10)} min="1" max="100" className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/></div>
                 <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Tempo</label><select value={examTime} onChange={e=>setExamTime(parseInt(e.target.value))} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}>{[15,30,45,60,90,120].map(t=><option key={t} value={t}>{t} min</option>)}</select></div>
               </div>
@@ -10388,7 +10584,7 @@ export default function QuestionBankApp() {
                         <input type="radio" name="ak" checked={!disabled && activeId===row.id} onChange={()=>saveSettings(withGeminiKeys(settingsRef.current, normalizeGeminiKeys(settingsRef.current), row.id))} disabled={disabled} className="w-5 h-5 accent-yellow-600 disabled:opacity-30 flex-shrink-0"/>
                         <input type="text" value={row.value||''} onChange={e=>updateRow(idx,'value',e.target.value)} onBlur={()=>saveSettings(settingsRef.current)} placeholder={`Chave Gemini ${idx + 1}...`} className={`flex-1 min-w-0 p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-gray-50 border-gray-200'}`}/>
                         {canRemove&&(
-                          <button onClick={()=>removeRow(idx)} title="Remover chave" className={`p-2 rounded-lg ${darkMode?'text-gray-500 hover:text-red-400 hover:bg-gray-700':'text-gray-400 hover:text-red-500 hover:bg-gray-100'}`}>
+                          <button type="button" onClick={()=>removeRow(idx)} title="Remover chave" aria-label={`Remover chave Gemini ${idx + 1}`} className={`p-2 rounded-lg ${darkMode?'text-gray-500 hover:text-red-400 hover:bg-gray-700':'text-gray-400 hover:text-red-500 hover:bg-gray-100'}`}>
                             <Trash2 className="w-4 h-4"/>
                           </button>
                         )}
@@ -10401,7 +10597,7 @@ export default function QuestionBankApp() {
             {/* Oracle Length */}
             <div className="app-card rounded-2xl p-5">
               <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><MessageCircle className="w-4 h-4"/>Resposta do Chat</label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {Object.entries(ORACLE_LENGTH).map(([k,c])=>(
                   <button key={k} onClick={()=>{const ns={...settings,oracleLength:k};setSettings(ns);saveSettings(ns);}}
                     className={`p-3 rounded-xl border-2 font-bold text-sm transition-all ${settings.oracleLength===k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
@@ -10448,9 +10644,9 @@ export default function QuestionBankApp() {
 	                <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><CalendarCheck className="w-4 h-4"/>Metas diárias</label>
 	                <div className={`rounded-2xl border p-4 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
 	                  <p className={`text-xs mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>Sugestão inicial: 120 questões e 90 minutos úteis de aula por dia.</p>
-	                  <div className="grid grid-cols-2 gap-3">
+	                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 	                    <div>
-	                      <label className="block text-[10px] font-bold uppercase mb-2 opacity-50">Questões/dia</label>
+	                      <label className="block text-xs font-bold uppercase mb-2 opacity-50 leading-snug">Questões/dia</label>
 	                      <input
 	                        type="number"
 	                        min="1"
@@ -10461,7 +10657,7 @@ export default function QuestionBankApp() {
 	                      />
 	                    </div>
 	                    <div>
-	                      <label className="block text-[10px] font-bold uppercase mb-2 opacity-50">Minutos de aula/dia</label>
+	                      <label className="block text-xs font-bold uppercase mb-2 opacity-50 leading-snug">Minutos de aula/dia</label>
 	                      <input
 	                        type="number"
 	                        min="1"
@@ -10506,7 +10702,7 @@ export default function QuestionBankApp() {
                       <span className="text-sm font-medium truncate">{email}</span>
                       {email.toLowerCase()===ADMIN_EMAIL.toLowerCase()
                         ? <span className="text-xs font-bold text-yellow-600 flex-shrink-0">admin</span>
-                        : <button onClick={()=>removeFromWhitelist(email)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
+                        : <button type="button" aria-label={`Remover ${email}`} onClick={()=>removeFromWhitelist(email)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
                       }
                     </div>
                   ))}
@@ -10520,7 +10716,7 @@ export default function QuestionBankApp() {
                     placeholder="novo@email.com"
                     className={`flex-1 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-white border-gray-200'}`}
                   />
-                  <button onClick={addToWhitelist} disabled={!newWhitelistEmail.trim()}
+                  <button type="button" aria-label="Adicionar email" onClick={addToWhitelist} disabled={!newWhitelistEmail.trim()}
                     className="px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold disabled:opacity-40">
                     <PlusIcon className="w-4 h-4"/>
                   </button>
@@ -10540,7 +10736,7 @@ export default function QuestionBankApp() {
               </div>
             )}
 
-            <button onClick={()=>{saveSettings(settings);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold">Salvar</button>
+            <button onClick={()=>{saveSettings(settings);addToast('Configurações salvas.', 'success', 2500);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold">Salvar</button>
           </div>
         )}
       </main>
@@ -10635,7 +10831,7 @@ export default function QuestionBankApp() {
               {errorReviewQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
                       <button key={opt.k} onClick={()=>setErrorReviewQStyle(opt.k)}
                         className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${errorReviewQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
@@ -10755,7 +10951,7 @@ export default function QuestionBankApp() {
               {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
                       <button key={opt.k} onClick={()=>setAcademiaRegenQStyle(opt.k)}
                         className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${academiaRegenQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
@@ -10816,7 +11012,7 @@ export default function QuestionBankApp() {
               {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
                       <button key={opt.k} onClick={()=>setAcademiaExtraQStyle(opt.k)}
                         className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${academiaExtraQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
@@ -10987,9 +11183,9 @@ export default function QuestionBankApp() {
                   <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Revisão de pasta</p>
                   <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><RepeatIcon className="w-6 h-6"/>{folderReviewModal.title}</h3>
                 </div>
-                <button onClick={()=>setFolderReviewModal(null)} className={`p-2 rounded-lg ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+                <button type="button" aria-label="Fechar" onClick={()=>setFolderReviewModal(null)} className={`p-2 rounded-lg ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Total de questões</label><input type="number" min="1" max="200" value={folderReviewConfig.total} onChange={e=>setFolderReviewConfig(p=>({...p,total:parseInt(e.target.value)||1}))} className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/></div>
                 <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Máx. por tema</label><input type="number" min="1" max="50" value={folderReviewConfig.perTopic} onChange={e=>setFolderReviewConfig(p=>({...p,perTopic:parseInt(e.target.value)||1}))} className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/></div>
               </div>
@@ -11030,7 +11226,7 @@ export default function QuestionBankApp() {
 	                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Geração em massa</p>
 	                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><Zap className="w-6 h-6"/>Gerar tudo</h3>
 	                </div>
-	                <button disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`p-2 rounded-lg disabled:opacity-30 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
+	                <button type="button" aria-label="Fechar" disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`p-2 rounded-lg disabled:opacity-30 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
 	              </div>
 	              <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'border-yellow-700/60 bg-yellow-900/10 text-yellow-100':'border-yellow-300 bg-yellow-50 text-yellow-900'}`}>
 	                <p className="font-bold mb-2">Use com cuidado.</p>
