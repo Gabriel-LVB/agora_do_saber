@@ -4854,6 +4854,27 @@ export default function QuestionBankApp() {
         changed.delete(item.id);
         items = items.filter(x => !sameIdValue(x.id, item.id));
       };
+      const findAcademiaSubject = (subjectId) => items.find(item =>
+        !isFolderItem(item) &&
+        item.source === 'academia' &&
+        sameIdValue(item.id, subjectId)
+      );
+      const academiaOriginExists = (origin) => {
+        if (origin?.source !== 'academia') return true;
+        const sourceSubject = findAcademiaSubject(origin.subjectId);
+        if (!sourceSubject) return false;
+        return (sourceSubject.topics || []).some(topic => sameIdValue(topic.id, origin.topicId));
+      };
+      items
+        .filter(item => !isFolderItem(item) && item.source === 'gemini' && (item.topics || []).some(t => t.origin?.source === 'academia'))
+        .forEach(oracleSubject => {
+          const nextTopics = (oracleSubject.topics || []).filter(topic =>
+            topic.origin?.source !== 'academia' || academiaOriginExists(topic.origin)
+          );
+          if (nextTopics.length === (oracleSubject.topics || []).length) return;
+          if (nextTopics.length) upsert({ ...oracleSubject, topics:nextTopics });
+          else removeItem(oracleSubject);
+        });
       const folderPathFromItems = (folderId, source) => {
         const path = [];
         let cur = items.find(f => isFolderItem(f) && sameIdValue(f.id, folderId) && f.source === source);
@@ -5112,13 +5133,12 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     if (!user || !library.length) return;
-    const hasAcademia = library.some(item => item.source === 'academia');
     const hasAcademiaOracleBlocks = library.some(item =>
       !isFolderItem(item) &&
       item.source === 'gemini' &&
       (item.topics || []).some(t => t.origin?.source === 'academia')
     );
-    if (hasAcademia && hasAcademiaOracleBlocks) scheduleAcademiaOracleMirrorSync(library);
+    if (hasAcademiaOracleBlocks) scheduleAcademiaOracleMirrorSync(library);
   }, [user?.uid, library.length]); // eslint-disable-line
 
   const ensureAcademiaOracleTopic = async ({ subject, topic, kind='fixation', questions=[], title=null, extraId=null, questionStyle='mixed' }) => {
