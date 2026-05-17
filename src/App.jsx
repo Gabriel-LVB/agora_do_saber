@@ -16,6 +16,8 @@ import {
   buildAcademiaFixationPrompt,
   buildAcademiaExtraBatteryPrompt,
 } from './agora_prompts.js';
+import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
+import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
@@ -1942,73 +1944,6 @@ const QuestionView = ({
   );
 };
 
-// ─── TOAST NOTIFICATION ───────────────────────────────────────────────────────
-const ToastContainer = ({ toasts, onRemove }) => {
-  if (!toasts.length) return null;
-  const icons = { loading: <Spinner className="w-4 h-4 text-yellow-400 flex-shrink-0"/>, success: <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0"/>, error: <svg className="w-4 h-4 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, info: <svg className="w-4 h-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> };
-  return (
-    <React.Fragment>
-      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      <div
-        className="fixed bottom-4 right-4 sm:bottom-auto sm:top-20 z-[500] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)]"
-        role="status"
-        aria-live="polite"
-      >
-        {toasts.map(t => (
-          <div key={t.id}
-            onClick={t.onClick || (() => onRemove(t.id))}
-            role={t.type === 'error' ? 'alert' : 'status'}
-            className={`flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl border cursor-pointer select-none transition-all
-              ${t.type==='success' ? 'bg-gray-900 border-green-700/50' :
-                t.type==='error'   ? 'bg-gray-900 border-red-700/50' :
-                t.type==='loading' ? 'bg-gray-900 border-yellow-700/40' :
-                                     'bg-gray-900 border-gray-700'}`}
-            style={{animation:'slideUp 0.25s ease both'}}>
-            {icons[t.type]||icons.info}
-            <p className="text-sm font-medium text-gray-100 flex-1 leading-snug">{t.msg}</p>
-            {t.type!=='loading'&&<button type="button" aria-label="Fechar aviso" onClick={e=>{e.stopPropagation();onRemove(t.id);}} className="text-gray-500 hover:text-gray-300 text-lg leading-none flex-shrink-0">×</button>}
-          </div>
-        ))}
-      </div>
-    </React.Fragment>
-  );
-};
-
-const BackToTopButton = ({ darkMode }) => (
-  <button
-    type="button"
-    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-    title="Voltar ao topo"
-    aria-label="Voltar ao topo"
-    className={`fixed bottom-5 right-5 z-30 h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${darkMode?'bg-gray-800 border-gray-700 text-yellow-400 hover:bg-gray-700':'bg-white border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}
-  >
-    <ChevronUp className="w-5 h-5"/>
-  </button>
-);
-
-const EmptyState = ({ icon, title, message, action, darkMode }) => (
-  <div className={`empty-state rounded-2xl border border-dashed px-5 py-12 text-center ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-white/80'}`}>
-    <div className={`mx-auto mb-4 h-14 w-14 rounded-2xl flex items-center justify-center ${darkMode?'bg-gray-800 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>
-      {icon}
-    </div>
-    <p className={`font-serif font-bold text-lg ${darkMode?'text-gray-100':'text-gray-900'}`}>{title}</p>
-    {message&&<p className={`text-sm mt-2 max-w-sm mx-auto leading-relaxed ${darkMode?'text-gray-400':'text-gray-500'}`}>{message}</p>}
-    {action&&<div className="mt-6">{action}</div>}
-  </div>
-);
-
-const LoadingState = ({ label='Carregando...', darkMode }) => (
-  <div className={`rounded-2xl border p-5 ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`} role="status" aria-live="polite">
-    <div className="flex items-center gap-3 mb-5">
-      <Spinner className="w-5 h-5 text-yellow-600"/>
-      <span className={`text-sm font-bold ${darkMode?'text-gray-300':'text-gray-700'}`}>{label}</span>
-    </div>
-    <div className="space-y-3">
-      {[0,1,2].map(i => <div key={i} className="skeleton-line rounded-xl" style={{width:`${92 - i * 13}%`}}/>)}
-    </div>
-  </div>
-);
-
 // ─── VQ CONFIG MODAL ──────────────────────────────────────────────────────────
 // Modal leve de configurações rápidas das questões de aulas
 const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
@@ -3882,7 +3817,7 @@ export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
 
   // ── Theme ─────────────────────────────────────────────────────────────────
-  const [darkMode, setDarkMode] = useState(()=>{ try { return JSON.parse(localStorage.getItem('qb_dark')||'false'); } catch(e){return false;} });
+  const [darkMode, setDarkMode] = useState(()=>readStorageJson('qb_dark', false));
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
   const [headerVisible, setHeaderVisible] = useState(true); // hide on scroll down
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
@@ -4688,12 +4623,12 @@ export default function QuestionBankApp() {
     lnk.rel='icon'; lnk.href=`data:image/svg+xml;base64,${window.btoa(svg)}`;
     if(!document.querySelector("link[rel~='icon']")) document.head.appendChild(lnk);
     document.body.style.backgroundColor=darkMode?'#111827':'#fafaf9';
-    localStorage.setItem('qb_dark',JSON.stringify(darkMode));
+    writeStorageJson('qb_dark', darkMode);
   },[darkMode]);
 
   useEffect(() => {
     const scale = Math.max(90, Math.min(130, Number(settings.fontScale) || 100));
-    try { localStorage.setItem('qb_font_scale', String(scale)); } catch(e) {}
+    writeStorageText('qb_font_scale', String(scale));
   }, [settings.fontScale]);
 
   // Android/browser back button — navigates within the app instead of leaving
@@ -4761,8 +4696,12 @@ export default function QuestionBankApp() {
       if (u) {
         setUser(u);
         if (u.isAnonymous) {
-          const ln=localStorage.getItem('qb_username');
-          if (ln) { setUsername(ln.toUpperCase()); try{const s=localStorage.getItem(`qb_settings_${ln}`);if(s)setSettings(buildSettingsWithGeminiRecovery(JSON.parse(s), '', ln));}catch(e){} }
+          const ln=readStorageText('qb_username', '');
+          if (ln) {
+            setUsername(ln.toUpperCase());
+            const savedSettings = readStorageJson(`qb_settings_${ln}`, null);
+            if(savedSettings) setSettings(buildSettingsWithGeminiRecovery(savedSettings, '', ln));
+          }
           else setLoginView('signup');
         } else {
           try {
@@ -5482,7 +5421,7 @@ export default function QuestionBankApp() {
       }
       if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid),{username,apiKey:finalNs.apiKey1||finalNs.apiKey||'',settings:finalNs},{merge:true}).catch(console.error);
       if (username) {
-        try { localStorage.setItem(`qb_settings_${username}`,JSON.stringify(finalNs)); } catch(e) {}
+        writeStorageJson(`qb_settings_${username}`, finalNs);
       }
     }, 800);
   };
@@ -5582,6 +5521,47 @@ export default function QuestionBankApp() {
   };
   const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
   const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (bulkGenerateRun.running) return;
+      const close = (setter, value=null) => { setter(value); e.preventDefault(); };
+
+      if (menuOpen) return close(setMenuOpen, false);
+      if (libraryActionMenu) return close(setLibraryActionMenu);
+      if (blockActionMenu) return close(setBlockActionMenu);
+      if (mobileNavOpen) return close(setMobileNavOpen, false);
+      if (errorModal) return close(setErrorModal);
+      if (deleteId) return close(setDeleteId);
+      if (openAnswerModal) return close(setOpenAnswerModal);
+      if (externalPromptModal) return close(setExternalPromptModal, false);
+      if (regenModal) return close(setRegenModal, false);
+      if (newFolderModal) return close(setNewFolderModal, false);
+      if (moveSubjectModal) return close(setMoveSubjectModal);
+      if (folderReviewModal) return close(setFolderReviewModal);
+      if (bulkGenerateModal) return close(setBulkGenerateModal);
+      if (academiaExtraModal) return close(setAcademiaExtraModal);
+      if (academiaRegenModal) return close(setAcademiaRegenModal);
+      if (academiaExportModal) return close(setAcademiaExportModal);
+      if (errorReviewModal) return close(setErrorReviewModal);
+      if (examSetup !== null) { setExamSetup(null); setExamTopics([]); e.preventDefault(); return; }
+      if (exportModal) return close(setExportModal);
+      if (bizuarioModal) return close(setBizuarioModal);
+      if (vqGenModal) return close(setVqGenModal);
+      if (resetCourseModal) return close(setResetCourseModal, false);
+      if (srModal) return close(setSrModal);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    menuOpen, libraryActionMenu, blockActionMenu, mobileNavOpen, errorModal, deleteId,
+    openAnswerModal, externalPromptModal, regenModal, newFolderModal, moveSubjectModal,
+    folderReviewModal, bulkGenerateModal, bulkGenerateRun.running, academiaExtraModal,
+    academiaRegenModal, academiaExportModal, errorReviewModal, examSetup, exportModal,
+    bizuarioModal, vqGenModal, resetCourseModal, srModal
+  ]);
+
   const getBulkGenerateTargets = (subject) => {
     const topics = subject?.topics || [];
     if (subject?.source === 'academia') return topics.filter(t => !t.lessonGenerated);
@@ -6558,7 +6538,7 @@ export default function QuestionBankApp() {
     const lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
     const fixationPlan = buildAcademiaFixationPlan(subtopics, lessonSections);
 
-    // Requisição B: questões de fixação proporcionais ao tamanho de cada seção
+    // Requisição B: questões de fixação da aula como um todo
     onProgress?.('Gerando questões de fixação...');
 	    const fixPrompt = buildAcademiaFixationPrompt(
 	      subtopics,
@@ -7079,10 +7059,10 @@ export default function QuestionBankApp() {
   const handleRegister    = async () => {
     if(!sigName.trim()||!sigKey.trim()||!user)return;
     const name=sigName.trim().toUpperCase(); const ns={...defaultSettings,apiKey:sigKey.trim(),apiKey1:sigKey.trim()};
-    if(user.isAnonymous){localStorage.setItem('qb_username',name);localStorage.setItem(`qb_settings_${name}`,JSON.stringify(ns));setUsername(name);setSettings(ns);}
+    if(user.isAnonymous){writeStorageText('qb_username',name);writeStorageJson(`qb_settings_${name}`,ns);setUsername(name);setSettings(ns);}
     else{try{await setDoc(doc(db,'users',user.uid),{username:name,apiKey:sigKey.trim(),settings:ns});setUsername(name);setSettings(ns);}catch(e){setErrorModal({title:'Erro',message:'Falha ao registrar.',isAlert:true});}}
   };
-  const handleLogout = async () => { await signOut(auth);setLibrary([]);setSettings(defaultSettings);setView('library');setSigName('');setSigKey('');localStorage.removeItem('qb_username'); };
+  const handleLogout = async () => { await signOut(auth);setLibrary([]);setSettings(defaultSettings);setView('library');setSigName('');setSigKey('');removeStorageItem('qb_username'); };
 
   // ─────────────────────────────────────────────────────────────────────────
   if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
@@ -8388,7 +8368,7 @@ export default function QuestionBankApp() {
               <div className="space-y-6">
                 <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><AcademiaIcon className="w-8 h-8"/>Nova Aula</h2>
                 <p className={`text-sm rounded-xl p-4 ${darkMode?'bg-yellow-900/20 text-yellow-300 border border-yellow-800/30':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-                  📖 A Academia gera <strong>aula + questões de fixação</strong> integradas por subtópico — como um curso profissional. Quanto mais detalhado o material, melhor a aula.
+                  📖 A Academia gera <strong>aula + questões de fixação</strong> a partir do conteúdo — como um curso profissional. Quanto mais detalhado o material, melhor a aula.
                 </p>
 
                 <input value={academiaSubName} onChange={e=>setAcademiaSubName(e.target.value)} placeholder="Título do assunto (ex: Síndrome Nefrótica)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -8528,7 +8508,7 @@ export default function QuestionBankApp() {
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura da Aula</h2>
                 <p className={`text-sm rounded-xl p-3 ${darkMode?'bg-blue-900/20 text-blue-300 border border-blue-800/30':'bg-blue-50 text-blue-800 border border-blue-200'}`}>
-                  ✅ Revise os tópicos e subtópicos. Cada subtópico vira uma seção da aula e recebe pelo menos 2 questões de fixação, chegando a 4 quando a seção for mais densa.
+                  ✅ Revise os tópicos e subtópicos. Eles viram seções da aula; as questões de fixação serão geradas para a aula como um todo, evitando repetir o mesmo eixo de cobrança entre subtópicos próximos.
                 </p>
                 <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>
                 <div className="relative">

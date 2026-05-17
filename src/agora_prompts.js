@@ -421,7 +421,7 @@ export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) =>
   const l = SYLLABUS_LIMITS.academia;
   const estrutura = autoMode
     ? `Defina uma estrutura completa para uma aula eficiente.
-O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria 2 a 4 questões de fixação para aquela seção conforme a densidade.
+O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria questões de fixação para o tópico como um todo. Portanto, os subtópicos devem ter fronteiras conceituais claras e não devem ser variações redundantes do mesmo eixo de cobrança.
 FAIXA DE REFERÊNCIA:
 - ${l.minTopics} a ${l.targetMaxTopics} tópicos costuma funcionar bem
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma funcionar bem
@@ -445,6 +445,14 @@ COMO CALIBRAR O TAMANHO DE UM SUBTÓPICO:
 Cada subtópico deve corresponder a um bloco de conteúdo que, no material original, ocupa
 aproximadamente 3 a 10 linhas (ou 1 a 2 parágrafos curtos).
 
+REGRA DE FRONTEIRA DE COBRANÇA:
+Antes de finalizar o sumário, pergunte para cada subtópico: "que tipo de questão diferente este subtópico permite gerar?".
+Mantenha o subtópico apenas se a resposta for clara e diferente dos subtópicos vizinhos.
+Se dois subtópicos gerariam praticamente a mesma pergunta, funda-os ou reescreva-os para separar eixos diferentes de cobrança.
+Evite repetir a mesma entidade em vários tópicos. Se a repetição for inevitável, o título deve explicitar um eixo novo, como anatomia, mecanismo, clínica, morfologia, fator de risco, diagnóstico, tratamento, complicação ou prognóstico.
+Não separe artificialmente "patogenia", "fatores", "mecanismos" e "consequências" quando isso só produziria variações da mesma questão.
+Não coloque exemplos específicos em tópicos errados só porque apareceram cedo no material; mantenha cada doença, síndrome ou tumor no bloco temático onde ela será cobrada.
+
 EXEMPLOS DE CALIBRAÇÃO (use como referência de tamanho):
 
 ERRADO — granularidade excessiva sem conceito próprio (cada item é apenas uma frase solta do material):
@@ -459,13 +467,33 @@ CERTO — unidade ensinável, específica e suficiente para uma seção:
   - Hérnias incisionais: fatores de risco e prevenção
   - Hérnias inguinais congênitas: fisiopatologia e conduta
 
+ERRADO — mesma entidade repetida em blocos diferentes sem eixo novo:
+  - Anatomia: hérnias de hiato
+  - Esofagites: hérnia de hiato e refluxo
+  - Complicações: hérnia de hiato por deslizamento
+
+CERTO — entidade localizada uma vez ou retomada com eixo explícito:
+  - Hérnias de hiato: deslizamento versus paraesofágica
+  - Doença do refluxo: barreira anti-refluxo, esofagite e fatores predisponentes
+
+ERRADO — facetamento que tende a gerar perguntas repetidas:
+  - Gastrite aguda: mecanismos de proteção
+  - Gastrite aguda: fatores que rompem a proteção
+  - Úlcera aguda: isquemia e AINEs
+  - Úlcera aguda: hipóxia e lesão intracraniana
+
+CERTO — bloco com fronteira de cobrança mais limpa:
+  - Gastrite aguda e úlceras de estresse: barreira mucosa, AINEs, isquemia, Curling e Cushing
+
 REGRA GERAL: separe blocos independentes sempre que eles renderem uma explicação própria.
-Não una temas vizinhos apenas porque a soma ficaria abaixo de um limite de subtópicos.
+Não una temas independentes apenas porque a soma ficaria abaixo de um limite de subtópicos; una apenas quando a separação criaria cobrança repetida.
 
 Proibido: títulos vagos como "Introdução", "Generalidades", "Aspectos gerais".
 Proibido: subtópico que descreve apenas 1 frase do material.
 Proibido: sumário enciclopédico que transforma cada bullet do material em um subtópico.
+Proibido: repetir a mesma síndrome/doença em tópicos diferentes sem eixo de cobrança explicitamente novo.
 Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber em uma quantidade fixa.
+Obrigatório: revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado.
 Obrigatório: antes de responder, revise tópicos gigantes e divida qualquer tópico que passe de 30 subtópicos.
 FORMATO:
 Tópico 1: [Nome]
@@ -553,24 +581,28 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
-  const plan = Array.isArray(questionPlan) && questionPlan.length === subtopicsArr.length
-    ? questionPlan.map(n => Math.max(2, Math.min(4, parseInt(n, 10) || 2)))
-    : subtopicsArr.map(() => 2);
-  const total = plan.reduce((acc, n) => acc + n, 0);
 
   return `Você é um examinador de residência médica criando questões de fixação para "${topicTitle}".
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
-ESTRUTURA — questões proporcionais à densidade de cada seção:
-${subtopicsArr.map((s, i) => `${i + 1}. "${s}" → EXATAMENTE ${plan[i]} questão(ões)`).join('\n')}
-Total: EXATAMENTE ${total} questões.
+SUBTÓPICOS DA AULA (use como mapa de cobertura, não como lista mecânica de tarefas):
+${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-REGRA DE ESCOPO (CRÍTICA):
-- Cada questão deve cobrar APENAS conteúdo do subtópico indicado.
-- Se um subtópico tiver 2, 3 ou 4 questões, cada uma deve testar um ponto diferente daquela seção.
-- Não repita a mesma ideia com palavras diferentes.
+REGRA DE FIXAÇÃO (CRÍTICA):
+- Gere questões para a AULA COMO UM TODO, usando os subtópicos apenas como referência de organização.
+- A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
+- Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.
+- Dê mais questões aos blocos de maior peso, maior densidade, maior chance de prova, maior risco de confusão ou maior número de contrastes importantes.
+- NÃO force o mesmo número de questões por subtópico.
+- NÃO há mínimo obrigatório por subtópico; um subtópico pode ficar sem questão se a cobrança seria redundante.
+- Um subtópico pode ter mais de uma questão quando houver ângulos realmente diferentes e úteis.
+- Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
+- É proibido criar duas questões que testem praticamente a mesma ideia, mesmo com enunciados, casos ou alternativas diferentes.
+- Se subtópicos vizinhos falarem do mesmo fenômeno, una mentalmente a cobrança e varie o eixo; não repita a pergunta.
 - Não crie questão sobre conteúdo que não apareceu na aula/material.
+- Escolha livremente a quantidade final de questões com foco em cobertura de alto rendimento e retenção, sem teto, piso fixo ou quota por subtópico.
+- Antes de finalizar, faça uma revisão mental: se a bateria ficou curta demais para revisar bem a aula, acrescente questões sobre eixos ainda descobertos; se houver repetição conceitual, remova ou reformule.
 
 ${REGRAS_ENUNCIADO}
 ${REGRAS_ALTERNATIVAS}
@@ -581,16 +613,17 @@ REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
 - PROIBIDO: referir-se a letras A, B, C, D, E
 ${TEMPLATE_QUESTAO(alts)}
 
-Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, para permitir o mapeamento correto:
+Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
 ## Questão 1.1
 ## Questão 1.2
 ## Questão 2.1
+Pode haver saltos, subtópicos sem questão e subtópicos com várias questões.
 
 ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
 ${previousQuestions ? `QUESTÕES JÁ EXISTENTES SOBRE ESTA AULA (não copie; varie foco, cenário e distratores):\n${previousQuestions.substring(0, 8000)}` : ''}
 
-Gere TODAS as ${total} questões sem interromper.`;
+Gere a bateria de fixação completa sem interromper.`;
 };
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
