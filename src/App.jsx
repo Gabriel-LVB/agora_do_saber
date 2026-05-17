@@ -7354,8 +7354,8 @@ export default function QuestionBankApp() {
                               <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase mb-4 ${darkMode?'border-gray-700 bg-gray-950/50 text-gray-400':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
                                 <Sparkles className="w-3.5 h-3.5"/>Painel de estudos
                               </div>
-                              <h2 className="text-3xl md:text-5xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
-                              <p className={`mt-3 text-sm md:text-base max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>- Platão</p>
+                              <h2 className="text-3xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
+                              <p className={`mt-3 text-sm md:text-base max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>- Pórtico da Academia de Platão</p>
                               <p className={`mt-3 text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}> </p>
                             </div>
                             <div className="min-w-0 space-y-3">
