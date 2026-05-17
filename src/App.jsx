@@ -7252,7 +7252,7 @@ export default function QuestionBankApp() {
 	            <div className="bg-yellow-600 p-2 rounded-xl shadow-md flex-shrink-0"><Landmark className="w-5 h-5 text-white"/></div>
 	            <div className="min-w-0">
 	              <h1 className={`font-serif font-bold text-lg leading-none truncate ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
-	              <p className={`hidden sm:block text-[10px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Estudo, questões e revisão</p>
+	              <p className={`hidden sm:block text-[10px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
 	            </div>
 	          </div>
 
@@ -7355,8 +7355,8 @@ export default function QuestionBankApp() {
                                 <Sparkles className="w-3.5 h-3.5"/>Painel de estudos
                               </div>
                               <h2 className="text-3xl md:text-5xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
-                              <p className={`mt-3 text-sm md:text-base max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Organize seus assuntos, gere questões, acompanhe videoaulas e volte no que importa com revisão espaçada.</p>
-                              <p className={`mt-3 text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}>- Platão</p>
+                              <p className={`mt-3 text-sm md:text-base max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>- Platão</p>
+                              <p className={`mt-3 text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}> </p>
                             </div>
                             <div className="min-w-0 space-y-3">
                               {canUseAdvancedFeatures&&(
