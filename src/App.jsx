@@ -1637,6 +1637,8 @@ const QuestionView = ({
   topicType=null,
   onAddToReview=null,
   onReviewErrorNotebook=null,
+  onOpenErrorReviewResult=null,
+  errorReviewResultCount=0,
   onGoToAula=null,
   goToAulaLabel='Assistir aula',
   onGenerateExtra=null,
@@ -1728,6 +1730,7 @@ const QuestionView = ({
     showBizuario&&onBizuario ? { label:bizuarioCached?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:onBizuario, active:bizuarioCached } : null,
     onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
     onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
+    onOpenErrorReviewResult && errorReviewResultCount > 0 ? { label:errorReviewResultCount>1?`Abrir revisões geradas (${errorReviewResultCount})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:onOpenErrorReviewResult } : null,
     onRegenerate ? { label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:onRegenerate } : null,
     onReset ? { label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:onReset, danger:true } : null,
   ].filter(Boolean) : [];
@@ -1753,6 +1756,53 @@ const QuestionView = ({
   const renderCompletion = () => {
     const wrongCount = questions.length - correctCount;
     const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
+    const spacedReviewAction = onAddToReview ? {
+      label:inReviewCount>0?`Gerenciar revisão espaçada (${inReviewCount})`:'Adicionar à revisão espaçada',
+      helper:inReviewCount>0?'Ajustar as questões que já estão no ciclo.':'Colocar este bloco no ciclo de retenção.',
+      icon:<RepeatIcon className="w-5 h-5"/>,
+      fn:()=>onAddToReview(questions, answers),
+    } : null;
+    const notebookActions = [
+      onReviewErrorNotebook && errorNotebook.length > 0 ? {
+        label:'Gerar nova revisão',
+        icon:<BookOpen className="w-4 h-4"/>,
+        fn:onReviewErrorNotebook,
+      } : null,
+      onOpenErrorReviewResult && errorReviewResultCount > 0 ? {
+        label:errorReviewResultCount>1?`Abrir geradas (${errorReviewResultCount})`:'Abrir revisão gerada',
+        icon:<BookOpen className="w-4 h-4"/>,
+        fn:onOpenErrorReviewResult,
+      } : null,
+    ].filter(Boolean);
+    const utilityActions = [
+      singleMode ? {
+        label:'Ver questões',
+        icon:<ArrowLeft className="w-4 h-4"/>,
+        fn:()=>setShowCompletion(false),
+      } : null,
+      onGoToAula ? {
+        label:goToAulaLabel,
+        icon:goToAulaIcon,
+        fn:onGoToAula,
+      } : null,
+      onGenerateExtra ? {
+        label:'Gerar bloco extra',
+        icon:<PlusIcon className="w-4 h-4"/>,
+        fn:onGenerateExtra,
+      } : null,
+      showBizuario&&onBizuario ? {
+        label:bizuarioCached?'Bizuário ✓':'Bizuário',
+        icon:<BrainIcon className="w-4 h-4"/>,
+        fn:onBizuario,
+        active:bizuarioCached,
+      } : null,
+    ].filter(Boolean);
+    const notebookBtnClass = dm
+      ? 'border-yellow-800/80 text-yellow-300 hover:bg-yellow-900/20'
+      : 'border-yellow-300 text-yellow-700 hover:bg-yellow-50';
+    const utilityBtnClass = dm
+      ? 'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+      : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800';
     return (
       <div className={`max-w-2xl mx-auto rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
         <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
@@ -1771,42 +1821,46 @@ const QuestionView = ({
             <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>reforço</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
-          {onAddToReview&&(
-            <button onClick={()=>onAddToReview(questions, answers)}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold bg-yellow-600 text-white hover:bg-yellow-700">
-              <RepeatIcon className="w-5 h-5"/>{inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Adicionar à revisão'}
+        <div className="space-y-5 text-left">
+          {spacedReviewAction && (
+            <button onClick={spacedReviewAction.fn}
+              className="w-full min-h-[58px] rounded-xl border border-yellow-600 bg-yellow-600 px-5 py-3 text-left font-bold text-white transition-colors hover:bg-yellow-700">
+              <span className="flex items-center gap-3">
+                {spacedReviewAction.icon}
+                <span className="min-w-0">
+                  <span className="block text-base">{spacedReviewAction.label}</span>
+                  <span className="block text-xs font-semibold text-yellow-100/80">{spacedReviewAction.helper}</span>
+                </span>
+              </span>
             </button>
           )}
-          {onReviewErrorNotebook && errorNotebook.length > 0 && (
-            <button onClick={onReviewErrorNotebook}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
-              <BookOpen className="w-4 h-4"/>Revisar caderno de erros
-            </button>
+          {notebookActions.length > 0 && (
+            <div className={`border-t pt-4 ${dm?'border-gray-800':'border-gray-100'}`}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Caderno de erros</p>
+                <p className={`text-xs font-bold ${dm?'text-yellow-500':'text-yellow-700'}`}>{wrongCount} para reforçar</p>
+              </div>
+              <div className={`grid grid-cols-1 ${notebookActions.length > 1 ? 'sm:grid-cols-2' : ''} gap-2`}>
+                {notebookActions.map(action=>(
+                  <button key={action.label} onClick={action.fn}
+                    className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${notebookBtnClass}`}>
+                    {action.icon}{action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
-          {singleMode && (
-            <button onClick={()=>setShowCompletion(false)}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-              <ArrowLeft className="w-4 h-4"/>Ver questões
-            </button>
-          )}
-          {onGoToAula&&(
-            <button onClick={onGoToAula}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-              {goToAulaIcon}{goToAulaLabel}
-            </button>
-          )}
-          {onGenerateExtra&&(
-            <button onClick={onGenerateExtra}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
-              <PlusIcon className="w-4 h-4"/>Gerar bloco extra
-            </button>
-          )}
-          {showBizuario&&onBizuario&&(
-            <button onClick={onBizuario}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${bizuarioCached?(dm?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50')}`}>
-              <BrainIcon className="w-4 h-4"/>{bizuarioCached?'Bizuário ✓':'Bizuário'}
-            </button>
+          {utilityActions.length > 0 && (
+            <div className={`border-t pt-4 ${dm?'border-gray-800':'border-gray-100'}`}>
+              <div className="flex flex-wrap justify-center gap-2">
+                {utilityActions.map(action=>(
+                  <button key={action.label} onClick={action.fn}
+                    className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-bold transition-colors ${action.active?(dm?'border-green-700 text-green-400 bg-green-900/10':'border-green-300 text-green-700 bg-green-50'):utilityBtnClass}`}>
+                    {action.icon}{action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1942,8 +1996,9 @@ const QuestionView = ({
               <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
                 <span className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Questão {singleIndex + 1} de {questions.length}</span>
                 <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}>
-                  <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${((singleIndex + 1) / questions.length) * 100}%`}}/>
+                  <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${questions.length ? (answeredCount / questions.length) * 100 : 0}%`}}/>
                 </div>
+                <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
               </div>
               {renderQuestion(currentQuestion, singleIndex)}
               <div className="mt-4 flex items-center justify-between gap-3">
@@ -2606,7 +2661,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           </button>
         </div>
       </div>
-      <div className={`text-base md:text-lg mb-6 leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</div>
+      <div className={`text-base md:text-lg mb-6 leading-relaxed select-text ${darkMode?'text-gray-200':'text-gray-800'}`} style={{userSelect:'text'}}>{parseHtmlTextChat(question.statement)}</div>
 
       {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
       {question.isOpen ? (
@@ -2631,11 +2686,11 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             if (revealMode==='selected') cls += ' cursor-pointer';
           } else if (isSkipped) {
             // Em branco: all neutral, correct gets a soft green border only
-            cls += 'cursor-default ';
+            cls += 'cursor-text ';
             if (opt.isCorrect) cls += darkMode?'border-green-700 bg-green-900/10 text-gray-300':'border-green-300 bg-green-50/50 text-gray-700';
             else cls += darkMode?'border-gray-700 text-gray-500 opacity-50':'border-gray-100 text-gray-400 opacity-60';
           } else {
-            cls += 'cursor-default ';
+            cls += 'cursor-text ';
             if (opt.isCorrect) cls += darkMode?'border-green-500 bg-green-900/20 text-green-100':'border-green-500 bg-green-50 text-green-900';
             else if (isSelected) cls += darkMode?'border-red-500 bg-red-900/20 text-red-100':'border-red-400 bg-red-50 text-red-900';
             else cls += 'opacity-40';
@@ -2647,13 +2702,22 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           else if (showResults && !isSkipped && isSelected) letterBadge = 'bg-red-500 text-white';
           else if (showResults && isSkipped && opt.isCorrect) letterBadge = darkMode?'bg-green-800 text-green-300':'bg-green-100 text-green-700';
           else if (isSelected && revealMode==='selected') letterBadge = 'bg-blue-500 text-white';
-          return (
-            <button key={opt.letter} disabled={!canClick} onClick={()=>canClick&&onAnswer(opt.letter)} className={cls}>
+          const content = (
+            <>
               <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
                 {opt.letter}
               </div>
-              <div className="pt-1 flex-1 leading-snug text-sm md:text-base">{parseHtmlTextChat(opt.text)}</div>
+              <div className="pt-1 flex-1 leading-snug text-sm md:text-base select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
+            </>
+          );
+          return canClick ? (
+            <button key={opt.letter} type="button" onClick={()=>onAnswer(opt.letter)} className={cls}>
+              {content}
             </button>
+          ) : (
+            <div key={opt.letter} className={`${cls} cursor-text select-text`} style={{userSelect:'text'}}>
+              {content}
+            </div>
           );
         })}
       </div>
@@ -2669,7 +2733,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
                 : <span className="text-xs text-red-500 font-bold">✗ Incorreto</span>
             }
           </div>
-          <div className="text-base leading-relaxed">{parseHtmlTextChat(explanation)}</div>
+          <div className="text-base leading-relaxed select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(explanation)}</div>
           {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
         </div>
       )}
@@ -3496,6 +3560,8 @@ function AcademiaTopicView({
   setOpenAnswerModal, getKey, callWithRotation, parseHtmlText, onBack,
   reviewQueue, setSrModal, trackQuestionAnswered,
   onOpenAcademiaQuestions,
+  findErrorNotebookReviewsForSource,
+  openErrorNotebookReviewResult,
 }) {
   const liveSubject = (library||[]).find(s => s.id === subject.id) || subject;
   const liveTopic = liveSubject?.topics?.find(t => t.id === topic.id) || topic;
@@ -3656,6 +3722,11 @@ function AcademiaTopicView({
 
   const allFixqs = subtopics.flatMap((_, idx) => liveTopic.fixationQuestions?.[idx] || []);
   const allFixAnswered = allFixqs.length > 0 && allFixqs.every(q => hasSavedAnswer(q.id));
+  const fixationErrorReviews = findErrorNotebookReviewsForSource ? findErrorNotebookReviewsForSource({
+    subjectTitle:[liveSubject.title, 'Fixação'],
+    topicTitle:[liveTopic.title, 'Questões de fixação'],
+    questionIds:allFixqs.map(q => q.id),
+  }) : [];
   return (
     <div className="max-w-3xl mx-auto">
       {/* Header */}
@@ -3681,6 +3752,12 @@ function AcademiaTopicView({
               <button onClick={()=>onOpenAcademiaQuestions?.(liveSubject, liveTopic, 'fixation')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
                 <GraduationCap className="w-3.5 h-3.5"/>Questões de fixação
+              </button>
+            )}
+            {fixationErrorReviews.length > 0 && (
+              <button onClick={()=>openErrorNotebookReviewResult?.(fixationErrorReviews[0])}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                <BookOpen className="w-3.5 h-3.5"/>{fixationErrorReviews.length>1?`Revisões geradas (${fixationErrorReviews.length})`:'Revisão gerada'}
               </button>
             )}
           </div>
@@ -3761,6 +3838,12 @@ function AcademiaTopicView({
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-yellow-600 text-white hover:bg-yellow-700">
                   <GraduationCap className="w-4 h-4"/>Questões de fixação
                 </button>
+                {fixationErrorReviews.length > 0 && (
+                  <button onClick={()=>openErrorNotebookReviewResult?.(fixationErrorReviews[0])}
+                    className={`ml-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                    <BookOpen className="w-4 h-4"/>{fixationErrorReviews.length>1?`Revisões geradas (${fixationErrorReviews.length})`:'Revisão gerada'}
+                  </button>
+                )}
               </div>
               {canUseAcademia && (allFixAnswered || fixReviewCount>0) && (
                 <div className="text-center mt-4">
@@ -4017,6 +4100,7 @@ export default function QuestionBankApp() {
   const [vqTopic, setVqTopic]       = useState(null);
   const [vqAula, setVqAula]         = useState(null);
   const [vqBlocks, setVqBlocks]     = useState({});
+  const vqBlocksRef = useRef({});
   const [vqLoading, setVqLoading]   = useState(false);   // carregamento do Firestore
   const [vqSyllabusLoading, setVqSyllabusLoading] = useState(false); // geração do sumário
   const [vqGenModal, setVqGenModal] = useState(null);
@@ -4028,6 +4112,10 @@ export default function QuestionBankApp() {
   const [vqActiveBlock, setVqActiveBlock] = useState(null);
   const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
+
+  useEffect(() => {
+    vqBlocksRef.current = vqBlocks;
+  }, [vqBlocks]);
   const [vqExpandedTopic, setVqExpandedTopic] = useState({});
 
   // Portal do Curso — aba ativa e cronograma
@@ -4600,7 +4688,8 @@ export default function QuestionBankApp() {
   };
 
   const saveVqBlock = async (aulaId, data) => {
-    const updated = { ...vqBlocks, [aulaId]: data };
+    const updated = { ...(vqBlocksRef.current || {}), [aulaId]: data };
+    vqBlocksRef.current = updated;
     setVqBlocks(updated);
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), data);
@@ -5957,9 +6046,12 @@ export default function QuestionBankApp() {
 
   const handleAnswer = async (qId, letter) => {
     trackQuestionAnswered(`${activeSubject?.source||'oraculo'}:${activeSubject?.id||'subject'}:${activeTopic?.id||activeTopicId}:${qId}`);
-    const q = activeTopic.questions.find(x=>x.id===qId);
+    const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
+    const freshTopic = freshSubject?.topics?.find(t => t.id === activeTopicId) || activeTopic;
+    if (!freshSubject || !freshTopic) return;
+    const q = (freshTopic.questions || []).find(x=>x.id===qId);
     const now = Date.now();
-    const sr = { ...(activeTopic.spacedReview || {}) };
+    const sr = { ...(freshTopic.spacedReview || {}) };
     let isRight = false;
 
     if (q?.isOpen) {
@@ -5975,12 +6067,12 @@ export default function QuestionBankApp() {
 
     if(canUseAdvancedFeatures && !isRight) sr[qId]={dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
     else if(canUseAdvancedFeatures && sr[qId]){const ni=Math.min((sr[qId].interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>{
+    await updateSubject({...freshSubject,topics:freshSubject.topics.map(t=>{
       if (t.id !== activeTopicId) return t;
       const errorNotebook = canUseAdvancedFeatures && !isRight ? addToList(t.errorNotebook || [], qId) : (t.errorNotebook || []);
       return {...t,answers:{...(t.answers||{}),[qId]:letter},spacedReview:sr,errorNotebook};
     })});
-    await syncAcademiaOriginAnswer(activeTopic.origin, qId, letter, q);
+    await syncAcademiaOriginAnswer(freshTopic.origin, qId, letter, q);
   };
 
   const handleFavorite = async (qId) => {
@@ -5991,11 +6083,14 @@ export default function QuestionBankApp() {
 
   const handleErrorNotebook = async (qId) => {
     if(!canUseAdvancedFeatures || !activeTopic) return;
-    const currentNotebook = activeTopic.errorNotebook || [];
+    const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
+    const freshTopic = freshSubject?.topics?.find(t => t.id === activeTopicId) || activeTopic;
+    if (!freshSubject || !freshTopic) return;
+    const currentNotebook = freshTopic.errorNotebook || [];
     const nextNotebook = toggleInList(currentNotebook, qId);
     const shouldInclude = nextNotebook.includes(qId);
-    await syncAcademiaOriginNotebook(activeTopic.origin, qId, shouldInclude);
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:nextNotebook}:t)});
+    await syncAcademiaOriginNotebook(freshTopic.origin, qId, shouldInclude);
+    await updateSubject({...freshSubject,topics:freshSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:nextNotebook}:t)});
   };
 
   // Bug 6: toggle favorite for a question that came from the exam (carries _subjectId, _topicId)
@@ -6944,6 +7039,68 @@ export default function QuestionBankApp() {
     const sourcePath = subject.folderId ? getFolderPath(subject.folderId).filter(f => f.source === subject.source).map(f => f.title) : [];
     return [sourceLabel, ...sourcePath, subject.title, topic.title].filter(Boolean);
   };
+
+  const normalizeErrorReviewKey = (value = '') => String(value || '').trim().toLowerCase();
+  const normalizeErrorReviewKeys = (value) => {
+    const values = Array.isArray(value) ? value : [value];
+    return values.map(normalizeErrorReviewKey).filter(Boolean);
+  };
+
+  const findErrorNotebookReviewsForSource = ({ subjectTitle='', topicTitle='', questionIds=[] } = {}) => {
+    const subjectKeys = normalizeErrorReviewKeys(subjectTitle);
+    const topicKeys = normalizeErrorReviewKeys(topicTitle);
+    const sourceQuestionIds = new Set((questionIds || []).filter(Boolean));
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+
+    return (items || [])
+      .filter(item => item && !isFolderItem(item) && Array.isArray(item.topics))
+      .flatMap(subject => (subject.topics || []).map(topic => ({ subject, topic })))
+      .filter(({ subject, topic }) => {
+        const origin = topic.origin || {};
+        if (origin.source !== 'errorNotebook') return false;
+
+        const pathSnapshot = Array.isArray(subject.origin?.pathSnapshot) ? subject.origin.pathSnapshot : [];
+        const snapshotSubject = normalizeErrorReviewKey(pathSnapshot[pathSnapshot.length - 2]);
+        const snapshotTopic = normalizeErrorReviewKey(pathSnapshot[pathSnapshot.length - 1]);
+        const originSubject = normalizeErrorReviewKey(origin.sourceSubjectTitle);
+        const originTopic = normalizeErrorReviewKey(origin.sourceTopicTitle);
+
+        const subjectMatches = !subjectKeys.length || subjectKeys.includes(originSubject) || subjectKeys.includes(snapshotSubject);
+        const topicMatches = !topicKeys.length || topicKeys.includes(originTopic) || topicKeys.includes(snapshotTopic);
+        const generatedFromIds = Array.isArray(origin.sourceQuestionIds) ? origin.sourceQuestionIds : [];
+        const idsMatch = !sourceQuestionIds.size || !generatedFromIds.length || generatedFromIds.some(id => sourceQuestionIds.has(id));
+
+        return subjectMatches && topicMatches && idsMatch;
+      })
+      .map(({ subject, topic }) => ({
+        subject,
+        topic,
+        createdAt: topic.origin?.generatedAt || subject.origin?.generatedAt || 0,
+      }))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  };
+
+  const openErrorNotebookReviewResult = (review) => {
+    if (!review?.subject || !review?.topic) return;
+    setErrorReviewModal(null);
+    setReviewSession(null);
+    setBlockActionMenu(null);
+    setLibFilter('gemini');
+    setActiveFolderId(review.subject.folderId || null);
+    setActiveSubjectId(review.subject.id);
+    setActiveTopicId(review.topic.id);
+    setShowOnlyWrong(false);
+    setVqActiveBlockView(null);
+    setView('topic');
+  };
+
+  const activeTopicErrorReviews = activeSubject && activeTopic
+    ? findErrorNotebookReviewsForSource({
+        subjectTitle:[activeSubject.title, activeTopic.origin?.sourceSubjectTitle],
+        topicTitle:[activeTopic.title, activeTopic.origin?.sourceTopicTitle],
+        questionIds:(activeTopic.questions || []).map(q => q.id),
+      })
+    : [];
 
   const ensureErrorNotebookFolder = async (pathTitles = []) => {
     let items = libraryRef.current?.length ? libraryRef.current : library;
@@ -8349,6 +8506,8 @@ export default function QuestionBankApp() {
                 questions:activeTopic.questions || [],
                 notebookIds:activeTopic.errorNotebook || [],
               })) : null}
+              onOpenErrorReviewResult={activeTopicErrorReviews.length ? (()=>openErrorNotebookReviewResult(activeTopicErrorReviews[0])) : null}
+              errorReviewResultCount={activeTopicErrorReviews.length}
               onGoToAula={activeTopic.origin?.source==='academia' ? ()=>{
                 const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
                 const originTopic = originSubject?.topics?.find(t => String(t.id) === String(activeTopic.origin.topicId));
@@ -8412,6 +8571,8 @@ export default function QuestionBankApp() {
             setSrModal={setSrModal}
             trackQuestionAnswered={trackQuestionAnswered}
             onOpenAcademiaQuestions={openAcademiaQuestionsInOracle}
+            findErrorNotebookReviewsForSource={findErrorNotebookReviewsForSource}
+            openErrorNotebookReviewResult={openErrorNotebookReviewResult}
           />
         )}
 
@@ -8748,17 +8909,23 @@ export default function QuestionBankApp() {
 
   const handleFavAnswer = async (subject, topic, qId, letter) => {
     trackQuestionAnswered(`${subject?.source||'oraculo'}:${subject.id}:${topic.id}:${qId}`);
-    const q = (topic.questions||[]).find(x=>x.id===qId);
-	            const errorNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(topic.errorNotebook||[], qId) : (topic.errorNotebook||[]);
-	            await updateSubject({...subject, topics:subject.topics.map(t2=>t2.id===topic.id?{...t2,answers:{...t2.answers,[qId]:letter},errorNotebook}:t2)});
+    const freshSubject = (libraryRef.current || library).find(s => s.id === subject.id) || subject;
+    const freshTopic = freshSubject?.topics?.find(t => t.id === topic.id) || topic;
+    const q = (freshTopic.questions||[]).find(x=>x.id===qId);
+	            const errorNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshTopic.errorNotebook||[], qId) : (freshTopic.errorNotebook||[]);
+	            await updateSubject({...freshSubject, topics:freshSubject.topics.map(t2=>t2.id===freshTopic.id?{...t2,answers:{...t2.answers,[qId]:letter},errorNotebook}:t2)});
 	          };
 	          const handleFavUnfavorite = async (subject, topic, qId) => {
-	            const nf=(topic.favorites||[]).filter(f=>f!==qId);
-	            await updateSubject({...subject,topics:subject.topics.map(t2=>t2.id===topic.id?{...t2,favorites:nf}:t2)});
+    const freshSubject = (libraryRef.current || library).find(s => s.id === subject.id) || subject;
+    const freshTopic = freshSubject?.topics?.find(t => t.id === topic.id) || topic;
+	            const nf=(freshTopic.favorites||[]).filter(f=>f!==qId);
+	            await updateSubject({...freshSubject,topics:freshSubject.topics.map(t2=>t2.id===freshTopic.id?{...t2,favorites:nf}:t2)});
 	          };
 	          const handleFavNotebook = async (subject, topic, qId) => {
 	            if (!canUseAdvancedFeatures) return;
-	            await updateSubject({...subject,topics:subject.topics.map(t2=>t2.id===topic.id?{...t2,errorNotebook:toggleInList(topic.errorNotebook||[],qId)}:t2)});
+    const freshSubject = (libraryRef.current || library).find(s => s.id === subject.id) || subject;
+    const freshTopic = freshSubject?.topics?.find(t => t.id === topic.id) || topic;
+	            await updateSubject({...freshSubject,topics:freshSubject.topics.map(t2=>t2.id===freshTopic.id?{...t2,errorNotebook:toggleInList(freshTopic.errorNotebook||[],qId)}:t2)});
 	          };
           const handleFavResetAll = async () => {
             // Reset only answers for favorited questions
@@ -10054,20 +10221,38 @@ export default function QuestionBankApp() {
 	              const ans     = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
 	              const blockFavs = Array.isArray(block.favorites) ? block.favorites : [];
 	              const blockNotebook = Array.isArray(block.errorNotebook) ? block.errorNotebook : [];
+              const blockTitle = block.title||`Bloco ${blockId.replace('block','')}`;
+              const blockErrorReviews = findErrorNotebookReviewsForSource({
+                subjectTitle:vqAula.title,
+                topicTitle:blockTitle,
+                questionIds:qs.map(q=>q.id),
+              });
 
   const handleVqAnswer = async (qId, letter) => {
     trackQuestionAnswered(`curso:${aulaIdNew}:${blockId}:${qId}`);
-    const q = qs.find(x => x.id === qId);
-	                const nextNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(blockNotebook, qId) : blockNotebook;
-	                await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{...ans,[qId]:letter},errorNotebook:nextNotebook}}});
+    const freshData = vqBlocksRef.current?.[aulaIdNew] || vqBlocksRef.current?.[aulaId] || aulaData;
+    const freshBlocks = Array.isArray(freshData?.blocks) ? {} : (freshData?.blocks || {});
+    const freshBlock = freshBlocks[blockId] || block;
+    const freshAnswers = (freshBlock.answers && typeof freshBlock.answers === 'object' && !Array.isArray(freshBlock.answers)) ? freshBlock.answers : {};
+    const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
+    const q = (Array.isArray(freshBlock.questions) ? freshBlock.questions : qs).find(x => x.id === qId);
+	                const nextNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshNotebook, qId) : freshNotebook;
+	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,answers:{...freshAnswers,[qId]:letter},errorNotebook:nextNotebook}}});
 	              };
 	              const handleVqFavorite = async (qId) => {
-	                const nf = toggleInList(blockFavs, qId);
-	                await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,favorites:nf}}});
+    const freshData = vqBlocksRef.current?.[aulaIdNew] || vqBlocksRef.current?.[aulaId] || aulaData;
+    const freshBlocks = Array.isArray(freshData?.blocks) ? {} : (freshData?.blocks || {});
+    const freshBlock = freshBlocks[blockId] || block;
+	                const nf = toggleInList(Array.isArray(freshBlock.favorites) ? freshBlock.favorites : [], qId);
+	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,favorites:nf}}});
 	              };
 	              const handleVqNotebook = async (qId) => {
 	                if (!canUseAdvancedFeatures) return;
-	                await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,errorNotebook:toggleInList(blockNotebook,qId)}}});
+    const freshData = vqBlocksRef.current?.[aulaIdNew] || vqBlocksRef.current?.[aulaId] || aulaData;
+    const freshBlocks = Array.isArray(freshData?.blocks) ? {} : (freshData?.blocks || {});
+    const freshBlock = freshBlocks[blockId] || block;
+    const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
+	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,errorNotebook:toggleInList(freshNotebook,qId)}}});
 	              };
               const handleVqReset = async () => {
                 await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}});
@@ -10112,11 +10297,13 @@ export default function QuestionBankApp() {
 	                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:block.title||`Bloco ${blockId.replace('block','')}`, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:block.title||`Bloco ${blockId.replace('block','')}`}})}
                     onReviewErrorNotebook={blockNotebook.length ? (()=>openErrorReviewModal({
                       subject:{id:aulaIdNew, title:vqAula.title, source:'curso'},
-                      topic:{id:blockId, title:block.title||`Bloco ${blockId.replace('block','')}`},
+                      topic:{id:blockId, title:blockTitle},
                       questions:qs,
                       notebookIds:blockNotebook,
                       sourceLabel:'Curso',
                     })) : null}
+                    onOpenErrorReviewResult={blockErrorReviews.length ? (()=>openErrorNotebookReviewResult(blockErrorReviews[0])) : null}
+                    errorReviewResultCount={blockErrorReviews.length}
                     inReviewCount={Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length}
                     onGoToAula={()=>{setVqActiveBlockView(null); setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}}
                     generateLabel="Gerar Questões"
@@ -10241,6 +10428,11 @@ export default function QuestionBankApp() {
                       const hasQs = qs.length>0;
                       const blockNum = blockId.replace('block','');
                       const blockTitle = block.title||`Bloco ${blockNum}`;
+                      const blockErrorReviews = findErrorNotebookReviewsForSource({
+                        subjectTitle:vqAula.title,
+                        topicTitle:blockTitle,
+                        questionIds:qs.map(q=>q.id),
+                      });
                       const openBlockBizuario = () => {
                         if(!checkKey() || !hasQs) return;
                         const syntheticTopic = {title:blockTitle, questions:qs, subtopics:block.subtopics||[]};
@@ -10255,9 +10447,10 @@ export default function QuestionBankApp() {
                         {label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:()=>setExportModal({topic:{title:`${vqAula.title} — ${blockTitle}`,questions:qs},subject:null})},
                         {label:block.bizuario?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:openBlockBizuario, active:!!block.bizuario},
                         {label:Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length>0?`Gerenciar revisão (${Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle, questions:qs, answers:ans, notebookIds:Array.isArray(block.errorNotebook)?block.errorNotebook:[], meta:{source:'curso',aulaTitle:vqAula.title,blockTitle}})},
+                        blockErrorReviews.length ? {label:blockErrorReviews.length>1?`Abrir revisões geradas (${blockErrorReviews.length})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:()=>openErrorNotebookReviewResult(blockErrorReviews[0])} : null,
                         {label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:()=>generateVqBlock(aulaIdNew,blockId)},
                         {label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:()=>saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}}), danger:true},
-                      ] : [];
+                      ].filter(Boolean) : [];
 
                       return (
                         <div key={blockId} className={`relative rounded-2xl border overflow-visible transition-all ${dm?'bg-gray-800 border-gray-700 hover:border-gray-600':'bg-white border-gray-200 hover:border-gray-300'}`}>
