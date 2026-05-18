@@ -591,7 +591,7 @@ ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
 - Gere questões para a AULA COMO UM TODO, usando os subtópicos apenas como referência de organização.
-- A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
+- A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo..
 - Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.
 - Dê mais questões aos blocos de maior peso, maior densidade, maior chance de prova, maior risco de confusão ou maior número de contrastes importantes.
 - NÃO force o mesmo número de questões por subtópico.

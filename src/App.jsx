@@ -328,6 +328,8 @@ const isErrorNotebookRootFolder = (item) =>
   item?.itemType === 'folder' && item.source === 'gemini' && item.mirrorRoot === 'errorNotebook';
 const isProtectedMirrorRootFolder = (item) =>
   isAcademiaMirrorRootFolder(item) || isErrorNotebookRootFolder(item);
+const hasAcademiaOriginTopic = (item) =>
+  !isFolderItem(item) && (item.topics || []).some(t => t.origin?.source === 'academia');
 
 const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questions=[], settings={} }) => {
   const total = Math.max(1, questions.length * 2);
@@ -1759,10 +1761,12 @@ const QuestionView = ({
               <BookOpen className="w-4 h-4"/>Revisar caderno de erros
             </button>
           )}
-          <button onClick={()=>setShowCompletion(false)}
-            className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-            <ArrowLeft className="w-4 h-4"/>Ver questões
-          </button>
+          {singleMode && (
+            <button onClick={()=>setShowCompletion(false)}
+              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+              <ArrowLeft className="w-4 h-4"/>Ver questões
+            </button>
+          )}
           {onGoToAula&&(
             <button onClick={onGoToAula}
               className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold border ${dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
@@ -3561,7 +3565,7 @@ function AcademiaTopicView({
     setAcademiaTopicAnswers(p => ({...p, [q.id]: letter}));
     const freshSubj  = (library||[]).find(s => s.id === subject.id) || subject;
     const freshTopic = freshSubj.topics.find(t => t.id === topic.id) || liveTopic;
-    const errorNotebook = isAdmin && !isAnswerCorrect(q, letter)
+    const errorNotebook = canUseAcademia && !isAnswerCorrect(q, letter)
       ? addToList(freshTopic.errorNotebook || [], q.id)
       : (freshTopic.errorNotebook || []);
     const updTopic = {...freshTopic, answers: {...(freshTopic.answers||{}), [q.id]: letter}, errorNotebook};
@@ -3581,7 +3585,7 @@ function AcademiaTopicView({
   };
 
   const handleNotebook = (qId) => {
-    if (!isAdmin) return;
+    if (!canUseAcademia) return;
     const freshSubj  = (library||[]).find(s => s.id === subject.id) || subject;
     const freshTopic = freshSubj.topics.find(t => t.id === topic.id) || liveTopic;
     const updTopic = {...freshTopic, errorNotebook:toggleInList(freshTopic.errorNotebook||[], qId)};
@@ -3616,7 +3620,7 @@ function AcademiaTopicView({
         darkMode={darkMode}
         isFavorite={(liveTopic.favorites||[]).includes(q.id)}
         onToggleFavorite={() => handleFavorite(q.id)}
-        showErrorNotebook={isAdmin}
+        showErrorNotebook={canUseAcademia}
         isInErrorNotebook={(liveTopic.errorNotebook||[]).includes(q.id)}
         onToggleErrorNotebook={() => handleNotebook(q.id)}
         apiKey={getKey()}
@@ -3644,7 +3648,7 @@ function AcademiaTopicView({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
               <Printer className="w-3.5 h-3.5"/>Exportar
             </button>
-            {isAdmin && fixReviewCount > 0 && (
+            {canUseAcademia && fixReviewCount > 0 && (
               <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                 <RepeatIcon className="w-3.5 h-3.5"/>Gerenciar ({fixReviewCount})
@@ -3721,7 +3725,7 @@ function AcademiaTopicView({
             <div className={`mt-4 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
               <div className="flex items-center justify-between mb-8 gap-3">
                 <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Questões de fixação</p>
-                {isAdmin && (allFixAnswered || fixReviewCount>0) && (
+                {canUseAcademia && (allFixAnswered || fixReviewCount>0) && (
                   <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                     <RepeatIcon className="w-3.5 h-3.5"/>{fixReviewCount>0?`Gerenciar (${fixReviewCount})`:'Revisão Espaçada'}
@@ -3735,7 +3739,7 @@ function AcademiaTopicView({
                   <GraduationCap className="w-4 h-4"/>Questões de fixação
                 </button>
               </div>
-              {isAdmin && (allFixAnswered || fixReviewCount>0) && (
+              {canUseAcademia && (allFixAnswered || fixReviewCount>0) && (
                 <div className="text-center mt-4">
                   <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
                     className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -3774,7 +3778,7 @@ function AcademiaTopicView({
                     <GraduationCap className="w-4 h-4"/>Abrir bloco
                   </button>
                 </div>
-	                {isAdmin && (blocoDone || reviewCount(reviewBlockId)>0) && (
+	                {canUseAcademia && (blocoDone || reviewCount(reviewBlockId)>0) && (
 	                  <div className="text-center mt-8">
 	                    <button onClick={()=>openAcademiaReview(blocoQs, reviewBlockId, blocoTitle)}
 	                      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -4812,7 +4816,7 @@ export default function QuestionBankApp() {
     setLibrary(p=>p.map(x=>x.id===s.id?s:x));
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.map(x=>x.id===s.id?s:x)));
-    if (s.source === 'academia') scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    if (s.source === 'academia' || hasAcademiaOriginTopic(s)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const updateLibraryItems = async (items) => {
     const changed = new Map(items.map(item=>[item.id,item]));
@@ -4821,7 +4825,7 @@ export default function QuestionBankApp() {
     setLibrary(nextLibrary);
     if(user&&!user.isAnonymous) await Promise.all(items.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
-    if (items.some(item => item.source === 'academia')) scheduleAcademiaOracleMirrorSync(nextLibrary);
+    if (items.some(item => item.source === 'academia' || hasAcademiaOriginTopic(item))) scheduleAcademiaOracleMirrorSync(nextLibrary);
   };
   const addSubject = async (s) => {
     let ns = s;
@@ -4835,7 +4839,7 @@ export default function QuestionBankApp() {
     setLibrary(p=>sortLibraryItems([ns,...p.filter(x=>x.id!==ns.id)]));
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',ns.id.toString()),ns).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([ns,...library]));
-    if (ns.source === 'academia') scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    if (ns.source === 'academia' || hasAcademiaOriginTopic(ns)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const removeSubject = async (id) => {
     const removed = libraryRef.current.find(s=>s.id===id);
@@ -4844,7 +4848,7 @@ export default function QuestionBankApp() {
     setLibrary(p=>p.filter(s=>s.id!==id));
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
-    if (removed?.source === 'academia') scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    if (removed?.source === 'academia' || hasAcademiaOriginTopic(removed)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const createLibraryFolder = async (source, title, parentFolderId = activeFolderId || null) => {
     const localItems = libraryRef.current?.length ? libraryRef.current : library;
@@ -5051,6 +5055,34 @@ export default function QuestionBankApp() {
           if (!sameIdValue(oracleSubject.folderId, targetFolderId)) {
             upsert({ ...oracleSubject, folderId:targetFolderId });
           }
+        });
+
+      items
+        .filter(item => !isFolderItem(item) && item.source === 'gemini' && (item.topics || []).some(t => t.origin?.source === 'academia'))
+        .forEach(oracleSubject => {
+          let changedSubject = false;
+          const nextTopics = (oracleSubject.topics || []).map(oracleTopic => {
+            const origin = oracleTopic.origin;
+            if (origin?.source !== 'academia') return oracleTopic;
+            const academiaSubject = findAcademiaSubject(origin.subjectId);
+            const academiaTopic = academiaSubject?.topics?.find(t => sameIdValue(t.id, origin.topicId));
+            if (!academiaTopic) return oracleTopic;
+            const oracleQuestionIds = new Set((oracleTopic.questions || []).map(q => q.id));
+            const sourceAnswers = Object.fromEntries(
+              Object.entries(academiaTopic.answers || {}).filter(([id, value]) =>
+                oracleQuestionIds.has(id) && value != null && value !== ''
+              )
+            );
+            const sourceNotebook = (academiaTopic.errorNotebook || []).filter(id => oracleQuestionIds.has(id));
+            const nextTopic = {
+              ...oracleTopic,
+              answers:{...(oracleTopic.answers || {}), ...sourceAnswers},
+              errorNotebook:sourceNotebook,
+            };
+            if (itemChanged(oracleTopic, nextTopic)) changedSubject = true;
+            return nextTopic;
+          });
+          if (changedSubject) upsert({ ...oracleSubject, topics:nextTopics });
         });
 
       const academiaOriginKey = (subject) => {
@@ -5859,6 +5891,22 @@ export default function QuestionBankApp() {
     });
   };
 
+  const syncAcademiaOriginNotebook = async (origin, qId, shouldInclude) => {
+    if (origin?.source !== 'academia') return;
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+    const sourceSubject = items.find(s => !isFolderItem(s) && s.source === 'academia' && String(s.id) === String(origin.subjectId));
+    const sourceTopic = sourceSubject?.topics?.find(t => String(t.id) === String(origin.topicId));
+    if (!sourceSubject || !sourceTopic) return;
+    const nextNotebook = shouldInclude
+      ? addToList(sourceTopic.errorNotebook || [], qId)
+      : (sourceTopic.errorNotebook || []).filter(id => id !== qId);
+    const updatedTopic = {...sourceTopic, errorNotebook:nextNotebook};
+    await updateSubject({
+      ...sourceSubject,
+      topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id) ? updatedTopic : t),
+    });
+  };
+
   const handleAnswer = async (qId, letter) => {
     trackQuestionAnswered(`${activeSubject?.source||'oraculo'}:${activeSubject?.id||'subject'}:${activeTopic?.id||activeTopicId}:${qId}`);
     const q = activeTopic.questions.find(x=>x.id===qId);
@@ -5895,7 +5943,11 @@ export default function QuestionBankApp() {
 
   const handleErrorNotebook = async (qId) => {
     if(!canUseAdvancedFeatures || !activeTopic) return;
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:toggleInList(t.errorNotebook||[],qId)}:t)});
+    const currentNotebook = activeTopic.errorNotebook || [];
+    const nextNotebook = toggleInList(currentNotebook, qId);
+    const shouldInclude = nextNotebook.includes(qId);
+    await syncAcademiaOriginNotebook(activeTopic.origin, qId, shouldInclude);
+    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:nextNotebook}:t)});
   };
 
   // Bug 6: toggle favorite for a question that came from the exam (carries _subjectId, _topicId)
@@ -6815,7 +6867,7 @@ export default function QuestionBankApp() {
     }
   };
 
-  const openErrorReviewModal = ({ subject, topic, questions=[], notebookIds=[], sourceLabel='' }) => {
+  const openErrorReviewModal = ({ subject, topic, questions=[], notebookIds=[], sourceLabel='', pathTitles=null }) => {
     const ids = new Set(notebookIds || []);
     const selected = questions.filter(q => ids.has(q.id));
     if (!selected.length) {
@@ -6825,7 +6877,7 @@ export default function QuestionBankApp() {
     setErrorReviewQStyle(settingsRef.current.questionStyle || 'mixed');
     setErrorReviewQTypes(settingsRef.current.questionTypes || ['direct']);
     setErrorReviewQAlts(settingsRef.current.numAlternatives || 5);
-    setErrorReviewModal({ subject, topic, questions:selected, notebookIds, sourceLabel });
+    setErrorReviewModal({ subject, topic, questions:selected, notebookIds, sourceLabel, pathTitles });
   };
 
   const sourceLabelForErrorReview = (subject = {}, explicit = '') => {
@@ -6837,6 +6889,7 @@ export default function QuestionBankApp() {
   };
 
   const getErrorReviewFolderPath = (payload) => {
+    if (Array.isArray(payload?.pathTitles) && payload.pathTitles.length) return payload.pathTitles.filter(Boolean);
     const subject = payload.subject || {};
     const topic = payload.topic || {};
     const sourceLabel = sourceLabelForErrorReview(subject, payload.sourceLabel);
@@ -6963,6 +7016,53 @@ export default function QuestionBankApp() {
 	        .concat((topic.extraBattery || []).flatMap(b => b.questions || b));
 	    }
 	    return topic.questions || [];
+	  };
+	  const getTopicErrorNotebookQuestions = (subject, topic) => {
+	    const ids = new Set(topic.errorNotebook || []);
+	    if (!ids.size) return [];
+	    return getTopicReviewQuestions(subject, topic).filter(q => ids.has(q.id));
+	  };
+	  const getSubjectErrorNotebookQuestions = (subject) => (subject?.topics || [])
+	    .flatMap(topic => getTopicErrorNotebookQuestions(subject, topic));
+	  const getFolderErrorNotebookSources = (folder) => getFolderReviewSources(folder)
+	    .map(({subject, topic}) => {
+	      const questions = getTopicErrorNotebookQuestions(subject, topic);
+	      return questions.length ? {subject, topic, questions} : null;
+	    })
+	    .filter(Boolean);
+	  const openSubjectErrorReview = (subject) => {
+	    const questions = getSubjectErrorNotebookQuestions(subject);
+	    if (!questions.length) {
+	      addToast('O caderno de erros deste assunto ainda está vazio.', 'info', 4000);
+	      return;
+	    }
+	    const sourceLabel = sourceLabelForErrorReview(subject);
+	    const sourcePath = subject.folderId ? getFolderPath(subject.folderId).filter(f => f.source === subject.source).map(f => f.title) : [];
+	    openErrorReviewModal({
+	      subject,
+	      topic:{id:`subject_error_${subject.id}`, title:'Caderno de erros do assunto'},
+	      questions,
+	      notebookIds:questions.map(q => q.id),
+	      sourceLabel,
+	      pathTitles:[sourceLabel, ...sourcePath, subject.title, 'Caderno de erros'],
+	    });
+	  };
+	  const openFolderErrorReview = (folder) => {
+	    const sources = getFolderErrorNotebookSources(folder);
+	    const questions = sources.flatMap(s => s.questions);
+	    if (!questions.length) {
+	      addToast('O caderno de erros desta pasta ainda está vazio.', 'info', 4000);
+	      return;
+	    }
+	    const sourceLabel = folder.source === 'academia' ? 'Academia' : folder.source === 'external' ? 'Externo' : 'Oráculo';
+	    openErrorReviewModal({
+	      subject:{id:`folder_error_${folder.id}`, title:folder.title, source:folder.source, folderId:folder.id},
+	      topic:{id:`folder_error_topic_${folder.id}`, title:'Caderno de erros da pasta'},
+	      questions,
+	      notebookIds:questions.map(q => q.id),
+	      sourceLabel,
+	      pathTitles:[sourceLabel, ...getFolderPath(folder.id).filter(f => f.source === folder.source).map(f => f.title), 'Caderno de erros'],
+	    });
 	  };
 	  const summarizeQuestionsForPrompt = (questions = []) => questions.slice(0, 80).map((q, i) => {
 	    const correct = (q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || '';
@@ -7623,6 +7723,9 @@ export default function QuestionBankApp() {
             const treeItems = directItems(treeRootId);
             const treeItemCount = treeItems.length;
             const activeFolderLocked = isProtectedMirrorRootFolder(activeFolder);
+            const activeFolderErrorCount = activeFolder
+              ? getFolderErrorNotebookSources(activeFolder).reduce((acc, s) => acc + s.questions.length, 0)
+              : 0;
             const collectTreeFolderIds = (parentId) => {
               const ids = [];
               const walk = (id) => directFolders(id).forEach(folder => {
@@ -7955,6 +8058,7 @@ export default function QuestionBankApp() {
 	                    </div>
 	                    <div className="flex flex-wrap gap-2">
 	                      {activeFolder&&<button onClick={()=>openFolderReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'}`}><RepeatIcon className="w-4 h-4"/>Revisar pasta</button>}
+	                      {activeFolder&&activeFolderErrorCount>0&&<button onClick={()=>openFolderErrorReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BookOpen className="w-4 h-4"/>Caderno de erros ({activeFolderErrorCount})</button>}
 	                      {libFilter==='external'&&<button onClick={()=>setExternalPromptModal(true)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>{copiedPrompt?<CheckCircle2 className="w-4 h-4 text-yellow-500"/>:<Copy className="w-4 h-4"/>}{copiedPrompt?'Copiado':'Prompt'}</button>}
 	                      {treeFolderIds.length>0&&<button onClick={()=>setAllTreeFoldersOpen(!allTreeFoldersOpen)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{allTreeFoldersOpen?<ChevronUp className="w-4 h-4"/>:<ChevronDown className="w-4 h-4"/>}{allTreeFoldersOpen?'Recolher tudo':'Expandir tudo'}</button>}
 	                      {!activeFolderLocked&&<button onClick={()=>{setNewFolderParentId(activeFolderId || null);setNewFolderName('');setNewFolderModal(true);}} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}><PlusIcon className="w-4 h-4"/>Nova pasta</button>}
@@ -8028,6 +8132,14 @@ export default function QuestionBankApp() {
 	                  );
 	                })()}
 	                {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
+	                {canUseAdvancedFeatures&&(()=>{
+	                  const count = getSubjectErrorNotebookQuestions(activeSubject).length;
+	                  return count > 0 ? (
+	                    <button onClick={()=>openSubjectErrorReview(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+	                      <BookOpen className="w-4 h-4"/>Caderno de erros ({count})
+	                    </button>
+	                  ) : null;
+	                })()}
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
                 {activeSubject.source==='academia'&&(()=>{
                   const allGenerated = activeSubject.topics.length > 0 && activeSubject.topics.every(t=>t.lessonGenerated);
