@@ -1248,14 +1248,18 @@ const renderRichText = (text, multiline = false) => {
   // Tokeniza o texto em segmentos: $$...$$ (display), $...$ (inline), **...**, <b>, <i>, <br>, texto
   const tokenize = (str) => {
     const tokens = [];
-    // Regex: $$...$$, $...$, **...**, *...*, <b>...</b>, <i>...</i>, <br/>
+    // Regex: $$...$$, $...$, **...**, *...*, _..._, <b>...</b>, <i>...</i>, <br/>
     // Nota: [\s\S] para capturar múltiplas linhas no bold
-    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[\s\S]*?\*\*|\*[^*\n]+?\*|<b>[\s\S]*?<\/b>|<i>[\s\S]*?<\/i>|<br\s*\/?>)/g;
+    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[\s\S]*?\*\*|\*[^*\n]+?\*|(^|[^\w])_([^_\n_](?:[^_\n]*?[^_\n_])?)_(?=$|[^\w])|<b>[\s\S]*?<\/b>|<i>[\s\S]*?<\/i>|<br\s*\/?>)/g;
     let last = 0, m;
     while ((m = re.exec(str)) !== null) {
       if (m.index > last) tokens.push({ type: 'text', val: str.slice(last, m.index) });
       const v = m[0];
-      if (v.startsWith('$$')) tokens.push({ type: 'tex-display', val: v.slice(2, -2).trim() });
+      if (m[3] !== undefined) {
+        if (m[2]) tokens.push({ type: 'text', val: m[2] });
+        tokens.push({ type: 'italic', val: m[3] });
+      }
+      else if (v.startsWith('$$')) tokens.push({ type: 'tex-display', val: v.slice(2, -2).trim() });
       else if (v.startsWith('$'))  tokens.push({ type: 'tex-inline', val: v.slice(1, -1).trim() });
       else if (v.startsWith('**')) tokens.push({ type: 'bold', val: v.slice(2, -2) });
       else if (v.startsWith('*') && !v.startsWith('**')) tokens.push({ type: 'italic', val: v.slice(1, -1) });
