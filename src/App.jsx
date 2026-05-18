@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 import {
   SYLLABUS_LIMITS,
@@ -30,6 +30,24 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db   = getFirestore(app);
+
+const getGoogleProvider = () => {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt:'select_account' });
+  return provider;
+};
+
+const authErrorMessage = (error, fallback = 'Login falhou.') => {
+  const code = error?.code || 'sem-codigo';
+  const message = error?.message || fallback;
+  const localHint = code === 'auth/unauthorized-domain'
+    ? '\n\nDica: adicione localhost e 127.0.0.1 em Firebase Console > Authentication > Settings > Authorized domains.'
+    : '';
+  const popupHint = ['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(code)
+    ? '\n\nDica: se o Chrome bloqueou o popup, tente novamente; no localhost o app usa redirecionamento como fallback quando possível.'
+    : '';
+  return `${fallback}\n\nFirebase: ${code}\n${message}${localHint}${popupHint}`;
+};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
@@ -322,6 +340,7 @@ const getDailyLessonSeconds = (stats = {}) =>
   Object.values(stats.lessonIntervals || {}).reduce((acc, intervals) => acc + sumIntervalsSeconds(intervals), 0);
 
 const cleanTopicTitle = (title = '') => title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
+const isFolderItem = (item) => item?.itemType === 'folder';
 const isAcademiaMirrorRootFolder = (item) =>
   item?.itemType === 'folder' && item.source === 'gemini' && item.mirrorRoot === 'academia';
 const isErrorNotebookRootFolder = (item) =>
@@ -4696,7 +4715,9 @@ export default function QuestionBankApp() {
 
   // Auth
   useEffect(()=>{
-    const unsub = onAuthStateChanged(auth, async(u)=>{
+    let mounted = true;
+    const applyAuthUser = async (u) => {
+      if (!mounted) return;
       if (u) {
         setUser(u);
         if (u.isAnonymous) {
@@ -4710,11 +4731,35 @@ export default function QuestionBankApp() {
         } else {
           try {
             const ud=await getDoc(doc(db,'users',u.uid));
-            if(ud.exists()){const d=ud.data();const uname=d.username||u.email||'';setUsername(d.username.toUpperCase());setSettings(buildSettingsWithGeminiRecovery(d.settings||{}, d.apiKey||'', uname));}
+            if(ud.exists()){const d=ud.data();const uname=d.username||u.email||'';setUsername(uname.toUpperCase());setSettings(buildSettingsWithGeminiRecovery(d.settings||{}, d.apiKey||'', uname));}
             else setLoginView('signup');
-          } catch(e){}
+          } catch(e){
+            console.error('Failed to load user profile after login:', e);
+            const fallbackName = u.email || u.displayName || 'USUARIO';
+            setUsername(fallbackName.toUpperCase());
+            const savedSettings = readStorageJson(`qb_settings_${fallbackName.toUpperCase()}`, null);
+            if(savedSettings) setSettings(buildSettingsWithGeminiRecovery(savedSettings, '', fallbackName.toUpperCase()));
+            setErrorModal({
+              title:'Perfil carregado parcialmente',
+              message:`Login feito, mas não consegui carregar seu perfil completo no Firestore.\n\nFirebase: ${e?.code || 'sem-codigo'}\n${e?.message || ''}`,
+              isAlert:true,
+            });
+          }
         }
       } else { setUser(null);setUsername(null);setLoginView('login'); }
+    };
+    setPersistence(auth, browserLocalPersistence).catch(e => console.error('Failed to set auth persistence:', e));
+    getRedirectResult(auth)
+      .then(async result => {
+        console.log('Google redirect result:', result?.user?.email || result?.user?.uid || 'empty');
+        if (result?.user) await applyAuthUser(result.user);
+      })
+      .catch(e => {
+        console.error('Google redirect login failed:', e);
+        if (mounted) setErrorModal({ title:'Erro no login Google', message:authErrorMessage(e), isAlert:true });
+      });
+    const unsub = onAuthStateChanged(auth, async(u)=>{
+      await applyAuthUser(u);
       setAuthReady(true);
       // Carregar whitelist de videoaulas do Firestore (público, qualquer usuário pode ler)
       try {
@@ -4723,7 +4768,7 @@ export default function QuestionBankApp() {
         else setAllowedEmails([ADMIN_EMAIL]); // fallback: só o admin
       } catch(e) { setAllowedEmails([ADMIN_EMAIL]); }
     });
-    return ()=>unsub();
+    return ()=>{ mounted = false; unsub(); };
   },[]);
 
   // Library sync
@@ -4745,7 +4790,6 @@ export default function QuestionBankApp() {
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeSubject = library.find(s=>s.id===activeSubjectId);
   const activeTopic   = activeSubject?.topics?.find(t=>t.id===activeTopicId);
-  const isFolderItem = (item) => item?.itemType === 'folder';
   const librarySubjects = library.filter(s => !isFolderItem(s));
   const libraryFolders = library.filter(isFolderItem);
   const sourceSubjects = (source = libFilter) => librarySubjects.filter(s => s.source === source);
@@ -7154,8 +7198,32 @@ export default function QuestionBankApp() {
   };
 
   // ── AUTH ──────────────────────────────────────────────────────────────────
-  const handleGoogleLogin = async () => { try{await signInWithPopup(auth,new GoogleAuthProvider());}catch(e){setErrorModal({title:'Erro',message:'Login falhou.',isAlert:true});} };
-  const handleAnonLogin   = async () => { try{await signInAnonymously(auth);}catch(e){setErrorModal({title:'Erro',message:'Login anônimo falhou.',isAlert:true});} };
+  const handleGoogleLogin = async () => {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      const mustUseRedirect = window.location.hostname.includes('scf.usercontent.goog');
+      if (mustUseRedirect) {
+        await signInWithRedirect(auth, getGoogleProvider());
+        return;
+      }
+      await signInWithPopup(auth, getGoogleProvider());
+    } catch(e) {
+      console.error('Google popup login failed:', e);
+      const canFallbackToRedirect = ['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(e?.code);
+      if (canFallbackToRedirect) {
+        try {
+          await signInWithRedirect(auth, getGoogleProvider());
+          return;
+        } catch(redirectError) {
+          console.error('Google redirect login failed:', redirectError);
+          setErrorModal({title:'Erro no login Google', message:authErrorMessage(redirectError), isAlert:true});
+          return;
+        }
+      }
+      setErrorModal({title:'Erro no login Google', message:authErrorMessage(e), isAlert:true});
+    }
+  };
+  const handleAnonLogin   = async () => { try{await setPersistence(auth, browserLocalPersistence);await signInAnonymously(auth);}catch(e){console.error('Anonymous login failed:', e);setErrorModal({title:'Erro',message:authErrorMessage(e, 'Login anônimo falhou.'),isAlert:true});} };
   const handleRegister    = async () => {
     if(!sigName.trim()||!sigKey.trim()||!user)return;
     const name=sigName.trim().toUpperCase(); const ns={...defaultSettings,apiKey:sigKey.trim(),apiKey1:sigKey.trim()};
