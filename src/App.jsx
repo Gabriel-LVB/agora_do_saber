@@ -305,14 +305,17 @@ const isAnswerCorrect = (question, answer) => {
   return answer === getCorrectLetter(question);
 };
 
+const sameId = (a, b) => String(a) === String(b);
+const listHasId = (list = [], id) => Array.isArray(list) && list.some(x => sameId(x, id));
+
 const toggleInList = (list = [], id) => {
   const safe = Array.isArray(list) ? list.filter(Boolean) : [];
-  return safe.includes(id) ? safe.filter(x => x !== id) : [...new Set([...safe, id])];
+  return listHasId(safe, id) ? safe.filter(x => !sameId(x, id)) : [...safe, id];
 };
 
 const addToList = (list = [], id) => {
   const safe = Array.isArray(list) ? list.filter(Boolean) : [];
-  return safe.includes(id) ? safe : [...safe, id];
+  return listHasId(safe, id) ? safe : [...safe, id];
 };
 
 const getTodayKey = () => new Date().toLocaleDateString('en-CA');
@@ -1747,7 +1750,7 @@ const QuestionView = ({
         darkMode={dm} isFavorite={favorites.includes(q.id)}
         onToggleFavorite={()=>onToggleFavorite(q.id)}
         showErrorNotebook={showErrorNotebook}
-        isInErrorNotebook={errorNotebook.includes(q.id)}
+        isInErrorNotebook={listHasId(errorNotebook, q.id)}
         onToggleErrorNotebook={onToggleErrorNotebook ? ()=>onToggleErrorNotebook(q.id) : undefined}
         apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
         onOpenAnswer={onOpenAnswer}/>
@@ -2619,6 +2622,10 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
 const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer }) => {
+  const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
+  useEffect(() => {
+    setOptimisticNotebook(isInErrorNotebook);
+  }, [isInErrorNotebook, question?.id]);
   const isSkipped = selectedLetter === 'SKIPPED';
   const effectiveLetter = isSkipped ? null : selectedLetter;
   // Para questões abertas: só é "respondida" se tiver JSON salvo com campo answer
@@ -2632,6 +2639,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const isCorrect = isAnswered && correctLetter === effectiveLetter;
   const explanation = cleanQuestionExplanation(question.explanation);
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
+  const handleNotebookClick = () => {
+    if (!onToggleErrorNotebook) return;
+    const previous = optimisticNotebook;
+    setOptimisticNotebook(!previous);
+    const result = onToggleErrorNotebook();
+    if (result && typeof result.catch === 'function') result.catch(() => setOptimisticNotebook(previous));
+  };
+  const handleAnswerClick = (letter) => {
+    if (showErrorNotebook && !question.isOpen && letter !== correctLetter) setOptimisticNotebook(true);
+    return onAnswer(letter);
+  };
 
 	  return (
     <div className={`rounded-xl shadow-sm border p-4 md:p-6 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
@@ -2643,10 +2661,10 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         <div className="flex items-center gap-2">
           {showErrorNotebook && (
             <button
-              onClick={onToggleErrorNotebook}
-              title={isInErrorNotebook ? 'Remover do caderno de erros' : 'Adicionar ao caderno de erros'}
-              aria-label={isInErrorNotebook ? 'Remover do caderno de erros' : 'Adicionar ao caderno de erros'}
-              className={`${iconBtnBase} ${isInErrorNotebook?(darkMode?'bg-yellow-500 border-yellow-300 text-gray-950 ring-2 ring-yellow-400/25':'bg-yellow-500 border-yellow-500 text-white ring-2 ring-yellow-200'):(darkMode?'border-gray-700 text-gray-500 hover:bg-gray-700 hover:text-yellow-400 hover:border-yellow-500/50':'border-transparent text-gray-300 hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200')}`}
+              onClick={handleNotebookClick}
+              title={optimisticNotebook ? 'Remover do caderno de erros' : 'Adicionar ao caderno de erros'}
+              aria-label={optimisticNotebook ? 'Remover do caderno de erros' : 'Adicionar ao caderno de erros'}
+              className={`${iconBtnBase} ${optimisticNotebook?(darkMode?'bg-yellow-500 border-yellow-300 text-gray-950 ring-2 ring-yellow-400/25':'bg-yellow-500 border-yellow-500 text-white ring-2 ring-yellow-200'):(darkMode?'border-gray-700 text-gray-500 hover:bg-gray-700 hover:text-yellow-400 hover:border-yellow-500/50':'border-transparent text-gray-300 hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200')}`}
             >
               <FileText className="w-5 h-5"/>
             </button>
@@ -2672,7 +2690,12 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           onCall={onCall}
           oracleLength={oracleLength}
           savedAnswer={selectedLetter && selectedLetter !== 'SKIPPED' ? selectedLetter : null}
-          onSave={l=>onAnswer(l)}
+          onSave={l=>{
+            try {
+              if (showErrorNotebook && (JSON.parse(l)?.score ?? 0) < 70) setOptimisticNotebook(true);
+            } catch(e) {}
+            return onAnswer(l);
+          }}
           isFavorite={isFavorite}
         />
       ) : (
@@ -2711,7 +2734,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             </>
           );
           return canClick ? (
-            <button key={opt.letter} type="button" onClick={()=>onAnswer(opt.letter)} className={cls}>
+            <button key={opt.letter} type="button" onClick={()=>handleAnswerClick(opt.letter)} className={cls}>
               {content}
             </button>
           ) : (
@@ -3710,7 +3733,7 @@ function AcademiaTopicView({
         isFavorite={(liveTopic.favorites||[]).includes(q.id)}
         onToggleFavorite={() => handleFavorite(q.id)}
         showErrorNotebook={canUseAcademia}
-        isInErrorNotebook={(liveTopic.errorNotebook||[]).includes(q.id)}
+        isInErrorNotebook={listHasId(liveTopic.errorNotebook || [], q.id)}
         onToggleErrorNotebook={() => handleNotebook(q.id)}
         apiKey={getKey()}
         oracleLength={settings.oracleLength||'medium'}
@@ -4006,8 +4029,9 @@ export default function QuestionBankApp() {
   const [moveSubjectModal, setMoveSubjectModal] = useState(null);
   const [folderReviewModal, setFolderReviewModal] = useState(null);
   const [folderReviewConfig, setFolderReviewConfig] = useState({ total:30, perTopic:5, selected:{} });
-  const [bulkGenerateModal, setBulkGenerateModal] = useState(null); // { subjectId }
+  const [bulkGenerateModal, setBulkGenerateModal] = useState(null); // { subjectId, mode, config }
   const [bulkGenerateRun, setBulkGenerateRun] = useState({ running:false, current:0, total:0, logs:[] });
+  const [bulkActionMenu, setBulkActionMenu] = useState(null);
 
   // ── Paste ─────────────────────────────────────────────────────────────────
   const [pasteText, setPasteText]     = useState('');
@@ -4617,8 +4641,8 @@ export default function QuestionBankApp() {
 
   const isReviewItemInNotebook = (reviewItem) => {
     const origin = getReviewOrigin(reviewItem);
-    if (origin.type === 'curso') return (origin.block?.errorNotebook || []).includes(reviewItem.qId);
-    return (origin.topic?.errorNotebook || []).includes(reviewItem.qId);
+    if (origin.type === 'curso') return listHasId(origin.block?.errorNotebook || [], reviewItem.qId);
+    return listHasId(origin.topic?.errorNotebook || [], reviewItem.qId);
   };
 
   const setReviewNotebook = async (reviewItem, mode = 'toggle') => {
@@ -5204,13 +5228,13 @@ export default function QuestionBankApp() {
             const academiaSubject = findAcademiaSubject(origin.subjectId);
             const academiaTopic = academiaSubject?.topics?.find(t => sameIdValue(t.id, origin.topicId));
             if (!academiaTopic) return oracleTopic;
-            const oracleQuestionIds = new Set((oracleTopic.questions || []).map(q => q.id));
+            const oracleQuestionIds = new Set((oracleTopic.questions || []).map(q => String(q.id)));
             const sourceAnswers = Object.fromEntries(
               Object.entries(academiaTopic.answers || {}).filter(([id, value]) =>
-                oracleQuestionIds.has(id) && value != null && value !== ''
+                oracleQuestionIds.has(String(id)) && value != null && value !== ''
               )
             );
-            const sourceNotebook = (academiaTopic.errorNotebook || []).filter(id => oracleQuestionIds.has(id));
+            const sourceNotebook = (academiaTopic.errorNotebook || []).filter(id => oracleQuestionIds.has(String(id)));
             const nextTopic = {
               ...oracleTopic,
               answers:{...(oracleTopic.answers || {}), ...sourceAnswers},
@@ -5402,12 +5426,12 @@ export default function QuestionBankApp() {
       ? `academia_extra_${topic.id}_${extraId || Date.now()}`
       : `academia_fix_${topic.id}`;
     const topicTitle = kind === 'extra' ? subjectTitle : 'Questões de fixação';
-    const questionIds = new Set(questions.map(q=>q.id));
+    const questionIds = new Set(questions.map(q=>String(q.id)));
     const syncedAnswers = Object.fromEntries(
-      Object.entries(topic.answers || {}).filter(([id, value]) => questionIds.has(id) && value != null && value !== '')
+      Object.entries(topic.answers || {}).filter(([id, value]) => questionIds.has(String(id)) && value != null && value !== '')
     );
-    const syncedFavorites = (topic.favorites || []).filter(id => questionIds.has(id));
-    const syncedNotebook = (topic.errorNotebook || []).filter(id => questionIds.has(id));
+    const syncedFavorites = (topic.favorites || []).filter(id => questionIds.has(String(id)));
+    const syncedNotebook = (topic.errorNotebook || []).filter(id => questionIds.has(String(id)));
     const findMatchingOracleSubject = () => items.find(item =>
       !isFolderItem(item) &&
       item.source === 'gemini' &&
@@ -5700,6 +5724,7 @@ export default function QuestionBankApp() {
       if (menuOpen) return close(setMenuOpen, false);
       if (libraryActionMenu) return close(setLibraryActionMenu);
       if (blockActionMenu) return close(setBlockActionMenu);
+      if (bulkActionMenu) return close(setBulkActionMenu);
       if (mobileNavOpen) return close(setMobileNavOpen, false);
       if (errorModal) return close(setErrorModal);
       if (deleteId) return close(setDeleteId);
@@ -5726,14 +5751,48 @@ export default function QuestionBankApp() {
   }, [
     menuOpen, libraryActionMenu, blockActionMenu, mobileNavOpen, errorModal, deleteId,
     openAnswerModal, externalPromptModal, regenModal, newFolderModal, moveSubjectModal,
-    folderReviewModal, bulkGenerateModal, bulkGenerateRun.running, academiaExtraModal,
+    folderReviewModal, bulkGenerateModal, bulkGenerateRun.running, academiaExtraModal, bulkActionMenu,
     academiaRegenModal, academiaExportModal, errorReviewModal, examSetup, exportModal,
     bizuarioModal, vqGenModal, resetCourseModal, srModal
   ]);
 
-  const getBulkGenerateTargets = (subject) => {
+  const getBulkOperationMeta = (mode = 'generate', source = 'academia') => {
+    const map = {
+      generate:{title:'Gerar tudo', verb:'Gerar', toast:'Gerar tudo', empty:'Nada pendente: todos os blocos desta pasta já foram gerados.', desc:'gera aula + questões de fixação para blocos ainda pendentes'},
+      extra:{title:'Gerar bateria extra de tudo', verb:'Gerar extras', toast:'Bateria extra em massa', empty:'Nenhuma aula gerada disponível para bateria extra.', desc:'cria uma bateria extra para cada aula já gerada'},
+      regenAll:{title:'Regenerar tudo', verb:'Regenerar tudo', toast:'Regenerar tudo', empty:'Nenhum bloco encontrado para regenerar.', desc:'substitui aula + questões de fixação de todos os blocos'},
+      regenLesson:{title:'Regenerar aula', verb:'Regenerar aulas', toast:'Regenerar aulas', empty:'Nenhum bloco encontrado para regenerar.', desc:'substitui apenas as explicações, mantendo questões e extras'},
+      regenQuestions:{title:'Regenerar questões', verb:'Regenerar questões', toast:'Regenerar questões', empty:'Nenhuma aula gerada disponível para regenerar questões.', desc:'substitui apenas as questões de fixação das aulas já geradas'},
+    };
+    if (source !== 'academia') return map.generate;
+    return map[mode] || map.generate;
+  };
+
+  const getDefaultBulkConfig = (mode = 'generate') => ({
+    explanationLength:settingsRef.current.explanationLength || 'complete',
+    questionStyle:settingsRef.current.questionStyle || 'mixed',
+    questionTypes:settingsRef.current.questionTypes || ['direct'],
+    numAlternatives:settingsRef.current.numAlternatives || 5,
+    regenReason:'',
+    mode,
+  });
+
+  const openBulkGenerateModal = (subject, mode = 'generate') => {
+    if (!subject) return;
+    const targets = getBulkGenerateTargets(subject, mode);
+    setBulkActionMenu(null);
+    setBulkGenerateRun({running:false,current:0,total:targets.length,logs:[]});
+    setBulkGenerateModal({subjectId:subject.id, mode, config:getDefaultBulkConfig(mode)});
+  };
+
+  const getBulkGenerateTargets = (subject, mode = 'generate') => {
     const topics = subject?.topics || [];
-    if (subject?.source === 'academia') return topics.filter(t => !t.lessonGenerated);
+    if (subject?.source === 'academia') {
+      if (mode === 'extra') return topics.filter(t => t.lessonGenerated);
+      if (mode === 'regenAll' || mode === 'regenLesson') return topics;
+      if (mode === 'regenQuestions') return topics.filter(t => t.lessonGenerated);
+      return topics.filter(t => !t.lessonGenerated);
+    }
     if (subject?.source === 'gemini') return topics.filter(t => !(t.questions || []).length);
     return [];
   };
@@ -6036,7 +6095,7 @@ export default function QuestionBankApp() {
     if (!sourceSubject || !sourceTopic) return;
     const nextNotebook = shouldInclude
       ? addToList(sourceTopic.errorNotebook || [], qId)
-      : (sourceTopic.errorNotebook || []).filter(id => id !== qId);
+      : (sourceTopic.errorNotebook || []).filter(id => !sameId(id, qId));
     const updatedTopic = {...sourceTopic, errorNotebook:nextNotebook};
     await updateSubject({
       ...sourceSubject,
@@ -6067,12 +6126,34 @@ export default function QuestionBankApp() {
 
     if(canUseAdvancedFeatures && !isRight) sr[qId]={dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
     else if(canUseAdvancedFeatures && sr[qId]){const ni=Math.min((sr[qId].interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
-    await updateSubject({...freshSubject,topics:freshSubject.topics.map(t=>{
+    const nextActiveSubject = {...freshSubject,topics:freshSubject.topics.map(t=>{
       if (t.id !== activeTopicId) return t;
       const errorNotebook = canUseAdvancedFeatures && !isRight ? addToList(t.errorNotebook || [], qId) : (t.errorNotebook || []);
       return {...t,answers:{...(t.answers||{}),[qId]:letter},spacedReview:sr,errorNotebook};
-    })});
-    await syncAcademiaOriginAnswer(freshTopic.origin, qId, letter, q);
+    })};
+    if (freshTopic.origin?.source === 'academia') {
+      const items = libraryRef.current?.length ? libraryRef.current : library;
+      const sourceSubject = items.find(s => !isFolderItem(s) && s.source === 'academia' && String(s.id) === String(freshTopic.origin.subjectId));
+      const sourceTopic = sourceSubject?.topics?.find(t => String(t.id) === String(freshTopic.origin.topicId));
+      if (sourceSubject && sourceTopic) {
+        const sourceQuestion = q || Object.values(sourceTopic.fixationQuestions || {}).flat()
+          .concat((sourceTopic.extraBattery || []).flatMap(b => b.questions || b))
+          .find(x => sameId(x.id, qId));
+        const errorNotebook = canUseAdvancedFeatures && sourceQuestion && !isAnswerCorrect(sourceQuestion, letter)
+          ? addToList(sourceTopic.errorNotebook || [], qId)
+          : (sourceTopic.errorNotebook || []);
+        const nextSourceSubject = {
+          ...sourceSubject,
+          topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id)
+            ? {...sourceTopic, answers:{...(sourceTopic.answers || {}), [qId]:letter}, errorNotebook}
+            : t),
+        };
+        setAcademiaTopicAnswers(p => ({...p, [qId]:letter}));
+        await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
+        return;
+      }
+    }
+    await updateSubject(nextActiveSubject);
   };
 
   const handleFavorite = async (qId) => {
@@ -6088,9 +6169,25 @@ export default function QuestionBankApp() {
     if (!freshSubject || !freshTopic) return;
     const currentNotebook = freshTopic.errorNotebook || [];
     const nextNotebook = toggleInList(currentNotebook, qId);
-    const shouldInclude = nextNotebook.includes(qId);
-    await syncAcademiaOriginNotebook(freshTopic.origin, qId, shouldInclude);
-    await updateSubject({...freshSubject,topics:freshSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:nextNotebook}:t)});
+    const shouldInclude = listHasId(nextNotebook, qId);
+    const nextActiveSubject = {...freshSubject,topics:freshSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:nextNotebook}:t)};
+    if (freshTopic.origin?.source === 'academia') {
+      const items = libraryRef.current?.length ? libraryRef.current : library;
+      const sourceSubject = items.find(s => !isFolderItem(s) && s.source === 'academia' && String(s.id) === String(freshTopic.origin.subjectId));
+      const sourceTopic = sourceSubject?.topics?.find(t => String(t.id) === String(freshTopic.origin.topicId));
+      if (sourceSubject && sourceTopic) {
+        const sourceNotebook = shouldInclude
+          ? addToList(sourceTopic.errorNotebook || [], qId)
+          : (sourceTopic.errorNotebook || []).filter(id => !sameId(id, qId));
+        const nextSourceSubject = {
+          ...sourceSubject,
+          topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id) ? {...sourceTopic, errorNotebook:sourceNotebook} : t),
+        };
+        await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
+        return;
+      }
+    }
+    await updateSubject(nextActiveSubject);
   };
 
   // Bug 6: toggle favorite for a question that came from the exam (carries _subjectId, _topicId)
@@ -6123,7 +6220,7 @@ export default function QuestionBankApp() {
   const isExamQuestionInNotebook = (q) => {
     const subj = library.find(s=>s.id===q._subjectId);
     const topic = subj?.topics.find(t=>t.id===q._topicId);
-    return (topic?.errorNotebook||[]).includes(q.id);
+    return listHasId(topic?.errorNotebook || [], q.id);
   };
 
   // Bug 1: also clear cached insights — they're based on old answers and would be stale
@@ -6694,6 +6791,9 @@ export default function QuestionBankApp() {
     const s = { ...settingsRef.current, ...lessonSettings };
     const material = subject.sourceMaterials || '';
     const subtopics = topic.subtopics || [];
+    const generationMode = s.generationMode || 'full';
+    const shouldGenerateLesson = generationMode !== 'questions';
+    const shouldGenerateQuestions = generationMode !== 'lesson';
 
     const na = s.numAlternatives || 5;
     const alts = na === 4
@@ -6703,70 +6803,80 @@ export default function QuestionBankApp() {
     const orderedKeys = getOrderedKeys();
 
     // Requisição A: aula em markdown
-    let lessonText = '';
-    const lessonLevel = s.explanationLength || 'complete';
-    const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, s.regenReason || '');
-    const lessonSystemPrompt = lessonLevel === 'essential'
-      ? 'Você é professor de medicina. Escreva em português. Modo Nível 1: escreva em outline de revisão tipo Pathoma/First Aid. Após cada ##, comece com um título curto em negrito que dê contexto aos bullets. Use bullets densos e sem letras ou números como marcadores.'
-      : 'Você é professor de medicina. Escreva em português. Após cada ##, comece com um título curto em negrito que dê contexto à explicação.';
-    onProgress?.('📝 Gerando explicação dos subtópicos...');
-    let lessonErr = null;
-    for (const { k } of orderedKeys) {
-      try {
-        lessonText = await callGemini(
-          lessonPrompt,
-          lessonSystemPrompt,
-          k,
-          [],
-          {}
-        );
-        await rotateKey();
-        break;
-      } catch (e) {
-        lessonErr = e;
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        break;
+    let lessonText = Object.values(topic.lessonSections || {}).map(sec => `${sec?.title || ''}\n${sec?.content || ''}`).join('\n\n');
+    let lessonSections = topic.lessonSections || {};
+    if (shouldGenerateLesson) {
+      lessonText = '';
+      const lessonLevel = s.explanationLength || 'complete';
+      const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, s.regenReason || '');
+      const lessonSystemPrompt = lessonLevel === 'essential'
+        ? 'Você é professor de medicina. Escreva em português. Modo Nível 1: escreva em outline de revisão tipo Pathoma/First Aid. Após cada ##, comece com um título curto em negrito que dê contexto aos bullets. Use bullets densos e sem letras ou números como marcadores.'
+        : 'Você é professor de medicina. Escreva em português. Após cada ##, comece com um título curto em negrito que dê contexto à explicação.';
+      onProgress?.('📝 Gerando explicação dos subtópicos...');
+      let lessonErr = null;
+      for (const { k } of orderedKeys) {
+        try {
+          lessonText = await callGemini(
+            lessonPrompt,
+            lessonSystemPrompt,
+            k,
+            [],
+            {}
+          );
+          await rotateKey();
+          break;
+        } catch (e) {
+          lessonErr = e;
+          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          break;
+        }
       }
-    }
-    if (!lessonText) throw lessonErr || new Error('CONNECTION_ERROR');
-
-    const lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
-    const fixationPlan = buildAcademiaFixationPlan(subtopics, lessonSections);
-
-    // Requisição B: questões de fixação da aula como um todo
-    onProgress?.('Gerando questões de fixação...');
-	    const fixPrompt = buildAcademiaFixationPrompt(
-	      subtopics,
-	      topic.title,
-	      s,
-	      lessonText,
-	      fixationPlan,
-	      summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic))
-	    );
-    let fixText = '';
-    const orderedKeys2 = getOrderedKeys();
-    for (const { k } of orderedKeys2) {
-      try {
-        fixText = await callGemini(fixPrompt, 'Você é examinador de residência médica. Escreva em português.', k);
-        await rotateKey();
-        break;
-      } catch (e) {
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        // Questões falharam mas temos a aula — continua sem questões
-        break;
-      }
+      if (!lessonText) throw lessonErr || new Error('CONNECTION_ERROR');
+      lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
     }
 
-    // Parsear as questões de fixação; se falhar, preserva a aula e segue sem questões.
-    let fixQuestions = [];
-    if (fixText) {
-      try {
-        fixQuestions = parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions;
-      } catch(e) {
-        onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
+    let fixationBySubtopic = topic.fixationQuestions || {};
+    let fixQuestions = Object.values(fixationBySubtopic || {}).flat();
+    if (shouldGenerateQuestions) {
+      const fixationPlan = buildAcademiaFixationPlan(subtopics, lessonSections);
+
+      // Requisição B: questões de fixação da aula como um todo
+      onProgress?.('Gerando questões de fixação...');
+	      const fixPrompt = buildAcademiaFixationPrompt(
+	        subtopics,
+	        topic.title,
+	        s,
+	        lessonText,
+	        fixationPlan,
+	        summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic))
+	      );
+      let fixText = '';
+      const orderedKeys2 = getOrderedKeys();
+      for (const { k } of orderedKeys2) {
+        try {
+          fixText = await callGemini(fixPrompt, 'Você é examinador de residência médica. Escreva em português.', k);
+          await rotateKey();
+          break;
+        } catch (e) {
+          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          if (generationMode === 'questions') throw e;
+          // Questões falharam mas temos a aula — continua sem questões
+          break;
+        }
       }
+
+      // Parsear as questões de fixação; se falhar, preserva a aula e segue sem questões.
+      fixQuestions = [];
+      if (fixText) {
+        try {
+          fixQuestions = parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions;
+        } catch(e) {
+          if (generationMode === 'questions') throw e;
+          onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
+        }
+      }
+      fixationBySubtopic = distributeAcademiaFixQuestions(fixQuestions, fixationPlan);
     }
-    const fixationBySubtopic = distributeAcademiaFixQuestions(fixQuestions, fixationPlan);
 
     // Salvar no tópico
     const updatedTopic = {
@@ -6780,7 +6890,7 @@ export default function QuestionBankApp() {
       topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
     };
     await updateSubject(updatedSubject);
-    if (fixQuestions.length) {
+    if (shouldGenerateQuestions && fixQuestions.length) {
       await ensureAcademiaOracleTopic({
         subject:updatedSubject,
         topic:updatedTopic,
@@ -6860,14 +6970,24 @@ export default function QuestionBankApp() {
   const startBulkGenerate = async () => {
     const initialSubject = library.find(s => s.id === bulkGenerateModal?.subjectId);
     if (!initialSubject || bulkGenerateRun.running || !checkKey()) return;
+    const mode = bulkGenerateModal?.mode || 'generate';
+    const operation = getBulkOperationMeta(mode, initialSubject.source);
+    const bulkConfig = bulkGenerateModal?.config || getDefaultBulkConfig(mode);
+    const operationSettings = {
+      explanationLength:bulkConfig.explanationLength,
+      questionStyle:bulkConfig.questionStyle,
+      questionTypes:bulkConfig.questionTypes,
+      numAlternatives:bulkConfig.numAlternatives,
+      regenReason:bulkConfig.regenReason || '',
+    };
 
-    const targets = getBulkGenerateTargets(initialSubject);
+    const targets = getBulkGenerateTargets(initialSubject, mode);
     if (!targets.length) {
       setBulkGenerateRun({
         running:false,
         current:0,
         total:0,
-        logs:[createBulkLog('success', 'Nada pendente: todos os blocos desta pasta já foram gerados.')]
+        logs:[createBulkLog('success', operation.empty)]
       });
       return;
     }
@@ -6876,10 +6996,10 @@ export default function QuestionBankApp() {
       running:true,
       current:0,
       total:targets.length,
-      logs:[createBulkLog('info', `Iniciando geração sequencial de ${targets.length} bloco${targets.length!==1?'s':''}.`)]
+      logs:[createBulkLog('info', `Iniciando: ${operation.title.toLowerCase()} em ${targets.length} bloco${targets.length!==1?'s':''}.`)]
     });
 
-    const toastId = addToast(`Gerar tudo: 0/${targets.length} blocos concluídos...`, 'loading', 0);
+    const toastId = addToast(`${operation.toast}: 0/${targets.length} blocos concluídos...`, 'loading', 0);
     let workingSubject = initialSubject;
     let successCount = 0;
     let errorCount = 0;
@@ -6888,16 +7008,25 @@ export default function QuestionBankApp() {
       const target = targets[i];
       const topic = workingSubject.topics.find(t => t.id === target.id) || target;
       setBulkGenerateRun(p => ({ ...p, current:i + 1 }));
-      addBulkLog('loading', `Gerando "${topic.title}" (${i + 1}/${targets.length})...`);
+      addBulkLog('loading', `${operation.verb} "${topic.title}" (${i + 1}/${targets.length})...`);
 
       try {
         let result = null;
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
             if (workingSubject.source === 'academia') {
-              result = await generateAcademiaLessonForSubject(topic, workingSubject, {}, {
-                onProgress: msg => addBulkLog('info', `"${topic.title}": ${msg.replace(/^📝\s*/, '')}`)
-              });
+              if (mode === 'extra') {
+                result = await generateAcademiaExtraBatteryForSubject(topic, workingSubject, operationSettings);
+              } else {
+                const generationMode = mode === 'regenLesson'
+                  ? 'lesson'
+                  : mode === 'regenQuestions'
+                    ? 'questions'
+                    : 'full';
+                result = await generateAcademiaLessonForSubject(topic, workingSubject, {...operationSettings, generationMode}, {
+                  onProgress: msg => addBulkLog('info', `"${topic.title}": ${msg.replace(/^📝\s*/, '')}`)
+                });
+              }
             } else {
               result = await generateOracleTopicForSubject(workingSubject, topic, '', {
                 onProgress: count => {
@@ -6919,7 +7048,11 @@ export default function QuestionBankApp() {
         workingSubject = result?.subject || workingSubject;
         successCount++;
         const detail = workingSubject.source === 'academia'
-          ? `${result?.fixationCount || 0} questões de fixação`
+          ? mode === 'regenLesson'
+            ? 'aula regenerada'
+            : mode === 'extra'
+              ? `${result?.questionCount || 0} questões extras`
+              : `${result?.fixationCount || 0} questões de fixação`
           : `${result?.questionCount || 0} questões`;
         addBulkLog('success', `"${topic.title}" concluído (${detail}).`);
       } catch(e) {
@@ -6927,74 +7060,80 @@ export default function QuestionBankApp() {
         addBulkLog('error', `"${topic.title}" falhou: ${getBulkErrorText(e)}. Pulei este bloco e continuei.`);
       }
 
-      updateToast(toastId, `Gerar tudo: ${successCount}/${targets.length} blocos concluídos${errorCount ? `, ${errorCount} erro${errorCount!==1?'s':''}` : ''}...`, errorCount ? 'info' : 'loading');
+      updateToast(toastId, `${operation.toast}: ${successCount}/${targets.length} blocos concluídos${errorCount ? `, ${errorCount} erro${errorCount!==1?'s':''}` : ''}...`, errorCount ? 'info' : 'loading');
     }
 
     setStreamCount(0);
     setBulkGenerateRun(p => ({ ...p, running:false, current:targets.length }));
     const finalType = errorCount ? 'info' : 'success';
-    updateToast(toastId, `Gerar tudo finalizado: ${successCount} certo${successCount!==1?'s':''}, ${errorCount} erro${errorCount!==1?'s':''}.`, finalType);
+    updateToast(toastId, `${operation.toast} finalizado: ${successCount} certo${successCount!==1?'s':''}, ${errorCount} erro${errorCount!==1?'s':''}.`, finalType);
     setTimeout(() => removeToast(toastId), 15000);
+  };
+
+  const generateAcademiaExtraBatteryForSubject = async (topic, subject, extraSettings = null) => {
+    const s = extraSettings || settingsRef.current;
+    const subtopics = topic.subtopics || [];
+	      const lessonText = Object.values(topic.lessonSections || {}).map(sec => `${sec?.title || ''}\n${sec?.content || ''}`).join('\n\n');
+	      const previousQuestions = summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic));
+	      const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s, lessonText, previousQuestions);
+    const orderedKeys = getOrderedKeys();
+    let extraText = '';
+    for (const { k } of orderedKeys) {
+      try {
+        extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k);
+        await rotateKey();
+        break;
+      } catch (e) {
+        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        throw e;
+      }
+    }
+
+    const parsed = parseData(extraText, `extra_${topic.id}_${Date.now()}`);
+    if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
+
+    const extraId = `eb_${Date.now()}`;
+    const extraTitle = `Bateria ${(topic.extraBattery||[]).length + 1}`;
+
+    // Salva no tópico da Academia (campo extraBattery) E cria/atualiza assunto no Oráculo
+    const updatedTopic = {
+      ...topic,
+      extraBattery: [...(topic.extraBattery || []), {
+        id: extraId,
+        title: extraTitle,
+        generatedAt: Date.now(),
+        oracleTopicId: `academia_extra_${topic.id}_${extraId}`,
+        questions: parsed.questions,
+      }],
+    };
+    const updatedSubject = {
+      ...subject,
+      topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
+    };
+    await updateSubject(updatedSubject);
+
+    const oracle = await ensureAcademiaOracleTopic({
+      subject:updatedSubject,
+      topic:updatedTopic,
+      kind:'extra',
+      questions:parsed.questions,
+      title:extraTitle,
+      extraId,
+      questionStyle:s.questionStyle || 'mixed',
+    });
+    return { subject:updatedSubject, topic:updatedTopic, oracle, questionCount:parsed.questions.length };
   };
 
   const generateAcademiaExtraBattery = async (topic, subject, extraSettings = null) => {
     if (!checkKey()) return;
     setAcademiaExtraBusy(true);
     try {
-      const s = extraSettings || settingsRef.current;
-      const subtopics = topic.subtopics || [];
-	      const lessonText = Object.values(topic.lessonSections || {}).map(sec => `${sec?.title || ''}\n${sec?.content || ''}`).join('\n\n');
-	      const previousQuestions = summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic));
-	      const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s, lessonText, previousQuestions);
-      const orderedKeys = getOrderedKeys();
-      let extraText = '';
-      for (const { k } of orderedKeys) {
-        try {
-          extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k);
-          await rotateKey();
-          break;
-        } catch (e) {
-          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-          showApiError(e.message);
-          return;
-        }
-      }
-
-      const parsed = parseData(extraText, `extra_${topic.id}_${Date.now()}`);
-      if (!parsed.questions.length) {
+      const result = await generateAcademiaExtraBatteryForSubject(topic, subject, extraSettings);
+      if (!result?.questionCount) {
         addToast('Nenhuma questão foi gerada. Tente novamente.', 'info', 4000);
         return;
       }
-
-      const extraId = `eb_${Date.now()}`;
-      const extraTitle = `Bateria ${(topic.extraBattery||[]).length + 1}`;
-
-      // Salva no tópico da Academia (campo extraBattery) E cria/atualiza assunto no Oráculo
-      const updatedTopic = {
-        ...topic,
-        extraBattery: [...(topic.extraBattery || []), {
-          id: extraId,
-          title: extraTitle,
-          generatedAt: Date.now(),
-          oracleTopicId: `academia_extra_${topic.id}_${extraId}`,
-          questions: parsed.questions,
-        }],
-      };
-      const updatedSubject = {
-        ...subject,
-        topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
-      };
-      await updateSubject(updatedSubject);
-
-      const oracle = await ensureAcademiaOracleTopic({
-        subject:updatedSubject,
-        topic:updatedTopic,
-        kind:'extra',
-        questions:parsed.questions,
-        title:extraTitle,
-        extraId,
-        questionStyle:s.questionStyle || 'mixed',
-      });
+      const oracle = result.oracle;
       setLibFilter('gemini');
       setActiveFolderId(oracle.folder?.id || null);
       setActiveSubjectId(oracle.subject.id);
@@ -7002,8 +7141,12 @@ export default function QuestionBankApp() {
       setShowOnlyWrong(false);
       setView('topic');
 
-      addToast(`${parsed.questions.length} questões extras adicionadas ao Oráculo!`, 'success', 5000);
+      addToast(`${result.questionCount} questões extras adicionadas ao Oráculo!`, 'success', 5000);
     } catch (e) {
+      if (e.message === 'NO_QUESTIONS_GENERATED') {
+        addToast('Nenhuma questão foi gerada. Tente novamente.', 'info', 4000);
+        return;
+      }
       showApiError(e.message || 'CONNECTION_ERROR');
     } finally {
       setAcademiaExtraBusy(false);
@@ -8346,18 +8489,57 @@ export default function QuestionBankApp() {
                 </div>
 	              </div>
 	              <div className="flex gap-2 flex-wrap">
-	                {['gemini','academia'].includes(activeSubject.source)&&(()=>{
+	                {activeSubject.source==='gemini'&&(()=>{
 	                  const pendingCount = getBulkGenerateTargets(activeSubject).length;
 	                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
 	                  return (
 	                    <button
-	                      onClick={()=>{setBulkGenerateModal({subjectId:activeSubject.id});setBulkGenerateRun({running:false,current:0,total:pendingCount,logs:[]});}}
+	                      onClick={()=>openBulkGenerateModal(activeSubject, 'generate')}
 	                      disabled={runningHere || pendingCount===0}
 	                      title={pendingCount ? `Gerar ${pendingCount} bloco${pendingCount!==1?'s':''} pendente${pendingCount!==1?'s':''}` : 'Todos os blocos já foram gerados'}
 	                      className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all ${pendingCount&&!runningHere?(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'):'opacity-40 cursor-not-allowed '+(darkMode?'border-gray-700 text-gray-500':'border-gray-200 text-gray-400')}`}>
 	                      {runningHere ? <Spinner className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
 	                      {runningHere ? 'Gerando...' : pendingCount ? `Gerar tudo (${pendingCount})` : 'Tudo gerado'}
 	                    </button>
+	                  );
+	                })()}
+	                {activeSubject.source==='academia'&&(()=>{
+	                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
+                    const actions = [
+                      {mode:'generate', label:'Gerar tudo', icon:<Zap className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'generate').length},
+                      {mode:'extra', label:'Gerar bateria extra de tudo', icon:<PlusIcon className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'extra').length},
+                      {divider:true},
+                      {mode:'regenAll', label:'Regenerar tudo', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenAll').length, danger:true},
+                      {mode:'regenLesson', label:'Regenerar aula', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenLesson').length, danger:true},
+                      {mode:'regenQuestions', label:'Regenerar questões', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenQuestions').length, danger:true},
+                    ];
+	                  return (
+                      <div className="relative">
+                        <button
+                          onClick={()=>setBulkActionMenu(p=>p===activeSubject.id?null:activeSubject.id)}
+                          disabled={runningHere}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all disabled:opacity-50 ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                          {runningHere ? <Spinner className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
+                          {runningHere ? 'Rodando...' : 'Geração em lote'}
+                          <ChevronDown className="w-4 h-4 opacity-60"/>
+                        </button>
+                        {bulkActionMenu===activeSubject.id&&(
+                          <div className={`absolute right-0 top-11 z-50 w-72 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                            {actions.map((item, i)=> item.divider ? (
+                              <div key={`div-${i}`} className={`my-1 border-t ${darkMode?'border-gray-700':'border-gray-100'}`}/>
+                            ) : (
+                              <button key={item.mode}
+                                onClick={()=>openBulkGenerateModal(activeSubject, item.mode)}
+                                disabled={!item.count}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${item.danger?(darkMode?'text-orange-300 hover:bg-orange-900/20':'text-orange-700 hover:bg-orange-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                                {item.icon}
+                                <span className="flex-1">{item.label}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] ${darkMode?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500'}`}>{item.count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 	                  );
 	                })()}
 	                {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
@@ -8999,7 +9181,7 @@ export default function QuestionBankApp() {
 	                      isFavorite={true}
 	                      onToggleFavorite={()=>handleFavUnfavorite(subject,topic,question.id)}
 	                      showErrorNotebook={canUseAdvancedFeatures}
-	                      isInErrorNotebook={(topic.errorNotebook||[]).includes(question.id)}
+	                      isInErrorNotebook={listHasId(topic.errorNotebook || [], question.id)}
 	                      onToggleErrorNotebook={()=>handleFavNotebook(subject,topic,question.id)}
 	                      apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
                     />
@@ -11571,29 +11753,86 @@ export default function QuestionBankApp() {
 	      })()}
 	      {bulkGenerateModal&&(()=>{
 	        const subject = library.find(s => s.id === bulkGenerateModal.subjectId);
-	        const pending = getBulkGenerateTargets(subject);
+          const mode = bulkGenerateModal.mode || 'generate';
+          const operation = getBulkOperationMeta(mode, subject?.source);
+	        const pending = getBulkGenerateTargets(subject, mode);
 	        const isAcademiaBulk = subject?.source === 'academia';
 	        const keyCount = getConfiguredGeminiKeys(settingsRef.current).length;
 	        const closeOrStartBulk = pending.length ? startBulkGenerate : (() => setBulkGenerateModal(null));
+          const cfg = bulkGenerateModal.config || getDefaultBulkConfig(mode);
+          const updateBulkConfig = (patch) => setBulkGenerateModal(p=>({...p, config:{...(p?.config||{}), ...patch}}));
+          const showsLessonConfig = isAcademiaBulk && ['generate','regenAll','regenLesson'].includes(mode);
+          const showsQuestionConfig = isAcademiaBulk && ['generate','extra','regenAll','regenQuestions'].includes(mode);
+          const isDestructiveBulk = ['regenAll','regenLesson','regenQuestions'].includes(mode);
 	        return (
 	          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{if(!bulkGenerateRun.running)setBulkGenerateModal(null);}}>
 	            <div className={`w-full max-w-2xl rounded-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
 	              <div className="flex items-start justify-between gap-4 mb-5">
 	                <div>
 	                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Geração em massa</p>
-	                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><Zap className="w-6 h-6"/>Gerar tudo</h3>
+	                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3">{isDestructiveBulk?<RotateCcw className="w-6 h-6"/>:<Zap className="w-6 h-6"/>}{operation.title}</h3>
 	                </div>
 	                <button type="button" aria-label="Fechar" disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`p-2 rounded-lg disabled:opacity-30 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
 	              </div>
 	              <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'border-yellow-700/60 bg-yellow-900/10 text-yellow-100':'border-yellow-300 bg-yellow-50 text-yellow-900'}`}>
 	                <p className="font-bold mb-2">Use com cuidado.</p>
-	                <p>Isso vai gerar {isAcademiaBulk?'aula + questões de fixação':'questões'} para {pending.length} bloco{pending.length!==1?'s':''} pendente{pending.length!==1?'s':''}, um por vez. Pode demorar bastante, consumir muitas requisições e ainda assim falhar em alguns blocos por quota, instabilidade do Gemini ou resposta malformada.</p>
+	                <p>Isso vai {operation.desc} em {pending.length} bloco{pending.length!==1?'s':''}, um por vez. Pode demorar bastante, consumir muitas requisições e ainda assim falhar em alguns blocos por quota, instabilidade do Gemini ou resposta malformada.</p>
 	                <p className="mt-2">Recomendação: rode à noite, mantenha a aba aberta, tenha várias chaves cadastradas e evite mexer nos blocos durante o processo. Chaves detectadas agora: <strong>{keyCount}</strong>.</p>
 	              </div>
+                {isAcademiaBulk && !bulkGenerateRun.running && (
+                  <div className={`rounded-xl border p-4 mb-5 space-y-5 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                    {showsLessonConfig && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Profundidade da aula</div>
+                        <ExplanationLengthSelector value={cfg.explanationLength} onChange={v=>updateBulkConfig({explanationLength:v})} darkMode={darkMode}/>
+                      </div>
+                    )}
+                    {isDestructiveBulk && showsLessonConfig && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Instrução extra <span className="normal-case font-normal opacity-70">(opcional)</span></div>
+                        <textarea value={cfg.regenReason || ''} onChange={e=>updateBulkConfig({regenReason:e.target.value})}
+                          placeholder="Ex: deixar mais direto, focar em conduta, reduzir enrolação..."
+                          className={`w-full h-20 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}/>
+                      </div>
+                    )}
+                    {showsQuestionConfig && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
+                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true}/>
+                      </div>
+                    )}
+                    {showsQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
+                            <button key={opt.k} onClick={()=>updateBulkConfig({questionStyle:opt.k})}
+                              className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {showsQuestionConfig && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                        <div className="flex gap-2">
+                          {[4,5].map(n=>(
+                            <button key={n} onClick={()=>updateBulkConfig({numAlternatives:n})}
+                              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.numAlternatives)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                              {n} (A-{n===4?'D':'E'})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 	              <div className={`rounded-xl border overflow-hidden mb-5 ${darkMode?'border-gray-700':'border-gray-200'}`}>
 	                <div className={`px-4 py-3 border-b flex items-center justify-between ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-100 bg-gray-50'}`}>
 	                  <span className="text-xs font-bold uppercase tracking-widest opacity-50">Log</span>
-	                  <span className="text-xs font-bold text-yellow-600">{bulkGenerateRun.running ? `${bulkGenerateRun.current}/${bulkGenerateRun.total}` : `${pending.length} pendente${pending.length!==1?'s':''}`}</span>
+	                  <span className="text-xs font-bold text-yellow-600">{bulkGenerateRun.running ? `${bulkGenerateRun.current}/${bulkGenerateRun.total}` : `${pending.length} alvo${pending.length!==1?'s':''}`}</span>
 	                </div>
 	                <div className="max-h-72 overflow-y-auto p-3 space-y-2">
 	                  {bulkGenerateRun.logs.length===0&&<p className="text-sm opacity-50 italic p-2">Confirme para iniciar. O progresso aparecerá aqui.</p>}
@@ -11616,9 +11855,21 @@ export default function QuestionBankApp() {
 	              </div>
 	              <div className="flex gap-3">
 	                <button disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`flex-1 py-3 rounded-xl font-bold disabled:opacity-40 ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>{bulkGenerateRun.running?'Rodando...':'Cancelar'}</button>
-	                <button onClick={closeOrStartBulk} disabled={bulkGenerateRun.running || !subject} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
-	                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Zap className="w-4 h-4"/>}
-	                  {bulkGenerateRun.running ? 'Gerando...' : pending.length ? 'Confirmar e gerar' : 'Nada pendente'}
+	                <button onClick={()=>{
+                    if (isAcademiaBulk && pending.length && !bulkGenerateRun.running) {
+                      const persist = {};
+                      if (showsLessonConfig) persist.explanationLength = cfg.explanationLength;
+                      if (showsQuestionConfig) {
+                        persist.questionStyle = cfg.questionStyle;
+                        persist.questionTypes = cfg.questionTypes;
+                        persist.numAlternatives = cfg.numAlternatives;
+                      }
+                      if (Object.keys(persist).length) saveSettings({...settingsRef.current, ...persist});
+                    }
+                    closeOrStartBulk();
+                  }} disabled={bulkGenerateRun.running || !subject} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
+	                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : isDestructiveBulk ? <RotateCcw className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
+	                  {bulkGenerateRun.running ? 'Rodando...' : pending.length ? operation.verb : 'Nada para fazer'}
 	                </button>
 	              </div>
 	            </div>

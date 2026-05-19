@@ -441,6 +441,13 @@ FONTE OBRIGATÓRIA — SIGA O MATERIAL:
 O sumário deve ser um índice fiel do material fornecido. Siga a ordem do material.
 Não reordene, não generalize, não extrapole. Não junte tópicos vizinhos apenas para economizar geração.
 
+MODO DE ESTUDO RÁPIDO E ENXUTO:
+Monte o sumário para estudo eficiente, não para uma apostila enciclopédica.
+Evite tópicos ou subtópicos de "introdução", "epidemiologia", "histórico", "conceitos gerais" ou "aspectos gerais" quando eles não forem diretamente úteis para prova, diagnóstico, conduta, mecanismo, classificação, fator de risco, complicação ou pegadinha.
+Se uma informação contextual puder ser explicada em 1 ou 2 frases dentro de outro subtópico, NÃO crie um subtópico próprio para ela.
+Prefira menos subtópicos, porém mais fortes e cobradores, a muitos subtópicos pequenos.
+Só mantenha epidemiologia, definição ampla ou introdução quando isso gerar cobrança real de prova ou mudar conduta/raciocínio.
+
 COMO CALIBRAR O TAMANHO DE UM SUBTÓPICO:
 Cada subtópico deve corresponder a um bloco de conteúdo que, no material original, ocupa
 aproximadamente 3 a 10 linhas (ou 1 a 2 parágrafos curtos).
@@ -581,28 +588,31 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
+  const plan = Array.isArray(questionPlan) && questionPlan.length
+    ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
+    : subtopicsArr.map(() => 2);
+  const totalQuestions = plan.reduce((acc, n) => acc + n, 0);
 
   return `Você é um examinador de residência médica criando questões de fixação para "${topicTitle}".
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
-SUBTÓPICOS DA AULA (use como mapa de cobertura, não como lista mecânica de tarefas):
-${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+SUBTÓPICOS DA AULA E QUANTIDADE OBRIGATÓRIA:
+${subtopicsArr.map((s, i) => `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
+
+TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.
 
 REGRA DE FIXAÇÃO (CRÍTICA):
-- Gere questões para a AULA COMO UM TODO, usando os subtópicos apenas como referência de organização.
-- A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo..
+- Gere no mínimo 2 questões por subtópico, seguindo exatamente a quantidade indicada acima.
+- A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
 - Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.
-- Dê mais questões aos blocos de maior peso, maior densidade, maior chance de prova, maior risco de confusão ou maior número de contrastes importantes.
-- NÃO force o mesmo número de questões por subtópico.
-- NÃO há mínimo obrigatório por subtópico; um subtópico pode ficar sem questão se a cobrança seria redundante.
-- Um subtópico pode ter mais de uma questão quando houver ângulos realmente diferentes e úteis.
+- Subtópicos maiores, mais importantes, mais densos ou com mais contrastes recebem 3 ou 4 questões.
+- Cada subtópico deve ter questões suficientes para revisar seus conceitos centrais sem virar repetição.
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
 - É proibido criar duas questões que testem praticamente a mesma ideia, mesmo com enunciados, casos ou alternativas diferentes.
 - Se subtópicos vizinhos falarem do mesmo fenômeno, una mentalmente a cobrança e varie o eixo; não repita a pergunta.
 - Não crie questão sobre conteúdo que não apareceu na aula/material.
-- Escolha livremente a quantidade final de questões com foco em cobertura de alto rendimento e retenção, sem teto, piso fixo ou quota por subtópico.
-- Antes de finalizar, faça uma revisão mental: se a bateria ficou curta demais para revisar bem a aula, acrescente questões sobre eixos ainda descobertos; se houver repetição conceitual, remova ou reformule.
+- Antes de finalizar, confira se cada subtópico recebeu exatamente a quantidade pedida e se não há repetição conceitual.
 
 ${REGRAS_ENUNCIADO}
 ${REGRAS_ALTERNATIVAS}
@@ -616,8 +626,9 @@ ${TEMPLATE_QUESTAO(alts)}
 Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
 ## Questão 1.1
 ## Questão 1.2
+## Questão 1.3
 ## Questão 2.1
-Pode haver saltos, subtópicos sem questão e subtópicos com várias questões.
+Não pule subtópicos. Não crie IDs fora do plano.
 
 ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
