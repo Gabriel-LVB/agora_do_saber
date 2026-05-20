@@ -208,12 +208,19 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
 
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
+  const expectedSubtopics = Math.max(1, Number(s.numSubtopics) || 1);
+  const expectedQPerSub = Math.max(1, Number(s.qPerSub) || 1);
+  const expectedTotal = expectedSubtopics * expectedQPerSub;
 
   const estruturaInst = autoMode
     ? `
 ESTRUTURA (modo automático):
 Quando uma lista de subtópicos obrigatórios for fornecida, ela substitui esta seção.
-Se NÃO houver lista obrigatória, defina uma estrutura completa para revisão.
+Se NÃO houver lista obrigatória, defina mentalmente ${expectedSubtopics} eixos/subtópicos de cobrança para este tópico.
+MODO AUTOMÁTICO NÃO SIGNIFICA QUANTIDADE LIVRE:
+- Gere EXATAMENTE ${expectedTotal} questões no total
+- Distribua como ${expectedQPerSub} questão(ões) por eixo/subtópico
+- NÃO gere apenas uma questão e NÃO pare antes de completar ${expectedTotal}
 FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico.
 Critérios:
 - Use subtópicos suficientes para cobrir os blocos reais de estudo
@@ -222,9 +229,9 @@ Critérios:
 - Organize do conceito mais fundamental ao mais específico dentro de cada tópico`
     : `
 ESTRUTURA OBRIGATÓRIA:
-- EXATAMENTE ${s.numSubtopics} subtópicos
-- EXATAMENTE ${s.qPerSub} questão por subtópico
-- Total: EXATAMENTE ${s.numSubtopics * s.qPerSub} questões
+- EXATAMENTE ${expectedSubtopics} subtópicos
+- EXATAMENTE ${expectedQPerSub} questão por subtópico
+- Total: EXATAMENTE ${expectedTotal} questões
 - Ordem: do conceito mais fundamental ao mais específico`;
 
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
@@ -314,6 +321,7 @@ REGRAS:
 
 export const buildExternalPrompt = (s) => {
   const na   = s.numAlternatives || 5;
+  const qPerSub = Math.max(1, Number(s.qPerSub) || 1);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -331,9 +339,9 @@ Responda APENAS o sumário. Aguarde a confirmação antes de gerar questões.`;
 
   const parte2 = s.autoMode
     ? `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere 1 questão por subtópico (total = número de subtópicos daquele tópico).`
+Para cada tópico gere ${qPerSub} questão(ões) por subtópico (total = subtópicos daquele tópico × ${qPerSub}).`
     : `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere ${s.numSubtopics * s.qPerSub} questões (${s.numSubtopics} subtópicos × ${s.qPerSub} por subtópico).`;
+Para cada tópico gere ${s.numSubtopics * qPerSub} questões (${s.numSubtopics} subtópicos × ${qPerSub} por subtópico).`;
 
   return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]
 
@@ -639,7 +647,7 @@ Gere a bateria de fixação completa sem interromper.`;
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
 
-export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lessonText = '', previousQuestions = '') => {
+export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lessonText = '', previousQuestions = '', questionPlan = null) => {
   const na = s.numAlternatives || 5;
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
@@ -647,21 +655,33 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
 
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+  const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
+  const plan = Array.isArray(questionPlan) && questionPlan.length
+    ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
+    : subtopicsArr.map(() => 2);
+  const totalQuestions = plan.reduce((acc, n) => acc + n, 0);
 
   return `Você é o Oráculo de Medicina da Ágora do Saber, gerando uma bateria de revisão sobre "${topicTitle}".
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
-ESTRUTURA:
-${subtopics.map((sub, i) => `- Subtópico ${i + 1}: "${sub}" → 1 questão`).join('\n')}
-Total: EXATAMENTE ${subtopics.length} questões, uma por subtópico, na ordem acima.
+ESTRUTURA E QUANTIDADE OBRIGATÓRIA:
+${subtopicsArr.map((sub, i) => `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
+Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.
+
+REGRA DA BATERIA EXTRA:
+- Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.
+- Subtópicos maiores, mais densos, mais importantes ou com mais contrastes recebem 3 ou 4 questões, conforme indicado acima.
+- A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
+- Não repita a mesma cobrança com palavras diferentes.
+- Não pule subtópicos e não crie questões fora do plano.
 
 ${REGRAS_ENUNCIADO}
 ${REGRAS_ALTERNATIVAS}
 ${REGRAS_EXPLICACAO}
 ${TEMPLATE_QUESTAO(alts)}
 
-Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 2.1...).
+Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).
 ${lessonText ? `\nCONTEXTO DA AULA/EXPLICAÇÕES (base obrigatória das questões):\n${lessonText.substring(0, 12000)}` : ''}
 ${previousQuestions ? `\nQUESTÕES ANTERIORES (faça algo ligeiramente diferente, sem repetir a mesma ideia):\n${previousQuestions.substring(0, 8000)}` : ''}
 Gere TODAS as questões sem interromper.`;

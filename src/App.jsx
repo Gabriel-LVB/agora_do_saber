@@ -1638,6 +1638,8 @@ const QuestionView = ({
   subtopics=[],
   topicStyle=null, onTopicStyleChange=null,
   topicType=null,
+  questionCountPerSub=1,
+  numAlternatives=5,
   onAddToReview=null,
   onReviewErrorNotebook=null,
   onOpenErrorReviewResult=null,
@@ -1952,6 +1954,34 @@ const QuestionView = ({
       {/* ── Seletores de estilo/tipo — aparecem abaixo dos subtópicos, antes de gerar ── */}
       {!isGenerating&&questions.length===0&&onGenerate&&onTopicStyleChange&&(
         <div className={`mb-6 p-4 rounded-xl border space-y-4 ${dm?'bg-gray-800/50 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+          {/* Quantidade */}
+          <div>
+            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Configuração das questões</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={`block text-[11px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Questões/Subtópico</label>
+                <input type="number" min="1" max="10" value={questionCountPerSub || 1}
+                  onChange={e=>{
+                    const v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1));
+                    onTopicStyleChange(v, 'qPerSub');
+                  }}
+                  className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+              </div>
+              {['direct','vof','cespe'].includes(topicType || 'direct') && (
+                <div>
+                  <label className={`block text-[11px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Alternativas</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[4,5].map(n=>(
+                      <button key={n} type="button" onClick={()=>onTopicStyleChange(n, 'numAlternatives')}
+                        className={`h-[50px] rounded-xl border-2 text-xs font-bold transition-all ${Number(numAlternatives || 5)===n?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                        {n} (A-{'ABCDE'[n-1]})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           {/* Estilo do enunciado */}
           <div>
             <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
@@ -3505,15 +3535,42 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
           </button>
 
           {/* Estrutura */}
-          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 transition-opacity ${cfg.autoMode?'opacity-30 pointer-events-none':''}`}>
-            {[{l:'Tópicos',k:'numTopics',mn:1,mx:20},{l:'Subtóp./Tópico',k:'numSubtopics',mn:1,mx:30},{l:'Q./Subtópico',k:'qPerSub',mn:1,mx:10}].map(f=>(
-              <div key={f.k}>
-                <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
-                <input type="number" min={f.mn} max={f.mx} value={cfg[f.k]}
-                  onChange={e=>setCfg(p=>({...p,[f.k]:Math.max(f.mn,Math.min(f.mx,parseInt(e.target.value)||f.mn))}))}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Estrutura do sumário</p>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 transition-opacity ${cfg.autoMode?'opacity-30 pointer-events-none':''}`}>
+              {[{l:'Tópicos',k:'numTopics',mn:1,mx:20},{l:'Subtóp./Tópico',k:'numSubtopics',mn:1,mx:30}].map(f=>(
+                <div key={f.k}>
+                  <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
+                  <input type="number" min={f.mn} max={f.mx} value={cfg[f.k]}
+                    onChange={e=>setCfg(p=>({...p,[f.k]:Math.max(f.mn,Math.min(f.mx,parseInt(e.target.value)||f.mn))}))}
+                    className={`w-full p-3 rounded-lg border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Questões */}
+          <div>
+            <p className="text-xs font-bold uppercase opacity-50 mb-2">Questões</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Q./Subtópico</label>
+                <input type="number" min={1} max={10} value={cfg.qPerSub}
+                  onChange={e=>setCfg(p=>({...p,qPerSub:Math.max(1,Math.min(10,parseInt(e.target.value)||1))}))}
                   className={`w-full p-3 rounded-lg border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
               </div>
-            ))}
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(o=>(
+                    <button key={o.v} onClick={()=>setCfg(p=>({...p,numAlternatives:o.v}))}
+                      className={`h-[50px] rounded-lg border-2 text-xs font-bold transition-all ${cfg.numAlternatives===o.v?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Estilo */}
@@ -3523,19 +3580,6 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
               {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
                 <button key={o.k} onClick={()=>setCfg(p=>({...p,questionStyle:o.k}))}
                   className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
-                  {o.l}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Alternativas */}
-          <div>
-            <p className="text-xs font-bold uppercase opacity-50 mb-2">Alternativas</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[{v:4,l:'4 (A–D)'},{v:5,l:'5 (A–E)'}].map(o=>(
-                <button key={o.v} onClick={()=>setCfg(p=>({...p,numAlternatives:o.v}))}
-                  className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${cfg.numAlternatives===o.v?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
                   {o.l}
                 </button>
               ))}
@@ -6243,14 +6287,21 @@ export default function QuestionBankApp() {
 
     const topicStyle = clearedTopic.questionStyle || settingsRef.current.questionStyle || 'mixed';
     const subtopicsArr = clearedTopic.subtopics?.filter(s => s.length > 0) || [];
-    const qPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
-    const promptSubtopicCount = subtopicsArr.length > 0
+    const oracleAutoMode = settingsRef.current.autoMode || false;
+    const baseQPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
+    const rawPromptSubtopicCount = subtopicsArr.length > 0
       ? subtopicsArr.length
       : Math.max(1, parseInt(settingsRef.current.numSubtopics, 10) || 1);
+    const promptSubtopicCount = oracleAutoMode && subtopicsArr.length === 0
+      ? Math.max(SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic, rawPromptSubtopicCount)
+      : rawPromptSubtopicCount;
+    const qPerSub = oracleAutoMode && promptSubtopicCount === 1 && baseQPerSub === 1
+      ? 2
+      : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
     const subtopicsBlock = subtopicsArr.length > 0
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
-      : '';
+      : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
     const matInst = cleared.sourceMaterials
       ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
       : '';
@@ -6319,14 +6370,21 @@ export default function QuestionBankApp() {
     const topicStyle = topic.questionStyle || settingsRef.current.questionStyle || 'mixed';
 
     const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
-    const qPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
-    const promptSubtopicCount = subtopicsArr.length > 0
+    const oracleAutoMode = settingsRef.current.autoMode || false;
+    const baseQPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
+    const rawPromptSubtopicCount = subtopicsArr.length > 0
       ? subtopicsArr.length
       : Math.max(1, parseInt(settingsRef.current.numSubtopics, 10) || 1);
+    const promptSubtopicCount = oracleAutoMode && subtopicsArr.length === 0
+      ? Math.max(SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic, rawPromptSubtopicCount)
+      : rawPromptSubtopicCount;
+    const qPerSub = oracleAutoMode && promptSubtopicCount === 1 && baseQPerSub === 1
+      ? 2
+      : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
     const subtopicsBlock = subtopicsArr.length > 0
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
-      : '';
+      : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
 
     // Material base como instrução PRIORITÁRIA — vem antes de tudo no system prompt
     const matInst = cleared.sourceMaterials
@@ -7075,7 +7133,8 @@ export default function QuestionBankApp() {
     const subtopics = topic.subtopics || [];
 	      const lessonText = Object.values(topic.lessonSections || {}).map(sec => `${sec?.title || ''}\n${sec?.content || ''}`).join('\n\n');
 	      const previousQuestions = summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic));
-	      const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s, lessonText, previousQuestions);
+	      const questionPlan = buildAcademiaFixationPlan(subtopics, topic.lessonSections || {});
+	      const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s, lessonText, previousQuestions, questionPlan);
     const orderedKeys = getOrderedKeys();
     let extraText = '';
     for (const { k } of orderedKeys) {
@@ -8665,7 +8724,15 @@ export default function QuestionBankApp() {
               subtopics={activeTopic.subtopics||[]}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
               topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
+              questionCountPerSub={settings.qPerSub||1}
+              numAlternatives={settings.numAlternatives||5}
               onTopicStyleChange={activeSubject?.source==='gemini'?(val,kind)=>{
+                if (kind === 'qPerSub' || kind === 'numAlternatives') {
+                  const ns = {...settingsRef.current, [kind]:val};
+                  setSettings(ns);
+                  saveSettings(ns);
+                  return;
+                }
                 const field = kind==='type' ? 'questionTypes' : 'questionStyle';
                 const newVal = kind==='type' ? [val] : val;
                 const updated = {...activeSubject, topics: activeSubject.topics.map(t=>
@@ -8809,7 +8876,7 @@ export default function QuestionBankApp() {
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                     <div>
                       <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
-                      <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos, subtópicos e questões</p>
+                      <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos e subtópicos</p>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
                       <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
@@ -8817,7 +8884,7 @@ export default function QuestionBankApp() {
                   </button>
 
                   <div className={`grid grid-cols-2 gap-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
-                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:30},{l:'Questões/Subtópico',k:'qPerSub',mn:1,mx:10}].map(f=>(
+                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:30}].map(f=>(
                       <div key={f.k}>
                         <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
                         <input type="number" min={f.mn} max={f.mx} value={settings[f.k]}
@@ -8826,6 +8893,15 @@ export default function QuestionBankApp() {
                           className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                       </div>
                     ))}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
+                      <input type="number" min="1" max="10" value={settings.qPerSub}
+                        onChange={e=>setSettings({...settings,qPerSub:e.target.value})}
+                        onBlur={()=>{let v=parseInt(settings.qPerSub);if(isNaN(v)||v<1)v=1;if(v>10)v=10;const ns={...settings,qPerSub:v};setSettings(ns);saveSettings(ns);}}
+                        className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                    </div>
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
                       <select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}>
@@ -8834,9 +8910,11 @@ export default function QuestionBankApp() {
                       </select>
                     </div>
                   </div>
-                  {!settings.autoMode&&<p className={`text-xs mt-2 opacity-40`}>
-                    Total estimado: {(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões
-                  </p>}
+                  <p className={`text-xs mt-2 opacity-40`}>
+                    {settings.autoMode
+                      ? `O sumário fica automático; cada subtópico gerado terá ${settings.qPerSub||1} questão(ões).`
+                      : `Total estimado: ${(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões`}
+                  </p>
                 </div>
 
                 {/* Tipo e estilo das questões */}
