@@ -3655,7 +3655,7 @@ function AcademiaTopicView({
       if (blockTitleMatch) {
         const blockTitle = blockTitleMatch[1].trim().replace(/:$/, '');
         elements.push(
-          <h3 key={`h3-${i}`} className={`text-[15px] font-bold mt-2 mb-1 ${darkMode?'text-yellow-300':'text-yellow-700'}`}>
+          <h3 key={`h3-${i}`} className={`text-sm font-bold mt-2 mb-1 ${darkMode?'text-yellow-300':'text-yellow-700'}`}>
             {blockTitle}
           </h3>
         );
@@ -3703,7 +3703,7 @@ function AcademiaTopicView({
           items.push(mdLines[i].replace(/^\s*[-*•]\s/, '')); i++;
         }
         elements.push(
-          <ul key={`ul-${i}`} className={`list-disc ml-5 space-y-1 my-2 text-[16px] ${darkMode?'text-gray-300':'text-gray-700'}`}>
+          <ul key={`ul-${i}`} className={`list-disc ml-5 space-y-1 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
             {items.map((item, ii) => <li key={ii}>{parseHtmlText(item)}</li>)}
           </ul>
         );
@@ -3711,7 +3711,7 @@ function AcademiaTopicView({
       }
       if (!line.trim()) { elements.push(<div key={`sp-${i}`} className="h-2"/>); i++; continue; }
       elements.push(
-        <p key={`p-${i}`} className={`text-[16px] leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>
+        <p key={`p-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>
       );
       i++;
     }
