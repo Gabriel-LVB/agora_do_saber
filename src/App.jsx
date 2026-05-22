@@ -5,8 +5,11 @@ import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSn
 import {
   SYLLABUS_LIMITS,
   buildOracleQuestionPrompt,
+  buildOracleQuestionJsonPrompt,
   buildOracleSyllabusPrompt,
+  buildOracleSyllabusJsonPrompt,
   buildOracleSyllabusRevisePrompt,
+  buildOracleSyllabusJsonRevisePrompt,
   buildExternalPrompt,
   buildVqSyllabusPrompt,
   buildVqBlockPrompt,
@@ -15,9 +18,12 @@ import {
   buildAcademiaLessonPrompt,
   buildAcademiaFixationPrompt,
   buildAcademiaExtraBatteryPrompt,
+  buildHeroJourneyPackagePrompt,
 } from './agora_prompts.js';
+import { HERO_SYLLABUS, HERO_SYLLABUS_VERSION, buildHeroQueue, getHeroSyllabusStats } from './hero_syllabus.js';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
+import JourneyShell from './journey/JourneyShell.jsx';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
@@ -212,7 +218,110 @@ const cleanSyllabusSubtopic = (line = '') => cleanSyllabusLine(line)
   .replace(/^Subt[óo]pico\s*\d{0,3}\s*[:.)\-–—]?\s*/i, '')
   .trim();
 
+const extractLooseJson = (raw = '') => {
+  const text = String(raw || '').trim()
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  try { return JSON.parse(text); } catch(e) {}
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+  const arrStart = text.indexOf('[');
+  const arrEnd = text.lastIndexOf(']');
+  if (arrStart >= 0 && arrEnd > arrStart) return JSON.parse(text.slice(arrStart, arrEnd + 1));
+  throw new Error('ORACLE_JSON_INVALID');
+};
+
+const getLooseText = (obj = {}, keys = []) => {
+  for (const key of keys) {
+    const value = obj?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+};
+
+const toTextArray = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        return getLooseText(item, ['title', 'titulo', 'nome', 'name', 'text', 'texto']);
+      }
+      return '';
+    })
+    .filter(Boolean);
+};
+
+const normalizeSyllabusJsonObject = (raw, settings = {}) => {
+  const parsed = typeof raw === 'string' ? extractLooseJson(raw) : raw;
+  const sourceTopics = Array.isArray(parsed)
+    ? parsed
+    : (parsed?.topics || parsed?.topicos || parsed?.tópicos || parsed?.items || []);
+  if (!Array.isArray(sourceTopics) || !sourceTopics.length) throw new Error('ORACLE_JSON_EMPTY');
+
+  const manual = Object.prototype.hasOwnProperty.call(settings || {}, 'autoMode')
+    ? !settings.autoMode
+    : false;
+  const maxSubtopics = manual && Number(settings.numSubtopics)
+    ? Math.max(1, Number(settings.numSubtopics))
+    : 30;
+
+  const topics = sourceTopics.map((topic, topicIndex) => {
+    const title = getLooseText(topic, ['title', 'titulo', 'nome', 'name']) || `Tópico ${topicIndex + 1}`;
+    const sourceSubtopics = topic?.subtopics || topic?.subtopicos || topic?.subtópicos || topic?.items || [];
+    const subtopics = Array.isArray(sourceSubtopics) ? sourceSubtopics.map((sub, subIndex) => {
+      const subTitle = typeof sub === 'string'
+        ? sub.trim()
+        : getLooseText(sub, ['title', 'titulo', 'nome', 'name', 'text', 'texto']);
+      if (!subTitle) return null;
+      const atoms = typeof sub === 'object' && sub
+        ? toTextArray(sub.atoms || sub.atomicos || sub.microtopics || sub.microtopicos || sub.microtópicos || sub.points || sub.pontos || [])
+        : [];
+      return {
+        id: getLooseText(sub, ['id', 'codigo', 'code']) || `t${topicIndex + 1}_s${subIndex + 1}`,
+        title: subTitle,
+        atoms: [...new Set(atoms)].slice(0, 8),
+      };
+    }).filter(Boolean) : [];
+
+    return {
+      id: getLooseText(topic, ['id', 'codigo', 'code']) || `t${topicIndex + 1}`,
+      title,
+      rationale: getLooseText(topic, ['rationale', 'justificativa', 'motivo', 'descricao', 'descrição']),
+      subtopics: [...new Map(subtopics.map(sub => [sub.title.toLowerCase(), sub])).values()]
+        .slice(0, manual ? maxSubtopics : 80),
+    };
+  }).filter(topic => topic.subtopics.length);
+
+  if (!topics.length) throw new Error('ORACLE_JSON_EMPTY');
+
+  return {
+    subject: getLooseText(parsed, ['subject', 'assunto', 'title', 'titulo', 'nome']),
+    summary: getLooseText(parsed, ['summary', 'resumo', 'description', 'descricao', 'descrição']),
+    topics,
+  };
+};
+
+const parseJsonSyllabusTopics = (syllabusText) => {
+  try {
+    const normalized = normalizeSyllabusJsonObject(syllabusText);
+    return normalized.topics.map((topic, index) => ({
+      title: /^T[óo]pico\s*\d+/i.test(topic.title) ? topic.title : `Tópico ${index + 1}: ${topic.title}`,
+      subtopics: topic.subtopics.map(sub => sub.title),
+      subtopicDetails: topic.subtopics,
+      rationale: topic.rationale || '',
+    }));
+  } catch(e) {
+    return [];
+  }
+};
+
 const parseSyllabusTopics = (syllabusText) => {
+  const jsonTopics = parseJsonSyllabusTopics(syllabusText);
+  if (jsonTopics.length) return jsonTopics;
+
   const lines = (syllabusText || '').split('\n');
   const topics = [];
   let current = null;
@@ -493,8 +602,120 @@ const normalizeSyllabusByLimits = (syllabusText, source = 'oracle', settings = {
 const normalizeOracleSyllabus = (syllabusText, settings = {}) =>
   normalizeSyllabusByLimits(syllabusText, 'oracle', settings);
 
+const normalizeOracleSyllabusJson = (syllabusText, settings = {}) =>
+  JSON.stringify(normalizeSyllabusJsonObject(syllabusText, settings), null, 2);
+
+const ORACLE_JSON_FALLBACK_ERRORS = new Set([
+  'CONNECTION_ERROR',
+  'SERVER_OVERLOADED',
+  'ORACLE_JSON_INVALID',
+  'ORACLE_JSON_EMPTY',
+  'API_KEY_INVALID',
+]);
+
+const legacySyllabusTextToJson = (syllabusText, subjectTitle = '', settings = {}) => {
+  const normalizedText = normalizeOracleSyllabus(syllabusText, settings);
+  const topics = parseSyllabusTopics(normalizedText);
+  if (!topics.length) throw new Error('ORACLE_JSON_EMPTY');
+
+  return JSON.stringify({
+    subject: subjectTitle,
+    summary: '',
+    topics: topics.map((topic, topicIndex) => ({
+      id: `t${topicIndex + 1}`,
+      title: cleanTopicTitle(topic.title) || topic.title || `Tópico ${topicIndex + 1}`,
+      rationale: topic.rationale || '',
+      subtopics: [...new Set(topic.subtopics || [])].filter(Boolean).map((subtopic, subtopicIndex) => ({
+        id: `t${topicIndex + 1}_s${subtopicIndex + 1}`,
+        title: subtopic,
+        atoms: [],
+      })),
+    })).filter(topic => topic.subtopics.length),
+  }, null, 2);
+};
+
 const normalizeAcademiaSyllabus = (syllabusText, settings = {}) =>
   normalizeSyllabusByLimits(syllabusText, 'academia', settings);
+
+const OracleSyllabusPreview = ({ syllabus, darkMode }) => {
+  let data = null;
+  try { data = normalizeSyllabusJsonObject(syllabus); } catch(e) {}
+  if (!data) {
+    return (
+      <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>
+        {syllabus}
+      </div>
+    );
+  }
+
+  const topicCount = data.topics.length;
+  const subtopicCount = data.topics.reduce((acc, topic) => acc + topic.subtopics.length, 0);
+  const atomCount = data.topics.reduce((acc, topic) => acc + topic.subtopics.reduce((sum, sub) => sum + (sub.atoms || []).length, 0), 0);
+
+  return (
+    <div className={`w-full h-[46vh] p-5 rounded-2xl border overflow-y-auto ${darkMode?'bg-gray-900/70 border-gray-700 text-gray-100':'bg-yellow-50/50 border-yellow-200 text-gray-900'}`}>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide opacity-50">Sumário estruturado</p>
+          <h3 className="text-xl font-serif font-bold text-yellow-600">{data.subject || 'Estrutura do Oráculo'}</h3>
+          {data.summary && <p className="text-sm opacity-70 mt-1">{data.summary}</p>}
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {[
+            ['Tópicos', topicCount],
+            ['Subtópicos', subtopicCount],
+            ['Átomos', atomCount],
+          ].map(([label, value]) => (
+            <div key={label} className={`px-3 py-2 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-yellow-200'}`}>
+              <div className="text-lg font-black text-yellow-600">{value}</div>
+              <div className="text-[10px] font-bold uppercase opacity-50">{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {data.topics.map((topic, topicIndex) => (
+          <div key={topic.id || topicIndex} className={`rounded-2xl border overflow-hidden ${darkMode?'bg-gray-800/80 border-gray-700':'bg-white border-yellow-100 shadow-sm'}`}>
+            <div className={`px-4 py-3 border-b flex items-start justify-between gap-3 ${darkMode?'border-gray-700':'border-yellow-100'}`}>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase opacity-45">Tópico {topicIndex + 1}</p>
+                <h4 className="font-bold leading-snug">{topic.title}</h4>
+                {topic.rationale && <p className="text-xs opacity-60 mt-1">{topic.rationale}</p>}
+              </div>
+              <span className={`text-xs font-bold rounded-full px-3 py-1 shrink-0 ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>
+                {topic.subtopics.length} subtópicos
+              </span>
+            </div>
+            <div className="divide-y divide-gray-200/60 dark:divide-gray-700">
+              {topic.subtopics.map((sub, subIndex) => (
+                <div key={sub.id || `${topic.id}-${subIndex}`} className="px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${darkMode?'bg-gray-700 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>
+                      {subIndex + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold leading-snug">{sub.title}</p>
+                      {!!sub.atoms?.length && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {sub.atoms.map((atom, atomIndex) => (
+                            <span key={`${sub.id}-atom-${atomIndex}`} className={`text-[11px] rounded-full px-2 py-1 border ${darkMode?'bg-gray-900 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                              {atom}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const buildChunkedSyllabusMessage = ({ chunk, index, total, accumulated, subjectTitle, settings = {}, source = 'oracle' }) => {
   const limits = source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
@@ -717,11 +938,12 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
     systemInstruction:{parts:[{text:systemPrompt}]},
     generationConfig: {
       thinkingConfig: { thinkingBudget: opts.thinking ?? 0 },
+      ...(opts.responseMimeType ? {responseMimeType: opts.responseMimeType} : {}),
       ...(opts.maxTokens ? {maxOutputTokens: opts.maxTokens} : {}),
     },
   };
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs || 55000);
   try {
     const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
     clearTimeout(timeout);
@@ -1213,6 +1435,112 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
   return { questions, summary: '' };
 };
 
+const extractOracleJson = (raw = '') => {
+  const text = String(raw || '').trim()
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  try { return JSON.parse(text); } catch(e) {}
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    return JSON.parse(text.slice(start, end + 1));
+  }
+  const arrStart = text.indexOf('[');
+  const arrEnd = text.lastIndexOf(']');
+  if (arrStart >= 0 && arrEnd > arrStart) {
+    return JSON.parse(text.slice(arrStart, arrEnd + 1));
+  }
+  throw new Error('ORACLE_JSON_INVALID');
+};
+
+const normalizeOracleJsonQuestions = (raw, namespace = '') => {
+  const parsed = extractOracleJson(raw);
+  const sourceQuestions = Array.isArray(parsed)
+    ? parsed
+    : (parsed.questions || parsed.questoes || parsed.items || []);
+  if (!Array.isArray(sourceQuestions) || !sourceQuestions.length) {
+    throw new Error('ORACLE_JSON_EMPTY');
+  }
+  const readBool = (value) => value === true || value === 'true' || value === 'sim' || value === 'correta' || value === 1;
+
+  const questions = [];
+  sourceQuestions.forEach((q, idx) => {
+    if (!q || typeof q !== 'object') return;
+    const rawId = String(q.id || q.codigo || `${idx + 1}`).trim();
+    const id = namespace ? `${namespace}_${rawId}` : rawId;
+    const statement = String(q.statement || q.enunciado || q.prompt || q.question || '').trim();
+    if (statement.length < 5) return;
+
+    const rawOptions = q.options || q.alternatives || q.alternativas || [];
+    const type = String(q.type || q.tipo || '').toLowerCase();
+    const expectedAnswer = String(q.expectedAnswer || q.respostaEsperada || q.answerText || q.resposta || '').trim();
+    const explanation = cleanQuestionExplanation(String(q.explanation || q.explicacao || q.feedback || '').trim());
+
+    if (!Array.isArray(rawOptions) || rawOptions.length < 2) {
+      if (!expectedAnswer && !['open','essay','aberta','dissertativa'].includes(type)) return;
+      questions.push({
+        id,
+        statement,
+        options: [],
+        explanation,
+        expectedAnswer,
+        isOpen: true,
+        isEssay: ['essay','dissertativa'].includes(type),
+      });
+      return;
+    }
+
+    const normalizedOptions = rawOptions.slice(0, 5).map((opt, optIdx) => {
+      const letter = String(opt?.letter || opt?.letra || 'ABCDE'[optIdx] || '').trim().toUpperCase();
+      return {
+        letter,
+        text: String(opt?.text || opt?.texto || opt?.content || '').trim(),
+        isCorrect: readBool(opt?.isCorrect) || readBool(opt?.correta) || readBool(opt?.correct),
+        explanation: String(opt?.explanation || opt?.explicacao || opt?.feedback || '').trim(),
+      };
+    }).filter(opt => opt.text);
+
+    if (normalizedOptions.length < 2) return;
+
+    const correctLetter = String(q.correctLetter || q.gabarito || q.answer || q.respostaCorreta || '').trim().replace(/[^A-Ea-e]/g, '').slice(0, 1).toUpperCase();
+    const correctOption = normalizedOptions.find(opt => opt.isCorrect)
+      || normalizedOptions.find(opt => opt.letter === correctLetter)
+      || normalizedOptions[0];
+    if (!correctOption) return;
+
+    const seed = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const seededShuffle = (arr) => {
+      const a = [...arr];
+      let s = seed;
+      for (let i = a.length - 1; i > 0; i--) {
+        s = (s * 1664525 + 1013904223) & 0xffffffff;
+        const j = Math.abs(s) % (i + 1);
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+    const distractors = normalizedOptions.filter(opt => opt !== correctOption);
+    const shuffled = seededShuffle(distractors);
+    const correctPos = Math.abs(seed * 2654435761) % normalizedOptions.length;
+    shuffled.splice(correctPos, 0, correctOption);
+    const finalOptions = shuffled.slice(0, normalizedOptions.length).map((opt, optIdx) => ({
+      letter: 'ABCDE'[optIdx],
+      text: opt.text,
+      isCorrect: opt === correctOption || opt.text === correctOption.text,
+      explanation: opt.explanation,
+    }));
+
+    questions.push({ id, statement, options: finalOptions, explanation });
+  });
+
+  if (!questions.length) throw new Error('ORACLE_JSON_EMPTY');
+  return {
+    questions,
+    summary: String(parsed?.summary || parsed?.resumo || '').trim(),
+  };
+};
+
 // Carrega KaTeX uma vez para renderização de LaTeX
 let _katexLoaded = false;
 const ensureKatex = () => {
@@ -1649,6 +1977,7 @@ const QuestionView = ({
   onGenerateExtra=null,
   inReviewCount=0,
   displayMode='list',
+  isAdmin=false,
 }) => {
   const dm = darkMode;
   const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
@@ -1755,7 +2084,8 @@ const QuestionView = ({
         isInErrorNotebook={listHasId(errorNotebook, q.id)}
         onToggleErrorNotebook={onToggleErrorNotebook ? ()=>onToggleErrorNotebook(q.id) : undefined}
         apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
-        onOpenAnswer={onOpenAnswer}/>
+        onOpenAnswer={onOpenAnswer}
+        isAdmin={isAdmin}/>
     </div>
   );
   const renderCompletion = () => {
@@ -2651,7 +2981,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, isAdmin=false }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   useEffect(() => {
     setOptimisticNotebook(isInErrorNotebook);
@@ -2668,6 +2998,41 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && correctLetter === effectiveLetter;
   const explanation = cleanQuestionExplanation(question.explanation);
+  const useAdminOracleFeedback = isAdmin;
+  const getOptionExplanation = (opt) => {
+    const optionText = cleanQuestionExplanation(opt?.explanation || '');
+    if (optionText) return optionText;
+    return opt?.isCorrect
+      ? 'Esta é a alternativa correta.'
+      : 'Esta alternativa não é a melhor resposta para o caso.';
+  };
+  const shouldShowInlineOptionExplanation = (opt) =>
+    useAdminOracleFeedback && showResults && !isSkipped && (opt.isCorrect || (effectiveLetter === opt.letter && !opt.isCorrect));
+  const inlineOptionExplanationClass = (opt) => {
+    if (opt.isCorrect) {
+      return darkMode
+        ? 'border-green-500/40 bg-green-900/20 text-green-100'
+        : 'border-green-300 bg-green-50 text-green-900';
+    }
+    return darkMode
+      ? 'border-red-500/40 bg-red-900/20 text-red-100'
+      : 'border-red-300 bg-red-50 text-red-900';
+  };
+  const reviewOptionClass = (opt) => {
+    if (opt.isCorrect) {
+      return darkMode
+        ? 'border-green-500/40 bg-green-900/15 text-green-100'
+        : 'border-green-200 bg-green-50 text-green-950';
+    }
+    if (effectiveLetter === opt.letter && !opt.isCorrect) {
+      return darkMode
+        ? 'border-red-500/40 bg-red-900/15 text-red-100'
+        : 'border-red-200 bg-red-50 text-red-950';
+    }
+    return darkMode
+      ? 'border-gray-700 bg-gray-900/30 text-gray-300'
+      : 'border-gray-200 bg-white text-gray-700';
+  };
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
     if (!onToggleErrorNotebook) return;
@@ -2763,19 +3128,82 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               <div className="pt-1 flex-1 leading-snug text-sm md:text-base select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
             </>
           );
-          return canClick ? (
-            <button key={opt.letter} type="button" onClick={()=>handleAnswerClick(opt.letter)} className={cls}>
+          const optionNode = canClick ? (
+            <button type="button" onClick={()=>handleAnswerClick(opt.letter)} className={cls}>
               {content}
             </button>
           ) : (
-            <div key={opt.letter} className={`${cls} cursor-text select-text`} style={{userSelect:'text'}}>
+            <div className={`${cls} cursor-text select-text`} style={{userSelect:'text'}}>
               {content}
+            </div>
+          );
+          return (
+            <div key={opt.letter}>
+              {optionNode}
+              {shouldShowInlineOptionExplanation(opt) && (
+                <div
+                  className={`mt-2 rounded-lg border p-3 text-sm leading-relaxed select-text md:ml-12 ${inlineOptionExplanationClass(opt)}`}
+                  style={{userSelect:'text'}}
+                >
+                  {parseHtmlTextChat(getOptionExplanation(opt))}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
       )}
-      {showResults && (
+      {showResults && useAdminOracleFeedback && (
+        <div className="mt-4 space-y-3">
+          <div className={`rounded-xl border p-4 md:p-5 ${darkMode?'bg-gray-900/35 border-gray-700 text-gray-200':'bg-white border-gray-200 text-gray-800'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className={`font-bold flex items-center gap-2 uppercase text-sm ${darkMode?'text-yellow-300':'text-yellow-700'}`}><BookOpen className="w-4 h-4"/>Explicação</h4>
+              {isCorrect
+                ? <span className="text-xs text-green-600 font-bold">✓ Correto</span>
+                : isSkipped
+                  ? <span className="text-xs text-gray-400 font-bold">— Em branco</span>
+                  : <span className="text-xs text-red-500 font-bold">✗ Incorreto</span>
+              }
+            </div>
+            <div className="text-base leading-relaxed select-text" style={{userSelect:'text'}}>
+              {parseHtmlTextChat(explanation || 'Revise o raciocínio central da questão e compare com a alternativa correta.')}
+            </div>
+          </div>
+
+          <div className={`rounded-xl border p-4 md:p-5 ${darkMode?'bg-gray-900/35 border-gray-700 text-gray-200':'bg-white border-gray-200 text-gray-800'}`}>
+            <h4 className={`font-bold uppercase text-sm mb-3 ${darkMode?'text-gray-300':'text-gray-700'}`}>Alternativas</h4>
+            <div className="space-y-3">
+              {question.options.map(opt => (
+                <div key={`review-${opt.letter}`} className={`rounded-lg border p-3 md:p-4 ${reviewOptionClass(opt)}`}>
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-sm font-bold ${
+                      opt.isCorrect
+                        ? 'border-green-500 bg-green-500 text-white'
+                        : effectiveLetter === opt.letter && !opt.isCorrect
+                          ? 'border-red-500 bg-red-500 text-white'
+                          : darkMode
+                            ? 'border-gray-600 bg-gray-800 text-gray-300'
+                            : 'border-gray-200 bg-gray-100 text-gray-600'
+                    }`}>
+                      {opt.letter}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm md:text-base leading-snug font-semibold select-text" style={{userSelect:'text'}}>
+                        {parseHtmlTextChat(opt.text)}
+                      </div>
+                      <div className={`mt-2 text-sm leading-relaxed select-text ${darkMode?'text-gray-300':'text-gray-700'}`} style={{userSelect:'text'}}>
+                        {parseHtmlTextChat(getOptionExplanation(opt))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
+        </div>
+      )}
+      {showResults && !useAdminOracleFeedback && (
         <div className={`mt-4 p-4 md:p-5 rounded-xl border ${darkMode?'bg-yellow-900/20 border-yellow-800/50 text-gray-200':'bg-yellow-50 border-yellow-200 text-gray-800'}`}>
           <div className="flex items-center justify-between mb-3">
             <h4 className="font-bold text-yellow-600 flex items-center gap-2 uppercase text-sm"><BookOpen className="w-4 h-4"/>Sabedoria:</h4>
@@ -3470,6 +3898,16 @@ const ERROR_CONFIGS = {
     message: 'Não foi possível conectar ao Gemini.\n\nPossíveis causas:\n• Problema de internet\n• Gemini sobrecarregado (comum durante o dia)\n• Timeout na requisição\n\nTente novamente. Se o problema persistir durante o dia, tente à noite.',
     link: null,
   },
+  ORACLE_JSON_INVALID: {
+    title: 'JSON inválido do Oráculo',
+    message: 'A IA respondeu fora do formato JSON obrigatório. Tente gerar novamente; se repetir, reduza a quantidade de questões ou deixe o prompt extra mais direto.',
+    link: null,
+  },
+  ORACLE_JSON_EMPTY: {
+    title: 'JSON sem questões',
+    message: 'A IA retornou JSON, mas sem uma lista de questões válida. Tente gerar novamente ou ajuste o número de tópicos/subtópicos.',
+    link: null,
+  },
 };
 
 const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMode, children, isAlert=false, actionLabel, onAction, link }) => (
@@ -3990,6 +4428,503 @@ function AcademiaTopicView({
 
 // ─── FIM ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────
 
+const cleanHeroSkillQuestion = (text = '') => {
+  let clean = String(text || '').replace(/\s+/g, ' ').trim();
+  const badPrefix = /^(voc[eê]\s+teve\s+seguran[cç]a\s+para\s+fazer\s+esta\s+etapa:\s*)+/i;
+  clean = clean.replace(badPrefix, '').trim();
+  clean = clean.replace(/\?{2,}$/g, '?').trim();
+  clean = clean.replace(/\s+\?/g, '?');
+  return clean;
+};
+
+const clampNumber = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+
+const getHeroFsrsCard = (card = {}) => ({
+  stability:Math.max(0.1, Number(card.stability) || 0.4),
+  difficulty:clampNumber(card.difficulty || 5, 1, 10),
+  elapsedDays:card.lastReviewedAt ? Math.max(0, (Date.now() - Number(card.lastReviewedAt)) / 86400000) : 0,
+  reps:Number(card.reps) || 0,
+});
+
+const scheduleHeroFsrs = (card = {}, passed) => {
+  const now = Date.now();
+  const fsrs = getHeroFsrsCard(card);
+  const retrievability = fsrs.reps > 0
+    ? Math.pow(1 + fsrs.elapsedDays / (9 * fsrs.stability), -1)
+    : 0.9;
+  const difficulty = clampNumber(fsrs.difficulty + (passed ? -0.35 : 1.15), 1, 10);
+  const stability = passed
+    ? Math.max(1, fsrs.stability * (1 + (11 - difficulty) * 0.10 * (1.15 - retrievability + 0.25)))
+    : Math.max(0.1, fsrs.stability * 0.45);
+  const intervalDays = passed ? Math.max(1, Math.round(stability)) : 10 / 1440;
+  return {
+    stability,
+    difficulty,
+    retrievability:Math.round(retrievability * 1000) / 1000,
+    intervalDays,
+    dueAt:now + intervalDays * 86400000,
+    lastReviewedAt:now,
+    reps:fsrs.reps + 1,
+    state:passed ? 'review' : 'learning',
+  };
+};
+
+function HeroJourneyView({ darkMode, heroState, heroQueue, heroStats, heroBackfillRun, onBack, onStartJourney, onHeroAnswer, onHeroSkillFeedback, onHeroContinue, onHeroFlashcardReview, isStarting }) {
+  const dm = darkMode;
+  const [revealedHeroCardId, setRevealedHeroCardId] = useState(null);
+  const [heroStudyTab, setHeroStudyTab] = useState('questions');
+  const logs = Array.isArray(heroState?.syncLogs) ? heroState.syncLogs : [];
+  const session = heroState?.todaySession || null;
+  const generated = heroState?.generated || {};
+  const activeConceptId = session?.currentConceptId || heroQueue[0]?.id || null;
+  const nextConcept = heroQueue.find(item => item.id === activeConceptId)
+    || (activeConceptId && generated.packets?.[activeConceptId]
+      ? { id:activeConceptId, title:generated.packets[activeConceptId].title, areaTitle:generated.packets[activeConceptId].areaTitle, topicTitle:generated.packets[activeConceptId].topicTitle, score:0, reason:'sessão atual' }
+      : null)
+    || heroQueue[0]
+    || null;
+  const generatedCount = Object.keys(generated.packets || {}).length;
+  const stockReadyCount = heroQueue.slice(0, 10).filter(item => generated.packets?.[item.id]).length;
+  const activePackage = nextConcept ? generated.packets?.[nextConcept.id] : null;
+  const activeQuestions = Array.isArray(activePackage?.questions) ? activePackage.questions : [];
+  const activeFlashcards = Array.isArray(activePackage?.flashcards) ? activePackage.flashcards : [];
+  const activeSkillCount = activeQuestions.reduce((acc, q) => acc + (Array.isArray(q.skills) ? q.skills.length : 0), 0);
+  const reviewCards = Object.values(heroState?.reviews?.cards || {}).filter(card => !card.gapType && card.source !== 'skill_gap');
+  const dueCards = reviewCards
+    .filter(card => !card.retired && (!card.dueAt || Number(card.dueAt) <= Date.now()))
+    .sort((a, b) => (Number(a.dueAt) || 0) - (Number(b.dueAt) || 0));
+  const currentReviewCard = dueCards[0] || null;
+  const packageAnswers = activePackage ? (heroState?.study?.answers?.[activePackage.id] || {}) : {};
+  const packageSkillFeedback = activePackage ? (heroState?.study?.skillFeedback?.[activePackage.id] || {}) : {};
+  const activeSkillIds = activeQuestions.flatMap(q => (q.skills || []).map(s => s.id));
+  const answeredAllQuestions = activeQuestions.length > 0 && activeQuestions.every(q => packageAnswers[q.id] !== undefined && packageAnswers[q.id] !== null);
+  const markedAllSkills = activeSkillIds.length > 0 && activeSkillIds.every(id => !!packageSkillFeedback[id]);
+  const packageComplete = answeredAllQuestions && markedAllSkills;
+  const weakSkillCount = activeSkillIds.filter(id => ['no','uncertain'].includes(packageSkillFeedback[id])).length;
+  const attentionSkillCount = activeSkillIds.filter(id => packageSkillFeedback[id] === 'attention').length;
+  const progressConcepts = heroState?.progress?.concepts || {};
+  const weakCount = Object.values(progressConcepts).filter(c => (c?.misses || 0) > 0 || (c?.uncertainty || 0) > 0).length;
+  const lastSync = heroState?.lastSyncAt ? new Date(heroState.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não iniciada';
+  const panel = dm ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200';
+  const mutedPanel = dm ? 'bg-gray-950/50 border-gray-800' : 'bg-gray-50 border-gray-100';
+  const optionClass = (isAnswered, isSelected, isCorrect) => {
+    if (!isAnswered) return dm ? 'border-gray-700 bg-gray-950/40 hover:border-yellow-700 hover:bg-gray-800' : 'border-gray-200 bg-white hover:border-yellow-400 hover:bg-yellow-50';
+    if (isCorrect) return dm ? 'border-green-700 bg-green-900/25 text-green-200' : 'border-green-500 bg-green-50 text-green-800';
+    if (isSelected) return dm ? 'border-red-800 bg-red-900/25 text-red-200' : 'border-red-400 bg-red-50 text-red-800';
+    return dm ? 'border-gray-800 bg-gray-950/40 text-gray-500' : 'border-gray-100 bg-gray-50 text-gray-400';
+  };
+  const formatHeroSkillQuestion = (text = '') => {
+    const clean = cleanHeroSkillQuestion(text);
+    if (!clean) return 'Você sabe dizer qual parte do raciocínio te fez errar ou ficar inseguro?';
+    if (/^voc[eê](?:\s|$)/i.test(clean)) return clean.endsWith('?') ? clean : `${clean}?`;
+    return `Você sabia ou foi capaz de fazer isto: ${clean.replace(/\.$/, '')}?`;
+  };
+  const skillOptions = [
+    { value:'yes', label:'Sim' },
+    { value:'uncertain', label:'Incerteza' },
+    { value:'attention', label:'Desatenção' },
+    { value:'no', label:'Não' },
+  ];
+  const statCards = [
+    { label:'Áreas', value:heroStats.areaCount, hint:'grandes grupos' },
+    { label:'Estoque', value:`${stockReadyCount}/10`, hint:'pacotes próximos' },
+    { label:'Cards', value:dueCards.length, hint:'conceitos vencidos' },
+    { label:'Fila', value:heroQueue.length, hint:'priorizados agora' },
+  ];
+  const topAreas = HERO_SYLLABUS.slice(0, 8);
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <section className="app-hero rounded-2xl p-5 md:p-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <button onClick={onBack} className={`flex items-center gap-2 mb-4 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+              <ArrowLeft className="w-4 h-4"/>Início
+            </button>
+            <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Admin · piloto automático</p>
+            <h2 className="text-3xl md:text-4xl font-serif font-bold text-yellow-600 leading-tight">Jornada do Herói</h2>
+            <p className={`mt-3 max-w-2xl text-sm md:text-base ${dm?'text-gray-400':'text-gray-600'}`}>
+              Painel adaptativo para decidir o próximo conceito sem escolher assunto manualmente. O mapa da medicina fica por baixo; aqui aparece só a fila viva.
+            </p>
+          </div>
+          <button onClick={onStartJourney} disabled={isStarting}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-yellow-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-yellow-700 disabled:opacity-40">
+            {isStarting ? <Spinner className="w-4 h-4"/> : <Flame className="w-4 h-4"/>}
+            {session?.startedAt ? 'Continuar Jornada' : 'Iniciar Jornada'}
+          </button>
+        </div>
+        {heroBackfillRun?.running&&(
+          <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${dm?'border-yellow-900/50 bg-yellow-950/20 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="font-bold">Produzindo estoque da Jornada</span>
+              <span className="font-bold">{heroBackfillRun.current}/{heroBackfillRun.total}</span>
+            </div>
+            {heroBackfillRun.currentTitle&&<p className="mt-1 text-xs opacity-80">{heroBackfillRun.currentTitle}</p>}
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {statCards.map(card=>(
+          <div key={card.label} className={`rounded-xl border p-4 ${panel}`}>
+            <p className="text-2xl font-serif font-bold text-yellow-600">{card.value}</p>
+            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{card.label}</p>
+            <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>{card.hint}</p>
+          </div>
+        ))}
+      </div>
+
+      {currentReviewCard&&(
+        <section className={`rounded-2xl border p-5 md:p-6 ${panel}`}>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Flashcard em revisão</p>
+              <h3 className="text-2xl font-serif font-bold text-yellow-600">{currentReviewCard.topicTitle || currentReviewCard.areaTitle || 'Jornada'}</h3>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}>
+              {dueCards.length} vencido{dueCards.length!==1?'s':''}
+            </span>
+          </div>
+          <div className={`mx-auto max-w-3xl rounded-2xl border p-6 md:p-8 text-center ${mutedPanel}`}>
+            <p className={`text-xs font-bold uppercase tracking-widest mb-5 ${dm?'text-gray-500':'text-gray-400'}`}>Frente</p>
+            <p className="text-xl md:text-2xl font-bold leading-relaxed">{currentReviewCard.front}</p>
+            {revealedHeroCardId===currentReviewCard.id ? (
+              <div className="mt-5 space-y-4">
+                <div className={`rounded-xl border p-5 text-left ${dm?'border-gray-800 bg-gray-950/50':'border-gray-100 bg-white'}`}>
+                  <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Resposta</p>
+                  <p className="text-sm leading-relaxed">{currentReviewCard.back}</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button onClick={()=>{setRevealedHeroCardId(null);onHeroFlashcardReview?.(currentReviewCard, true);}}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-600 bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-700">
+                    <CheckIcon className="w-4 h-4"/>Acertei
+                  </button>
+                  <button onClick={()=>{setRevealedHeroCardId(null);onHeroFlashcardReview?.(currentReviewCard, false);}}
+                    className={`inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold transition-colors ${dm?'border-red-800 text-red-300 hover:bg-red-900/20':'border-red-300 text-red-700 hover:bg-red-50'}`}>
+                    <XCircle className="w-4 h-4"/>Errei
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={()=>setRevealedHeroCardId(currentReviewCard.id)}
+                className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700">
+                <BookOpen className="w-4 h-4"/>Mostrar resposta
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {activePackage&&(
+        <section className={`rounded-2xl border p-5 md:p-6 ${panel}`}>
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Missão atual</p>
+              <h3 className="text-2xl font-serif font-bold text-yellow-600">{packageComplete ? (activePackage.title || 'Capítulo concluído') : 'Capítulo atual'}</h3>
+              <p className={`mt-1 text-sm ${dm?'text-gray-500':'text-gray-500'}`}>A Jornada escolheu o alvo. O nome do tópico fica oculto para não entregar pista.</p>
+              {packageComplete&&activePackage.internalFocus&&<p className={`mt-2 text-xs font-bold ${dm?'text-yellow-300':'text-yellow-700'}`}>Etapa interna: {activePackage.internalFocus}</p>}
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}>
+              {Object.keys(packageAnswers).length}/{activeQuestions.length} respondidas
+            </span>
+          </div>
+
+          <div className={`mb-5 grid grid-cols-2 rounded-xl border p-1 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-200 bg-gray-50'}`}>
+            {[
+              { key:'questions', label:'Questões', count:activeQuestions.length },
+              { key:'flashcards', label:'Flashcards', count:activeFlashcards.length },
+            ].map(tab=>(
+              <button key={tab.key} onClick={()=>setHeroStudyTab(tab.key)}
+                className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${heroStudyTab===tab.key
+                  ? 'bg-yellow-600 text-white'
+                  : dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-white'}`}>
+                {tab.label} <span className="opacity-70">({tab.count})</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-5">
+            {heroStudyTab==='questions'&&activeQuestions.map((q, qIndex)=>{
+              const selected = packageAnswers[q.id];
+              const answered = selected !== undefined && selected !== null;
+              const selectedIndex = Number(selected);
+              const correctIndex = Number(q.correctIndex) || 0;
+              const correct = answered && selectedIndex === correctIndex;
+              return (
+                <div key={q.id} className={`rounded-2xl border p-4 md:p-5 ${mutedPanel}`}>
+                  <div className="mb-4 flex items-start gap-3">
+                    <div className={`mt-0.5 h-8 w-8 flex-shrink-0 rounded-lg flex items-center justify-center text-sm font-bold ${dm?'bg-gray-800 text-yellow-400':'bg-white text-yellow-700'}`}>{qIndex + 1}</div>
+                    <p className="min-w-0 flex-1 text-sm md:text-base leading-relaxed font-medium">{q.statement}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {(q.options || []).map((opt, optIndex)=>{
+                      const isSelected = answered && selectedIndex === optIndex;
+                      const isCorrect = answered && correctIndex === optIndex;
+                      return (
+                        <button key={optIndex} onClick={()=>!answered&&onHeroAnswer?.(activePackage, q, optIndex)}
+                          disabled={answered}
+                          className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-bold transition-all ${optionClass(answered, isSelected, isCorrect)}`}>
+                          <span className="mr-2 opacity-60">{'ABCDE'[optIndex]})</span>{opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {answered&&(
+                    <div className="mt-5 space-y-5">
+                      <div className={`rounded-xl border p-4 ${correct ? (dm?'border-green-800 bg-green-950/20':'border-green-200 bg-green-50') : (dm?'border-red-900 bg-red-950/20':'border-red-200 bg-red-50')}`}>
+                        <p className={`text-xs font-bold uppercase mb-1 ${correct ? 'text-green-600' : 'text-red-500'}`}>{correct ? 'Correto' : 'Reforçar'}</p>
+                        <p className="text-sm leading-relaxed">{q.explanation}</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Habilidades</p>
+                        <div className="space-y-3">
+                          {(q.skills || []).map((skill, skillIndex)=>{
+                            const feedback = packageSkillFeedback[skill.id];
+                            return (
+                              <div key={skill.id} className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/40':'border-gray-100 bg-white'}`}>
+                                <p className="text-sm font-bold leading-relaxed mb-3">{skillIndex + 1}. {formatHeroSkillQuestion(skill.text)}</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  {skillOptions.map(opt=>(
+                                    <button key={opt.value} onClick={()=>onHeroSkillFeedback?.(activePackage, q, skill, opt.value)}
+                                      className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${feedback===opt.value
+                                        ? opt.value==='yes'
+                                          ? (dm?'border-green-700 bg-green-900/30 text-green-300':'border-green-400 bg-green-50 text-green-700')
+                                          : opt.value==='no'
+                                            ? (dm?'border-red-800 bg-red-900/30 text-red-300':'border-red-300 bg-red-50 text-red-700')
+                                            : (dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300':'border-yellow-400 bg-yellow-50 text-yellow-700')
+                                        : (dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-500 hover:bg-gray-50')}`}>
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {heroStudyTab==='flashcards'&&activeFlashcards.length>0&&(
+              <section className={`rounded-2xl border p-5 ${dm?'border-yellow-900/40 bg-yellow-950/10':'border-yellow-200 bg-yellow-50/70'}`}>
+                <div className="mb-4">
+                  <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-yellow-400':'text-yellow-700'}`}>Flashcards gerados</p>
+                  <h4 className="text-xl font-serif font-bold text-yellow-600">Modo Anki</h4>
+                  <p className={`mt-1 text-sm ${dm?'text-gray-400':'text-gray-600'}`}>Revele a resposta e marque Acertei/Errei. O intervalo é calculado pelo agendador FSRS da Jornada.</p>
+                </div>
+                <div className="space-y-4">
+                  {activeFlashcards.map((fc, fcIndex)=>{
+                    const cardId = `${activePackage.id}_${fc.id || fcIndex}`;
+                    const revealed = revealedHeroCardId === cardId;
+                    const reviewCard = {
+                      id:cardId,
+                      packetId:activePackage.id,
+                      conceptId:activePackage.conceptId,
+                      areaTitle:activePackage.areaTitle,
+                      topicTitle:activePackage.topicTitle,
+                      front:fc.front,
+                      back:fc.back,
+                      sourceSkillIds:fc.sourceSkillIds || [],
+                    };
+                    return (
+                      <div key={cardId} className={`mx-auto max-w-3xl rounded-2xl border p-6 text-center ${dm?'border-gray-800 bg-gray-950/40':'border-white bg-white'}`}>
+                        <p className={`text-xs font-bold uppercase tracking-widest mb-4 ${dm?'text-gray-500':'text-gray-400'}`}>Card {fcIndex + 1}</p>
+                        <p className="text-xl font-bold leading-relaxed">{fc.front}</p>
+                        {revealed ? (
+                          <div className="mt-4 space-y-3">
+                            <div className={`rounded-lg border p-4 text-left text-sm leading-relaxed ${dm?'border-gray-800 bg-gray-900':'border-gray-100 bg-gray-50'}`}>{fc.back}</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <button onClick={()=>{setRevealedHeroCardId(null);onHeroFlashcardReview?.(reviewCard, true);}}
+                                className="rounded-lg bg-green-600 px-4 py-3 text-sm font-bold text-white hover:bg-green-700">Acertei</button>
+                              <button onClick={()=>{setRevealedHeroCardId(null);onHeroFlashcardReview?.(reviewCard, false);}}
+                                className={`rounded-lg border px-4 py-3 text-sm font-bold ${dm?'border-red-800 text-red-300 hover:bg-red-900/20':'border-red-300 text-red-700 hover:bg-red-50'}`}>Errei</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button onClick={()=>setRevealedHeroCardId(cardId)}
+                            className="mt-5 rounded-lg bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700">Mostrar resposta</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+            {heroStudyTab==='flashcards'&&activeFlashcards.length===0&&(
+              <EmptyState darkMode={dm} icon={<BookOpen className="w-8 h-8"/>} title="Sem flashcards neste pacote" message="O controle de qualidade tenta exigir cards, mas este pacote ainda não tem cards válidos."/>
+            )}
+            {packageComplete&&(
+              <div className={`rounded-2xl border p-5 md:p-6 text-center ${weakSkillCount > 0 ? (dm?'border-yellow-800 bg-yellow-950/20':'border-yellow-300 bg-yellow-50') : (dm?'border-green-800 bg-green-950/20':'border-green-200 bg-green-50')}`}>
+                <CheckCircle2 className={`w-12 h-12 mx-auto mb-3 ${weakSkillCount > 0 ? 'text-yellow-600' : 'text-green-600'}`}/>
+                <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-500'}`}>Pacote concluído</p>
+                <h4 className="text-2xl font-serif font-bold text-yellow-600 mb-2">
+                  {weakSkillCount > 0 ? 'Reforço agendado' : 'Conceito bem encaminhado'}
+                </h4>
+                <p className={`text-sm max-w-xl mx-auto mb-5 ${dm?'text-gray-400':'text-gray-600'}`}>
+                  {weakSkillCount > 0
+                    ? `${weakSkillCount} habilidade${weakSkillCount!==1?'s':''} ficaram como lacuna/incerteza${attentionSkillCount?` e ${attentionSkillCount} como desatenção`:''}. A Jornada guarda isso e puxa reforço depois.`
+                    : 'Todas as habilidades foram marcadas como dominadas ou sem lacuna conceitual forte. A Jornada pode avançar.'}
+                </p>
+                <button onClick={()=>onHeroContinue?.(activePackage)} disabled={isStarting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-yellow-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-yellow-700 disabled:opacity-40">
+                  {isStarting ? <Spinner className="w-4 h-4"/> : <SkipForward className="w-4 h-4"/>}
+                  Continuar Jornada
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)] gap-6">
+        <section className={`rounded-2xl border p-5 ${panel}`}>
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Próximos assuntos</p>
+              <h3 className="text-2xl font-serif font-bold text-yellow-600">Fila adaptativa</h3>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}>{lastSync}</span>
+          </div>
+          <div className="space-y-3">
+            {heroQueue.slice(0, 8).map((item, index)=>(
+              <div key={item.id} className={`rounded-xl border p-4 ${mutedPanel}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`h-8 w-8 flex-shrink-0 rounded-lg flex items-center justify-center text-sm font-bold ${index===0?'bg-yellow-600 text-white':dm?'bg-gray-800 text-yellow-400':'bg-white text-yellow-700'}`}>{index + 1}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold leading-snug">{index===0 ? 'Missão atual' : `Missão futura ${index + 1}`}</p>
+                    <p className={`mt-1 text-xs ${dm?'text-gray-500':'text-gray-500'}`}>Alvo oculto até chegar a hora.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${dm?'bg-yellow-900/30 text-yellow-300':'bg-yellow-50 text-yellow-700'}`}>prioridade {item.score}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${dm?'bg-gray-800 text-gray-400':'bg-white text-gray-500'}`}>{item.reason}</span>
+                      {generated.packets?.[item.id]&&<span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${dm?'bg-green-900/30 text-green-300':'bg-green-50 text-green-700'}`}>pacote pronto</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {heroQueue.length===0&&(
+              <EmptyState darkMode={dm} icon={<Flame className="w-8 h-8"/>} title="Fila vazia" message="Inicie a Jornada para calcular os próximos conceitos do mapa médico."/>
+            )}
+          </div>
+        </section>
+
+        <aside className="space-y-6">
+          <section className={`rounded-2xl border p-5 ${panel}`}>
+            <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Sessão de hoje</p>
+            <h3 className="text-xl font-serif font-bold text-yellow-600 mb-4">{session?.startedAt ? 'Em andamento' : 'Pronta para iniciar'}</h3>
+            <div className={`rounded-xl border p-4 ${mutedPanel}`}>
+              <p className={`text-xs font-bold uppercase mb-1 ${dm?'text-gray-500':'text-gray-400'}`}>Próximo alvo</p>
+              <p className="font-bold">{nextConcept ? 'Selecionado automaticamente' : 'Inicie para calcular'}</p>
+              {nextConcept&&<p className={`mt-1 text-xs ${dm?'text-gray-500':'text-gray-500'}`}>Sem escolha manual e sem spoiler do próximo assunto.</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className={`rounded-xl border p-3 ${mutedPanel}`}>
+                <p className="text-2xl font-serif font-bold text-red-500">{weakCount}</p>
+                <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>fracos</p>
+              </div>
+              <div className={`rounded-xl border p-3 ${mutedPanel}`}>
+                <p className="text-2xl font-serif font-bold text-green-500">{generatedCount}</p>
+                <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>pacotes</p>
+              </div>
+            </div>
+          </section>
+
+          {activePackage&&(
+            <section className={`rounded-2xl border p-5 ${panel}`}>
+              <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Pacote atual</p>
+              <h3 className="text-xl font-serif font-bold text-yellow-600 mb-4">{packageComplete ? (activePackage.title || 'Pacote concluído') : 'Pacote atual'}</h3>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className={`rounded-xl border p-3 text-center ${mutedPanel}`}>
+                  <p className="font-serif text-xl font-bold text-yellow-600">{activeQuestions.length}</p>
+                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>questões</p>
+                </div>
+                <div className={`rounded-xl border p-3 text-center ${mutedPanel}`}>
+                  <p className="font-serif text-xl font-bold text-yellow-600">{activeSkillCount}</p>
+                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>habilidades</p>
+                </div>
+                <div className={`rounded-xl border p-3 text-center ${mutedPanel}`}>
+                  <p className="font-serif text-xl font-bold text-yellow-600">{activeFlashcards.length}</p>
+                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>cards</p>
+                </div>
+              </div>
+              {activeQuestions[0]&&(
+                <div className={`rounded-xl border p-4 ${mutedPanel}`}>
+                  <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Primeira questão</p>
+                  <p className="text-sm leading-relaxed">{activeQuestions[0].statement}</p>
+                </div>
+              )}
+            </section>
+          )}
+
+          <section className={`rounded-2xl border p-5 ${panel}`}>
+            <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Mapa inicial</p>
+            <div className="space-y-2">
+              {topAreas.map(area=>(
+                <div key={area.id} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${mutedPanel}`}>
+                  <span className="text-sm font-bold truncate">{area.title}</span>
+                  <span className={`text-xs font-bold ${dm?'text-gray-500':'text-gray-400'}`}>{(area.topics||[]).length} tópicos</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className={`rounded-2xl border p-5 ${panel}`}>
+            <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Logs</p>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {logs.slice(0, 8).map(log=>(
+                <div key={log.id} className={`rounded-xl border p-3 text-sm ${mutedPanel}`}>
+                  <p className="font-bold">{log.message}</p>
+                  <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>{new Date(log.at).toLocaleString('pt-BR')}</p>
+                </div>
+              ))}
+              {logs.length===0&&<p className={`text-sm italic ${dm?'text-gray-500':'text-gray-500'}`}>Nenhum log ainda.</p>}
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function HeroJourneyResetView({ darkMode, onBack }) {
+  const panel = darkMode ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-200 text-gray-900';
+  const muted = darkMode ? 'text-gray-400' : 'text-gray-600';
+  const soft = darkMode ? 'bg-gray-950/50 border-gray-800' : 'bg-gray-50 border-gray-100';
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      <section className={`rounded-2xl border p-5 md:p-7 ${panel}`}>
+        <button onClick={onBack} className={`flex items-center gap-2 mb-5 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+          <ArrowLeft className="w-4 h-4"/>Início
+        </button>
+        <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Admin · reconstrução</p>
+        <h2 className="text-3xl md:text-4xl font-serif font-bold text-yellow-600 leading-tight">Jornada do Herói</h2>
+        <p className={`mt-3 max-w-3xl text-sm md:text-base ${muted}`}>
+          A Jornada foi recuada para recomeçar do jeito certo: uma esteira simples usando as funções do site, com questão mestre por subtópico, habilidades no JSON e revisão por miniquestões.
+        </p>
+      </section>
+
+      <section className={`rounded-2xl border p-5 md:p-6 ${panel}`}>
+        <h3 className="text-2xl font-serif font-bold text-yellow-600 mb-4">Novo desenho</h3>
+        <div className="grid gap-3 md:grid-cols-2">
+          {[
+            ['1. Questão mestre', 'Uma ou duas questões clínicas completas abrem cada subtópico.'],
+            ['2. Habilidades', 'O JSON lista exatamente quais habilidades aquela questão cobra.'],
+            ['3. Autoavaliação', 'Botões: Facilmente, Sim, Dificilmente e Não.'],
+            ['4. Revisão', 'Cada habilidade agenda miniquestões diretas em intervalos diferentes.'],
+          ].map(([title, text])=>(
+            <div key={title} className={`rounded-xl border p-4 ${soft}`}>
+              <p className="font-bold">{title}</p>
+              <p className={`mt-1 text-sm ${muted}`}>{text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function QuestionBankApp() {
   const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
 
@@ -4200,10 +5135,19 @@ export default function QuestionBankApp() {
   const [cronLoading, setCronLoading]     = useState(false);
   const [curWeek, setCurWeek]             = useState(null);   // semana selecionada no cronograma
   const [cronStartDate, setCronStartDate] = useState(null);   // data de início do curso (salva no Firestore)
+  const [heroState, setHeroState] = useState({ syllabusVersion:HERO_SYLLABUS_VERSION, progress:{concepts:{}}, generated:{packets:{}}, study:{answers:{}, skillFeedback:{}}, reviews:{cards:{}}, syncLogs:[], lastSyncAt:null, queue:[] });
+  const [heroLoading, setHeroLoading] = useState(false);
+  const [heroBackfillRun, setHeroBackfillRun] = useState({ running:false, current:0, total:0, currentTitle:'' });
+  const heroStateRef = useRef(heroState);
+  const heroBackfillRef = useRef(false);
 
   useEffect(() => {
     reviewQueueRef.current = reviewQueue;
   }, [reviewQueue]);
+
+  useEffect(() => {
+    heroStateRef.current = heroState;
+  }, [heroState]);
 
   // Load videoaulas: carrega UMA VEZ no login e usa localStorage como cache entre sessões
   const videoaulasLoadedRef = useRef(false);
@@ -4505,15 +5449,238 @@ export default function QuestionBankApp() {
   const MS_DAY = 86400000;
 
   const saveReviewQueue = async (updated) => {
-    reviewQueueRef.current = updated;
-    setReviewQueue(updated);
-    // Persiste cada aulaId como doc separado
+    const previous = reviewQueueRef.current || {};
+    const compacted = {};
+    Object.entries(updated || {}).forEach(([aulaId, blocks]) => {
+      const nextBlocks = {};
+      Object.entries(blocks || {}).forEach(([blockId, qMap]) => {
+        if (qMap && Object.keys(qMap).length) nextBlocks[blockId] = qMap;
+      });
+      if (Object.keys(nextBlocks).length) compacted[aulaId] = nextBlocks;
+    });
+    const removedAulaIds = Object.keys(previous).filter(aulaId => !Object.prototype.hasOwnProperty.call(compacted, aulaId));
+    reviewQueueRef.current = compacted;
+    setReviewQueue(compacted);
     if (!user || user.isAnonymous) return;
-    // Calcular diffs para salvar apenas os que mudaram
-    for (const [aulaId, data] of Object.entries(updated)) {
-      try { await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data); } catch(e) {}
-    }
+    await Promise.all([
+      ...Object.entries(compacted).map(([aulaId, data]) =>
+        setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data).catch(console.error)
+      ),
+      ...removedAulaIds.map(aulaId =>
+        deleteDoc(doc(db, 'users', user.uid, 'vq_review', aulaId)).catch(console.error)
+      ),
+    ]);
   };
+
+  const directQuestionIds = (topic = {}) => new Set((topic.questions || []).map(q => String(q.id)));
+  const fixationQuestionIds = (topic = {}) => new Set(Object.values(topic.fixationQuestions || {}).flat().map(q => String(q.id)));
+  const extraBatteryQuestions = (block) => Array.isArray(block?.questions) ? block.questions : (Array.isArray(block) ? block : []);
+  const academiaExtraBlockId = (topicId, block, index) => `academia_extra_${topicId}_${block?.id || `legacy_${index}`}`;
+  const allTopicQuestionIds = (topic = {}) => new Set([
+    ...directQuestionIds(topic),
+    ...fixationQuestionIds(topic),
+    ...(topic.extraBattery || []).flatMap(block => extraBatteryQuestions(block).map(q => String(q.id))),
+  ]);
+
+  const pruneEmbeddedSpacedReview = (subject) => {
+    if (!subject || isFolderItem(subject)) return subject;
+    let changed = false;
+    const topics = (subject.topics || []).map(topic => {
+      const spacedReview = topic.spacedReview || {};
+      if (!Object.keys(spacedReview).length) return topic;
+      const validIds = allTopicQuestionIds(topic);
+      const nextSpacedReview = Object.fromEntries(
+        Object.entries(spacedReview).filter(([qId]) => validIds.has(String(qId)))
+      );
+      if (Object.keys(nextSpacedReview).length === Object.keys(spacedReview).length) return topic;
+      changed = true;
+      return { ...topic, spacedReview:nextSpacedReview };
+    });
+    return changed ? { ...subject, topics } : subject;
+  };
+
+  const pruneReviewBlockToQuestionIds = (queue, aulaId, blockId, validIds) => {
+    const block = queue?.[aulaId]?.[blockId];
+    if (!block) return { queue, changed:false };
+    const nextBlock = Object.fromEntries(
+      Object.entries(block).filter(([qId]) => validIds.has(String(qId)))
+    );
+    if (Object.keys(nextBlock).length === Object.keys(block).length) return { queue, changed:false };
+    const nextAula = { ...(queue[aulaId] || {}) };
+    if (Object.keys(nextBlock).length) nextAula[blockId] = nextBlock;
+    else delete nextAula[blockId];
+    return { queue:{ ...queue, [aulaId]:nextAula }, changed:true };
+  };
+
+  const removeReviewBlock = (queue, aulaId, blockId) => {
+    if (!queue?.[aulaId]?.[blockId]) return { queue, changed:false };
+    const nextAula = { ...(queue[aulaId] || {}) };
+    delete nextAula[blockId];
+    return { queue:{ ...queue, [aulaId]:nextAula }, changed:true };
+  };
+
+  const pruneLibraryReviewQueueToCurrentSources = (queue) => {
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+    const libraryTargets = {};
+    const validAcademiaOrigin = (origin) => {
+      if (origin?.source !== 'academia') return true;
+      const sourceSubject = items.find(item =>
+        !isFolderItem(item) &&
+        item.source === 'academia' &&
+        String(item.id) === String(origin.subjectId)
+      );
+      return !!sourceSubject?.topics?.some(topic => String(topic.id) === String(origin.topicId));
+    };
+    const setTarget = (aulaId, blockId, ids) => {
+      if (!libraryTargets[aulaId]) libraryTargets[aulaId] = {};
+      libraryTargets[aulaId][blockId] = ids;
+    };
+
+    items.filter(item => item && !isFolderItem(item)).forEach(subject => {
+      const aulaId = `lib_${subject.id}`;
+      (subject.topics || []).forEach(topic => {
+        if (!validAcademiaOrigin(topic.origin)) return;
+        setTarget(aulaId, `topic_${topic.id}`, directQuestionIds(topic));
+        if (subject.source === 'academia') {
+          setTarget(aulaId, `academia_fix_${topic.id}`, fixationQuestionIds(topic));
+          (topic.extraBattery || []).forEach((block, index) => {
+            setTarget(
+              aulaId,
+              academiaExtraBlockId(topic.id, block, index),
+              new Set(extraBatteryQuestions(block).map(q => String(q.id)))
+            );
+          });
+        }
+      });
+    });
+
+    let changed = false;
+    const nextQueue = {};
+    Object.entries(queue || {}).forEach(([aulaId, blocks]) => {
+      if (!aulaId.startsWith('lib_')) {
+        nextQueue[aulaId] = blocks;
+        return;
+      }
+      const targets = libraryTargets[aulaId] || {};
+      const nextBlocks = {};
+      Object.entries(blocks || {}).forEach(([blockId, qMap]) => {
+        const validIds = targets[blockId];
+        if (!validIds) {
+          changed = true;
+          return;
+        }
+        const nextQMap = Object.fromEntries(
+          Object.entries(qMap || {}).filter(([qId]) => validIds.has(String(qId)))
+        );
+        if (Object.keys(nextQMap).length !== Object.keys(qMap || {}).length) changed = true;
+        if (Object.keys(nextQMap).length) nextBlocks[blockId] = nextQMap;
+      });
+      if (Object.keys(nextBlocks).length) nextQueue[aulaId] = nextBlocks;
+      else if (Object.keys(blocks || {}).length) changed = true;
+    });
+
+    return { queue:nextQueue, changed };
+  };
+
+  const pruneReviewQueueForSubjectChanges = async (previousSubjects = [], nextSubjects = []) => {
+    let queue = reviewQueueRef.current || {};
+    let changed = false;
+    const nextById = new Map(nextSubjects.filter(Boolean).map(s => [String(s.id), s]));
+    const mark = (result) => {
+      if (!result.changed) return;
+      queue = result.queue;
+      changed = true;
+    };
+
+    previousSubjects.filter(Boolean).forEach(previousSubject => {
+      if (isFolderItem(previousSubject)) return;
+      const aulaId = `lib_${previousSubject.id}`;
+      const nextSubject = nextById.get(String(previousSubject.id));
+      if (!nextSubject || isFolderItem(nextSubject)) {
+        if (queue[aulaId]) {
+          const { [aulaId]: _removed, ...rest } = queue;
+          queue = rest;
+          changed = true;
+        }
+        return;
+      }
+
+      const nextTopics = new Map((nextSubject.topics || []).map(t => [String(t.id), t]));
+      (previousSubject.topics || []).forEach(previousTopic => {
+        const nextTopic = nextTopics.get(String(previousTopic.id));
+        if (!nextTopic) {
+          mark(removeReviewBlock(queue, aulaId, `topic_${previousTopic.id}`));
+          mark(removeReviewBlock(queue, aulaId, `academia_fix_${previousTopic.id}`));
+          (previousTopic.extraBattery || []).forEach((block, index) => {
+            mark(removeReviewBlock(queue, aulaId, academiaExtraBlockId(previousTopic.id, block, index)));
+          });
+          return;
+        }
+
+        mark(pruneReviewBlockToQuestionIds(queue, aulaId, `topic_${previousTopic.id}`, directQuestionIds(nextTopic)));
+        mark(pruneReviewBlockToQuestionIds(queue, aulaId, `academia_fix_${previousTopic.id}`, fixationQuestionIds(nextTopic)));
+
+        const nextExtraBlocks = new Map((nextTopic.extraBattery || []).map((block, index) => [block?.id || `legacy_${index}`, { block, index }]));
+        (previousTopic.extraBattery || []).forEach((previousBlock, previousIndex) => {
+          const key = previousBlock?.id || `legacy_${previousIndex}`;
+          const blockId = academiaExtraBlockId(previousTopic.id, previousBlock, previousIndex);
+          const nextEntry = nextExtraBlocks.get(key);
+          if (!nextEntry) {
+            mark(removeReviewBlock(queue, aulaId, blockId));
+            return;
+          }
+          mark(pruneReviewBlockToQuestionIds(
+            queue,
+            aulaId,
+            blockId,
+            new Set(extraBatteryQuestions(nextEntry.block).map(q => String(q.id)))
+          ));
+        });
+      });
+    });
+
+    const currentSources = pruneLibraryReviewQueueToCurrentSources(queue);
+    if (currentSources.changed) {
+      queue = currentSources.queue;
+      changed = true;
+    }
+    if (changed) await saveReviewQueue(queue);
+  };
+
+  const pruneReviewQueueForVqBlockChange = async (aulaId, previousData, nextData) => {
+    let queue = reviewQueueRef.current || {};
+    let changed = false;
+    const previousBlocks = previousData?.blocks || {};
+    const nextBlocks = nextData?.blocks || {};
+    Object.entries(previousBlocks).forEach(([blockId, previousBlock]) => {
+      const nextBlock = nextBlocks[blockId];
+      if (!nextBlock) {
+        const result = removeReviewBlock(queue, aulaId, blockId);
+        if (result.changed) {
+          queue = result.queue;
+          changed = true;
+        }
+        return;
+      }
+      const result = pruneReviewBlockToQuestionIds(
+        queue,
+        aulaId,
+        blockId,
+        new Set((nextBlock.questions || []).map(q => String(q.id)))
+      );
+      if (result.changed) {
+        queue = result.queue;
+        changed = true;
+      }
+    });
+    if (changed) await saveReviewQueue(queue);
+  };
+
+  useEffect(() => {
+    if (!user || !library.length || !Object.keys(reviewQueueRef.current || {}).length) return;
+    const result = pruneLibraryReviewQueueToCurrentSources(reviewQueueRef.current || {});
+    if (result.changed) saveReviewQueue(result.queue);
+  }, [user?.uid, library.length, reviewLoaded, reviewQueue]); // eslint-disable-line
 
   // Adiciona questões selecionadas à fila de revisão
   const addToReview = async (aulaId, blockId, selectedQIds, questions, meta = {}) => {
@@ -4756,12 +5923,14 @@ export default function QuestionBankApp() {
   };
 
   const saveVqBlock = async (aulaId, data) => {
+    const previousData = vqBlocksRef.current?.[aulaId];
     const updated = { ...(vqBlocksRef.current || {}), [aulaId]: data };
     vqBlocksRef.current = updated;
     setVqBlocks(updated);
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), data);
     } catch(e) {}
+    await pruneReviewQueueForVqBlockChange(aulaId, previousData, data);
   };
 
   // Build stable Firestore document ID — tenta bunny_id primeiro, depois título sanitizado (legacy)
@@ -4825,6 +5994,7 @@ export default function QuestionBankApp() {
       if (view === 'academia-topic') { setView('subject'); return; }
       if (view === 'subject')      { setView('sub-library'); return; }
       if (view === 'sub-library')  { setView('library'); return; }
+      if (view === 'hero-journey') { setView('library'); return; }
       if (view === 'creator')      { setCreatorStep(1); setView('library'); return; }
       if (view === 'academia-creator') { setAcademiaCreatorStep(1); setView('library'); return; }
       setView('library');
@@ -5017,20 +6187,28 @@ export default function QuestionBankApp() {
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
   const updateSubject = async (s) => {
-    libraryRef.current = libraryRef.current.map(x=>x.id===s.id?s:x);
-    setLibrary(p=>p.map(x=>x.id===s.id?s:x));
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.map(x=>x.id===s.id?s:x)));
-    if (s.source === 'academia' || hasAcademiaOriginTopic(s)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    const cleanSubject = pruneEmbeddedSpacedReview(s);
+    const previous = libraryRef.current.find(x=>x.id===cleanSubject.id);
+    const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
+    libraryRef.current = nextLibrary;
+    setLibrary(p=>p.map(x=>x.id===cleanSubject.id?cleanSubject:x));
+    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',cleanSubject.id.toString()),cleanSubject).catch(console.error);
+    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
+    if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const updateLibraryItems = async (items) => {
-    const changed = new Map(items.map(item=>[item.id,item]));
-    const nextLibrary = sortLibraryItems(library.map(item=>changed.get(item.id)||item));
+    const cleanItems = items.map(pruneEmbeddedSpacedReview);
+    const changed = new Map(cleanItems.map(item=>[item.id,item]));
+    const currentLibrary = libraryRef.current?.length ? libraryRef.current : library;
+    const previousItems = cleanItems.map(item => currentLibrary.find(x => x.id === item.id)).filter(Boolean);
+    const nextLibrary = sortLibraryItems(currentLibrary.map(item=>changed.get(item.id)||item));
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
-    if(user&&!user.isAnonymous) await Promise.all(items.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
+    if(user&&!user.isAnonymous) await Promise.all(cleanItems.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
-    if (items.some(item => item.source === 'academia' || hasAcademiaOriginTopic(item))) scheduleAcademiaOracleMirrorSync(nextLibrary);
+    await pruneReviewQueueForSubjectChanges(previousItems, cleanItems);
+    if (cleanItems.some(item => item.source === 'academia' || hasAcademiaOriginTopic(item))) scheduleAcademiaOracleMirrorSync(nextLibrary);
   };
   const addSubject = async (s) => {
     let ns = s;
@@ -5049,10 +6227,12 @@ export default function QuestionBankApp() {
   const removeSubject = async (id) => {
     const removed = libraryRef.current.find(s=>s.id===id);
     if (isProtectedMirrorRootFolder(removed)) return;
-    libraryRef.current = libraryRef.current.filter(s=>s.id!==id);
+    const nextLibrary = libraryRef.current.filter(s=>s.id!==id);
+    libraryRef.current = nextLibrary;
     setLibrary(p=>p.filter(s=>s.id!==id));
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
+    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    await pruneReviewQueueForSubjectChanges(removed ? [removed] : [], []);
     if (removed?.source === 'academia' || hasAcademiaOriginTopic(removed)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const createLibraryFolder = async (source, title, parentFolderId = activeFolderId || null) => {
@@ -5605,11 +6785,10 @@ export default function QuestionBankApp() {
     if (!folder) return;
     if (isProtectedMirrorRootFolder(folder)) return;
     const folderIds = getFolderTreeIds(folder);
+    const removedSubjects = librarySubjects.filter(s => s.source === folder.source && folderIds.has(s.folderId));
     const idsToDelete = new Set([
       ...Array.from(folderIds),
-      ...librarySubjects
-        .filter(s => s.source === folder.source && folderIds.has(s.folderId))
-        .map(s => s.id),
+      ...removedSubjects.map(s => s.id),
     ]);
     const nextLibrary = library.filter(item => !idsToDelete.has(item.id));
     libraryRef.current = nextLibrary;
@@ -5625,6 +6804,7 @@ export default function QuestionBankApp() {
       setActiveTopicId(null);
       setView('sub-library');
     }
+    await pruneReviewQueueForSubjectChanges(removedSubjects, []);
   };
 
   const saveSettingsTimer = useRef(null);
@@ -5713,7 +6893,9 @@ export default function QuestionBankApp() {
   const getPrompt = (forAPI=false, areas=[]) => {
     const s = settingsRef.current;
     const focusBlock = getFocusInst(areas);
-    return buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
+    return isAdmin
+      ? buildOracleQuestionJsonPrompt(s, focusBlock, s.autoMode || false)
+      : buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
   };
 
   const getExternalPrompt = () => buildExternalPrompt(settingsRef.current);
@@ -5732,7 +6914,7 @@ export default function QuestionBankApp() {
     if(imageInputRef.current) imageInputRef.current.value='';
   };
 
-  // Wrapper que chama Gemini com rotação automática de chaves — para uso no ChatBox
+  // Wrapper que chama Gemini com rotação automática de chaves.
   const callWithRotation = async (prompt, sys) => {
     const orderedKeys = getOrderedKeys();
     let lastErr;
@@ -5743,9 +6925,9 @@ export default function QuestionBankApp() {
         return r;
       } catch(e) {
         lastErr = e;
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        // SERVER_OVERLOADED, CONNECTION_ERROR etc. — não tenta outra chave, só desperdiça
-        throw e;
+        if (e.message === 'API_KEY_MISSING') throw e;
+        await rotateKey();
+        continue;
       }
     }
     throw lastErr;
@@ -5758,6 +6940,685 @@ export default function QuestionBankApp() {
   };
   const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
   const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
+
+  const heroStats = getHeroSyllabusStats();
+  const heroQueue = buildHeroQueue(heroState.progress || {}, { limit:24 });
+  const HERO_STOCK_TARGET = 10;
+  const HERO_TOPIC_PACKAGES_PER_PASS = 3;
+
+  const compactHeroQueue = (queue = []) => queue.map(item => ({
+    conceptId:item.id,
+    areaId:item.areaId,
+    topicId:item.topicId,
+    title:item.title,
+    areaTitle:item.areaTitle,
+    topicTitle:item.topicTitle,
+    score:item.score,
+    reason:item.reason,
+  }));
+
+  const pushHeroLog = (state, log) => ({
+    ...state,
+    syncLogs:[
+      { id:`hero_log_${log.at || Date.now()}_${Math.random().toString(36).slice(2, 7)}`, at:log.at || Date.now(), type:log.type || 'info', message:log.message },
+      ...(state.syncLogs || []),
+    ],
+  });
+
+  const persistHeroState = async (next, silent=false) => {
+    const normalized = {
+      syllabusVersion:HERO_SYLLABUS_VERSION,
+      progress:{ concepts:{...(next.progress?.concepts || {})} },
+      generated:{ packets:{...(next.generated?.packets || {})} },
+      study:{
+        answers:{...(next.study?.answers || {})},
+        skillFeedback:{...(next.study?.skillFeedback || {})},
+        completedPacketIds:Array.isArray(next.study?.completedPacketIds) ? next.study.completedPacketIds : [],
+      },
+      reviews:{...(next.reviews || {}), cards:{...(next.reviews?.cards || {})}},
+      syncLogs:Array.isArray(next.syncLogs) ? next.syncLogs.slice(0, 80) : [],
+      lastSyncAt:next.lastSyncAt || null,
+      queue:Array.isArray(next.queue) ? next.queue : [],
+      todaySession:next.todaySession || null,
+    };
+    heroStateRef.current = normalized;
+    setHeroState(normalized);
+    if (user) {
+      try { localStorage.setItem(`agora_hero_${user.uid || username || 'anon'}`, JSON.stringify(normalized)); } catch(e) {}
+    }
+    if (user && !user.isAnonymous && isAdmin) {
+      try { await setDoc(doc(db, 'users', user.uid, 'hero', 'state'), normalized, { merge:false }); }
+      catch(e) { if (!silent) addToast('Não consegui salvar a Jornada agora, mas mantive em cache local.', 'info', 4000); }
+    }
+  };
+
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setHeroState({ syllabusVersion:HERO_SYLLABUS_VERSION, progress:{concepts:{}}, generated:{packets:{}}, study:{answers:{}, skillFeedback:{}}, reviews:{cards:{}}, syncLogs:[], lastSyncAt:null, queue:[] });
+      return;
+    }
+    const cacheKey = `agora_hero_${user.uid || username || 'anon'}`;
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (cached?.syllabusVersion === HERO_SYLLABUS_VERSION) setHeroState({
+        syllabusVersion:HERO_SYLLABUS_VERSION,
+        progress:{ concepts:{...(cached.progress?.concepts || {})} },
+        generated:{ packets:{...(cached.generated?.packets || {})} },
+        study:{
+          answers:{...(cached.study?.answers || {})},
+          skillFeedback:{...(cached.study?.skillFeedback || {})},
+          completedPacketIds:Array.isArray(cached.study?.completedPacketIds) ? cached.study.completedPacketIds : [],
+        },
+        reviews:{...(cached.reviews || {}), cards:{...(cached.reviews?.cards || {})}},
+        syncLogs:Array.isArray(cached.syncLogs) ? cached.syncLogs : [],
+        lastSyncAt:cached.lastSyncAt || null,
+        queue:Array.isArray(cached.queue) ? cached.queue : [],
+        todaySession:cached.todaySession || null,
+      });
+    } catch(e) {}
+    if (user.isAnonymous) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid, 'hero', 'state'));
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          if (data.syllabusVersion !== HERO_SYLLABUS_VERSION) return;
+          const loaded = {
+            syllabusVersion:HERO_SYLLABUS_VERSION,
+            progress:{ concepts:{...(data.progress?.concepts || {})} },
+            generated:{ packets:{...(data.generated?.packets || {})} },
+            study:{
+              answers:{...(data.study?.answers || {})},
+              skillFeedback:{...(data.study?.skillFeedback || {})},
+              completedPacketIds:Array.isArray(data.study?.completedPacketIds) ? data.study.completedPacketIds : [],
+            },
+            reviews:{...(data.reviews || {}), cards:{...(data.reviews?.cards || {})}},
+            syncLogs:Array.isArray(data.syncLogs) ? data.syncLogs : [],
+            lastSyncAt:data.lastSyncAt || null,
+            queue:Array.isArray(data.queue) ? data.queue : [],
+            todaySession:data.todaySession || null,
+          };
+          heroStateRef.current = loaded;
+          setHeroState(loaded);
+          try { localStorage.setItem(cacheKey, JSON.stringify(loaded)); } catch(e) {}
+        }
+      } catch(e) {}
+    })();
+  }, [user?.uid, isAdmin]); // eslint-disable-line
+
+  const parseHeroJson = (raw = '') => {
+    const clean = String(raw || '')
+      .replace(/^```(?:json)?/i, '')
+      .replace(/```$/i, '')
+      .trim();
+    try { return JSON.parse(clean); } catch(e) {}
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(clean.slice(start, end + 1));
+    throw new Error('JSON_INVALID');
+  };
+
+  const heroTextFingerprint = (text = '') => String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const heroWordSet = (text = '') => new Set(
+    heroTextFingerprint(text)
+      .split(' ')
+      .filter(word => word.length > 3 && !['para','como','qual','quando','porque','sobre','entre','mais','menos','paciente'].includes(word))
+  );
+
+  const heroSimilarity = (a = '', b = '') => {
+    const left = heroWordSet(a);
+    const right = heroWordSet(b);
+    if (!left.size || !right.size) return 0;
+    let overlap = 0;
+    left.forEach(word => { if (right.has(word)) overlap += 1; });
+    return overlap / Math.min(left.size, right.size);
+  };
+
+  const normalizeHeroSkillQuestion = (text = '') => {
+    const clean = cleanHeroSkillQuestion(text);
+    if (/^voc[eê](?:\s|$)/i.test(clean)) return clean.endsWith('?') ? clean : `${clean}?`;
+    if (!clean) return '';
+    return `Você sabia ou foi capaz de fazer isto: ${clean.replace(/\.$/, '')}?`;
+  };
+
+  const assessHeroPackageQuality = (packet, concept, expectedQuestions = 3) => {
+    const issues = [];
+    const addIssue = (severity, message) => issues.push({ severity, message });
+    const questions = Array.isArray(packet?.questions) ? packet.questions : [];
+    const flashcards = Array.isArray(packet?.flashcards) ? packet.flashcards : [];
+    if (questions.length < expectedQuestions) addIssue('blocker', `Gerou ${questions.length}/${expectedQuestions} questões.`);
+    if (flashcards.length < 2) addIssue('blocker', 'Gerou poucos flashcards para revisar o conceito depois.');
+    const conceptWords = heroWordSet(concept?.title || '');
+    questions.forEach((q, index) => {
+      const label = `Questão ${index + 1}`;
+      if (heroTextFingerprint(q.statement).length < 80) addIssue('warning', `${label}: enunciado curto demais.`);
+      if (heroTextFingerprint(q.explanation).length < 140) addIssue('blocker', `${label}: explicação curta demais.`);
+      else if (heroTextFingerprint(q.explanation).length < 260) addIssue('warning', `${label}: explicação poderia ser mais didática.`);
+      const optionFingerprints = (q.options || []).map(heroTextFingerprint);
+      if (new Set(optionFingerprints).size !== optionFingerprints.length) addIssue('blocker', `${label}: alternativas repetidas.`);
+      if ((q.options || []).some(opt => /todas|nenhuma|anteriores/i.test(opt))) addIssue('blocker', `${label}: usa alternativa proibida tipo todas/nenhuma.`);
+      if (!Number.isInteger(Number(q.correctIndex)) || Number(q.correctIndex) < 0 || Number(q.correctIndex) >= (q.options || []).length) addIssue('blocker', `${label}: correctIndex inválido.`);
+      if ((q.skills || []).length < 3) addIssue('warning', `${label}: menos de 3 habilidades.`);
+      (q.skills || []).forEach((skill, skillIndex) => {
+        const text = heroTextFingerprint(skill.text);
+        if (text.length < 35) addIssue('warning', `${label}, habilidade ${skillIndex + 1}: curta/genérica demais.`);
+        if (!/^voce(?:\s|$)/.test(text)) addIssue('blocker', `${label}, habilidade ${skillIndex + 1}: precisa perguntar diretamente "Você...?".`);
+        if (/voce teve seguranca para fazer esta etapa/.test(text)) addIssue('blocker', `${label}, habilidade ${skillIndex + 1}: usou fórmula proibida e pouco diagnóstica.`);
+        if (/^(sabe|conhece|entende|domina|estuda|aprende)\b/.test(text) || /^voce (sabe|conhece|entende|domina|estuda|aprende)\b/.test(text)) addIssue('warning', `${label}, habilidade ${skillIndex + 1}: começa genérica demais.`);
+        if (conceptWords.size > 1 && heroSimilarity(skill.text, concept?.title || '') > 0.9) addIssue('warning', `${label}, habilidade ${skillIndex + 1}: parece só repetir o tema.`);
+      });
+    });
+    for (let i = 0; i < questions.length; i += 1) {
+      for (let j = i + 1; j < questions.length; j += 1) {
+        if (heroSimilarity(questions[i].statement, questions[j].statement) > 0.72) addIssue('blocker', `Questões ${i + 1} e ${j + 1}: enunciados parecidos demais.`);
+      }
+    }
+    const penalty = issues.reduce((acc, issue) => acc + (issue.severity === 'blocker' ? 18 : 7), 0);
+    const score = Math.max(0, 100 - penalty);
+    return {
+      score,
+      issues,
+      blocking:issues.some(issue => issue.severity === 'blocker') || score < 65,
+      checkedAt:Date.now(),
+    };
+  };
+
+  const normalizeHeroPackage = (data, concept) => {
+    const questions = (Array.isArray(data?.questions) ? data.questions : []).slice(0, 8).map((q, qIndex) => {
+      const options = (Array.isArray(q.options) ? q.options : []).map(x => String(x || '').trim()).filter(Boolean).slice(0, 5);
+      const correctIndex = Math.max(0, Math.min(options.length - 1, Number(q.correctIndex) || 0));
+      const qId = String(q.id || `q${qIndex + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+      return {
+        id:qId,
+        statement:String(q.statement || '').trim(),
+        options,
+        correctIndex,
+        explanation:String(q.explanation || '').trim(),
+        skills:(Array.isArray(q.skills) ? q.skills : []).slice(0, 5).map((s, sIndex) => ({
+          id:String(s.id || `${qId}_s${sIndex + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_'),
+          text:normalizeHeroSkillQuestion(s.text || s),
+        })).filter(s => s.text.length > 8),
+      };
+    }).filter(q => q.statement.length > 10 && q.options.length >= 4 && q.skills.length >= 2);
+    const skillIds = new Set(questions.flatMap(q => q.skills.map(s => s.id)));
+    const flashcards = (Array.isArray(data?.flashcards) ? data.flashcards : []).slice(0, 12).map((fc, i) => ({
+      id:String(fc.id || `fc${i + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_'),
+      front:String(fc.front || '').trim(),
+      back:String(fc.back || '').trim(),
+      sourceSkillIds:(Array.isArray(fc.sourceSkillIds) ? fc.sourceSkillIds : []).filter(id => skillIds.has(id)),
+    })).filter(fc => fc.front.length > 5 && fc.back.length > 5);
+    if (!questions.length) throw new Error('HERO_PACKAGE_EMPTY');
+    const packageNumber = Math.max(1, (Number(concept.packageIndex) || 0) + 1);
+    return {
+      id:`hero_pkg_${concept.id}_p${packageNumber}`,
+      conceptId:concept.id,
+      packageNumber,
+      title:String(data?.title || concept.title).trim(),
+      internalFocus:String(data?.internalFocus || '').trim(),
+      areaTitle:concept.areaTitle,
+      topicTitle:concept.topicTitle,
+      createdAt:Date.now(),
+      status:'ready',
+      questions,
+      flashcards,
+      raw:data,
+    };
+  };
+
+  const generateHeroPackage = async (concept, queue) => {
+    const questionCount = 3;
+    const conceptState = heroStateRef.current?.progress?.concepts?.[concept.id] || {};
+    const conceptForPrompt = {
+      ...concept,
+      packagesCompleted:Number(conceptState.packagesCompleted) || 0,
+      packageIndex:Number(conceptState.packagesCompleted) || 0,
+    };
+    let qualityNotes = [];
+    let bestPacket = null;
+    let bestAssessment = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const prompt = buildHeroJourneyPackagePrompt({
+        concept:conceptForPrompt,
+        relatedConcepts:[],
+        questionCount,
+        numAlternatives:Number(settingsRef.current.numAlternatives) || 5,
+        qualityNotes,
+      });
+      const raw = await callWithRotation(prompt, 'Responda apenas JSON válido. Você cria questões médicas de alta qualidade, explicações didáticas completas, perguntas metacognitivas em primeira pessoa e flashcards objetivos.');
+      const packet = normalizeHeroPackage(parseHeroJson(raw), conceptForPrompt);
+      const assessment = assessHeroPackageQuality(packet, concept, questionCount);
+      const candidate = { ...packet, quality:{ ...assessment, attempts:attempt } };
+      if (!bestAssessment || assessment.score > bestAssessment.score) {
+        bestAssessment = assessment;
+        bestPacket = candidate;
+      }
+      if (!assessment.blocking) return candidate;
+      qualityNotes = assessment.issues.map(issue => issue.message);
+    }
+    if (bestAssessment?.blocking) {
+      const err = new Error('HERO_PACKAGE_LOW_QUALITY');
+      err.issues = bestAssessment.issues || [];
+      throw err;
+    }
+    return bestPacket;
+  };
+
+  const mergeHeroReviewCards = (reviews = {}, packet, now = Date.now()) => {
+    const cards = {...(reviews.cards || {})};
+    (packet?.flashcards || []).forEach((fc, index) => {
+      const id = `${packet.id}_${fc.id || index}`;
+      if (cards[id]) return;
+      cards[id] = {
+        id,
+        packetId:packet.id,
+        conceptId:packet.conceptId,
+        areaTitle:packet.areaTitle,
+        topicTitle:packet.topicTitle,
+        front:fc.front,
+        back:fc.back,
+        sourceSkillIds:fc.sourceSkillIds || [],
+        createdAt:now,
+        dueAt:now,
+        interval:0,
+        successes:0,
+        misses:0,
+        lapses:0,
+      };
+    });
+    return {...reviews, cards};
+  };
+
+  const describeHeroPackageQuality = (packet) => {
+    const quality = packet?.quality;
+    if (!quality) return '';
+    const attempts = Number(quality.attempts) || 1;
+    const issueCount = Array.isArray(quality.issues) ? quality.issues.length : 0;
+    if (attempts > 1) return ` Controle de qualidade: corrigido na tentativa ${attempts}, nota ${quality.score}.`;
+    if (issueCount > 0) return ` Controle de qualidade: nota ${quality.score}, ${issueCount} alerta${issueCount!==1?'s':''} leve${issueCount!==1?'s':''}.`;
+    return ` Controle de qualidade: nota ${quality.score}.`;
+  };
+
+  const runHeroStockBackfill = async (sourceQueue = []) => {
+    if (heroBackfillRef.current) return;
+    const candidates = sourceQueue
+      .slice(0, HERO_STOCK_TARGET)
+      .filter(item => item?.id && !heroStateRef.current.generated?.packets?.[item.id]);
+    if (!candidates.length) return;
+    heroBackfillRef.current = true;
+    setHeroBackfillRun({ running:true, current:0, total:candidates.length, currentTitle:'Organizando próximos alvos' });
+    const startedAt = Date.now();
+    await persistHeroState(pushHeroLog(heroStateRef.current, {
+      at:startedAt,
+      type:'loading',
+      message:`Estoque automático iniciado: ${candidates.length} pacote${candidates.length!==1?'s':''} na fila.`,
+    }), true);
+    try {
+      let produced = 0;
+      for (const concept of candidates) {
+        const currentIndex = produced + 1;
+        setHeroBackfillRun({ running:true, current:produced, total:candidates.length, currentTitle:'Gerando missão futura' });
+        if (heroStateRef.current.generated?.packets?.[concept.id]) {
+          produced += 1;
+          setHeroBackfillRun({ running:true, current:produced, total:candidates.length, currentTitle:'Missão futura já estava pronta' });
+          continue;
+        }
+        try {
+          const packet = await generateHeroPackage(concept, sourceQueue);
+          const doneAt = Date.now();
+          await persistHeroState(pushHeroLog({
+            ...heroStateRef.current,
+            generated:{
+              ...(heroStateRef.current.generated || {}),
+              packets:{...(heroStateRef.current.generated?.packets || {}), [concept.id]:packet},
+            },
+          }, {
+            at:doneAt,
+            type:'success',
+            message:`Estoque ${currentIndex}/${candidates.length}: missão futura pronta.${describeHeroPackageQuality(packet)}`,
+          }), true);
+        } catch(e) {
+          const failAt = Date.now();
+          await persistHeroState(pushHeroLog(heroStateRef.current, {
+            at:failAt,
+            type:'error',
+            message:`Estoque ${currentIndex}/${candidates.length}: falha ao gerar uma missão futura.`,
+          }), true);
+        }
+        produced += 1;
+        setHeroBackfillRun({ running:true, current:produced, total:candidates.length, currentTitle:'Missão futura concluída' });
+      }
+      const finishedAt = Date.now();
+      await persistHeroState(pushHeroLog(heroStateRef.current, {
+        at:finishedAt,
+        type:'success',
+        message:'Estoque automático da Jornada atualizado.',
+      }), true);
+    } finally {
+      heroBackfillRef.current = false;
+      setHeroBackfillRun({ running:false, current:0, total:0, currentTitle:'' });
+    }
+  };
+
+  const handleHeroStartJourney = async () => {
+    if (!isAdmin || heroLoading) return;
+    if (!checkKey()) return;
+    setHeroLoading(true);
+    const hasStartedSession = !!heroStateRef.current.todaySession?.currentConceptId;
+    const toastId = addToast(hasStartedSession ? 'Continuando Jornada...' : 'Iniciando Jornada...', 'loading', 0);
+    const now = Date.now();
+    const queue = buildHeroQueue(heroStateRef.current.progress || {}, { limit:32 });
+    if (!queue.length) {
+      updateToast(toastId, 'Não há conceitos para iniciar.', 'info');
+      setTimeout(()=>removeToast(toastId), 2500);
+      setHeroLoading(false);
+      return;
+    }
+    const sessionConceptId = heroStateRef.current.todaySession?.currentConceptId || null;
+    const sessionPacket = sessionConceptId ? heroStateRef.current.generated?.packets?.[sessionConceptId] : null;
+    const current = sessionConceptId
+      ? (queue.find(item => item.id === sessionConceptId) || (sessionPacket ? {
+        id:sessionConceptId,
+        title:sessionPacket.title || sessionPacket.topicTitle || 'Jornada em andamento',
+        areaTitle:sessionPacket.areaTitle,
+        topicTitle:sessionPacket.topicTitle,
+        reason:'sessão em andamento',
+      } : null) || queue[0])
+      : queue[0];
+    const started = {
+      ...heroStateRef.current,
+      lastSyncAt:now,
+      queue:compactHeroQueue(queue),
+      todaySession:{
+        date:getTodayKey(),
+        startedAt:heroStateRef.current.todaySession?.startedAt || now,
+        currentConceptId:current.id,
+        completedConceptIds:heroStateRef.current.todaySession?.completedConceptIds || [],
+      },
+      syncLogs:[
+        { id:`hero_log_${now}`, at:now, type:'loading', message:`${hasStartedSession ? 'Jornada retomada' : 'Jornada iniciada'}. Preparando a missão atual.` },
+        ...(heroStateRef.current.syncLogs || []),
+      ],
+    };
+    await persistHeroState(started, true);
+    try {
+      let packet = heroStateRef.current.generated?.packets?.[current.id];
+      if (!packet) {
+        updateToast(toastId, 'Gerando pacote da Jornada...', 'loading');
+        packet = await generateHeroPackage(current, queue);
+      }
+      const doneAt = Date.now();
+      const next = {
+        ...heroStateRef.current,
+        generated:{
+          ...(heroStateRef.current.generated || {}),
+          packets:{...(heroStateRef.current.generated?.packets || {}), [current.id]:packet},
+        },
+        syncLogs:[
+          { id:`hero_log_${doneAt}`, at:doneAt, type:'success', message:`Pacote pronto: ${packet.questions.length} questões, ${packet.questions.reduce((acc,q)=>acc+q.skills.length,0)} habilidades e ${packet.flashcards.length} cards.${describeHeroPackageQuality(packet)}` },
+          ...(heroStateRef.current.syncLogs || []),
+        ],
+      };
+      await persistHeroState(next, true);
+      updateToast(toastId, hasStartedSession ? 'Jornada retomada.' : 'Jornada pronta para estudar.', 'success');
+      setTimeout(()=>removeToast(toastId), 2500);
+      runHeroStockBackfill(queue);
+    } catch(e) {
+      const failAt = Date.now();
+      await persistHeroState({
+        ...heroStateRef.current,
+        syncLogs:[
+          { id:`hero_log_${failAt}`, at:failAt, type:'error', message:'Falha ao gerar o pacote da missão atual.' },
+          ...(heroStateRef.current.syncLogs || []),
+        ],
+      }, true);
+      updateToast(toastId, 'Falha ao gerar o pacote da Jornada.', 'error');
+      setTimeout(()=>removeToast(toastId), 4500);
+    } finally {
+      setHeroLoading(false);
+    }
+  };
+
+  const handleHeroAnswer = async (packet, question, optionIndex) => {
+    if (!packet?.id || !question?.id) return;
+    const cur = heroStateRef.current || {};
+    const answers = cur.study?.answers || {};
+    const packetAnswers = answers[packet.id] || {};
+    if (packetAnswers[question.id] !== undefined) return;
+    const now = Date.now();
+    await persistHeroState({
+      ...cur,
+      study:{
+        ...(cur.study || {}),
+        answers:{...answers, [packet.id]:{...packetAnswers, [question.id]:optionIndex}},
+        skillFeedback:cur.study?.skillFeedback || {},
+        completedPacketIds:cur.study?.completedPacketIds || [],
+      },
+      syncLogs:[
+        { id:`hero_log_${now}`, at:now, type:'info', message:`Questão respondida em ${packet.title}.` },
+        ...(cur.syncLogs || []),
+      ],
+    }, true);
+  };
+
+  const getHeroFeedbackEffect = (value) => ({
+    yes:{ mastery:12, successes:1, misses:0, uncertainty:0, attentions:0, dueDays:14 },
+    uncertain:{ mastery:-4, successes:0, misses:0, uncertainty:1, attentions:0, dueDays:3 },
+    attention:{ mastery:0, successes:0, misses:0, uncertainty:0, attentions:1, dueDays:5 },
+    no:{ mastery:-12, successes:0, misses:1, uncertainty:0, attentions:0, dueDays:1 },
+  }[value] || { mastery:0, successes:0, misses:0, uncertainty:0, attentions:0, dueDays:7 });
+
+  const handleHeroSkillFeedback = async (packet, question, skill, value) => {
+    if (!packet?.id || !packet?.conceptId || !question?.id || !skill?.id || !value) return;
+    const cur = heroStateRef.current || {};
+    const skillFeedback = cur.study?.skillFeedback || {};
+    const packetFeedback = skillFeedback[packet.id] || {};
+    const previous = packetFeedback[skill.id];
+    if (previous === value) return;
+    const prevEffect = getHeroFeedbackEffect(previous);
+    const nextEffect = getHeroFeedbackEffect(value);
+    const now = Date.now();
+    const conceptState = cur.progress?.concepts?.[packet.conceptId] || {};
+    const nextMastery = Math.max(0, Math.min(100, (Number(conceptState.mastery) || 0) - prevEffect.mastery + nextEffect.mastery));
+    const reviewDueAt = now + nextEffect.dueDays * 86400000;
+    const nextConceptState = {
+      ...conceptState,
+      mastery:nextMastery,
+      lastSeenAt:now,
+      reviewDueAt,
+      successes:Math.max(0, (Number(conceptState.successes) || 0) - prevEffect.successes + nextEffect.successes),
+      misses:Math.max(0, (Number(conceptState.misses) || 0) - prevEffect.misses + nextEffect.misses),
+      uncertainty:Math.max(0, (Number(conceptState.uncertainty) || 0) - prevEffect.uncertainty + nextEffect.uncertainty),
+      attentions:Math.max(0, (Number(conceptState.attentions) || 0) - prevEffect.attentions + nextEffect.attentions),
+    };
+    await persistHeroState({
+      ...cur,
+      progress:{
+        ...(cur.progress || {}),
+        concepts:{...(cur.progress?.concepts || {}), [packet.conceptId]:nextConceptState},
+      },
+      study:{
+        ...(cur.study || {}),
+        answers:cur.study?.answers || {},
+        skillFeedback:{...skillFeedback, [packet.id]:{...packetFeedback, [skill.id]:value}},
+        completedPacketIds:cur.study?.completedPacketIds || [],
+      },
+      syncLogs:[
+        { id:`hero_log_${now}`, at:now, type:'success', message:`Habilidade atualizada: ${skill.text.slice(0, 72)}${skill.text.length>72?'...':''}` },
+        ...(cur.syncLogs || []),
+      ],
+    }, true);
+  };
+
+  const handleHeroContinue = async (packet) => {
+    if (!isAdmin || heroLoading || !packet?.id || !packet?.conceptId) return;
+    if (!checkKey()) return;
+    setHeroLoading(true);
+    const toastId = addToast('Avançando Jornada...', 'loading', 0);
+    const now = Date.now();
+    const cur = heroStateRef.current || {};
+    const packetFeedback = cur.study?.skillFeedback?.[packet.id] || {};
+    const skillIds = (packet.questions || []).flatMap(q => (q.skills || []).map(s => s.id));
+    const weakCount = skillIds.filter(id => ['no','uncertain'].includes(packetFeedback[id])).length;
+    const attentionCount = skillIds.filter(id => packetFeedback[id] === 'attention').length;
+    const conceptState = cur.progress?.concepts?.[packet.conceptId] || {};
+    const cooldownHours = weakCount > 0 ? 10 : attentionCount > 0 ? 18 : 72;
+    const reviewDays = weakCount > 0 ? 1 : attentionCount > 0 ? 3 : 21;
+    const completedIds = new Set(cur.study?.completedPacketIds || []);
+    completedIds.add(packet.id);
+    const nextPackageCount = (Number(conceptState.packagesCompleted) || 0) + 1;
+    const nextConceptState = {
+      ...conceptState,
+      lastCompletedAt:now,
+      lastSeenAt:now,
+      cooldownUntil:now + cooldownHours * 3600000,
+      reviewDueAt:Math.min(Number(conceptState.reviewDueAt) || Infinity, now + reviewDays * 86400000),
+      packagesCompleted:nextPackageCount,
+    };
+    const progress = {
+      ...(cur.progress || {}),
+      concepts:{...(cur.progress?.concepts || {}), [packet.conceptId]:nextConceptState},
+    };
+    const queue = buildHeroQueue(progress, { limit:32 });
+    const sameTopic = queue.find(item => item.id === packet.conceptId) || {
+      id:packet.conceptId,
+      title:packet.topicTitle || packet.title,
+      areaTitle:packet.areaTitle,
+      topicTitle:packet.topicTitle,
+      reason:'continuação do tópico',
+    };
+    const shouldContinueSameTopic = nextPackageCount < HERO_TOPIC_PACKAGES_PER_PASS;
+    const nextConcept = shouldContinueSameTopic ? sameTopic : (queue.find(item => item.id !== packet.conceptId) || queue[0]);
+    if (!nextConcept) {
+      await persistHeroState({
+        ...cur,
+        progress,
+        study:{...(cur.study || {}), completedPacketIds:Array.from(completedIds)},
+        syncLogs:[
+          { id:`hero_log_${now}`, at:now, type:'success', message:`Pacote concluído: ${packet.title}.` },
+          ...(cur.syncLogs || []),
+        ],
+      }, true);
+      updateToast(toastId, 'Pacote concluído.', 'success');
+      setTimeout(()=>removeToast(toastId), 2500);
+      setHeroLoading(false);
+      return;
+    }
+
+    const started = {
+      ...cur,
+      progress,
+      queue:compactHeroQueue(queue),
+      todaySession:{
+        ...(cur.todaySession || {}),
+        date:getTodayKey(),
+        startedAt:cur.todaySession?.startedAt || now,
+        currentConceptId:nextConcept.id,
+        completedConceptIds:[...new Set([...(cur.todaySession?.completedConceptIds || []), packet.conceptId])],
+      },
+      study:{...(cur.study || {}), completedPacketIds:Array.from(completedIds)},
+      syncLogs:[
+        { id:`hero_log_${now}`, at:now, type:'success', message:`Missão concluída. Próximo alvo definido automaticamente.` },
+        ...(cur.syncLogs || []),
+      ],
+    };
+    await persistHeroState(started, true);
+    try {
+      let nextPacket = heroStateRef.current.generated?.packets?.[nextConcept.id];
+      const completedNextPacket = nextPacket?.id && completedIds.has(nextPacket.id);
+      if (!nextPacket) {
+        updateToast(toastId, 'Gerando próximo pacote da Jornada...', 'loading');
+        nextPacket = await generateHeroPackage(nextConcept, queue);
+      } else if (completedNextPacket || shouldContinueSameTopic) {
+        updateToast(toastId, 'Gerando nova etapa da missão atual...', 'loading');
+        nextPacket = await generateHeroPackage(nextConcept, queue);
+      }
+      const doneAt = Date.now();
+      await persistHeroState({
+        ...heroStateRef.current,
+        generated:{
+          ...(heroStateRef.current.generated || {}),
+          packets:{...(heroStateRef.current.generated?.packets || {}), [nextConcept.id]:nextPacket},
+        },
+        syncLogs:[
+          { id:`hero_log_${doneAt}`, at:doneAt, type:'success', message:`Próximo pacote pronto.${describeHeroPackageQuality(nextPacket)}` },
+          ...(heroStateRef.current.syncLogs || []),
+        ],
+      }, true);
+      updateToast(toastId, 'Jornada avançou para o próximo alvo.', 'success');
+      setTimeout(()=>removeToast(toastId), 2500);
+      runHeroStockBackfill(queue);
+    } catch(e) {
+      const failAt = Date.now();
+      await persistHeroState({
+        ...heroStateRef.current,
+        syncLogs:[
+          { id:`hero_log_${failAt}`, at:failAt, type:'error', message:`Avançou para o próximo alvo, mas falhou ao gerar o pacote.` },
+          ...(heroStateRef.current.syncLogs || []),
+        ],
+      }, true);
+      updateToast(toastId, 'Avançou, mas falhou ao gerar o próximo pacote.', 'error');
+      setTimeout(()=>removeToast(toastId), 4500);
+    } finally {
+      setHeroLoading(false);
+    }
+  };
+
+  const handleHeroFlashcardReview = async (card, knew) => {
+    if (!isAdmin || !card?.id || !card?.conceptId) return;
+    const cur = heroStateRef.current || {};
+    const now = Date.now();
+    const currentCard = cur.reviews?.cards?.[card.id] || card;
+    const schedule = scheduleHeroFsrs(currentCard, knew);
+    const nextCard = {
+      ...currentCard,
+      source:'flashcard',
+      createdAt:currentCard.createdAt || now,
+      dueAt:schedule.dueAt,
+      lastReviewedAt:schedule.lastReviewedAt,
+      stability:schedule.stability,
+      difficulty:schedule.difficulty,
+      retrievability:schedule.retrievability,
+      intervalDays:schedule.intervalDays,
+      reps:schedule.reps,
+      state:schedule.state,
+      successes:Math.max(0, Number(currentCard.successes) || 0) + (knew ? 1 : 0),
+      misses:Math.max(0, Number(currentCard.misses) || 0) + (knew ? 0 : 1),
+      lapses:Math.max(0, Number(currentCard.lapses) || 0) + (knew ? 0 : 1),
+    };
+    const conceptState = cur.progress?.concepts?.[card.conceptId] || {};
+    const nextConceptState = {
+      ...conceptState,
+      mastery:Math.max(0, Math.min(100, (Number(conceptState.mastery) || 0) + (knew ? 6 : -8))),
+      lastSeenAt:now,
+      reviewDueAt:knew
+        ? Math.min(Number(conceptState.reviewDueAt) || Infinity, schedule.dueAt)
+        : now + 86400000,
+      successes:Math.max(0, Number(conceptState.successes) || 0) + (knew ? 1 : 0),
+      misses:Math.max(0, Number(conceptState.misses) || 0) + (knew ? 0 : 1),
+    };
+    await persistHeroState({
+      ...cur,
+      progress:{
+        ...(cur.progress || {}),
+        concepts:{...(cur.progress?.concepts || {}), [card.conceptId]:nextConceptState},
+      },
+      reviews:{
+        ...(cur.reviews || {}),
+        cards:{...(cur.reviews?.cards || {}), [card.id]:nextCard},
+      },
+      syncLogs:[
+        { id:`hero_log_${now}`, at:now, type:knew?'success':'info', message:`Flashcard revisado: ${knew ? 'acertei' : 'errei'}. Próxima revisão pelo FSRS.` },
+        ...(cur.syncLogs || []),
+      ],
+    }, true);
+  };
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -6320,10 +8181,12 @@ export default function QuestionBankApp() {
     const altSuffix = hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
-    const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
+    const buildOraclePrompt = isAdmin ? buildOracleQuestionJsonPrompt : buildOracleQuestionPrompt;
+    const PROMPT = buildOraclePrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
       + (addPrompt ? `\n\nFoco adicional: ${addPrompt}` : '')
-      + altSuffix;
+      + altSuffix
+      + (isAdmin ? '\n\nRETORNO FINAL: responda somente JSON válido, sem markdown, sem comentários fora do JSON.' : '');
 
     const orderedKeys = getOrderedKeys();
     let lastErr = null;
@@ -6331,13 +8194,20 @@ export default function QuestionBankApp() {
       try {
         const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, PROMPT, k, (acc,qc)=>onProgress?.(qc));
         let allQuestions = [];
-        if (hasClosed) {
-          const p = parseData(full, `${subject.id}_${clearedTopic.id}`);
-          allQuestions = [...allQuestions, ...p.questions];
+        let summary = '';
+        if (isAdmin) {
+          const parsed = normalizeOracleJsonQuestions(full, `${subject.id}_${clearedTopic.id}`);
+          allQuestions = parsed.questions;
+          summary = parsed.summary;
+        } else {
+          if (hasClosed) {
+            const p = parseData(full, `${subject.id}_${clearedTopic.id}`);
+            allQuestions = [...allQuestions, ...p.questions];
+          }
+          if (hasOpen)  { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, false); allQuestions = [...allQuestions, ...p.questions]; }
+          if (hasEssay) { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
+          summary = parseData(full).summary;
         }
-        if (hasOpen)  { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, false); allQuestions = [...allQuestions, ...p.questions]; }
-        if (hasEssay) { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
-        const summary = parseData(full).summary;
         const updatedSubject = {
           ...cleared,
           topics: cleared.topics.map(t => t.id === clearedTopic.id
@@ -6408,25 +8278,34 @@ export default function QuestionBankApp() {
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
 
-    const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
+    const buildOraclePrompt = isAdmin ? buildOracleQuestionJsonPrompt : buildOracleQuestionPrompt;
+    const PROMPT = buildOraclePrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
       + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
-      + altSuffix;
+      + altSuffix
+      + (isAdmin ? '\n\nRETORNO FINAL: responda somente JSON válido, sem markdown, sem comentários fora do JSON.' : '');
 
     const orderedKeys = getOrderedKeys();
     let err=null, ok=false;
     for (const {k} of orderedKeys) {
       try {
         const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc));
-        // Separar questões fechadas (com alternativas) das abertas
         let allQuestions = [];
-        if (hasClosed) {
-          const p = parseData(full, `${activeSubject.id}_${topicId}`);
-          allQuestions = [...allQuestions, ...p.questions];
+        let summary = '';
+        if (isAdmin) {
+          const parsed = normalizeOracleJsonQuestions(full, `${activeSubject.id}_${topicId}`);
+          allQuestions = parsed.questions;
+          summary = parsed.summary;
+        } else {
+          // Separar questões fechadas (com alternativas) das abertas
+          if (hasClosed) {
+            const p = parseData(full, `${activeSubject.id}_${topicId}`);
+            allQuestions = [...allQuestions, ...p.questions];
+          }
+          if (hasOpen)  { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, false); allQuestions = [...allQuestions, ...p.questions]; }
+          if (hasEssay) { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
+          summary = parseData(full).summary;
         }
-        if (hasOpen)  { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, false); allQuestions = [...allQuestions, ...p.questions]; }
-        if (hasEssay) { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
-        const summary = parseData(full).summary;
         await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
         await rotateKey();
         ok=true; break;
@@ -6450,7 +8329,13 @@ export default function QuestionBankApp() {
     }
     if(!checkKey())return;setIsBusy(true);
     const s = settingsRef.current;
-    const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
+    const useJsonSyllabus = isAdmin;
+    const sys = useJsonSyllabus
+      ? buildOracleSyllabusJsonPrompt(subjectTitle, s, s.autoMode || false)
+      : buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
+    const legacySys = useJsonSyllabus
+      ? buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false)
+      : sys;
     const orderedKeys = getOrderedKeys();
     const chunks = buildAcademiaMaterialChunks(materialText, uploadedFiles);
     if (chunks.length > 1) {
@@ -6477,16 +8362,44 @@ export default function QuestionBankApp() {
       let chunkOk = false;
       for (const {k} of orderedKeys) {
         try {
-          const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : []);
-          accumulated = normalizeOracleSyllabus(r, s);
+          const r=await callGemini(
+            userMsg,
+            sys,
+            k,
+            i === 0 ? uploadedImages : [],
+            useJsonSyllabus ? {responseMimeType:'application/json', timeoutMs:120000} : {}
+          );
+          accumulated = useJsonSyllabus ? normalizeOracleSyllabusJson(r, s) : normalizeOracleSyllabus(r, s);
           await rotateKey();
           chunkOk = true;
           break;
         } catch(e) {
           if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
-          showApiError(e.message);
-          setIsBusy(false);
-          return;
+          if (useJsonSyllabus && ORACLE_JSON_FALLBACK_ERRORS.has(e.message)) {
+            try {
+              const fallback = await callGemini(
+                userMsg,
+                legacySys,
+                k,
+                i === 0 ? uploadedImages : [],
+                {timeoutMs:120000}
+              );
+              accumulated = legacySyllabusTextToJson(fallback, subjectTitle, s);
+              await rotateKey();
+              chunkOk = true;
+              addToast('O Gemini demorou no JSON. Usei o modo compatível e mantive o sumário estruturado.', 'info', 6000);
+              break;
+            } catch(fallbackError) {
+              if (fallbackError.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+              showApiError(fallbackError.message || e.message);
+              setIsBusy(false);
+              return;
+            }
+          } else {
+            showApiError(e.message);
+            setIsBusy(false);
+            return;
+          }
         }
       }
       if (!chunkOk) {
@@ -6505,15 +8418,40 @@ export default function QuestionBankApp() {
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
-    const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, settingsRef.current);
+    const useJsonSyllabus = isAdmin && parseJsonSyllabusTopics(syllabus).length > 0;
+    const sys = useJsonSyllabus
+      ? buildOracleSyllabusJsonRevisePrompt(syllabus, syllabusFB, settingsRef.current)
+      : buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, settingsRef.current);
+    const legacySys = useJsonSyllabus
+      ? buildOracleSyllabusRevisePrompt(formatSyllabusTopics(parseSyllabusTopics(syllabus)), syllabusFB, settingsRef.current)
+      : sys;
     const orderedKeys = getOrderedKeys();
     for (const {k} of orderedKeys) {
       try {
-        const r=await callGemini('Revise.',sys,k);
-        setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
+        const r=await callGemini(
+          'Revise.',
+          sys,
+          k,
+          [],
+          useJsonSyllabus ? {responseMimeType:'application/json', timeoutMs:120000} : {}
+        );
+        setSyllabus(useJsonSyllabus ? normalizeOracleSyllabusJson(r, settingsRef.current) : normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
         await rotateKey(); break;
       } catch(e) {
         if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        if (useJsonSyllabus && ORACLE_JSON_FALLBACK_ERRORS.has(e.message)) {
+          try {
+            const fallback = await callGemini('Revise.', legacySys, k, [], {timeoutMs:120000});
+            setSyllabus(legacySyllabusTextToJson(fallback, normalizeSyllabusJsonObject(syllabus).subject || '', settingsRef.current));
+            setSyllabusFB('');
+            addToast('A revisão do JSON caiu para o modo compatível e foi salva estruturada.', 'info', 6000);
+            await rotateKey();
+            break;
+          } catch(fallbackError) {
+            if (fallbackError.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+            showApiError(fallbackError.message || e.message); break;
+          }
+        }
         showApiError(e.message); break;
       }
     }
@@ -6526,11 +8464,12 @@ export default function QuestionBankApp() {
       return;
     }
 
-    const topics = parsedTopics.map(({ title, subtopics }, topicPos) => {
+    const topics = parsedTopics.map(({ title, subtopics, subtopicDetails }, topicPos) => {
       return {
         id: `t-${topicPos}-${Date.now()}`,
         title,
         subtopics,
+        subtopicDetails: Array.isArray(subtopicDetails) ? subtopicDetails : undefined,
         questionStyle: settingsRef.current.questionStyle || 'mixed', // herdado do modal na criação
         questions: [], answers: {}, summary: '', favorites: [], errorNotebook: [], spacedReview: {},
       };
@@ -7983,13 +9922,14 @@ export default function QuestionBankApp() {
         {/* Mobile dropdown menu */}
         {menuOpen&&(
           <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-            <div className="px-4 py-2 grid grid-cols-2 gap-1">
+	            <div className="px-4 py-2 grid grid-cols-2 gap-1">
               {[
+                isAdmin ? {icon:<Flame className="w-5 h-5"/>, label:'Jornada', action:()=>setView('hero-journey')} : null,
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
                 {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
-              ].map((item,i)=>(
+              ].filter(Boolean).map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-900/20':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
                   {item.icon}{item.label}
@@ -8007,6 +9947,7 @@ export default function QuestionBankApp() {
 	        {view==='library'&&(
 	          (()=>{
 			    const homeCards = [
+                    isAdmin ? {key:'hero', icon:<Flame className="w-5 h-5"/>, title:'Jornada do Herói', desc:'Esteira guiada com questão mestre, habilidades e revisões por miniquestões.', meta:'reconstrução', action:()=>setView('hero-journey')} : null,
 			              canUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aulas autorais com fixação no final.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
 			              canSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões e cronograma.', meta:'Acesso restrito', action:()=>setView('curso')} : null,
 			              {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Acervo do Oráculo', desc:'Assuntos, blocos e simulados gerados por IA.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
@@ -8098,6 +10039,17 @@ export default function QuestionBankApp() {
 	            );
 	          })()
 	        )}
+
+        {view==='hero-journey'&&isAdmin&&(
+          <JourneyShell
+            darkMode={darkMode}
+            onBack={()=>setView('library')}
+            onCallGemini={async (prompt, sys) => {
+              if (!checkKey()) throw new Error('Configure uma chave de API antes de gerar a Jornada.');
+              return callWithRotation(prompt, sys);
+            }}
+          />
+        )}
 
         {/* ── SUB-LIBRARY ── */}
         {view==='sub-library'&&(
@@ -8718,6 +10670,7 @@ export default function QuestionBankApp() {
               oracleLength={settings.oracleLength||'medium'}
               onCall={callWithRotation}
               onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
+              isAdmin={isAdmin && activeSubject?.source==='gemini'}
               displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
               generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
               onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
@@ -8951,7 +10904,7 @@ export default function QuestionBankApp() {
             ):(
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura Gerada</h2>
-                <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{syllabus}</div>
+                <OracleSyllabusPreview syllabus={syllabus} darkMode={darkMode} />
                 <div className="relative">
                   <textarea value={syllabusFB} onChange={e=>setSyllabusFB(e.target.value)} placeholder="Solicite ajustes..." className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <button onClick={reviseSyllabus} disabled={!syllabusFB.trim()||isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg disabled:opacity-40">{isBusy?<Spinner className="w-5 h-5 text-white"/>:<Send className="w-5 h-5"/>}</button>

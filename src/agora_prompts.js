@@ -259,6 +259,97 @@ ${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` :
 Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.`;
 };
 
+export const buildOracleQuestionJsonPrompt = (s, focusBlock = '', autoMode = false) => {
+  const na = Math.max(2, Math.min(5, Number(s.numAlternatives) || 5));
+  const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
+  const expectedSubtopics = Math.max(1, Number(s.numSubtopics) || 1);
+  const expectedQPerSub = Math.max(1, Number(s.qPerSub) || 1);
+  const expectedTotal = expectedSubtopics * expectedQPerSub;
+  const types = s.questionTypes || ['direct'];
+  const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
+  const hasOpen = types.some(t => ['open','essay'].includes(t));
+  const typeInst = `TIPOS DE QUESTÃO PEDIDOS NO MODAL:
+${types.map(t => `- ${QUESTION_TYPE_LABELS[t] || t}`).join('\n')}
+
+REGRAS POR TIPO:
+- Direta: múltipla escolha objetiva sobre conceito, critério, mecanismo, exame, conduta, contraindicação ou classificação.
+- Verdadeiro ou falso: use assertivas no enunciado e alternativas como combinações plausíveis de V/F.
+- CESPE/Certo ou errado: use uma afirmação única e alternativas "Certo" e "Errado".
+- Resposta curta: use "options": [], preencha "expectedAnswer" em 1 a 3 linhas.
+- Dissertativa: use "options": [], preencha "expectedAnswer" com um parágrafo forte.`;
+
+  const estruturaInst = autoMode
+    ? `
+ESTRUTURA (modo automático):
+Quando uma lista de subtópicos obrigatórios for fornecida, ela substitui esta seção.
+Se NÃO houver lista obrigatória, defina mentalmente ${expectedSubtopics} eixos/subtópicos de cobrança para este tópico.
+MODO AUTOMÁTICO NÃO SIGNIFICA QUANTIDADE LIVRE:
+- Gere EXATAMENTE ${expectedTotal} questões no total
+- Distribua como ${expectedQPerSub} questão(ões) por eixo/subtópico
+- NÃO gere apenas uma questão e NÃO pare antes de completar ${expectedTotal}`
+    : `
+ESTRUTURA OBRIGATÓRIA:
+- EXATAMENTE ${expectedSubtopics} subtópicos
+- EXATAMENTE ${expectedQPerSub} questão por subtópico
+- Total: EXATAMENTE ${expectedTotal} questões
+- Ordem: do conceito mais fundamental ao mais específico`;
+
+  const schema = {
+    summary: 'Resumo curto do bloco gerado, em 2 a 4 frases.',
+    questions: [
+      {
+        id: '1.1.1',
+        topic: 'Nome do tópico/eixo',
+        subtopic: 'Nome do subtópico/eixo específico',
+        type: hasOpen && !hasClosed ? 'open' : 'direct',
+        style: s.questionStyle || 'mixed',
+        statement: 'Enunciado completo da questão.',
+        options: hasClosed ? [
+          { letter: 'A', text: 'Alternativa correta, sempre aqui antes do embaralhamento.', isCorrect: true, explanation: 'Por que esta alternativa está correta.' },
+          { letter: 'B', text: 'Distrator plausível.', isCorrect: false, explanation: 'Por que este distrator está errado.' },
+          { letter: 'C', text: 'Distrator plausível.', isCorrect: false, explanation: 'Por que este distrator está errado.' },
+          { letter: 'D', text: 'Distrator plausível.', isCorrect: false, explanation: 'Por que este distrator está errado.' },
+          { letter: 'E', text: 'Distrator plausível.', isCorrect: false, explanation: 'Por que este distrator está errado.' },
+        ].slice(0, na) : [],
+        correctLetter: hasClosed ? 'A' : '',
+        expectedAnswer: hasOpen ? 'Resposta esperada para questão aberta/dissertativa.' : '',
+        explanation: 'Explicação completa, estilo UWorld: conceito central, raciocínio e principais confusões.',
+        teachingPoints: ['Ponto cobrável principal', 'Pegadinha ou distinção importante'],
+        difficulty: 'fundamental'
+      }
+    ]
+  };
+
+  return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
+
+${focusBlock ? focusBlock + '\n' : ''}
+ESTILO DE ENUNCIADO: ${styleInst}
+${typeInst ? typeInst + '\n' : ''}${estruturaInst}
+${REGRAS_ENUNCIADO}
+
+FORMATO OBRIGATÓRIO:
+Responda APENAS um JSON válido. Não use markdown. Não use bloco \`\`\`json. Não escreva nenhum texto fora do JSON.
+
+SCHEMA:
+${JSON.stringify(schema, null, 2)}
+
+REGRAS DO JSON:
+- O campo "questions" deve ter EXATAMENTE ${expectedTotal} itens, salvo se uma instrução posterior de subtópicos obrigatórios alterar explicitamente o total.
+- IDs devem seguir "topico.subtopico.questao" quando possível, como "1.2.1".
+- Para questões fechadas, "options" deve ter EXATAMENTE ${na} alternativas.
+- Para questões fechadas, a alternativa correta deve estar em "A" e "correctLetter" deve ser "A"; o site embaralha antes de exibir.
+- Cada alternativa precisa ter "explanation", inclusive distratores.
+- Para questões abertas/dissertativas, use "options": [], preencha "expectedAnswer" e mantenha "explanation".
+- "explanation" deve ensinar o raciocínio da questão: conceito central, por que a resposta está correta e quais confusões derrubam o aluno.
+- Nunca mencione "alternativa A/B/C" na explicação geral, porque o site embaralha as alternativas; use o conteúdo da alternativa.
+- Não use epidemiologia como foco principal, salvo quando for indispensável para conduta, rastreio ou diagnóstico.
+${hasClosed ? REGRAS_ALTERNATIVAS : ''}
+${REGRAS_EXPLICACAO}
+${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` : ''}
+
+Gere TODAS as questões em JSON válido sem interromper.`;
+};
+
 // ─── PROMPT: SUMÁRIO DO ORÁCULO ───────────────────────────────────────────────
 
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
@@ -296,6 +387,63 @@ Tópico 2: [Nome]
 Responda APENAS o sumário.`;
 };
 
+export const buildOracleSyllabusJsonPrompt = (subjectName, s, autoMode = false) => {
+  const l = SYLLABUS_LIMITS.oracle;
+  const estrutura = autoMode
+    ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
+OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
+FAIXA DE REFERÊNCIA:
+- Assunto comum: ${l.minTopics} a ${l.targetMaxTopics} tópicos no total
+- ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma ser suficiente
+- Materiais longos devem virar MAIS TÓPICOS, não tópicos gigantes
+- Use mais subtópicos quando o material realmente exigir cobertura própria
+- Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
+- Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros
+- PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.`
+    : `Crie exatamente ${s.numTopics} tópicos com exatamente ${s.numSubtopics} subtópicos cada.`;
+
+  const schema = {
+    subject: subjectName,
+    summary: 'Uma frase curta descrevendo o recorte do sumário.',
+    topics: [
+      {
+        id: 't1',
+        title: 'Nome didático do tópico',
+        rationale: 'Por que este tópico existe neste sumário.',
+        subtopics: [
+          {
+            id: 't1_s1',
+            title: 'Nome concreto e testável do subtópico',
+            atoms: [
+              'microhabilidade ou ponto interno 1',
+              'microhabilidade ou ponto interno 2'
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  return `Você é o Arquiteto de Alexandria. Crie um sumário em JSON para "${subjectName}" baseado no material do usuário.
+
+${estrutura}
+
+REGRAS:
+- Baseie os subtópicos no material fornecido — não extrapole para fora do que foi pedido
+- Ordem obrigatória dentro de cada tópico: fundamentos antes de detalhes, mecanismo antes da aplicação clínica, regra antes da exceção
+- Subtópicos concretos e objetivos — nada de "Generalidades", "Introdução" ou "Aspectos gerais"
+- Se o material for muito grande, preserve a cobertura por importância de prova e crie mais tópicos/subtópicos quando necessário
+- Pode usar o terceiro nível "atoms" quando isso melhorar a atomização do estudo
+- "atoms" são pontos internos do subtópico; as questões ainda serão geradas por subtópico, não por atom
+- Não transforme cada atom em subtópico. Subtópico deve continuar sendo o bloco de geração das questões
+- Não inclua comentários, markdown, bloco \`\`\`json ou texto fora do JSON
+
+SCHEMA OBRIGATÓRIO:
+${JSON.stringify(schema, null, 2)}
+
+Responda APENAS um JSON válido.`;
+};
+
 // ─── PROMPT: REVISÃO DE SUMÁRIO ───────────────────────────────────────────────
 
 export const buildOracleSyllabusRevisePrompt = (currentSyllabus, feedback, s) => {
@@ -315,6 +463,28 @@ REGRAS:
 - Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
 - Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
+};
+
+export const buildOracleSyllabusJsonRevisePrompt = (currentSyllabus, feedback, s) => {
+  const l = s?.source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
+  return `Você é o Arquiteto de Alexandria. Ajuste o sumário JSON abaixo conforme a instrução do usuário.
+
+SUMÁRIO JSON ATUAL:
+${currentSyllabus}
+
+INSTRUÇÃO DO USUÁRIO:
+${feedback}
+
+REGRAS:
+- Responda APENAS um JSON válido, sem markdown e sem texto fora do JSON
+- Mantenha o schema: subject, summary, topics[], topics[].id/title/rationale/subtopics[], subtopics[].id/title/atoms[]
+- Preserve a ordem didática (geral → específico, mecanismo → aplicação)
+- Cada subtópico deve ser um conceito testável independente
+- Use "atoms" para quebrar pontos internos quando isso melhorar a clareza
+- As questões continuarão sendo geradas por subtópico; não atomize tanto a ponto de transformar cada detalhe em subtópico
+- Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
+- Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
+- Referência de tamanho: até cerca de ${l.targetMaxTopics} tópicos e ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico em blocos comuns, ampliando quando necessário`;
 };
 
 // ─── PROMPT: IA EXTERNA ───────────────────────────────────────────────────────
@@ -685,4 +855,103 @@ Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Qu
 ${lessonText ? `\nCONTEXTO DA AULA/EXPLICAÇÕES (base obrigatória das questões):\n${lessonText.substring(0, 12000)}` : ''}
 ${previousQuestions ? `\nQUESTÕES ANTERIORES (faça algo ligeiramente diferente, sem repetir a mesma ideia):\n${previousQuestions.substring(0, 8000)}` : ''}
 Gere TODAS as questões sem interromper.`;
+};
+
+// ─── PROMPT: JORNADA DO HERÓI ────────────────────────────────────────────────
+
+export const buildHeroJourneyPackagePrompt = ({ concept, relatedConcepts = [], questionCount = 3, numAlternatives = 5, qualityNotes = [] }) => {
+  const alts = numAlternatives === 4
+    ? ['A', 'B', 'C', 'D']
+    : ['A', 'B', 'C', 'D', 'E'];
+  const packageIndex = Number(concept?.packageIndex || concept?.packagesCompleted || 0) + 1;
+
+  return `Você é o motor da Jornada do Herói da Ágora do Saber.
+
+OBJETIVO:
+Gerar um pacote de estudo adaptativo para um TÓPICO médico amplo. O aluno não escolheu o tema; o algoritmo priorizou este alvo por relevância prática, frequência, risco se errar, prova e valor estrutural.
+
+ALVO AMPLO:
+- ID: ${concept?.id}
+- Área: ${concept?.areaTitle}
+- Tópico amplo: ${concept?.title}
+- Pacote sequencial deste tópico: ${packageIndex}
+- Motivo da prioridade: ${concept?.reason || 'alta prioridade'}
+
+PROGRESSÃO INTERNA:
+- Você deve expandir o tópico por conta própria, em ordem pedagógica.
+- Pacote 1: fundamentos, definição, reconhecimento inicial, raciocínio de base e coisas que destravam o resto.
+- Pacote 2: diagnóstico, classificação, exames iniciais e decisões frequentes.
+- Pacote 3: tratamento inicial, condutas práticas e erros comuns.
+- Pacotes seguintes: complicações, exceções, pegadinhas, casos mistos e alta performance.
+- Não pule para microtema avançado antes de construir o básico. Se o tópico envolver ácido-base, por exemplo, não comece por ânion gap antes de garantir o que é acidose/alcalose e como reconhecer o distúrbio primário.
+- Não revele o título do tópico como pista óbvia no enunciado. A questão deve parecer uma questão real, não uma pergunta anunciando o assunto.
+
+${qualityNotes.length ? `AJUSTES OBRIGATÓRIOS POR CONTROLE DE QUALIDADE:
+${qualityNotes.slice(0, 8).map(note => `- ${note}`).join('\n')}
+` : ''}
+
+TAREFA:
+Crie exatamente ${questionCount} questões de múltipla escolha que cobrem o ponto mais adequado desta etapa interna do tópico.
+Cada questão deve ter:
+- enunciado clínico ou direto de alto rendimento;
+- ${alts.length} alternativas plausíveis;
+- índice da alternativa correta em correctIndex, usando base zero;
+- explicação completa, didática e clínica, com o porquê da correta e por que as principais alternativas estão erradas;
+- 4 a 6 perguntas diagnósticas em primeira pessoa para descobrir por que o aluno acertou/errou;
+- 2 a 4 flashcards/conceitos revisáveis.
+
+REGRAS DAS HABILIDADES / DIAGNÓSTICO DE ERRO:
+- As skills NÃO são uma descrição do que a questão cobra.
+- Elas são perguntas para descobrir a causa do erro/acerto do aluno.
+- Cada skill deve começar exatamente com "Você".
+- Use perguntas naturais como:
+  - "Você sabia reconhecer a doença ou síndrome por trás do caso?"
+  - "Você sabia qual classificação/estágio/severidade se aplicava a este paciente?"
+  - "Você foi capaz de identificar no enunciado o dado que mudava a conduta?"
+  - "Você sabia qual exame ou conduta vinha antes da decisão final?"
+  - "Você sabia ligar essa classificação ao tratamento correto?"
+  - "Você errou por confundir conceitos parecidos, e não por falta de atenção?"
+- Para uma questão de tratamento por classificação, cubra causas possíveis do erro: não conhecer a doença, não conhecer a classificação, não reconhecer a classe no caso, não saber o tratamento daquela classe, não lembrar contraindicação/exceção, ou ter se distraído com um dado do enunciado.
+- Se a questão for de diagnóstico, pergunte sobre reconhecimento da doença, critérios, sinais-chave, exames, diferenciais e armadilhas.
+- Se a questão for de conduta, pergunte sobre gravidade/classificação, primeira medida, tratamento específico, contraindicações e exceções.
+- Não escreva frases como "Reconhece...", "Identifica...", "Associa...", "Determina..." sem perguntar ao usuário.
+- Não escreva "Você teve segurança para fazer esta etapa".
+- Cada pergunta deve permitir resposta: Sim / Incerteza / Desatenção / Não.
+
+REGRAS DAS QUESTÕES:
+- Não mencione a Jornada, algoritmo, conceito-alvo ou flashcards no enunciado.
+- Não faça questões repetidas com palavras diferentes.
+- Se uma questão tiver distratores, eles devem ser confusões reais de prova/prática.
+- A alternativa correta NÃO precisa ser sempre A neste JSON; use correctIndex.
+- Não use "todas as anteriores" ou "nenhuma das anteriores".
+- Evite enunciado que entregue a resposta pelo título do tópico.
+
+RESPONDA APENAS JSON VÁLIDO, sem markdown, sem crase, sem comentário.
+Formato obrigatório:
+{
+  "conceptId": "${concept?.id}",
+  "title": "título curto do pacote sem entregar a resposta",
+  "internalFocus": "subtema escolhido por você para esta etapa do tópico",
+  "questions": [
+    {
+      "id": "q1",
+      "statement": "enunciado",
+      "options": ["alternativa A", "alternativa B", "alternativa C", "alternativa D"${alts.length === 5 ? ', "alternativa E"' : ''}],
+      "correctIndex": 0,
+      "explanation": "explicação completa e didática",
+      "skills": [
+        {"id": "q1_s1", "text": "Você sabia reconhecer a doença ou síndrome por trás do caso?"},
+        {"id": "q1_s2", "text": "Você sabia ligar a classificação ou gravidade à conduta correta?"}
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "fc1",
+      "front": "pergunta objetiva",
+      "back": "resposta objetiva e cobrável",
+      "sourceSkillIds": ["q1_s1"]
+    }
+  ]
+}`;
 };
