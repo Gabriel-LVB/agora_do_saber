@@ -4505,15 +4505,238 @@ export default function QuestionBankApp() {
   const MS_DAY = 86400000;
 
   const saveReviewQueue = async (updated) => {
-    reviewQueueRef.current = updated;
-    setReviewQueue(updated);
-    // Persiste cada aulaId como doc separado
+    const previous = reviewQueueRef.current || {};
+    const compacted = {};
+    Object.entries(updated || {}).forEach(([aulaId, blocks]) => {
+      const nextBlocks = {};
+      Object.entries(blocks || {}).forEach(([blockId, qMap]) => {
+        if (qMap && Object.keys(qMap).length) nextBlocks[blockId] = qMap;
+      });
+      if (Object.keys(nextBlocks).length) compacted[aulaId] = nextBlocks;
+    });
+    const removedAulaIds = Object.keys(previous).filter(aulaId => !Object.prototype.hasOwnProperty.call(compacted, aulaId));
+    reviewQueueRef.current = compacted;
+    setReviewQueue(compacted);
     if (!user || user.isAnonymous) return;
-    // Calcular diffs para salvar apenas os que mudaram
-    for (const [aulaId, data] of Object.entries(updated)) {
-      try { await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data); } catch(e) {}
-    }
+    await Promise.all([
+      ...Object.entries(compacted).map(([aulaId, data]) =>
+        setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data).catch(console.error)
+      ),
+      ...removedAulaIds.map(aulaId =>
+        deleteDoc(doc(db, 'users', user.uid, 'vq_review', aulaId)).catch(console.error)
+      ),
+    ]);
   };
+
+  const directQuestionIds = (topic = {}) => new Set((topic.questions || []).map(q => String(q.id)));
+  const fixationQuestionIds = (topic = {}) => new Set(Object.values(topic.fixationQuestions || {}).flat().map(q => String(q.id)));
+  const extraBatteryQuestions = (block) => Array.isArray(block?.questions) ? block.questions : (Array.isArray(block) ? block : []);
+  const academiaExtraBlockId = (topicId, block, index) => `academia_extra_${topicId}_${block?.id || `legacy_${index}`}`;
+  const allTopicQuestionIds = (topic = {}) => new Set([
+    ...directQuestionIds(topic),
+    ...fixationQuestionIds(topic),
+    ...(topic.extraBattery || []).flatMap(block => extraBatteryQuestions(block).map(q => String(q.id))),
+  ]);
+
+  const pruneEmbeddedSpacedReview = (subject) => {
+    if (!subject || isFolderItem(subject)) return subject;
+    let changed = false;
+    const topics = (subject.topics || []).map(topic => {
+      const spacedReview = topic.spacedReview || {};
+      if (!Object.keys(spacedReview).length) return topic;
+      const validIds = allTopicQuestionIds(topic);
+      const nextSpacedReview = Object.fromEntries(
+        Object.entries(spacedReview).filter(([qId]) => validIds.has(String(qId)))
+      );
+      if (Object.keys(nextSpacedReview).length === Object.keys(spacedReview).length) return topic;
+      changed = true;
+      return { ...topic, spacedReview:nextSpacedReview };
+    });
+    return changed ? { ...subject, topics } : subject;
+  };
+
+  const pruneReviewBlockToQuestionIds = (queue, aulaId, blockId, validIds) => {
+    const block = queue?.[aulaId]?.[blockId];
+    if (!block) return { queue, changed:false };
+    const nextBlock = Object.fromEntries(
+      Object.entries(block).filter(([qId]) => validIds.has(String(qId)))
+    );
+    if (Object.keys(nextBlock).length === Object.keys(block).length) return { queue, changed:false };
+    const nextAula = { ...(queue[aulaId] || {}) };
+    if (Object.keys(nextBlock).length) nextAula[blockId] = nextBlock;
+    else delete nextAula[blockId];
+    return { queue:{ ...queue, [aulaId]:nextAula }, changed:true };
+  };
+
+  const removeReviewBlock = (queue, aulaId, blockId) => {
+    if (!queue?.[aulaId]?.[blockId]) return { queue, changed:false };
+    const nextAula = { ...(queue[aulaId] || {}) };
+    delete nextAula[blockId];
+    return { queue:{ ...queue, [aulaId]:nextAula }, changed:true };
+  };
+
+  const pruneLibraryReviewQueueToCurrentSources = (queue) => {
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+    const libraryTargets = {};
+    const validAcademiaOrigin = (origin) => {
+      if (origin?.source !== 'academia') return true;
+      const sourceSubject = items.find(item =>
+        !isFolderItem(item) &&
+        item.source === 'academia' &&
+        String(item.id) === String(origin.subjectId)
+      );
+      return !!sourceSubject?.topics?.some(topic => String(topic.id) === String(origin.topicId));
+    };
+    const setTarget = (aulaId, blockId, ids) => {
+      if (!libraryTargets[aulaId]) libraryTargets[aulaId] = {};
+      libraryTargets[aulaId][blockId] = ids;
+    };
+
+    items.filter(item => item && !isFolderItem(item)).forEach(subject => {
+      const aulaId = `lib_${subject.id}`;
+      (subject.topics || []).forEach(topic => {
+        if (!validAcademiaOrigin(topic.origin)) return;
+        setTarget(aulaId, `topic_${topic.id}`, directQuestionIds(topic));
+        if (subject.source === 'academia') {
+          setTarget(aulaId, `academia_fix_${topic.id}`, fixationQuestionIds(topic));
+          (topic.extraBattery || []).forEach((block, index) => {
+            setTarget(
+              aulaId,
+              academiaExtraBlockId(topic.id, block, index),
+              new Set(extraBatteryQuestions(block).map(q => String(q.id)))
+            );
+          });
+        }
+      });
+    });
+
+    let changed = false;
+    const nextQueue = {};
+    Object.entries(queue || {}).forEach(([aulaId, blocks]) => {
+      if (!aulaId.startsWith('lib_')) {
+        nextQueue[aulaId] = blocks;
+        return;
+      }
+      const targets = libraryTargets[aulaId] || {};
+      const nextBlocks = {};
+      Object.entries(blocks || {}).forEach(([blockId, qMap]) => {
+        const validIds = targets[blockId];
+        if (!validIds) {
+          changed = true;
+          return;
+        }
+        const nextQMap = Object.fromEntries(
+          Object.entries(qMap || {}).filter(([qId]) => validIds.has(String(qId)))
+        );
+        if (Object.keys(nextQMap).length !== Object.keys(qMap || {}).length) changed = true;
+        if (Object.keys(nextQMap).length) nextBlocks[blockId] = nextQMap;
+      });
+      if (Object.keys(nextBlocks).length) nextQueue[aulaId] = nextBlocks;
+      else if (Object.keys(blocks || {}).length) changed = true;
+    });
+
+    return { queue:nextQueue, changed };
+  };
+
+  const pruneReviewQueueForSubjectChanges = async (previousSubjects = [], nextSubjects = []) => {
+    let queue = reviewQueueRef.current || {};
+    let changed = false;
+    const nextById = new Map(nextSubjects.filter(Boolean).map(s => [String(s.id), s]));
+    const mark = (result) => {
+      if (!result.changed) return;
+      queue = result.queue;
+      changed = true;
+    };
+
+    previousSubjects.filter(Boolean).forEach(previousSubject => {
+      if (isFolderItem(previousSubject)) return;
+      const aulaId = `lib_${previousSubject.id}`;
+      const nextSubject = nextById.get(String(previousSubject.id));
+      if (!nextSubject || isFolderItem(nextSubject)) {
+        if (queue[aulaId]) {
+          const { [aulaId]: _removed, ...rest } = queue;
+          queue = rest;
+          changed = true;
+        }
+        return;
+      }
+
+      const nextTopics = new Map((nextSubject.topics || []).map(t => [String(t.id), t]));
+      (previousSubject.topics || []).forEach(previousTopic => {
+        const nextTopic = nextTopics.get(String(previousTopic.id));
+        if (!nextTopic) {
+          mark(removeReviewBlock(queue, aulaId, `topic_${previousTopic.id}`));
+          mark(removeReviewBlock(queue, aulaId, `academia_fix_${previousTopic.id}`));
+          (previousTopic.extraBattery || []).forEach((block, index) => {
+            mark(removeReviewBlock(queue, aulaId, academiaExtraBlockId(previousTopic.id, block, index)));
+          });
+          return;
+        }
+
+        mark(pruneReviewBlockToQuestionIds(queue, aulaId, `topic_${previousTopic.id}`, directQuestionIds(nextTopic)));
+        mark(pruneReviewBlockToQuestionIds(queue, aulaId, `academia_fix_${previousTopic.id}`, fixationQuestionIds(nextTopic)));
+
+        const nextExtraBlocks = new Map((nextTopic.extraBattery || []).map((block, index) => [block?.id || `legacy_${index}`, { block, index }]));
+        (previousTopic.extraBattery || []).forEach((previousBlock, previousIndex) => {
+          const key = previousBlock?.id || `legacy_${previousIndex}`;
+          const blockId = academiaExtraBlockId(previousTopic.id, previousBlock, previousIndex);
+          const nextEntry = nextExtraBlocks.get(key);
+          if (!nextEntry) {
+            mark(removeReviewBlock(queue, aulaId, blockId));
+            return;
+          }
+          mark(pruneReviewBlockToQuestionIds(
+            queue,
+            aulaId,
+            blockId,
+            new Set(extraBatteryQuestions(nextEntry.block).map(q => String(q.id)))
+          ));
+        });
+      });
+    });
+
+    const currentSources = pruneLibraryReviewQueueToCurrentSources(queue);
+    if (currentSources.changed) {
+      queue = currentSources.queue;
+      changed = true;
+    }
+    if (changed) await saveReviewQueue(queue);
+  };
+
+  const pruneReviewQueueForVqBlockChange = async (aulaId, previousData, nextData) => {
+    let queue = reviewQueueRef.current || {};
+    let changed = false;
+    const previousBlocks = previousData?.blocks || {};
+    const nextBlocks = nextData?.blocks || {};
+    Object.entries(previousBlocks).forEach(([blockId]) => {
+      const nextBlock = nextBlocks[blockId];
+      if (!nextBlock) {
+        const result = removeReviewBlock(queue, aulaId, blockId);
+        if (result.changed) {
+          queue = result.queue;
+          changed = true;
+        }
+        return;
+      }
+      const result = pruneReviewBlockToQuestionIds(
+        queue,
+        aulaId,
+        blockId,
+        new Set((nextBlock.questions || []).map(q => String(q.id)))
+      );
+      if (result.changed) {
+        queue = result.queue;
+        changed = true;
+      }
+    });
+    if (changed) await saveReviewQueue(queue);
+  };
+
+  useEffect(() => {
+    if (!user || !library.length || !Object.keys(reviewQueueRef.current || {}).length) return;
+    const result = pruneLibraryReviewQueueToCurrentSources(reviewQueueRef.current || {});
+    if (result.changed) saveReviewQueue(result.queue);
+  }, [user?.uid, library.length, reviewLoaded, reviewQueue]); // eslint-disable-line
 
   // Adiciona questões selecionadas à fila de revisão
   const addToReview = async (aulaId, blockId, selectedQIds, questions, meta = {}) => {
@@ -4756,12 +4979,14 @@ export default function QuestionBankApp() {
   };
 
   const saveVqBlock = async (aulaId, data) => {
+    const previousData = vqBlocksRef.current?.[aulaId];
     const updated = { ...(vqBlocksRef.current || {}), [aulaId]: data };
     vqBlocksRef.current = updated;
     setVqBlocks(updated);
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), data);
     } catch(e) {}
+    await pruneReviewQueueForVqBlockChange(aulaId, previousData, data);
   };
 
   // Build stable Firestore document ID — tenta bunny_id primeiro, depois título sanitizado (legacy)
@@ -5017,20 +5242,28 @@ export default function QuestionBankApp() {
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
   const updateSubject = async (s) => {
-    libraryRef.current = libraryRef.current.map(x=>x.id===s.id?s:x);
-    setLibrary(p=>p.map(x=>x.id===s.id?s:x));
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',s.id.toString()),s).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.map(x=>x.id===s.id?s:x)));
-    if (s.source === 'academia' || hasAcademiaOriginTopic(s)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    const cleanSubject = pruneEmbeddedSpacedReview(s);
+    const previous = libraryRef.current.find(x=>x.id===cleanSubject.id);
+    const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
+    libraryRef.current = nextLibrary;
+    setLibrary(p=>p.map(x=>x.id===cleanSubject.id?cleanSubject:x));
+    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',cleanSubject.id.toString()),cleanSubject).catch(console.error);
+    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
+    if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const updateLibraryItems = async (items) => {
-    const changed = new Map(items.map(item=>[item.id,item]));
-    const nextLibrary = sortLibraryItems(library.map(item=>changed.get(item.id)||item));
+    const cleanItems = items.map(pruneEmbeddedSpacedReview);
+    const changed = new Map(cleanItems.map(item=>[item.id,item]));
+    const currentLibrary = libraryRef.current?.length ? libraryRef.current : library;
+    const previousItems = cleanItems.map(item => currentLibrary.find(x => x.id === item.id)).filter(Boolean);
+    const nextLibrary = sortLibraryItems(currentLibrary.map(item=>changed.get(item.id)||item));
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
-    if(user&&!user.isAnonymous) await Promise.all(items.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
+    if(user&&!user.isAnonymous) await Promise.all(cleanItems.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
-    if (items.some(item => item.source === 'academia' || hasAcademiaOriginTopic(item))) scheduleAcademiaOracleMirrorSync(nextLibrary);
+    await pruneReviewQueueForSubjectChanges(previousItems, cleanItems);
+    if (cleanItems.some(item => item.source === 'academia' || hasAcademiaOriginTopic(item))) scheduleAcademiaOracleMirrorSync(nextLibrary);
   };
   const addSubject = async (s) => {
     let ns = s;
@@ -5049,10 +5282,12 @@ export default function QuestionBankApp() {
   const removeSubject = async (id) => {
     const removed = libraryRef.current.find(s=>s.id===id);
     if (isProtectedMirrorRootFolder(removed)) return;
-    libraryRef.current = libraryRef.current.filter(s=>s.id!==id);
+    const nextLibrary = libraryRef.current.filter(s=>s.id!==id);
+    libraryRef.current = nextLibrary;
     setLibrary(p=>p.filter(s=>s.id!==id));
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(library.filter(s=>s.id!==id)));
+    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    await pruneReviewQueueForSubjectChanges(removed ? [removed] : [], []);
     if (removed?.source === 'academia' || hasAcademiaOriginTopic(removed)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const createLibraryFolder = async (source, title, parentFolderId = activeFolderId || null) => {
@@ -5605,11 +5840,10 @@ export default function QuestionBankApp() {
     if (!folder) return;
     if (isProtectedMirrorRootFolder(folder)) return;
     const folderIds = getFolderTreeIds(folder);
+    const removedSubjects = librarySubjects.filter(s => s.source === folder.source && folderIds.has(s.folderId));
     const idsToDelete = new Set([
       ...Array.from(folderIds),
-      ...librarySubjects
-        .filter(s => s.source === folder.source && folderIds.has(s.folderId))
-        .map(s => s.id),
+      ...removedSubjects.map(s => s.id),
     ]);
     const nextLibrary = library.filter(item => !idsToDelete.has(item.id));
     libraryRef.current = nextLibrary;
@@ -5625,6 +5859,7 @@ export default function QuestionBankApp() {
       setActiveTopicId(null);
       setView('sub-library');
     }
+    await pruneReviewQueueForSubjectChanges(removedSubjects, []);
   };
 
   const saveSettingsTimer = useRef(null);
