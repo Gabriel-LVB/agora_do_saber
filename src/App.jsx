@@ -5924,7 +5924,7 @@ export default function QuestionBankApp() {
     return [...slots.slice(startIdx), ...slots.slice(0, startIdx)];
   };
 
-  // Advance to the next available key (called after every request, success or quota fail)
+  // Advance to the next available key after each attempted Gemini request.
   const rotateKey = async () => {
     const s = settingsRef.current;
     const slots = getConfiguredGeminiKeys(s);
@@ -5980,7 +5980,7 @@ export default function QuestionBankApp() {
         return r;
       } catch(e) {
         lastErr = e;
-        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+        await rotateKey();
         // SERVER_OVERLOADED, CONNECTION_ERROR etc. rotacionam para a próxima requisição, sem repetir a mesma chamada.
         throw e;
       }
@@ -6151,7 +6151,7 @@ export default function QuestionBankApp() {
         summaryText = await callGemini('Gere o sumário.', summaryPrompt, k);
         await rotateKey(); break;
       } catch(e) {
-        await rotateKey(); if(e.message==='QUOTA_EXCEEDED'){continue;}
+        await rotateKey();
         if(toastId) updateToast(toastId, `❌ Erro ao gerar sumário: ${e.message}`, 'error');
         setVqSyllabusLoading(false); return;
       }
@@ -6214,7 +6214,7 @@ export default function QuestionBankApp() {
     const total = blockIds.length;
     if(toastId) updateToast(toastId, `⚡ Gerando questões (0/${total} blocos)...`, 'loading');
 
-    // 6. Gerar todos os blocos em paralelo, cada um com chave rotacionada
+    // 6. Gerar todos os blocos em paralelo, rotacionando a chave após cada tentativa
     let done = 0;
     const na = numAlternatives;
     const alts = na===4
@@ -6224,7 +6224,7 @@ export default function QuestionBankApp() {
     const generateBlock = async (blockId, keySlot) => {
       const block = parsedBlocks[blockId];
       const PROMPT = buildVqBlockPrompt(block, aulaData.meta, block.subtopics||[], block.transcriptSlice||'', alts);
-      // Tenta com a chave designada, rotaciona se quota
+      // Usa a chave designada; se falhar, rotaciona para a próxima tentativa manual.
       const keys = getOrderedKeys();
       const startIdx = keySlot % keys.length;
       const ordered = [...keys.slice(startIdx), ...keys.slice(0, startIdx)];
@@ -6253,7 +6253,7 @@ export default function QuestionBankApp() {
           }
           return;
         } catch(e) {
-          await rotateKey(); if(e.message==='QUOTA_EXCEEDED'){continue;}
+          await rotateKey();
           // SERVER_OVERLOADED ou outro erro rotaciona para a próxima requisição, sem repetir este bloco.
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
@@ -6331,7 +6331,7 @@ export default function QuestionBankApp() {
         ok = true; break;
       } catch(e) {
         err = e;
-        await rotateKey(); if(e.message==='QUOTA_EXCEEDED'){continue;}
+        await rotateKey();
         break;
       }
     }
@@ -6587,7 +6587,7 @@ export default function QuestionBankApp() {
         return { subject:updatedSubject, questionCount:allQuestions.length };
       } catch(e) {
         lastErr = e;
-        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+        await rotateKey();
         break;
       }
     }
@@ -6669,7 +6669,7 @@ export default function QuestionBankApp() {
         ok=true; break;
       } catch(e) {
         err=e;
-        await rotateKey(); if (e.message==='QUOTA_EXCEEDED') { continue; }
+        await rotateKey();
         break;
       }
     }
@@ -6720,7 +6720,7 @@ export default function QuestionBankApp() {
           chunkOk = true;
           break;
         } catch(e) {
-          await rotateKey(); if (e.message==='QUOTA_EXCEEDED') { continue; }
+          await rotateKey();
           showApiError(e.message);
           setIsBusy(false);
           return;
@@ -6750,7 +6750,7 @@ export default function QuestionBankApp() {
         setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
         await rotateKey(); break;
       } catch(e) {
-        await rotateKey(); if (e.message==='QUOTA_EXCEEDED') { continue; }
+        await rotateKey();
         showApiError(e.message); break;
       }
     }
@@ -6991,7 +6991,7 @@ export default function QuestionBankApp() {
           chunkOk = true;
           break;
         } catch (e) {
-          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+          await rotateKey();
           showApiError(e.message);
           setIsBusy(false);
           return;
@@ -7024,7 +7024,7 @@ export default function QuestionBankApp() {
         setAcademiaSyllabusFB('');
         await rotateKey(); break;
       } catch (e) {
-        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+        await rotateKey();
         showApiError(e.message); break;
       }
     }
@@ -7122,7 +7122,7 @@ export default function QuestionBankApp() {
           break;
         } catch (e) {
           lessonErr = e;
-          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+          await rotateKey();
           break;
         }
       }
@@ -7153,7 +7153,7 @@ export default function QuestionBankApp() {
           await rotateKey();
           break;
         } catch (e) {
-          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+          await rotateKey();
           if (generationMode === 'questions') throw e;
           // Questões falharam mas temos a aula — continua sem questões
           break;
@@ -7380,7 +7380,7 @@ export default function QuestionBankApp() {
         await rotateKey();
         break;
       } catch (e) {
-        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+        await rotateKey();
         throw e;
       }
     }
@@ -7579,7 +7579,7 @@ export default function QuestionBankApp() {
           await rotateKey();
           break;
         } catch (e) {
-          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+          await rotateKey();
           showApiError(e.message);
           return;
         }
