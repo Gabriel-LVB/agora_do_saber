@@ -3385,11 +3385,13 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
       const r = await callGemini(prompt, sys, apiKey);
       setText(r); setPhase('done');
       if (onSave) onSave(r);
-      if (onRotateKey) onRotateKey();
     } catch(e) {
       setText('Não foi possível gerar o bizuário agora. Verifique sua API Key.');
       setPhase('done');
-    } finally { setLoading(false); }
+    } finally {
+      if (onRotateKey) await onRotateKey();
+      setLoading(false);
+    }
   };
 
   useEffect(() => { if (!cachedText) generate(); }, []); // eslint-disable-line
@@ -5978,8 +5980,8 @@ export default function QuestionBankApp() {
         return r;
       } catch(e) {
         lastErr = e;
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
-        // SERVER_OVERLOADED, CONNECTION_ERROR etc. — não tenta outra chave, só desperdiça
+        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
+        // SERVER_OVERLOADED, CONNECTION_ERROR etc. rotacionam para a próxima requisição, sem repetir a mesma chamada.
         throw e;
       }
     }
@@ -6149,7 +6151,7 @@ export default function QuestionBankApp() {
         summaryText = await callGemini('Gere o sumário.', summaryPrompt, k);
         await rotateKey(); break;
       } catch(e) {
-        if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
+        await rotateKey(); if(e.message==='QUOTA_EXCEEDED'){continue;}
         if(toastId) updateToast(toastId, `❌ Erro ao gerar sumário: ${e.message}`, 'error');
         setVqSyllabusLoading(false); return;
       }
@@ -6251,8 +6253,8 @@ export default function QuestionBankApp() {
           }
           return;
         } catch(e) {
-          if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
-          // SERVER_OVERLOADED ou outro erro — não tenta outra chave
+          await rotateKey(); if(e.message==='QUOTA_EXCEEDED'){continue;}
+          // SERVER_OVERLOADED ou outro erro rotaciona para a próxima requisição, sem repetir este bloco.
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {...(cur.blocks||{}), [blockId]:{...block,generating:false}};
@@ -6329,7 +6331,7 @@ export default function QuestionBankApp() {
         ok = true; break;
       } catch(e) {
         err = e;
-        if(e.message==='QUOTA_EXCEEDED'){await rotateKey();continue;}
+        await rotateKey(); if(e.message==='QUOTA_EXCEEDED'){continue;}
         break;
       }
     }
@@ -6585,7 +6587,7 @@ export default function QuestionBankApp() {
         return { subject:updatedSubject, questionCount:allQuestions.length };
       } catch(e) {
         lastErr = e;
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
         break;
       }
     }
@@ -6667,7 +6669,7 @@ export default function QuestionBankApp() {
         ok=true; break;
       } catch(e) {
         err=e;
-        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        await rotateKey(); if (e.message==='QUOTA_EXCEEDED') { continue; }
         break;
       }
     }
@@ -6718,7 +6720,7 @@ export default function QuestionBankApp() {
           chunkOk = true;
           break;
         } catch(e) {
-          if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          await rotateKey(); if (e.message==='QUOTA_EXCEEDED') { continue; }
           showApiError(e.message);
           setIsBusy(false);
           return;
@@ -6748,7 +6750,7 @@ export default function QuestionBankApp() {
         setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
         await rotateKey(); break;
       } catch(e) {
-        if (e.message==='QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        await rotateKey(); if (e.message==='QUOTA_EXCEEDED') { continue; }
         showApiError(e.message); break;
       }
     }
@@ -6989,7 +6991,7 @@ export default function QuestionBankApp() {
           chunkOk = true;
           break;
         } catch (e) {
-          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
           showApiError(e.message);
           setIsBusy(false);
           return;
@@ -7022,7 +7024,7 @@ export default function QuestionBankApp() {
         setAcademiaSyllabusFB('');
         await rotateKey(); break;
       } catch (e) {
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
         showApiError(e.message); break;
       }
     }
@@ -7120,7 +7122,7 @@ export default function QuestionBankApp() {
           break;
         } catch (e) {
           lessonErr = e;
-          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
           break;
         }
       }
@@ -7151,7 +7153,7 @@ export default function QuestionBankApp() {
           await rotateKey();
           break;
         } catch (e) {
-          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
           if (generationMode === 'questions') throw e;
           // Questões falharam mas temos a aula — continua sem questões
           break;
@@ -7378,7 +7380,7 @@ export default function QuestionBankApp() {
         await rotateKey();
         break;
       } catch (e) {
-        if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+        await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
         throw e;
       }
     }
@@ -7577,7 +7579,7 @@ export default function QuestionBankApp() {
           await rotateKey();
           break;
         } catch (e) {
-          if (e.message === 'QUOTA_EXCEEDED') { await rotateKey(); continue; }
+          await rotateKey(); if (e.message === 'QUOTA_EXCEEDED') { continue; }
           showApiError(e.message);
           return;
         }
