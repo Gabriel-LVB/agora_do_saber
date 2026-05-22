@@ -4070,6 +4070,7 @@ export default function QuestionBankApp() {
   const libraryDragRef = useRef(null);
   const libraryDragCleanupRef = useRef(null);
   const suppressLibraryClickUntil = useRef(0);
+  const [settingsOpen, setSettingsOpen] = useState({});
   const [blockActionMenu, setBlockActionMenu] = useState(null);
   const [moveNewFolderName, setMoveNewFolderName] = useState('');
   const [moveSubjectModal, setMoveSubjectModal] = useState(null);
@@ -4123,6 +4124,7 @@ export default function QuestionBankApp() {
   // Whitelist de videoaulas — carregada do Firestore
   const [allowedEmails, setAllowedEmails]       = useState([]);
   const [newWhitelistEmail, setNewWhitelistEmail] = useState('');
+  const [userDevices, setUserDevices] = useState([]);
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
   const canUseAcademia = isAdmin || canSeeVideoaulas;
@@ -5158,6 +5160,64 @@ export default function QuestionBankApp() {
     });
     return ()=>{ mounted = false; unsub(); };
   },[]);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous || !user.email) return;
+    const storageKey = 'agora_device_id';
+    let deviceId = readStorageText(storageKey, '');
+    if (!deviceId) {
+      deviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      writeStorageText(storageKey, deviceId);
+    }
+    const createdKey = 'agora_device_created_at';
+    let createdAt = Number(readStorageText(createdKey, '')) || 0;
+    if (!createdAt) {
+      createdAt = Date.now();
+      writeStorageText(createdKey, String(createdAt));
+    }
+    const deviceRef = doc(db, 'user_devices', `${user.uid}_${deviceId}`);
+    const writePresence = async () => {
+      const now = Date.now();
+      const screenSize = typeof window !== 'undefined' && window.screen
+        ? `${window.screen.width}x${window.screen.height}`
+        : '';
+      await setDoc(deviceRef, {
+        uid:user.uid,
+        email:user.email.toLowerCase(),
+        displayName:user.displayName || username || '',
+        deviceId,
+        userAgent:navigator.userAgent || '',
+        platform:navigator.platform || '',
+        language:navigator.language || '',
+        timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        screen:screenSize,
+        lastSeenAt:now,
+        updatedAt:now,
+        createdAt,
+      }, { merge:true }).catch(()=>{});
+    };
+    writePresence();
+    const interval = setInterval(writePresence, 60000);
+    const onVisibility = () => { if (document.visibilityState === 'visible') writePresence(); };
+    window.addEventListener('focus', writePresence);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', writePresence);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [user?.uid, user?.email, username]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setUserDevices([]);
+      return;
+    }
+    const unsub = onSnapshot(collection(db, 'user_devices'), (snap) => {
+      setUserDevices(snap.docs.map(d => ({ id:d.id, ...d.data() })));
+    }, () => setUserDevices([]));
+    return () => unsub();
+  }, [isAdmin]);
 
   // Library sync
   useEffect(()=>{
@@ -7831,6 +7891,25 @@ export default function QuestionBankApp() {
     else{try{await setDoc(doc(db,'users',user.uid),{username:name,apiKey:sigKey.trim(),settings:ns});setUsername(name);setSettings(ns);}catch(e){setErrorModal({title:'Erro',message:'Falha ao registrar.',isAlert:true});}}
   };
   const handleLogout = async () => { await signOut(auth);setLibrary([]);setSettings(defaultSettings);setView('library');setSigName('');setSigKey('');removeStorageItem('qb_username'); };
+
+  const isSettingsSectionOpen = (key) => settingsOpen[key] ?? (!isAdmin && key !== 'api');
+  const toggleSettingsSection = (key) => setSettingsOpen(p => ({ ...p, [key]:!isSettingsSectionOpen(key) }));
+  const SettingsSection = ({ id, title, icon, children, className='app-card rounded-2xl p-5', titleClassName='opacity-50' }) => {
+    const open = isSettingsSectionOpen(id);
+    return (
+      <div className={className} style={{overflowAnchor:'none'}}>
+        <button
+          type="button"
+          onClick={()=>toggleSettingsSection(id)}
+          className={`flex w-full items-center justify-between gap-3 text-left text-xs font-bold uppercase ${titleClassName}`}
+        >
+          <span className="flex items-center gap-2">{icon}{title}</span>
+          {open ? <ChevronDown className="w-4 h-4 flex-shrink-0"/> : <ChevronRight className="w-4 h-4 flex-shrink-0"/>}
+        </button>
+        {open && <div className="mt-3">{children}</div>}
+      </div>
+    );
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
@@ -11396,7 +11475,7 @@ export default function QuestionBankApp() {
 
         {/* ── SETTINGS ── */}
         {view==='settings'&&(
-          <div className="max-w-3xl mx-auto space-y-6">
+          <div className="max-w-3xl mx-auto space-y-6" style={{overflowAnchor:'none'}}>
             <div className="app-hero rounded-2xl p-5 md:p-6 flex items-center gap-4 mb-8">
               <button onClick={()=>setView('library')} className={`h-11 w-11 rounded-xl border flex items-center justify-center ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-white'}`}><ArrowLeft className="w-5 h-5"/></button>
               <div>
@@ -11405,8 +11484,7 @@ export default function QuestionBankApp() {
               </div>
             </div>
             {/* API Keys */}
-            <div className="app-card rounded-2xl p-5">
-              <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Key className="w-4 h-4"/>Chaves API (Gemini)</label>
+            <SettingsSection id="api" title="Chaves API (Gemini)" icon={<Key className="w-4 h-4"/>}>
               <div className={`p-3 rounded-xl mb-3 text-xs leading-relaxed ${darkMode?'bg-blue-900/20 border border-blue-800/40 text-blue-300':'bg-blue-50 border border-blue-200 text-blue-800'}`}>
                 <p className="font-bold mb-1">ℹ️ Sobre as chaves</p>
                 <p>Cada chave gratuita tem limite de ~20 requests/dia. Cadastre quantas chaves quiser para o site alternar automaticamente.</p>
@@ -11447,10 +11525,9 @@ export default function QuestionBankApp() {
                   );
                 });
               })()}
-            </div>
+            </SettingsSection>
             {/* Oracle Length */}
-            <div className="app-card rounded-2xl p-5">
-              <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><MessageCircle className="w-4 h-4"/>Resposta do Chat</label>
+            <SettingsSection id="chat" title="Resposta do Chat" icon={<MessageCircle className="w-4 h-4"/>}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {Object.entries(ORACLE_LENGTH).map(([k,c])=>(
                   <button key={k} onClick={()=>{const ns={...settings,oracleLength:k};setSettings(ns);saveSettings(ns);}}
@@ -11459,9 +11536,8 @@ export default function QuestionBankApp() {
                   </button>
                 ))}
 	              </div>
-	            </div>
-            <div className="app-card rounded-2xl p-5">
-              <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><SettingsIcon className="w-4 h-4"/>Tamanho da fonte</label>
+            </SettingsSection>
+            <SettingsSection id="font" title="Tamanho da fonte" icon={<SettingsIcon className="w-4 h-4"/>}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                 {FONT_SCALE_OPTIONS.map(opt=>(
                   <button
@@ -11492,10 +11568,9 @@ export default function QuestionBankApp() {
                 />
                 <p className={`text-xs mt-3 ${darkMode?'text-gray-500':'text-gray-500'}`}>A mudança afeta textos, questões, menus e formulários do site inteiro.</p>
               </div>
-            </div>
+            </SettingsSection>
 	            {canUseAdvancedFeatures&&(
-	              <div className="app-card rounded-2xl p-5">
-	                <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><CalendarCheck className="w-4 h-4"/>Metas diárias</label>
+	              <SettingsSection id="goals" title="Metas diárias" icon={<CalendarCheck className="w-4 h-4"/>}>
 	                <div className={`rounded-2xl border p-4 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
 	                  <p className={`text-xs mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>Sugestão inicial: 120 questões e 90 minutos úteis de aula por dia.</p>
 	                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -11523,11 +11598,10 @@ export default function QuestionBankApp() {
 	                    </div>
 	                  </div>
 	                </div>
-	              </div>
+	              </SettingsSection>
 	            )}
 	            {canUseAdvancedFeatures&&(
-	              <div className="app-card rounded-2xl p-5">
-	                <label className="block text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><GraduationCap className="w-4 h-4"/>Modo de questões</label>
+	              <SettingsSection id="question-mode" title="Modo de questões" icon={<GraduationCap className="w-4 h-4"/>}>
 	                <div className="grid grid-cols-2 gap-3">
 	                  {[
 	                    {k:'list',label:'Lista',desc:'Todas na página'},
@@ -11540,16 +11614,21 @@ export default function QuestionBankApp() {
 	                    </button>
 	                  ))}
 	                </div>
-	              </div>
+	              </SettingsSection>
 	            )}
-	            <div className="app-card rounded-2xl p-5"><label className="block text-xs font-bold uppercase mb-2 opacity-50">Prompt Extra</label><textarea value={settings.customPrompt} onChange={e=>setSettings({...settings,customPrompt:e.target.value})} onBlur={()=>saveSettings(settings)} placeholder="Instruções adicionais para o Oráculo..." className={`w-full h-28 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/></div>
+	            <SettingsSection id="prompt" title="Prompt Extra" icon={<MessageCircle className="w-4 h-4"/>}>
+                <textarea value={settings.customPrompt} onChange={e=>setSettings({...settings,customPrompt:e.target.value})} onBlur={()=>saveSettings(settings)} placeholder="Instruções adicionais para o Oráculo..." className={`w-full h-28 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
+              </SettingsSection>
 
             {/* ── ADMIN: Whitelist de Videoaulas ── */}
             {isAdmin&&(
-              <div className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-yellow-900/40':'bg-yellow-50 border-yellow-200'}`}>
-                <label className="block text-xs font-bold uppercase mb-4 flex items-center gap-2 text-yellow-600">
-                  <Sparkles className="w-4 h-4"/>Acesso às Videoaulas
-                </label>
+              <SettingsSection
+                id="whitelist"
+                title="Acesso às Videoaulas"
+                icon={<Sparkles className="w-4 h-4"/>}
+                className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-yellow-900/40':'bg-yellow-50 border-yellow-200'}`}
+                titleClassName="text-yellow-600"
+              >
                 <div className="space-y-2 mb-4">
                   {allowedEmails.map(email=>(
                     <div key={email} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl ${darkMode?'bg-gray-700':'bg-white'} border ${darkMode?'border-gray-600':'border-gray-200'}`}>
@@ -11575,19 +11654,95 @@ export default function QuestionBankApp() {
                     <PlusIcon className="w-4 h-4"/>
                   </button>
                 </div>
-              </div>
+              </SettingsSection>
             )}
+            {isAdmin&&(()=>{
+              const now = Date.now();
+              const activeWindow = 3 * 60 * 1000;
+              const recentWindow = 30 * 24 * 60 * 60 * 1000;
+              const whitelist = allowedEmails.map(e => e.toLowerCase());
+              const devicesByEmail = new Map();
+              userDevices
+                .filter(device => whitelist.includes(String(device.email || '').toLowerCase()))
+                .forEach(device => {
+                  const email = String(device.email || '').toLowerCase();
+                  devicesByEmail.set(email, [...(devicesByEmail.get(email) || []), device]);
+                });
+              const rows = whitelist.map(email => {
+                const devices = [...(devicesByEmail.get(email) || [])].sort((a,b)=>(b.lastSeenAt||0)-(a.lastSeenAt||0));
+                const active = devices.filter(d => now - Number(d.lastSeenAt || 0) <= activeWindow);
+                const recent = devices.filter(d => now - Number(d.lastSeenAt || 0) <= recentWindow);
+                return { email, devices, active, recent };
+              });
+              const fmtSeen = (ts) => {
+                if (!ts) return 'nunca';
+                const diff = now - Number(ts);
+                if (diff < 90000) return 'agora';
+                if (diff < 3600000) return `${Math.round(diff/60000)} min`;
+                if (diff < 86400000) return `${Math.round(diff/3600000)} h`;
+                return `${Math.round(diff/86400000)} d`;
+              };
+              const totalActive = rows.reduce((acc,row)=>acc+row.active.length,0);
+              const totalRecent = rows.reduce((acc,row)=>acc+row.recent.length,0);
+              return (
+                <SettingsSection
+                  id="devices"
+                  title="Dispositivos conectados"
+                  icon={<UserIcon className="w-4 h-4"/>}
+                  className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
+                  titleClassName="text-yellow-600"
+                >
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                      <p className="text-2xl font-serif font-bold text-green-500">{totalActive}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">ativos agora</p>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                      <p className="text-2xl font-serif font-bold text-yellow-600">{totalRecent}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">últimos 30 dias</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {rows.map(row=>(
+                      <div key={row.email} className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-bold truncate">{row.email}</p>
+                          <p className="text-xs font-bold text-yellow-600 flex-shrink-0">{row.active.length} ativo{row.active.length!==1?'s':''} · {row.recent.length} disp.</p>
+                        </div>
+                        {row.devices.length > 0 ? (
+                          <div className="mt-2 space-y-1">
+                            {row.devices.slice(0, 4).map(device=>(
+                              <div key={device.id} className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs ${darkMode?'bg-gray-800 text-gray-300':'bg-white text-gray-600'}`}>
+                                <span className="truncate">{device.platform || 'Dispositivo'} · {device.screen || 'tela ?'} · {device.timezone || 'fuso ?'}</span>
+                                <span className={now - Number(device.lastSeenAt || 0) <= activeWindow ? 'font-bold text-green-500' : 'opacity-60'}>{fmtSeen(device.lastSeenAt)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs opacity-40">Nenhum dispositivo registrado.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </SettingsSection>
+              );
+            })()}
 
             {/* Zona de perigo */}
             {canSeeVideoaulas&&(
-              <div className={`border-2 border-dashed rounded-2xl p-6 ${darkMode?'border-red-800/50':'border-red-200'}`}>
-                <p className={`text-xs font-bold uppercase mb-1 ${darkMode?'text-red-400':'text-red-600'}`}>Zona de perigo</p>
+              <SettingsSection
+                id="danger"
+                title="Zona de perigo"
+                icon={<Trash2 className="w-4 h-4"/>}
+                className={`border-2 border-dashed rounded-2xl p-6 ${darkMode?'border-red-800/50':'border-red-200'}`}
+                titleClassName={darkMode?'text-red-400':'text-red-600'}
+              >
                 <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>Apaga todo o progresso do Portal do Curso: aulas assistidas, questões geradas e fila de revisão espaçada. A biblioteca do Oráculo não é afetada.</p>
                 <button onClick={()=>{setResetCourseModal(true);setResetCourseInput('');}}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${darkMode?'border-red-700 text-red-400 hover:bg-red-900/20':'border-red-300 text-red-600 hover:bg-red-50'}`}>
                   <Trash2 className="w-4 h-4"/>Apagar progresso do curso
                 </button>
-              </div>
+              </SettingsSection>
             )}
 
             <button onClick={()=>{saveSettings(settings);addToast('Configurações salvas.', 'success', 2500);setView('library');}} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold">Salvar</button>
