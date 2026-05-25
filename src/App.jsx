@@ -642,6 +642,72 @@ const cleanAulaTitle = (title) => {
   return t || title;
 };
 
+const splitLessonPartTitle = (title = '') => {
+  const clean = String(title || '').trim();
+  const match = clean.match(/\s*(?:[-–—:]\s*)?(?:parte|part)\s*(\d{1,2})\s*$/i);
+  if (!match) return { base:clean, part:null };
+  return {
+    base:clean.slice(0, match.index).replace(/\s*[-–—:]\s*$/, '').trim() || clean,
+    part:Number(match[1]) || null,
+  };
+};
+
+const cleanCourseOrgLabel = (text = '') =>
+  String(text || '')
+    .replace(/\s*\((?:b[oô]nus|bonus)\)\s*$/i, '')
+    .replace(/^\s*(?:b[oô]nus|bonus)\s*[-–—:]\s*/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+const courseOrgTitleGroupKey = (title = '') =>
+  normalizeTextKey(title)
+    .replace(/\s*\([a-z0-9]{2,12}\)\s*/g, ' ')
+    .replace(/\b(?:uma|um|abordagem|completa|conceitos|basicos|base|bases)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const normalizeCourseOrganizationTitles = (proposal) => {
+  const modules = (proposal.modules || []).map(module => ({
+    ...module,
+    title:cleanCourseOrgLabel(module.title || ''),
+    lessons:(module.lessons || []).map(lesson => ({
+      ...lesson,
+      title:cleanCourseOrgLabel(lesson.title || ''),
+    })),
+  }));
+  const bonus = (proposal.bonus || []).map(lesson => ({
+    ...lesson,
+    title:cleanCourseOrgLabel(lesson.title || ''),
+  }));
+  const lessons = [...modules.flatMap(module => module.lessons), ...bonus];
+  const byBase = new Map();
+  lessons.forEach(lesson => {
+    const parsed = splitLessonPartTitle(lesson.title);
+    const key = courseOrgTitleGroupKey(parsed.base);
+    if (!key) return;
+    if (!byBase.has(key)) byBase.set(key, []);
+    byBase.get(key).push({ lesson, ...parsed });
+  });
+  byBase.forEach(group => {
+    const shouldNumber = group.length > 1;
+    const sorted = group.sort((a, b) => (a.lesson.order || 0) - (b.lesson.order || 0));
+    const preferredBase = sorted.find(item => /\([^)]+\)/.test(item.base))?.base || sorted[0]?.base || '';
+    sorted.forEach((item, index) => {
+      item.lesson.title = shouldNumber ? `${preferredBase} - Parte ${index + 1}` : item.base;
+    });
+  });
+  return { ...proposal, modules, bonus };
+};
+
+const normalizeCourseOrgProposal = (proposal) => {
+  if (!proposal || !Array.isArray(proposal.subjects)) return proposal;
+  return {
+    ...proposal,
+    subjects:proposal.subjects.map(subjectProposal => normalizeCourseOrganizationTitles(subjectProposal)),
+  };
+};
+
 
 // Cronogram subtopic order — partial key match → sort index
 const SUBTOPIC_ORDER_MAP = {
@@ -1381,22 +1447,275 @@ const shortTopicName = (key) => {
   const t = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
   return t.length > 32 ? t.substring(0, 31) + '…' : (t || key);
 };
+
+const courseLessonDisplayTitle = (aula = {}) =>
+  cleanCourseOrgLabel(aula.display_title || aula.ai_catalog?.cleanTitle || cleanAulaTitle(aula.title || ''));
+
+const flattenCourseLessons = (raw) => {
+  const data = parseVideoaulasData(raw || {});
+  return sortSubjects(Object.keys(data)).flatMap(subject =>
+    Object.entries(data[subject] || {}).flatMap(([topic, cats]) => {
+      const groups = [
+        { cat:'main', label:'Aulas', items:cats.main || [] },
+        { cat:'bonus', label:'Bônus', items:cats.bonus || [] },
+      ];
+      return groups.flatMap(group => group.items.map((aula, index) => {
+        const id = getAulaId(aula) || `${subject}::${topic}::${group.cat}::${index}`;
+        return {
+          id,
+          docId:aula.doc_id || id,
+          subject,
+          topic,
+          cat:group.cat,
+          catLabel:group.label,
+          index,
+          aula,
+          title:courseLessonDisplayTitle(aula),
+          topicTitle:aula.display_topic || shortTopicName(topic),
+          durationSeconds:aula.duration_seconds || 0,
+          duration:aula.duration_formatted || '',
+        };
+      }));
+    })
+  );
+};
+
+const applyCourseOrgProposalToVideoData = (raw, proposal) => {
+  const normalized = normalizeCourseOrgProposal(proposal);
+  if (!normalized?.subjects?.length || !raw || !Object.keys(raw).length) return raw;
+  const allLessons = flattenCourseLessons(raw);
+  const byId = new Map();
+  allLessons.forEach(lesson => {
+    [lesson.docId, lesson.id, getAulaId(lesson.aula)].filter(Boolean).forEach(id => byId.set(String(id), lesson));
+  });
+  const used = new Set();
+  const result = {};
+  normalized.subjects.forEach(subjectProposal => {
+    if (!subjectProposal?.subject) return;
+    result[subjectProposal.subject] = result[subjectProposal.subject] || {};
+    (subjectProposal.modules || []).forEach((module, moduleIndex) => {
+      const topicKey = `${String(moduleIndex + 1).padStart(2, '0')} - ${module.title || `Módulo ${moduleIndex + 1}`}`;
+      result[subjectProposal.subject][topicKey] = { 'Aulas Principais': [], 'Bônus': [] };
+      (module.lessons || []).forEach((proposalLesson, lessonIndex) => {
+        const source = byId.get(String(proposalLesson.lessonId || ''));
+        if (!source) return;
+        used.add(source.id);
+        if (source.docId) used.add(source.docId);
+        result[subjectProposal.subject][topicKey]['Aulas Principais'].push({
+          ...source.aula,
+          display_title:proposalLesson.title || source.title,
+          display_topic:module.title || source.topicTitle,
+          display_order:lessonIndex + 1,
+        });
+      });
+    });
+  });
+  allLessons.forEach(lesson => {
+    if (used.has(lesson.id) || used.has(lesson.docId)) return;
+    if (!result[lesson.subject]) result[lesson.subject] = {};
+    if (!result[lesson.subject][lesson.topic]) result[lesson.subject][lesson.topic] = { 'Aulas Principais': [], 'Bônus': [] };
+    const bucket = lesson.cat === 'bonus' ? 'Bônus' : 'Aulas Principais';
+    result[lesson.subject][lesson.topic][bucket].push(lesson.aula);
+  });
+  return result;
+};
+
+const ADMIN_COURSE_TOPIC_QUESTION_MAX = 30;
+
+const getCourseVqQuestionPlan = ({ durationSecs = 0, suggestedQ = 10, isAdmin = false, maxPerBlock = 20 }) => {
+  if (isAdmin && durationSecs > 0) {
+    const totalQ = Math.max(1, Math.ceil(durationSecs / 60));
+    const qPerBlock = Math.min(ADMIN_COURSE_TOPIC_QUESTION_MAX, totalQ);
+    return { totalQ, qPerBlock, numBlocks:Math.ceil(totalQ / qPerBlock), adminMinuteRule:true };
+  }
+  const raw = durationSecs > 0 ? Math.ceil(durationSecs / 120) : (suggestedQ || 10);
+  const totalQ = Math.max(10, Math.round(raw / 10) * 10);
+  const qPerBlock = Math.min(maxPerBlock, totalQ);
+  return { totalQ, qPerBlock, numBlocks:Math.ceil(totalQ / qPerBlock), adminMinuteRule:false };
+};
+
+const isLikelyValidGeminiKey = (value = '') => /^AIza[0-9A-Za-z_-]{30,80}$/.test(String(value || '').trim());
+const COURSE_CATALOG_TARGET_SUBJECTS = ['Cardiologia', 'Pneumologia', 'Gastroenterologia', 'Endocrinologia'];
+const COURSE_CATALOG_TARGET_TOKENS = ['cardio', 'pneumo', 'gastro', 'endocr'];
+const COURSE_CATALOG_KEY_COOLDOWN_MS = 75 * 1000;
+const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
+const COURSE_CATALOG_DELAY_MIN_MS = 5000;
+const COURSE_CATALOG_DELAY_MAX_MS = 5000;
+
+const normalizeTextKey = (value = '') =>
+  String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const isCourseCatalogTargetSubject = (lesson = {}) => {
+  const haystack = normalizeTextKey([lesson.subject, lesson.topic, lesson.title].filter(Boolean).join(' '));
+  return COURSE_CATALOG_TARGET_TOKENS.some(token => haystack.includes(token));
+};
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const randomBetween = (min, max) => Math.floor(min + Math.random() * (max - min + 1));
+const shuffleList = (items = []) => {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = randomBetween(0, i);
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+const parseJsonObject = (text = '') => {
+  const cleaned = String(text || '').replace(/```json|```/gi, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('JSON_MISSING');
+  return JSON.parse(cleaned.slice(start, end + 1));
+};
+
+const buildLessonCatalogPrompt = ({ lesson = {}, subject = '', topic = '' }) => {
+  const transcript = String(lesson.transcript || '').slice(0, 14000);
+  return `Analise esta aula de medicina e devolva APENAS um JSON válido.
+
+OBJETIVO:
+- Dar um nome limpo e didático para a aula.
+- Criar uma descrição curta de 1 parágrafo para aparecer no site.
+- Sugerir matéria/tópico e se a aula é principal ou bônus.
+- Ajudar uma etapa futura de reorganização e enumeração do curso.
+
+REGRAS:
+- Não invente conteúdo fora do título/transcrição.
+- O título limpo deve ser curto, específico e sem numeração.
+- Descrição: 1 parágrafo, 25 a 55 palavras, português do Brasil.
+- isBonus=true apenas se parecer aula extra, revisão, plantão, resolução de questões, caso complementar, aprofundamento ou conteúdo acessório.
+- lessonType deve ser um destes: "principal", "bonus", "revisao", "questoes", "casos", "plantao", "intro", "extra".
+- confidence: número entre 0 e 1.
+
+JSON obrigatório:
+{
+  "cleanTitle": "Título limpo",
+  "description": "Descrição curta da aula.",
+  "suggestedSubject": "Matéria sugerida",
+  "suggestedTopic": "Tópico/módulo sugerido",
+  "isBonus": false,
+  "lessonType": "principal",
+  "orderHint": 1,
+  "tags": ["tag1", "tag2"],
+  "confidence": 0.8
+}
+
+DADOS ATUAIS:
+Título atual: ${lesson.title || ''}
+Matéria atual: ${subject || lesson.subject || ''}
+Tópico atual: ${topic || lesson.topic || ''}
+Marcada como bônus hoje: ${lesson.is_bonus ? 'sim' : 'não'}
+Duração: ${lesson.duration_formatted || ''}
+
+TRANSCRIÇÃO:
+${transcript || '[sem transcrição disponível]'}`;
+};
+
+const buildCourseOrganizationPrompt = ({ subject = '', lessons = [], integrateBonus = false }) => {
+  const payload = lessons.map((lesson, index) => ({
+    lessonId: lesson.id,
+    currentTitle: lesson.title || '',
+    currentSubject: lesson.subject || '',
+    currentTopic: lesson.topic || '',
+    currentIsBonus: !!lesson.is_bonus,
+    duration: lesson.duration_formatted || '',
+    cleanTitle: lesson.ai_catalog?.cleanTitle || lesson.title || '',
+    description: lesson.ai_catalog?.description || lesson.description || '',
+    suggestedTopic: lesson.ai_catalog?.suggestedTopic || '',
+    suggestedSubject: lesson.ai_catalog?.suggestedSubject || '',
+    lessonType: lesson.ai_catalog?.lessonType || '',
+    suggestedBonus: !!lesson.ai_catalog?.isBonus,
+    confidence: lesson.ai_catalog?.confidence || 0,
+    originalIndex:index + 1,
+  }));
+  const modeInstructions = integrateBonus
+    ? `OBJETIVO:
+- Criar uma proposta de organização para revisar antes de aplicar.
+- Separar módulos/tópicos.
+- Integrar TODAS as aulas na trilha principal, sem criar uma seção separada de bônus.
+- Aulas marcadas como bônus, revisão, questões ou plantão devem entrar perto do tema relacionado, como aprofundamento, revisão aplicada ou complemento.
+- Usar apenas os lessonId fornecidos.
+
+REGRAS:
+- Não invente lessonId.
+- Cada lessonId deve aparecer exatamente uma vez em modules[].lessons.
+- O campo bonus deve existir, mas precisa ser [].
+- Use títulos limpos, curtos e específicos, sem número no começo.
+- module title deve ser didático e curto.
+- No modo integrado, não use a palavra "bônus" nos títulos de módulos; integre como complemento/aprofundamento normal.
+- A ordem deve ir de bases/conceitos para diagnóstico, tratamento, complicações, aprofundamentos e questões/revisões.
+- Só use "Parte 1", "Parte 2" etc se todas as partes da mesma sequência existirem e estiverem nomeadas de modo consistente.
+- Se duas aulas tiverem o mesmo título, diferencie pelo foco real da aula ou use partes numeradas de modo consistente.
+- Não aplique nada, só proponha.`
+    : `OBJETIVO:
+- Criar uma proposta de organização para revisar antes de aplicar.
+- Separar módulos/tópicos.
+- Enumerar aulas principais.
+- Separar bônus/revisões/questões/plantões em uma seção própria.
+- Usar apenas os lessonId fornecidos.
+
+REGRAS:
+- Não invente lessonId.
+- Cada lessonId deve aparecer exatamente uma vez: em modules[].lessons OU em bonus[].
+- Use títulos limpos, curtos e específicos, sem número no começo.
+- module title deve ser didático e curto.
+- A ordem deve ir de bases/conceitos para diagnóstico, tratamento, complicações e questões.
+- Se a ficha marcar bônus/revisão/questões/plantão, prefira colocar em bonus, exceto se for claramente essencial.
+- Evite colocar "(Bônus)" no nome de módulos; use a seção bonus para essa distinção.
+- Só use "Parte 1", "Parte 2" etc se todas as partes da mesma sequência existirem e estiverem nomeadas de modo consistente.
+- Se duas aulas tiverem o mesmo título, diferencie pelo foco real da aula ou use partes numeradas de modo consistente.
+- Não aplique nada, só proponha.`;
+  return `Você é coordenador pedagógico de um curso médico. Reorganize as aulas de "${subject}" em ordem didática.
+
+${modeInstructions}
+
+JSON obrigatório:
+{
+  "subject": "${subject}",
+  "modules": [
+    {
+      "title": "Nome do módulo",
+      "lessons": [
+        {
+          "lessonId": "id",
+          "title": "Título limpo",
+          "order": 1,
+          "reason": "motivo curto"
+        }
+      ]
+    }
+  ],
+  "bonus": [
+    {
+      "lessonId": "id",
+      "title": "Título limpo",
+      "order": 1,
+      "reason": "motivo curto"
+    }
+  ],
+  "notes": "observações curtas"
+}
+
+AULAS:
+${JSON.stringify(payload, null, 2)}`;
+};
 // Modal de configuração de geração de questões para uma videoaula
-const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading, savedSettings={} }) => {
+const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading, savedSettings={}, isAdmin=false }) => {
   const dm = darkMode;
-  const MAX_PER_BLOCK = 20;
+  const MAX_PER_BLOCK = isAdmin ? ADMIN_COURSE_TOPIC_QUESTION_MAX : 20;
 
   const [lessonMeta, setLessonMeta]   = useState(null);
   const [metaLoading, setMetaLoading] = useState(true);
 
   const durationSecs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
   const durationFmt  = lessonMeta?.duration_formatted || aula.duration_formatted || '';
-  const roundToTen   = (n) => Math.max(10, Math.round(n / 10) * 10);
-  const calculatedQ  = durationSecs > 0 ? roundToTen(Math.ceil(durationSecs / 120)) : (suggestedQ || 10);
+  const calculatedPlan = getCourseVqQuestionPlan({ durationSecs, suggestedQ, isAdmin, maxPerBlock:MAX_PER_BLOCK });
+  const calculatedQ  = calculatedPlan.totalQ;
+  const initialPlan = getCourseVqQuestionPlan({ durationSecs:aula.duration_seconds || 0, suggestedQ, isAdmin, maxPerBlock:MAX_PER_BLOCK });
 
-  const [totalQ,      setTotalQ]      = useState(suggestedQ || 10);
-  const [qPerBlock,   setQPerBlock]   = useState(Math.min(MAX_PER_BLOCK, suggestedQ || 10));
-  const [numBlocks,   setNumBlocks]   = useState(Math.ceil((suggestedQ || 10) / Math.min(MAX_PER_BLOCK, suggestedQ || 10)));
+  const [totalQ,      setTotalQ]      = useState(initialPlan.totalQ);
+  const [qPerBlock,   setQPerBlock]   = useState(initialPlan.qPerBlock);
+  const [numBlocks,   setNumBlocks]   = useState(initialPlan.numBlocks);
   // Inicializar com as configurações salvas do usuário
   const [numAlts,       setNumAlts]     = useState(savedSettings.numAlternatives || 5);
   const [extraPrompt,   setExtraPrompt] = useState('');
@@ -1424,13 +1743,10 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   useEffect(() => {
     if (metaLoading || initialized) return;
     const secs = lessonMeta?.duration_seconds || aula.duration_seconds || 0;
-    const raw = secs > 0 ? Math.ceil(secs / 120) : (suggestedQ || 10);
-    const q   = Math.max(10, Math.round(raw / 10) * 10);
-    const perB = Math.min(MAX_PER_BLOCK, q);
-    const blks = Math.ceil(q / perB);
-    setTotalQ(q); setQPerBlock(perB); setNumBlocks(blks);
+    const plan = getCourseVqQuestionPlan({ durationSecs:secs, suggestedQ, isAdmin, maxPerBlock:MAX_PER_BLOCK });
+    setTotalQ(plan.totalQ); setQPerBlock(plan.qPerBlock); setNumBlocks(plan.numBlocks);
     setInitialized(true);
-  }, [metaLoading, initialized]); // eslint-disable-line
+  }, [metaLoading, initialized, isAdmin]); // eslint-disable-line
 
   // Helpers de mudança — mantém consistência entre os 3 campos
   const handleTotalChange = (v) => {
@@ -1494,7 +1810,9 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
               <div>
                 <p className="text-sm font-bold">Duração: {durationFmt}</p>
                 <p className={`text-xs mt-0.5 ${dm?'text-gray-400':'text-gray-500'}`}>
-                  Sugestão: {calculatedQ} questões ({Math.ceil(durationSecs/60)} min ÷ 2, arredondado para dezena)
+                  {isAdmin
+                    ? `Sugestão admin: ${calculatedQ} questões (${Math.ceil(durationSecs/60)} min × 1; até ${ADMIN_COURSE_TOPIC_QUESTION_MAX} por bloco)`
+                    : `Sugestão: ${calculatedQ} questões (${Math.ceil(durationSecs/60)} min ÷ 2, arredondado para dezena)`}
                 </p>
               </div>
             ) : (
@@ -1595,7 +1913,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, syllabusMaxPerBlock:isAdmin?effectivePerBlock:undefined, adminMinuteRule:isAdmin})}
             className="flex-[2] px-5 py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
@@ -4204,6 +4522,25 @@ export default function QuestionBankApp() {
   const [cronLoading, setCronLoading]     = useState(false);
   const [curWeek, setCurWeek]             = useState(null);   // semana selecionada no cronograma
   const [cronStartDate, setCronStartDate] = useState(null);   // data de início do curso (salva no Firestore)
+  const [coursePlanSubjects, setCoursePlanSubjects] = useState([]);
+  const [coursePlanLessonOrder, setCoursePlanLessonOrder] = useState([]);
+  const [coursePlanLocked, setCoursePlanLocked] = useState(false);
+  const [courseCycleReviews, setCourseCycleReviews] = useState({});
+  const [courseCatalogRun, setCourseCatalogRun] = useState({ running:false, paused:false, stopping:false, current:0, total:0, logs:[] });
+  const [courseOrgRun, setCourseOrgRun] = useState({ running:false, current:0, total:0, logs:[] });
+  const [courseOrgProposal, setCourseOrgProposal] = useState(null);
+  const courseCatalogControlRef = useRef({ paused:false, stop:false });
+  const courseCatalogLogRef = useRef(null);
+
+  useEffect(() => {
+    const el = courseCatalogLogRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+  }, [courseCatalogRun.logs.length]);
+
+  useEffect(() => {
+    if (!isAdmin && cursoTab === 'plano') setCursoTab('cronograma');
+  }, [isAdmin, cursoTab]);
 
   useEffect(() => {
     reviewQueueRef.current = reviewQueue;
@@ -4255,11 +4592,14 @@ export default function QuestionBankApp() {
           if (!built[subj]) built[subj] = {};
           if (!built[subj][topic]) built[subj][topic] = { 'Aulas Principais': [], 'Bônus': [] };
           const aula = {
+            doc_id:            d.id,
             title:             data.title,
             embed_url:         data.embed_url,
             bunny_id:          data.bunny_id,
             duration_seconds:  data.duration_seconds  || 0,
             duration_formatted:data.duration_formatted || '',
+            description:       data.description || data.ai_catalog?.description || '',
+            ai_catalog:        data.ai_catalog || null,
           };
           if (isBonus) built[subj][topic]['Bônus'].push(aula);
           else         built[subj][topic]['Aulas Principais'].push(aula);
@@ -4285,6 +4625,13 @@ export default function QuestionBankApp() {
     } catch(e) { console.error(e); if (showLoading) setVideoaulasData({}); }
     finally { if (showLoading) setVideoaulasLoading(false); }
   };
+
+  useEffect(() => {
+    if (!user || user.isAnonymous || !coursePlanLessonOrder.length || !videoaulasData) return;
+    const hasDocIds = flattenCourseLessons(videoaulasData).some(lesson => lesson.aula?.doc_id);
+    if (hasDocIds) return;
+    refreshVideoaulasInBackground(user, `agora_videoaulas_${user.uid}`, `agora_watched_${user.uid}`, false);
+  }, [user, coursePlanLessonOrder.length, videoaulasData]); // eslint-disable-line
 
   const markAulaWatched = async (bunnyId, aula = null) => {
     if (!bunnyId) return;
@@ -4440,7 +4787,14 @@ export default function QuestionBankApp() {
         setCronograma(JSON.parse(cached));
         // Carregar prefs do usuário (data de início) em background
         getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main')).then(prefSnap => {
-          if (prefSnap.exists() && prefSnap.data().startDate) setCronStartDate(prefSnap.data().startDate);
+          if (!prefSnap.exists()) return;
+          const prefs = prefSnap.data() || {};
+          if (prefs.startDate) setCronStartDate(prefs.startDate);
+          if (Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
+          if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
+          if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
+          if (prefs.courseCycleReviews && typeof prefs.courseCycleReviews === 'object') setCourseCycleReviews(prefs.courseCycleReviews);
+          if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') setCourseOrgProposal(normalizeCourseOrgProposal(prefs.courseOrgProposal));
         }).catch(()=>{});
         return;
       }
@@ -4457,7 +4811,15 @@ export default function QuestionBankApp() {
         setCronograma(weeks);
         try { localStorage.setItem(cacheKey, JSON.stringify(weeks)); } catch(e) {}
         const prefSnap = await getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'));
-        if (prefSnap.exists() && prefSnap.data().startDate) setCronStartDate(prefSnap.data().startDate);
+        if (prefSnap.exists()) {
+          const prefs = prefSnap.data() || {};
+          if (prefs.startDate) setCronStartDate(prefs.startDate);
+          if (Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
+          if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
+          if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
+          if (prefs.courseCycleReviews && typeof prefs.courseCycleReviews === 'object') setCourseCycleReviews(prefs.courseCycleReviews);
+          if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') setCourseOrgProposal(normalizeCourseOrgProposal(prefs.courseOrgProposal));
+        }
       } catch(e) { setCronograma([]); }
       finally { setCronLoading(false); }
     })();
@@ -4465,7 +4827,15 @@ export default function QuestionBankApp() {
 
   // Resetar ao logout
   useEffect(() => {
-    if (!user) cronLoadedRef.current = false;
+    if (!user) {
+      cronLoadedRef.current = false;
+      setCoursePlanSubjects([]);
+      setCoursePlanLessonOrder([]);
+      setCoursePlanLocked(false);
+      setCourseCycleReviews({});
+      setCourseOrgProposal(null);
+      setCourseOrgRun({ running:false, current:0, total:0, logs:[] });
+    }
   }, [user]);
 
   // Load reviewQueue — carrega uma vez no login
@@ -4492,6 +4862,56 @@ export default function QuestionBankApp() {
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { startDate: dateStr }, { merge: true });
     } catch(e) {}
+  };
+
+  const saveCoursePlanPrefs = async (nextSubjects = coursePlanSubjects, nextLocked = coursePlanLocked, nextLessonOrder = coursePlanLessonOrder) => {
+    const cleanSubjects = [...new Set((nextSubjects || []).filter(Boolean))];
+    const cleanLessonOrder = [...new Set((nextLessonOrder || []).filter(Boolean).map(String))];
+    setCoursePlanSubjects(cleanSubjects);
+    setCoursePlanLessonOrder(cleanLessonOrder);
+    setCoursePlanLocked(!!nextLocked);
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
+        coursePlanSubjects:cleanSubjects,
+        coursePlanLessonOrder:cleanLessonOrder,
+        coursePlanLocked:!!nextLocked,
+      }, { merge:true });
+    } catch(e) {
+      addToast('Não consegui sincronizar o plano agora, mas mantive na tela.', 'info', 3500);
+    }
+  };
+
+  const applyCourseOrgProposalToPlan = async () => {
+    const proposal = normalizeCourseOrgProposal(courseOrgProposal);
+    const subjects = (proposal?.subjects || []).map(item => item.subject).filter(Boolean);
+    const lessonOrder = (proposal?.subjects || []).flatMap(subjectProposal =>
+      (subjectProposal.modules || []).flatMap(module => (module.lessons || []).map(lesson => lesson.lessonId))
+    ).filter(Boolean);
+    if (!subjects.length || !lessonOrder.length) {
+      addToast('Gere uma proposta antes de aplicar ao plano.', 'info', 3500);
+      return;
+    }
+    await saveCoursePlanPrefs(subjects, true, lessonOrder);
+    setCursoTab('plano');
+    setView('curso');
+    addToast('Proposta aplicada ao Meu Plano.', 'success', 3500);
+  };
+
+  const saveCourseCycleReview = async (lessonId, stage) => {
+    if (!lessonId || !stage) return;
+    const next = {
+      ...(courseCycleReviews || {}),
+      [lessonId]: {
+        ...(courseCycleReviews?.[lessonId] || {}),
+        [stage]: Date.now(),
+      },
+    };
+    setCourseCycleReviews(next);
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { courseCycleReviews:next }, { merge:true });
+    } catch(e) {
+      addToast('Não consegui sincronizar essa revisão agora, mas marquei na tela.', 'info', 3500);
+    }
   };
 
   // Calcula semana atual baseada na data de início
@@ -5038,6 +5458,20 @@ export default function QuestionBankApp() {
     document.body.style.backgroundColor=darkMode?'#111827':'#fafaf9';
     writeStorageJson('qb_dark', darkMode);
   },[darkMode]);
+
+  useEffect(() => {
+    const shouldLockPageScroll = view === 'videoaulas';
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    if (shouldLockPageScroll) {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [view]);
 
   useEffect(() => {
     const scale = Math.max(90, Math.min(130, Number(settings.fontScale) || 100));
@@ -6056,6 +6490,367 @@ export default function QuestionBankApp() {
   const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
   const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
 
+  const addCourseCatalogLog = (type, msg) => {
+    const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    setCourseCatalogRun(p => ({ ...p, logs:[...p.logs.slice(-80), { id:Date.now()+Math.random(), type, msg, time }] }));
+  };
+
+  const collectLikelySiteGeminiKeys = async () => {
+    const byValue = new Map();
+    const addKey = (value, label='Chave') => {
+      const clean = String(value || '').trim();
+      if (!isLikelyValidGeminiKey(clean) || byValue.has(clean)) return;
+      byValue.set(clean, { value:clean, label });
+    };
+    getConfiguredGeminiKeys(settingsRef.current).forEach((key, idx) => addKey(key.k, `Minhas chaves ${idx + 1}`));
+    if (!isAdmin) return [...byValue.values()];
+    try {
+      const snap = await getDocs(collection(db, 'users'));
+      snap.forEach(userDoc => {
+        const data = userDoc.data() || {};
+        const label = data.username || data.email || userDoc.id;
+        addKey(data.apiKey, label);
+        normalizeGeminiKeys(data.settings || {}).forEach(key => addKey(key.value, label));
+        normalizeGeminiKeys({ geminiKeysBackup:data.settings?.geminiKeysBackup || [] }).forEach(key => addKey(key.value, label));
+      });
+    } catch(e) {
+      addCourseCatalogLog('error', 'Não consegui buscar as chaves dos usuários; usando apenas as suas.');
+    }
+    return [...byValue.values()];
+  };
+
+  const pauseCourseCatalogAnalysis = () => {
+    courseCatalogControlRef.current.paused = true;
+    setCourseCatalogRun(p => ({ ...p, paused:true }));
+    addCourseCatalogLog('info', 'Pausado. O item atual termina e a fila espera.');
+  };
+
+  const resumeCourseCatalogAnalysis = () => {
+    courseCatalogControlRef.current.paused = false;
+    setCourseCatalogRun(p => ({ ...p, paused:false }));
+    addCourseCatalogLog('info', 'Continuando a fila.');
+  };
+
+  const stopCourseCatalogAnalysis = () => {
+    courseCatalogControlRef.current.stop = true;
+    courseCatalogControlRef.current.paused = false;
+    setCourseCatalogRun(p => ({ ...p, paused:false, stopping:true }));
+    addCourseCatalogLog('info', 'Parando após a etapa atual.');
+  };
+
+  const addCourseOrgLog = (type, msg) => {
+    const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    setCourseOrgRun(p => ({ ...p, logs:[...p.logs.slice(-40), { id:Date.now()+Math.random(), type, msg, time }] }));
+  };
+
+  const startCourseOrganizationProposal = async ({ integrateBonus=false } = {}) => {
+    if (!isAdmin || courseOrgRun.running) return;
+    setCourseOrgRun({ running:true, current:0, total:COURSE_CATALOG_TARGET_SUBJECTS.length, logs:[] });
+    const modeLabel = integrateBonus ? 'sem separar bônus' : 'com bônus separado';
+    const toastId = addToast(`Gerando proposta ${modeLabel}...`, 'loading', 0);
+    try {
+      const keys = shuffleList(await collectLikelySiteGeminiKeys());
+      if (!keys.length) {
+        updateToast(toastId, 'Nenhuma chave Gemini com formato plausível foi encontrada.', 'error');
+        setCourseOrgRun(p => ({ ...p, running:false }));
+        return;
+      }
+      const snap = await getDocs(collection(db, 'lessons'));
+      const lessons = [];
+      snap.forEach(lessonDoc => {
+        const data = lessonDoc.data() || {};
+        if (!data.title || !isCourseCatalogTargetSubject(data)) return;
+        if (!data.ai_catalog?.cleanTitle && !data.ai_catalog?.description) return;
+        lessons.push({ id:lessonDoc.id, ...data });
+      });
+      const proposals = [];
+      let keyCursor = 0;
+      for (let i = 0; i < COURSE_CATALOG_TARGET_SUBJECTS.length; i += 1) {
+        const subject = COURSE_CATALOG_TARGET_SUBJECTS[i];
+        const token = COURSE_CATALOG_TARGET_TOKENS[i];
+        const subjectLessons = lessons.filter(lesson => isCourseCatalogTargetSubject(lesson) && normalizeTextKey([lesson.subject, lesson.topic, lesson.title, lesson.ai_catalog?.suggestedSubject].join(' ')).includes(token));
+        setCourseOrgRun(p => ({ ...p, current:i + 1, total:COURSE_CATALOG_TARGET_SUBJECTS.length }));
+        if (!subjectLessons.length) {
+          addCourseOrgLog('info', `${subject}: nenhuma ficha encontrada.`);
+          continue;
+        }
+        updateToast(toastId, `Organizando ${subject} ${modeLabel} (${i + 1}/${COURSE_CATALOG_TARGET_SUBJECTS.length})...`, 'loading');
+        let parsed = null;
+        let lastErr = null;
+        for (let attempt = 0; attempt < Math.min(keys.length, 8); attempt += 1) {
+          const key = keys[keyCursor % keys.length];
+          keyCursor += 1;
+          try {
+            const raw = await callGemini(
+              'Organize a matéria em JSON.',
+              buildCourseOrganizationPrompt({ subject, lessons:subjectLessons, integrateBonus }),
+              key.value,
+              [],
+              { maxTokens:6000 }
+            );
+            parsed = parseJsonObject(raw);
+            break;
+          } catch(e) {
+            lastErr = e;
+            if (!['QUOTA_EXCEEDED', 'SERVER_OVERLOADED', 'CONNECTION_ERROR'].includes(e.message)) break;
+            await wait(1200);
+          }
+        }
+        if (!parsed) {
+          addCourseOrgLog('error', `${subject}: ${ERROR_CONFIGS[lastErr?.message]?.title || lastErr?.message || 'erro'}.`);
+          continue;
+        }
+        const lessonIds = new Set(subjectLessons.map(lesson => lesson.id));
+        const cleanLessons = (items = []) => (Array.isArray(items) ? items : [])
+          .filter(item => lessonIds.has(String(item.lessonId || '')))
+          .map((item, idx) => ({
+            lessonId:String(item.lessonId),
+            title:String(item.title || '').trim().slice(0, 120),
+            order:Number(item.order) || idx + 1,
+            reason:String(item.reason || '').trim().slice(0, 160),
+          }));
+        const fallbackById = new Map(subjectLessons.map(lesson => [
+          lesson.id,
+          {
+            lessonId:lesson.id,
+            title:String(lesson.ai_catalog?.cleanTitle || lesson.title || 'Aula').trim().slice(0, 120),
+            reason:String(lesson.ai_catalog?.description || 'Aula integrada à trilha.').trim().slice(0, 160),
+          },
+        ]));
+        const modules = (Array.isArray(parsed.modules) ? parsed.modules : []).map((module, idx) => ({
+          title:String(module.title || `Módulo ${idx + 1}`).trim().slice(0, 100),
+          lessons:cleanLessons(module.lessons),
+        })).filter(module => module.lessons.length);
+        const parsedBonus = cleanLessons(parsed.bonus);
+        if (integrateBonus) {
+          const usedIds = new Set(modules.flatMap(module => module.lessons.map(lesson => lesson.lessonId)));
+          const extras = [];
+          parsedBonus.forEach(lesson => {
+            if (usedIds.has(lesson.lessonId)) return;
+            usedIds.add(lesson.lessonId);
+            extras.push({ ...lesson, reason:lesson.reason || 'Complemento integrado ao fluxo principal.' });
+          });
+          subjectLessons.forEach(lesson => {
+            if (usedIds.has(lesson.id)) return;
+            usedIds.add(lesson.id);
+            const fallback = fallbackById.get(lesson.id);
+            extras.push({ ...fallback, order:extras.length + 1 });
+          });
+          if (extras.length) {
+            modules.push({ title:'Complementos e revisões integradas', lessons:extras });
+          }
+        }
+        const proposal = normalizeCourseOrganizationTitles({
+          subject,
+          modules,
+          bonus:integrateBonus ? [] : parsedBonus,
+          notes:String(parsed.notes || '').trim().slice(0, 500),
+          generatedAt:Date.now(),
+        });
+        proposals.push(proposal);
+        addCourseOrgLog('success', `${subject}: ${proposal.modules.length} módulo(s)${integrateBonus ? ' integrados' : `, ${proposal.bonus.length} bônus`}.`);
+        await wait(1000);
+      }
+      const nextProposal = {
+        subjects:proposals,
+        generatedAt:Date.now(),
+        scope:COURSE_CATALOG_TARGET_SUBJECTS,
+        mode:integrateBonus ? 'integrated' : 'separate-bonus',
+      };
+      setCourseOrgProposal(nextProposal);
+      if (user && !user.isAnonymous) {
+        await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { courseOrgProposal:nextProposal }, { merge:true });
+      }
+      updateToast(toastId, `Proposta gerada para ${proposals.length} matéria${proposals.length!==1?'s':''}.`, proposals.length ? 'success' : 'info');
+      setTimeout(() => removeToast(toastId), 10000);
+    } catch(e) {
+      updateToast(toastId, 'Erro ao gerar proposta de organização.', 'error');
+      addCourseOrgLog('error', e.message || 'Erro desconhecido.');
+    } finally {
+      setCourseOrgRun(p => ({ ...p, running:false }));
+    }
+  };
+
+  const startCourseCatalogAnalysis = async ({ force=false } = {}) => {
+    if (!isAdmin || courseCatalogRun.running) return;
+    courseCatalogControlRef.current = { paused:false, stop:false };
+    setCourseCatalogRun({ running:true, paused:false, stopping:false, current:0, total:0, logs:[] });
+    const toastId = addToast('Organizando catálogo das aulas...', 'loading', 0);
+    try {
+      const keys = await collectLikelySiteGeminiKeys();
+      if (!keys.length) {
+        updateToast(toastId, 'Nenhuma chave Gemini com formato plausível foi encontrada.', 'error');
+        setCourseCatalogRun(p => ({ ...p, running:false }));
+        return;
+      }
+      addCourseCatalogLog('info', `${keys.length} chave${keys.length!==1?'s':''} plausível${keys.length!==1?'is':''} encontrada${keys.length!==1?'s':''}.`);
+      const shuffledKeys = shuffleList(keys.map((key, originalIndex) => ({ ...key, originalIndex })));
+      addCourseCatalogLog('info', 'Ordem das chaves embaralhada para esta execução.');
+      const keyStates = shuffledKeys.map((key, index) => ({
+        ...key,
+        index,
+        uses:0,
+        quotaHits:0,
+        invalid:false,
+        cooldownUntil:0,
+      }));
+      let keyCursor = 0;
+      const keyLabel = (key) => `${key.label || 'chave'} #${(key.originalIndex ?? key.index) + 1}`;
+      const getNextCatalogKey = async () => {
+        while (!courseCatalogControlRef.current.stop) {
+          const now = Date.now();
+          const usable = keyStates.filter(key => !key.invalid);
+          if (!usable.length) return null;
+          for (let offset = 0; offset < keyStates.length; offset += 1) {
+            const idx = (keyCursor + offset) % keyStates.length;
+            const key = keyStates[idx];
+            if (key.invalid || key.cooldownUntil > now) continue;
+            keyCursor = (idx + 1) % keyStates.length;
+            return key;
+          }
+          const nextAt = Math.min(...usable.map(key => key.cooldownUntil).filter(Boolean));
+          const waitMs = Math.max(500, Math.min(15000, nextAt - now));
+          updateToast(toastId, `Todas as chaves disponíveis estão em cooldown. Aguardando ${Math.ceil(waitMs/1000)}s...`, 'info');
+          await wait(waitMs);
+        }
+        return null;
+      };
+      const snap = await getDocs(collection(db, 'lessons'));
+      const targets = [];
+      snap.forEach(lessonDoc => {
+        const data = lessonDoc.data() || {};
+        if (!data.title) return;
+        if (!isCourseCatalogTargetSubject(data)) return;
+        if (!force && data.ai_catalog?.description && data.ai_catalog?.cleanTitle) return;
+        targets.push({ id:lessonDoc.id, data });
+      });
+      setCourseCatalogRun(p => ({ ...p, total:targets.length }));
+      if (!targets.length) {
+        updateToast(toastId, 'Nada pendente em Cardio, Pneumo, Gastro e Endócrino.', 'success');
+        addCourseCatalogLog('success', 'Nada pendente nessas matérias.');
+        setCourseCatalogRun(p => ({ ...p, running:false }));
+        setTimeout(() => removeToast(toastId), 4000);
+        return;
+      }
+      addCourseCatalogLog('info', `Escopo atual: ${COURSE_CATALOG_TARGET_SUBJECTS.join(', ')}.`);
+      let ok = 0;
+      let fail = 0;
+      for (let i = 0; i < targets.length; i += 1) {
+        while (courseCatalogControlRef.current.paused && !courseCatalogControlRef.current.stop) {
+          updateToast(toastId, `Catálogo pausado (${i}/${targets.length}).`, 'info');
+          await wait(600);
+        }
+        if (courseCatalogControlRef.current.stop) {
+          addCourseCatalogLog('info', 'Execução interrompida. Clique em Gerar pendentes para continuar depois.');
+          break;
+        }
+        const item = targets[i];
+        setCourseCatalogRun(p => ({ ...p, current:i + 1, total:targets.length }));
+        updateToast(toastId, `Catalogando aulas (${i + 1}/${targets.length})...`, 'loading');
+        let saved = false;
+        let lastErr = null;
+        let quotaBurst = 0;
+        const maxAttemptsForLesson = Math.max(1, keyStates.length);
+        for (let attempt = 1; attempt <= maxAttemptsForLesson; attempt += 1) {
+          if (courseCatalogControlRef.current.stop) break;
+          const key = await getNextCatalogKey();
+          if (!key) {
+            lastErr = new Error('NO_KEYS_AVAILABLE');
+            break;
+          }
+          try {
+            key.uses += 1;
+          const raw = await callGemini(
+            'Gere a ficha JSON desta aula.',
+            buildLessonCatalogPrompt({ lesson:item.data, subject:item.data.subject, topic:item.data.topic }),
+            key.value,
+            [],
+            { maxTokens:1200 }
+          );
+          const parsed = parseJsonObject(raw);
+          const catalog = {
+            cleanTitle:String(parsed.cleanTitle || item.data.title || '').trim().slice(0, 120),
+            description:String(parsed.description || '').trim().slice(0, 450),
+            suggestedSubject:String(parsed.suggestedSubject || item.data.subject || '').trim().slice(0, 80),
+            suggestedTopic:String(parsed.suggestedTopic || item.data.topic || '').trim().slice(0, 100),
+            isBonus:!!parsed.isBonus,
+            lessonType:String(parsed.lessonType || (parsed.isBonus ? 'bonus' : 'principal')).trim().slice(0, 30),
+            orderHint:Number(parsed.orderHint) || null,
+            tags:Array.isArray(parsed.tags) ? parsed.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 8) : [],
+            confidence:Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
+            generatedAt:Date.now(),
+            originalTitle:item.data.title || '',
+          };
+          await setDoc(doc(db, 'lessons', item.id), {
+            description:catalog.description,
+            ai_catalog:catalog,
+          }, { merge:true });
+          ok += 1;
+            saved = true;
+          addCourseCatalogLog('success', `${catalog.cleanTitle || item.data.title}: ficha salva.`);
+            break;
+          } catch(e) {
+            lastErr = e;
+            if (e.message === 'QUOTA_EXCEEDED') {
+              key.quotaHits += 1;
+              key.cooldownUntil = Date.now() + COURSE_CATALOG_KEY_COOLDOWN_MS;
+              quotaBurst += 1;
+              addCourseCatalogLog('info', `${keyLabel(key)} em cooldown por quota; tentando outra chave.`);
+              if (quotaBurst >= COURSE_CATALOG_QUOTA_STORM_THRESHOLD) {
+                addCourseCatalogLog('info', 'Várias chaves diferentes bateram quota em sequência. Parece limite global/temporário; aguardando antes de continuar.');
+                updateToast(toastId, 'Muitas quotas seguidas. Aguardando 60s antes de tentar novamente...', 'info');
+                for (let s = 0; s < 60 && !courseCatalogControlRef.current.stop; s += 1) {
+                  while (courseCatalogControlRef.current.paused && !courseCatalogControlRef.current.stop) await wait(600);
+                  await wait(1000);
+                }
+                quotaBurst = 0;
+              }
+              continue;
+            }
+            if (e.message === 'API_KEY_INVALID') {
+              key.invalid = true;
+              addCourseCatalogLog('error', `${keyLabel(key)} removida da rodada: chave inválida.`);
+              continue;
+            }
+            break;
+          }
+        }
+        if (!saved) {
+          const code = lastErr?.message || 'erro';
+          if (code === 'QUOTA_EXCEEDED') {
+            addCourseCatalogLog('error', `${item.data.title || item.id}: limite temporário/global. Mantive pendente para continuar depois.`);
+            break;
+          }
+          fail += 1;
+          addCourseCatalogLog('error', `${item.data.title || item.id}: ${ERROR_CONFIGS[code]?.title || code}.`);
+          if (code === 'NO_KEYS_AVAILABLE') {
+            addCourseCatalogLog('error', 'Não há chaves disponíveis agora. Pare ou aguarde o cooldown.');
+            break;
+          }
+        }
+        if (!courseCatalogControlRef.current.stop && i < targets.length - 1) {
+          const delay = randomBetween(COURSE_CATALOG_DELAY_MIN_MS, COURSE_CATALOG_DELAY_MAX_MS);
+          updateToast(toastId, `Aguardando ${Math.round(delay/1000)}s antes da próxima aula...`, 'info');
+          for (let elapsed = 0; elapsed < delay && !courseCatalogControlRef.current.stop; elapsed += 500) {
+            while (courseCatalogControlRef.current.paused && !courseCatalogControlRef.current.stop) await wait(600);
+            await wait(Math.min(500, delay - elapsed));
+          }
+        }
+      }
+      updateToast(toastId, `Catálogo finalizado: ${ok} aula${ok!==1?'s':''} analisada${ok!==1?'s':''}, ${fail} erro${fail!==1?'s':''}.`, fail ? 'info' : 'success');
+      setTimeout(() => removeToast(toastId), 12000);
+      if (user && !user.isAnonymous) {
+        refreshVideoaulasInBackground(user, `agora_videoaulas_${user.uid}`, `agora_watched_${user.uid}`, false);
+      }
+    } catch(e) {
+      updateToast(toastId, 'Erro ao organizar catálogo das aulas.', 'error');
+      addCourseCatalogLog('error', e.message || 'Erro desconhecido.');
+    } finally {
+      courseCatalogControlRef.current = { paused:false, stop:false };
+      setCourseCatalogRun(p => ({ ...p, running:false, paused:false, stopping:false }));
+    }
+  };
+
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
@@ -6152,10 +6947,8 @@ export default function QuestionBankApp() {
     if (!checkKey()) return;
     const s = settingsRef.current;
     const durationSecs = aula.duration_seconds || 0;
-    const raw = durationSecs > 0 ? Math.ceil(durationSecs / 120) : 10;
-    const totalQ = Math.max(10, Math.round(raw / 10) * 10);
-    const qPerBlock = Math.min(30, totalQ);
-    const numBlocks = Math.ceil(totalQ / qPerBlock);
+    const plan = getCourseVqQuestionPlan({ durationSecs, suggestedQ:10, isAdmin, maxPerBlock:30 });
+    const { totalQ, qPerBlock, numBlocks } = plan;
     const aulaId = aulaDocId(aula);
 
     const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
@@ -6165,6 +6958,8 @@ export default function QuestionBankApp() {
       numAlternatives: s.numAlternatives || 5,
       questionStyle: s.questionStyle || 'mixed',
       autoMode: s.autoMode !== false,
+      syllabusMaxPerBlock: isAdmin ? qPerBlock : undefined,
+      adminMinuteRule: isAdmin,
       extraPrompt: '',
       subject, topic,
       toastId,
@@ -6203,7 +6998,9 @@ export default function QuestionBankApp() {
     const transcriptSlices = splitByParagraph(transcript, numBlocks);
 
     // 3. Gerar sumário
-    const summaryPrompt = buildVqSyllabusPrompt(aula, numBlocks, qPerBlock, transcript, extraPrompt);
+    const summaryPrompt = buildVqSyllabusPrompt(aula, numBlocks, qPerBlock, transcript, extraPrompt, {
+      maxSubtopicsPerBlock: cfg.syllabusMaxPerBlock,
+    });
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
     for (const {k} of orderedKeys) {
@@ -7913,6 +8710,17 @@ export default function QuestionBankApp() {
 
   // ─────────────────────────────────────────────────────────────────────────
   if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
+  const displayCourseOrgProposal = normalizeCourseOrgProposal(courseOrgProposal);
+  const appliedVideoaulasData = isAdmin && coursePlanLessonOrder.length && displayCourseOrgProposal?.subjects?.length
+    ? applyCourseOrgProposalToVideoData(videoaulasData || {}, displayCourseOrgProposal)
+    : videoaulasData;
+  const appliedCourseSubjectOrder = (displayCourseOrgProposal?.subjects || []).map(item => item.subject).filter(Boolean);
+  const sortCourseSubjectsForDisplay = (subjects = []) => {
+    if (!isAdmin || !coursePlanLessonOrder.length || !appliedCourseSubjectOrder.length) return sortSubjects(subjects);
+    const seen = new Set();
+    const ordered = appliedCourseSubjectOrder.filter(subject => subjects.includes(subject) && !seen.has(subject) && seen.add(subject));
+    return [...ordered, ...sortSubjects(subjects.filter(subject => !seen.has(subject)))];
+  };
 
   if (!username) return (
     <div className={`min-h-screen flex items-center justify-center p-4 ${darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900'}`}>
@@ -8122,6 +8930,40 @@ export default function QuestionBankApp() {
         }
         .agora-shell ::selection {
           background: rgba(217, 119, 6, .25);
+        }
+        html,
+        body,
+        .agora-shell,
+        .agora-shell * {
+          scrollbar-width: thin;
+          scrollbar-color: ${darkMode ? '#4b5563 #0f172a' : '#cbd5e1 #f8fafc'};
+        }
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar,
+        .agora-shell::-webkit-scrollbar,
+        .agora-shell *::-webkit-scrollbar {
+          width: 9px;
+          height: 9px;
+        }
+        html::-webkit-scrollbar-track,
+        body::-webkit-scrollbar-track,
+        .agora-shell::-webkit-scrollbar-track,
+        .agora-shell *::-webkit-scrollbar-track {
+          background: ${darkMode ? '#0f172a' : '#f8fafc'};
+        }
+        html::-webkit-scrollbar-thumb,
+        body::-webkit-scrollbar-thumb,
+        .agora-shell::-webkit-scrollbar-thumb,
+        .agora-shell *::-webkit-scrollbar-thumb {
+          background: ${darkMode ? '#4b5563' : '#cbd5e1'};
+          border-radius: 999px;
+          border: 2px solid ${darkMode ? '#0f172a' : '#f8fafc'};
+        }
+        html::-webkit-scrollbar-thumb:hover,
+        body::-webkit-scrollbar-thumb:hover,
+        .agora-shell::-webkit-scrollbar-thumb:hover,
+        .agora-shell *::-webkit-scrollbar-thumb:hover {
+          background: #d97706;
         }
         .agora-shell .app-hero {
           background:
@@ -9220,7 +10062,7 @@ export default function QuestionBankApp() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
-                      <select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}>
+                      <select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} style={{colorScheme:darkMode?'dark':'light'}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}>
                         <option value={4}>4 (A-D)</option>
                         <option value={5}>5 (A-E)</option>
                       </select>
@@ -9752,8 +10594,8 @@ export default function QuestionBankApp() {
 
           // Progresso por tópico
           const watchedByTopic = {};
-          if(videoaulasData){
-            Object.values(videoaulasData).forEach(topics=>
+          if(appliedVideoaulasData){
+            Object.values(appliedVideoaulasData).forEach(topics=>
               Object.entries(topics).forEach(([topic,cats])=>{
                 const all=extractAulas(cats);
                 const watched=all.filter(a=>watchedAulas[getAulaId(a)]).length;
@@ -9766,12 +10608,25 @@ export default function QuestionBankApp() {
           const totalWatched = Object.values(watchedByTopic).reduce((a,b)=>a+b.watched,0);
           const totalAulas   = Object.values(watchedByTopic).reduce((a,b)=>a+b.total,0);
           const globalPct    = totalAulas>0?Math.round(totalWatched/totalAulas*100):0;
+          const courseLessons = flattenCourseLessons(appliedVideoaulasData || {});
+          const courseSubjects = sortCourseSubjectsForDisplay([...new Set(courseLessons.map(lesson => lesson.subject))]);
+          const savedPlanSubjects = coursePlanSubjects.filter(subject => courseSubjects.includes(subject));
+          const effectivePlanSubjects = [
+            ...savedPlanSubjects,
+            ...courseSubjects.filter(subject => !savedPlanSubjects.includes(subject)),
+          ];
+          const plannedSubjectSet = new Set(effectivePlanSubjects);
+          const plannedLessons = courseLessons.filter(lesson => plannedSubjectSet.has(lesson.subject));
+          const plannedWatched = plannedLessons.filter(lesson => watchedAulas[lesson.id]).length;
+          const planPct = plannedLessons.length ? Math.round(plannedWatched / plannedLessons.length * 100) : 0;
 
           const tabs = [
             {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
             {id:'questoes',   label:'Questões',     icon:<GraduationCap className="w-4 h-4"/>},
             {id:'revisoes',   label:'Revisões',     icon:<RepeatIcon className="w-4 h-4"/>, badge: dueCount},
-            {id:'cronograma', label:'Cronograma',   icon:<CalendarCheck className="w-4 h-4"/>},
+            isAdmin
+              ? {id:'plano', label:'Meu Plano', icon:<CalendarCheck className="w-4 h-4"/>}
+              : {id:'cronograma', label:'Cronograma', icon:<CalendarCheck className="w-4 h-4"/>},
           ];
 
           return (
@@ -9786,13 +10641,15 @@ export default function QuestionBankApp() {
                         <ArrowLeft className="w-3 h-3"/>Início
                       </button>
                       <h1 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Portal do Curso</h1>
-                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Questões · Cronograma</p>
+                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Questões · {isAdmin?'Plano flexível':'Cronograma'}</p>
                     </div>
                     {/* Progresso global */}
                     <div className={`flex-shrink-0 text-right`}>
                       <div className={`text-3xl font-bold font-serif ${globalPct===100?'text-green-500':'text-yellow-600'}`}>{globalPct}<span className="text-lg">%</span></div>
                       <div className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{totalWatched}/{totalAulas} aulas</div>
-                      {currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek} de 46</div>}
+                      {isAdmin&&plannedLessons.length>0
+                        ? <div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Plano {planPct}%</div>
+                        : currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek} de 46</div>}
                     </div>
                   </div>
                   {/* Barra de progresso global */}
@@ -9821,7 +10678,7 @@ export default function QuestionBankApp() {
                 {/* ── ABA VIDEOAULAS ── */}
                 {cursoTab==='videoaulas'&&(()=>{
                   if(videoaulasLoading) return <LoadingState darkMode={dm} label="Carregando videoaulas..."/>;
-                  if(!videoaulasData||Object.keys(videoaulasData).length===0) return (
+                  if(!appliedVideoaulasData||Object.keys(appliedVideoaulasData).length===0) return (
                     <EmptyState
                       darkMode={dm}
                       icon={<VideoIcon className="w-7 h-7"/>}
@@ -9829,8 +10686,8 @@ export default function QuestionBankApp() {
                       message="Quando o conteúdo estiver disponível, ele aparece aqui organizado por assunto e tópico."
                     />
                   );
-                  const parsedData = parseVideoaulasData(videoaulasData);
-                  const subjects   = sortSubjects(Object.keys(parsedData));
+                  const parsedData = parseVideoaulasData(appliedVideoaulasData);
+                  const subjects   = sortCourseSubjectsForDisplay(Object.keys(parsedData));
                   return (
                     <div className="space-y-3">
                       {subjects.map(subj=>{
@@ -9898,10 +10755,10 @@ export default function QuestionBankApp() {
 
                 {/* ── ABA QUESTÕES ── */}
                 {cursoTab==='questoes'&&(()=>{
-                  if(!videoaulasData) return <LoadingState darkMode={dm} label="Carregando questões do curso..."/>;
+                  if(!appliedVideoaulasData) return <LoadingState darkMode={dm} label="Carregando questões do curso..."/>;
 
-                  const parsedData = parseVideoaulasData(videoaulasData);
-                  const subjects   = sortSubjects(Object.keys(parsedData));
+                  const parsedData = parseVideoaulasData(appliedVideoaulasData);
+                  const subjects   = sortCourseSubjectsForDisplay(Object.keys(parsedData));
 
                   return (
                     <div className="space-y-2">
@@ -9970,7 +10827,7 @@ export default function QuestionBankApp() {
                                           {qPct===100?<CheckIcon className="w-3.5 h-3.5"/>:hasQ?`${qPct}%`:<Sparkles className="w-3 h-3"/>}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                          <p className={`text-sm truncate ${dm?'text-gray-300':'text-gray-700'}`}>{cleanAulaTitle(aula.title)}</p>
+                                          <p className={`text-sm truncate ${dm?'text-gray-300':'text-gray-700'}`}>{courseLessonDisplayTitle(aula)}</p>
                                           <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
                                             {hasQ?`${qAns}/${qTotal} respondidas · ${Object.keys(d?.blocks||{}).length} bloco(s)`:'Sem questões'}
                                           </p>
@@ -10196,6 +11053,275 @@ export default function QuestionBankApp() {
                   );
                 })()}
 
+                {cursoTab==='plano'&&isAdmin&&(()=>{
+                  if(videoaulasLoading) return <LoadingState darkMode={dm} label="Carregando plano do curso..."/>;
+                  if(!courseLessons.length) return (
+                    <EmptyState
+                      darkMode={dm}
+                      icon={<CalendarCheck className="w-7 h-7"/>}
+                      title="Nenhuma aula carregada"
+                      message="O plano usa as videoaulas reais do portal. Quando elas carregarem, você poderá montar sua ordem de matérias."
+                    />
+                  );
+
+                  const normalizedSubjects = effectivePlanSubjects;
+                  const dueCourseItems = getDueReviews().filter(item => item.source === 'curso' || vqBlocks[item.aulaId]);
+                  const questionInfoForLesson = (lesson) => {
+                    const data = vqBlocks[aulaVqKey(lesson.aula)];
+                    const blocks = blockValues(data?.blocks);
+                    const total = blocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
+                    const answered = blocks.reduce((sum, block) => sum + Object.keys(block.answers || {}).length, 0);
+                    return { total, answered, blocks:blocks.length };
+                  };
+                  const lessonOrderIndex = new Map((coursePlanLessonOrder || []).map((id, index) => [String(id), index]));
+                  const planLessonRank = (lesson) => {
+                    const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
+                    const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
+                    return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
+                  };
+                  const lessonsBySubject = (subject) => courseLessons
+                    .filter(lesson => lesson.subject === subject)
+                    .sort((a, b) => {
+                      const byPlan = planLessonRank(a) - planLessonRank(b);
+                      if (byPlan) return byPlan;
+                      return a.title.localeCompare(b.title, 'pt');
+                    });
+                  const topicsBySubject = (subject) => {
+                    const map = {};
+                    lessonsBySubject(subject).forEach(lesson => {
+                      if (!map[lesson.topic]) map[lesson.topic] = [];
+                      map[lesson.topic].push(lesson);
+                    });
+                    return map;
+                  };
+                  const subjectSummaries = normalizedSubjects.map(subject => {
+                    const lessons = lessonsBySubject(subject);
+                    const watched = lessons.filter(lesson => watchedAulas[lesson.id]).length;
+                    const questionCount = lessons.reduce((acc, lesson) => acc + questionInfoForLesson(lesson).total, 0);
+                    return {
+                      subject,
+                      lessons,
+                      watched,
+                      total:lessons.length,
+                      topics:Object.keys(topicsBySubject(subject)).length,
+                      pct:lessons.length ? Math.round(watched / lessons.length * 100) : 0,
+                      questions:questionCount,
+                    };
+                  });
+                  const firstUnfinishedSubject = subjectSummaries.findIndex(item => item.total && item.watched < item.total);
+                  const unlockedSubjectLimit = firstUnfinishedSubject >= 0
+                    ? Math.min(subjectSummaries.length, firstUnfinishedSubject + 4)
+                    : Infinity;
+                  const activeSubjectSummaries = subjectSummaries.filter((_, index) => index < unlockedSubjectLimit);
+                  const lessonIds = (lesson) => [
+                    lesson.id,
+                    aulaVqKey(lesson.aula),
+                    aulaDocId(lesson.aula),
+                  ].filter(Boolean);
+                  const reviewItemsForLesson = (lesson) => dueCourseItems.filter(item =>
+                    lessonIds(lesson).includes(item.aulaId)
+                    || cleanAulaTitle(item.aulaTitle || '') === lesson.title
+                    || cleanAulaTitle(item.aulaTitle || '') === cleanAulaTitle(lesson.aula.title || '')
+                  );
+                  const openLesson = (lesson) => {
+                    setActiveSubjectVid(lesson.subject);
+                    setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
+                    setActiveAulaAndReset(lesson.aula);
+                    setView('videoaulas');
+                  };
+                  const openQuestions = (lesson) => {
+                    setVqSubject(lesson.subject);
+                    setVqTopic(lesson.topic);
+                    setVqAula(lesson.aula);
+                    setVqActiveBlock(null);
+                    setVqActiveBlockView(null);
+                    if (aulaHasVqData(lesson.aula)) setView('videoquestions');
+                    else setVqGenModal({aula:lesson.aula,aulaId:aulaDocId(lesson.aula),suggestedQ:10,subject:lesson.subject,topic:lesson.topic,fromConfig:true});
+                  };
+                  const goToLessonStep = (lesson) => {
+                    const qi = questionInfoForLesson(lesson);
+                    if (!watchedAulas[lesson.id]) {
+                      openLesson(lesson);
+                      return;
+                    }
+                    if (qi.total === 0 || qi.answered < qi.total) {
+                      openQuestions(lesson);
+                      return;
+                    }
+                    openQuestions(lesson);
+                  };
+                  const isLessonComplete = (lesson) => {
+                    const qi = questionInfoForLesson(lesson);
+                    return !!watchedAulas[lesson.id] && qi.total > 0 && qi.answered >= qi.total;
+                  };
+                  const openCycleReview = async (lesson, stage) => {
+                    await saveCourseCycleReview(lesson.id, stage);
+                    openQuestions(lesson);
+                  };
+                  const reviewSubject = (items) => {
+                    setView('spaced-review');
+                    setReviewSession({items, index:0, sessionAnswers:{}});
+                  };
+	                  const lessonStep = (lesson) => {
+	                    const qi = questionInfoForLesson(lesson);
+	                    if (!watchedAulas[lesson.id]) return { label:'Assistir aula', tone:'yellow', detail:'marque como assistida ao terminar' };
+	                    if (qi.total === 0) return { label:'Gerar questões', tone:'blue', detail:'fixação imediata' };
+	                    if (qi.answered < qi.total) return { label:'Responder questões', tone:'green', detail:`${qi.answered}/${qi.total} respondidas` };
+	                    return { label:'Rever questões', tone:'gray', detail:'aula em dia' };
+	                  };
+                  const nextStepForSubject = (item) => {
+                    const due = item.lessons.flatMap(lesson => reviewItemsForLesson(lesson));
+                    if (due.length) {
+                      return {
+                        label:'Revisar aula',
+                        tone:'red',
+                        detail:due[0].aulaTitle || item.subject,
+                        action:()=>reviewSubject(due),
+                      };
+                    }
+                    const completedCutoff = item.lessons.findIndex(lesson => !isLessonComplete(lesson));
+                    const completedCount = completedCutoff === -1 ? item.lessons.length : completedCutoff;
+                    const allComplete = completedCount === item.lessons.length;
+                    for (let idx = 0; idx < completedCount; idx += 1) {
+                      const lesson = item.lessons[idx];
+                      const done = courseCycleReviews?.[lesson.id] || {};
+                      const completedAfter = completedCount - idx - 1;
+                      if (!done.r3 && completedAfter >= 3) {
+                        return {
+                          label:'Revisar +3',
+                          tone:'red',
+                          detail:lesson.title,
+                          subdetail:'bloco extra da aula',
+                          action:()=>openCycleReview(lesson, 'r3'),
+                        };
+                      }
+                      if (done.r3 && !done.r10 && (completedAfter >= 10 || allComplete)) {
+                        return {
+                          label:'Revisar +10',
+                          tone:'red',
+                          detail:lesson.title,
+                          subdetail:'revisão longa da aula',
+                          action:()=>openCycleReview(lesson, 'r10'),
+                        };
+                      }
+                    }
+                    const lesson = item.lessons.find(aula => {
+                      const qi = questionInfoForLesson(aula);
+                      return !watchedAulas[aula.id] || qi.total === 0 || qi.answered < qi.total;
+                    });
+                    if (!lesson) {
+                      return {
+                        label:'Matéria em dia',
+                        tone:'gray',
+                        detail:'sem pendência agora',
+                        action:()=>{},
+                        done:true,
+                      };
+                    }
+	                    const step = lessonStep(lesson);
+	                    const lessonIndex = item.lessons.findIndex(aula => aula.id === lesson.id) + 1;
+	                    return {
+	                      ...step,
+	                      detail:lesson.title,
+	                      subdetail:`Aula ${lessonIndex || '?'} de ${item.total} · ${step.detail}`,
+	                      action:()=>goToLessonStep(lesson),
+	                    };
+                  };
+                  const moveSubject = (idx, dir) => {
+                    const next = [...normalizedSubjects];
+                    const target = idx + dir;
+                    if (target < 0 || target >= next.length) return;
+                    [next[idx], next[target]] = [next[target], next[idx]];
+                    saveCoursePlanPrefs(next, coursePlanLocked);
+                  };
+
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-5">
+                      <section className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                        <div className={`px-5 py-4 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
+                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Admin · plano guiado</p>
+	                          <h2 className="text-2xl font-serif font-bold text-yellow-600">Próximo passo</h2>
+	                          <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Escolha uma matéria ativa e siga o comando do card. O site cuida da ordem.</p>
+                        </div>
+                        <div className="p-4 space-y-2">
+                          {activeSubjectSummaries.map(item=>{
+                            const step = nextStepForSubject(item);
+                            const color = step.tone === 'green'
+                              ? 'text-green-500'
+                              : step.tone === 'blue'
+                                ? 'text-blue-500'
+                                : step.tone === 'red'
+                                  ? 'text-red-500'
+                                  : step.tone === 'gray'
+                                    ? (dm?'text-gray-400':'text-gray-500')
+                                    : 'text-yellow-600';
+                            return (
+                              <button key={item.subject} onClick={step.action} disabled={step.done}
+                                className={`w-full rounded-xl border p-4 text-left transition-all ${dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-800 hover:bg-gray-950':'bg-gray-50 border-gray-200 hover:border-yellow-300 hover:bg-white'}`}>
+	                                <div className="flex items-center gap-3">
+	                                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>
+	                                    {step.done?<CheckIcon className="w-4 h-4"/>:<PlayIcon className="w-4 h-4"/>}
+	                                  </div>
+	                                  <div className="min-w-0 flex-1">
+	                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${dm?'text-gray-600':'text-gray-400'}`}>{item.subject}</p>
+	                                    <p className="font-bold truncate mt-0.5">{step.detail}</p>
+	                                    {step.subdetail&&<p className={`text-xs mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{step.subdetail}</p>}
+	                                  </div>
+	                                  <div className="text-right flex-shrink-0">
+	                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${dm?'text-gray-600':'text-gray-400'}`}>Agora</p>
+	                                    <p className={`text-sm font-bold mt-0.5 ${color}`}>{step.label}</p>
+	                                  </div>
+	                                </div>
+                              </button>
+                            );
+                          })}
+                          {!activeSubjectSummaries.length&&(
+                            <div className="p-8 text-center">
+                              <CheckCircle2 className="w-10 h-10 mx-auto text-green-500 mb-3"/>
+                              <p className="font-bold text-green-500">Curso em dia</p>
+                              <p className={`text-sm mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>Quando houver algo para fazer, aparece aqui.</p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+
+                      <aside className="space-y-4">
+                        <section className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Ordem</p>
+                          <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">Matérias</h3>
+                          <div className="mt-4 space-y-2">
+                            {subjectSummaries.map((item, idx)=>{
+                              const active = idx < unlockedSubjectLimit;
+                              return (
+                                <div key={item.subject} className={`rounded-xl border p-3 ${active?(dm?'bg-gray-950/70 border-gray-800':'bg-gray-50 border-gray-200'):(dm?'bg-gray-950/30 border-gray-900 opacity-50':'bg-gray-50/60 border-gray-100 opacity-60')}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`h-6 w-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${item.pct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700')}`}>{item.pct===100?'✓':idx+1}</span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-bold truncate">{item.subject}</p>
+                                      <p className={`text-[10px] ${dm?'text-gray-500':'text-gray-500'}`}>{item.watched}/{item.total} aulas</p>
+                                    </div>
+                                    <button onClick={()=>moveSubject(idx,-1)} disabled={idx===0} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↑</button>
+                                    <button onClick={()=>moveSubject(idx,1)} disabled={idx===subjectSummaries.length-1} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↓</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+
+                        <section className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Revisão</p>
+                          <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">{dueCourseItems.length} pendente{dueCourseItems.length!==1?'s':''}</h3>
+                          <button onClick={()=>setView('spaced-review')} disabled={!dueCourseItems.length}
+                            className={`mt-4 w-full px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-35 ${dueCourseItems.length?'bg-yellow-600 hover:bg-yellow-700 text-white':(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400')}`}>
+                            Revisar agora
+                          </button>
+                        </section>
+                      </aside>
+                    </div>
+                  );
+                })()}
+
                 {cursoTab==='cronograma'&&(()=>{
                   // Config de data de início
                   const hasStart = !!cronStartDate;
@@ -10330,29 +11456,53 @@ export default function QuestionBankApp() {
               },
             },
           };
-          const isDemo = !videoaulasData || Object.keys(videoaulasData).length===0;
-          const raw = isDemo ? DEMO_DATA : videoaulasData;
+          const isDemo = !appliedVideoaulasData || Object.keys(appliedVideoaulasData).length===0;
+          const raw = isDemo ? DEMO_DATA : appliedVideoaulasData;
 
           // Usar o helper global parseVideoaulasData → { [subj]: { [topic]: { main, bonus } } }
           const data     = parseVideoaulasData(raw);
-          const subjects = sortSubjects(Object.keys(data));
+          const subjects = sortCourseSubjectsForDisplay(Object.keys(data));
 
           // allAulas = todas as aulas flat (main + bonus) para contagem de progresso
           const allAulas = Object.values(data).flatMap(s=>Object.values(s).flatMap(t=>[...t.main,...t.bonus]));
           const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
 
           // Estado ativo: subject + topic + categoria ('main'|'bonus')
-          const effSubject  = activeSubjectVid || subjects[0] || null;
-          const effTopic    = activeSubtopicVid?.split('::')[0] || (effSubject ? Object.keys(data[effSubject]||{})[0] : null);
-          const effCat      = activeSubtopicVid?.split('::')[1] || 'main';
+          const effSubject  = activeSubjectVid && data[activeSubjectVid] ? activeSubjectVid : subjects[0] || null;
+          const requestedTopic = activeSubtopicVid?.split('::')[0] || null;
+          const firstTopic = effSubject ? Object.keys(data[effSubject]||{})[0] : null;
+          const effTopic = requestedTopic && data[effSubject]?.[requestedTopic] ? requestedTopic : firstTopic;
+          const requestedCat = activeSubtopicVid?.split('::')[1] || 'main';
+          const effCat = data[effSubject]?.[effTopic]?.[requestedCat] ? requestedCat : 'main';
           const effAulas    = (effSubject && effTopic) ? (data[effSubject]?.[effTopic]?.[effCat] || []) : [];
-          const effAula     = activeAula || effAulas[0] || null;
-          const effIdx      = effAulas.findIndex(a=>getAulaId(a)===getAulaId(effAula));
-          const prevAula    = effIdx>0 ? effAulas[effIdx-1] : null;
-          const nextAula    = effIdx<effAulas.length-1 ? effAulas[effIdx+1] : null;
-          const sideBorder  = dm?'border-gray-700':'border-gray-200';
-          const sideBg      = dm?'bg-gray-800/50':'bg-white';
-          const textMuted   = dm?'text-gray-400':'text-gray-500';
+          const activeAulaId = getAulaId(activeAula);
+          const effAula     = (activeAulaId ? effAulas.find(aula => getAulaId(aula) === activeAulaId) : null) || effAulas[0] || null;
+	          const effDescription = effAula?.description || effAula?.ai_catalog?.description || '';
+	          const effIdx      = effAulas.findIndex(a=>getAulaId(a)===getAulaId(effAula));
+	          const prevAula    = effIdx>0 ? effAulas[effIdx-1] : null;
+	          const nextAula    = effIdx<effAulas.length-1 ? effAulas[effIdx+1] : null;
+	          const sideBorder  = dm?'border-gray-700':'border-gray-200';
+	          const sideBg      = dm?'bg-gray-800/50':'bg-white';
+	          const textMuted   = dm?'text-gray-400':'text-gray-500';
+	          const useIntegratedCourseNav = isAdmin && coursePlanLessonOrder.length && displayCourseOrgProposal?.mode === 'integrated';
+	          const effQuestionData = effAula ? vqBlocks[aulaVqKey(effAula)] : null;
+	          const effQuestionBlocks = blockValues(effQuestionData?.blocks);
+	          const effQuestionTotal = effQuestionBlocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
+	          const effQuestionAnswered = effQuestionBlocks.reduce((sum, block) => sum + Object.keys(block.answers || {}).length, 0);
+	          const effWatched = !!watchedAulas[getAulaId(effAula)];
+	          const effQuestionActionLabel = effQuestionTotal === 0
+	            ? 'Gerar questões de fixação'
+	            : effQuestionAnswered < effQuestionTotal
+	              ? `Responder questões (${effQuestionAnswered}/${effQuestionTotal})`
+	              : 'Rever questões';
+	          const effQuestionNeedsAction = effQuestionTotal === 0 || effQuestionAnswered < effQuestionTotal;
+	          const effNextStepLabel = !effWatched
+	            ? 'Assista a aula e marque como assistida'
+	            : effQuestionTotal === 0
+	              ? 'Agora faça as questões de fixação'
+	              : effQuestionAnswered < effQuestionTotal
+	                ? 'Continue as questões de fixação'
+	                : 'Aula em dia';
 
           // Helper para setar tópico+cat ao mesmo tempo
           const setTopicCat = (subject, topic, cat) => {
@@ -10397,47 +11547,65 @@ export default function QuestionBankApp() {
                           </div>
                           {isExp?<ChevronDown className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>}
                         </button>
-                        {isExp&&Object.entries(data[subject]).map(([topic,{main,bonus}])=>{
-                          const topicAulas=[...main,...bonus];
-                          const topicW=topicAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
-                          const isTopicExp=expandedSubjectsVid[`${subject}::${topic}`]??(effSubject===subject&&effTopic===topic);
-                          return (
-                            <div key={topic}>
-                              {/* Tópico */}
-                              <button onClick={()=>setExpandedSubjectsVid(p=>({...p,[`${subject}::${topic}`]:!isTopicExp}))}
-                                className={`w-full flex items-center justify-between px-3 py-1.5 pl-5 text-left ${dm?'hover:bg-gray-700/40 text-gray-300':'hover:bg-gray-50 text-gray-600'} ${effSubject===subject&&effTopic===topic?(dm?'text-yellow-400':'text-yellow-700'):''}`}>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-semibold truncate">{shortTopicName(topic)}</p>
-                                  <p className={`text-[9px] ${textMuted}`}>{topicW}/{topicAulas.length}</p>
-                                </div>
-                                {isTopicExp?<ChevronDown className="w-3 h-3 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 flex-shrink-0"/>}
-                              </button>
-                              {isTopicExp&&(
-                                <div>
-                                  {/* Categoria: Aulas */}
-                                  {main.length>0&&(
-                                    <div>
-                                      <button onClick={()=>setTopicCat(subject,topic,'main')}
-                                        className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='main'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
-                                        📖 Aulas ({main.length})
-                                      </button>
-                                      {effSubject===subject&&effTopic===topic&&effCat==='main'&&main.map((aula,ai)=>{
-                                        const isAct=getAulaId(effAula)===getAulaId(aula);
-                                        const watched=watchedAulas[getAulaId(aula)];
-                                        return (
-                                          <button key={getAulaId(aula)||ai} onClick={()=>setActiveAulaAndReset(aula)}
-                                            className={`w-full flex items-center gap-2 px-3 py-1.5 pl-10 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
-                                            <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
-                                              {watched&&<CheckIcon className="w-2 h-2"/>}
-                                            </div>
-                                            <span className="text-[11px] truncate leading-tight">{cleanAulaTitle(aula.title)}</span>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                  {/* Categoria: Bônus */}
-                                  {bonus.length>0&&(
+	                        {isExp&&Object.entries(data[subject]).map(([topic,{main,bonus}])=>{
+	                          const topicAulas=[...main,...bonus];
+	                          const topicW=topicAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+	                          const isTopicExp=expandedSubjectsVid[`${subject}::${topic}`]??(effSubject===subject&&effTopic===topic);
+	                          return (
+	                            <div key={topic}>
+	                              {/* Tópico */}
+	                              <button onClick={()=>setExpandedSubjectsVid(p=>({...p,[`${subject}::${topic}`]:!isTopicExp}))}
+	                                className={`w-full flex items-center justify-between px-3 py-1.5 pl-5 text-left ${dm?'hover:bg-gray-700/40 text-gray-300':'hover:bg-gray-50 text-gray-600'} ${effSubject===subject&&effTopic===topic?(dm?'text-yellow-400':'text-yellow-700'):''}`}>
+	                                <div className="min-w-0 flex-1">
+	                                  <p className="text-[11px] font-semibold truncate">{shortTopicName(topic)}</p>
+	                                  {!useIntegratedCourseNav&&<p className={`text-[9px] ${textMuted}`}>{topicW}/{topicAulas.length}</p>}
+	                                </div>
+	                                {isTopicExp?<ChevronDown className="w-3 h-3 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 flex-shrink-0"/>}
+	                              </button>
+	                              {isTopicExp&&(
+	                                <div>
+	                                  {useIntegratedCourseNav ? (
+	                                    topicAulas.map((aula, ai)=>{
+	                                      const isAct=getAulaId(effAula)===getAulaId(aula);
+	                                      const watched=watchedAulas[getAulaId(aula)];
+	                                      return (
+	                                        <button key={getAulaId(aula)||ai} onClick={()=>{setTopicCat(subject,topic,aula.display_cat || 'main');setActiveAulaAndReset(aula);}}
+	                                          className={`w-full flex items-center gap-2 px-3 py-1.5 pl-8 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
+	                                          <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
+	                                            {watched&&<CheckIcon className="w-2 h-2"/>}
+	                                          </div>
+	                                          <span className="text-[11px] truncate leading-tight">{courseLessonDisplayTitle(aula)}</span>
+	                                        </button>
+	                                      );
+	                                    })
+	                                  ) : (
+	                                    <>
+	                                      {/* Categoria: Aulas */}
+	                                      {main.length>0&&(
+	                                        <div>
+	                                          <button onClick={()=>setTopicCat(subject,topic,'main')}
+	                                            className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='main'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
+	                                            📖 Aulas ({main.length})
+	                                          </button>
+	                                          {effSubject===subject&&effTopic===topic&&effCat==='main'&&main.map((aula,ai)=>{
+	                                            const isAct=getAulaId(effAula)===getAulaId(aula);
+	                                            const watched=watchedAulas[getAulaId(aula)];
+	                                            return (
+	                                              <button key={getAulaId(aula)||ai} onClick={()=>setActiveAulaAndReset(aula)}
+	                                                className={`w-full flex items-center gap-2 px-3 py-1.5 pl-10 text-left transition-colors ${isAct?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-500 hover:bg-gray-50')}`}>
+	                                                <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
+	                                                  {watched&&<CheckIcon className="w-2 h-2"/>}
+	                                                </div>
+	                                                <span className="text-[11px] truncate leading-tight">{courseLessonDisplayTitle(aula)}</span>
+	                                              </button>
+	                                            );
+	                                          })}
+	                                        </div>
+	                                      )}
+	                                    </>
+	                                  )}
+	                                  {/* Categoria: Bônus */}
+	                                  {!useIntegratedCourseNav&&bonus.length>0&&(
                                     <div>
                                       <button onClick={()=>setTopicCat(subject,topic,'bonus')}
                                         className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='bonus'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
@@ -10452,7 +11620,7 @@ export default function QuestionBankApp() {
                                             <div className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300')}`}>
                                               {watched&&<CheckIcon className="w-2 h-2"/>}
                                             </div>
-                                            <span className="text-[11px] truncate leading-tight">{cleanAulaTitle(aula.title)}</span>
+                                            <span className="text-[11px] truncate leading-tight">{courseLessonDisplayTitle(aula)}</span>
                                           </button>
                                         );
                                       })}
@@ -10475,7 +11643,7 @@ export default function QuestionBankApp() {
                 <div className={`flex items-center gap-2 px-3 py-2.5 md:hidden border-b flex-shrink-0 ${sideBorder} ${dm?'bg-gray-800':'bg-white'}`}>
                   <button onClick={()=>setView('library')} className={`p-1.5 rounded-lg ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
                   <span className="text-sm font-bold text-yellow-600 flex-1 truncate">
-                    {effAula ? cleanAulaTitle(effAula.title) : 'Videoaulas'}
+                    {effAula ? courseLessonDisplayTitle(effAula) : 'Videoaulas'}
                   </span>
                   {effAula&&<span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>{effIdx+1}/{effAulas.length}</span>}
                 </div>
@@ -10494,7 +11662,7 @@ export default function QuestionBankApp() {
                           <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 border-2 ${dm?'border-yellow-600 bg-yellow-900/30':'border-yellow-500 bg-yellow-50'}`}>
                             <PlayIcon className="w-7 h-7 text-yellow-500 ml-0.5"/>
                           </div>
-                          <p className="text-white font-bold text-lg px-4 text-center">{cleanAulaTitle(effAula.title)}</p>
+                          <p className="text-white font-bold text-lg px-4 text-center">{courseLessonDisplayTitle(effAula)}</p>
                           <p className="text-gray-500 text-sm mt-1">Player Bunny Stream</p>
                           <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-10" style={{background:'linear-gradient(transparent,rgba(0,0,0,0.88))'}}>
                             <div className="mb-2"><div className="h-1 bg-gray-600/60 rounded-full"><div className="h-full bg-yellow-500 rounded-full" style={{width:'34%'}}/></div></div>
@@ -10542,14 +11710,14 @@ export default function QuestionBankApp() {
                           <SkipBack className="w-4 h-4 flex-shrink-0"/>
                           <div className="min-w-0 text-left">
                             <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Anterior</p>
-                            <p className="truncate">{prevAula?cleanAulaTitle(prevAula.title):'—'}</p>
+                            <p className="truncate">{prevAula?courseLessonDisplayTitle(prevAula):'—'}</p>
                           </div>
                         </button>
                         <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 justify-end text-right ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
                           <div className="min-w-0 text-right">
                             <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Próxima</p>
-                            <p className="truncate">{nextAula?cleanAulaTitle(nextAula.title):'—'}</p>
+                            <p className="truncate">{nextAula?courseLessonDisplayTitle(nextAula):'—'}</p>
                           </div>
                           <SkipForward className="w-4 h-4 flex-shrink-0"/>
                         </button>
@@ -10564,11 +11732,19 @@ export default function QuestionBankApp() {
                           <span className="flex-1 truncate">{effSubject} — {shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="opacity-40 flex-shrink-0"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
+                        {effDescription&&<p className={`px-1 text-xs leading-relaxed ${dm?'text-gray-500':'text-gray-500'}`}>{effDescription}</p>}
 
-                        {/* Botões principais em linha — grandes e bem espaçados */}
-                        <div className="flex gap-2">
-                          {/* Questões + config */}
-                          <div className={`flex flex-1 rounded-xl overflow-hidden border ${aulaHasVqData(effAula)?(dm?'border-green-700':'border-green-500'):(dm?'border-yellow-700':'border-yellow-500')}`}>
+	                        {/* Botões principais em linha — fluxo: assistir → questões */}
+	                        <div className="flex gap-2">
+	                          {/* Marcar assistida */}
+	                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
+	                            className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white active:bg-green-600':('border '+(dm?'border-green-700 text-green-400 active:bg-green-900/20':'border-green-400 text-green-700 active:bg-green-50'))}`}>
+	                            <CheckIcon className="w-4 h-4"/>
+	                            {watchedAulas[getAulaId(effAula)]?'✓':'Assistida'}
+	                          </button>
+
+	                          {/* Questões + config */}
+	                          <div className={`flex flex-1 rounded-xl overflow-hidden border ${aulaHasVqData(effAula)?(dm?'border-green-700':'border-green-500'):(dm?'border-yellow-700':'border-yellow-500')}`}>
                             <button
                               onClick={()=>{
                                 if(aulaHasVqData(effAula)){
@@ -10577,26 +11753,19 @@ export default function QuestionBankApp() {
                                   gerarQuestoesDireto(effAula, effSubject, effTopic);
                                 }
                               }}
-                              className={`flex items-center justify-center gap-2 flex-1 py-3.5 font-bold text-sm transition-all ${aulaHasVqData(effAula)?(dm?'bg-green-900/20 text-green-400 active:bg-green-900/40':'bg-green-50 text-green-700 active:bg-green-100'):(dm?'bg-yellow-900/20 text-yellow-400 active:bg-yellow-900/40':'bg-yellow-50 text-yellow-700 active:bg-yellow-100')}`}>
-                              <GraduationCap className="w-4 h-4"/>
-                              {aulaHasVqData(effAula)?'Ver Questões':'Gerar Questões'}
-                            </button>
+		                              className={`flex items-center justify-center gap-2 flex-1 py-3.5 font-bold text-sm transition-all ${effWatched&&effQuestionNeedsAction?'bg-yellow-600 text-white active:bg-yellow-700':aulaHasVqData(effAula)?(dm?'bg-green-900/20 text-green-400 active:bg-green-900/40':'bg-green-50 text-green-700 active:bg-green-100'):(dm?'bg-yellow-900/20 text-yellow-400 active:bg-yellow-900/40':'bg-yellow-50 text-yellow-700 active:bg-yellow-100')}`}>
+	                              <GraduationCap className="w-4 h-4"/>
+	                              {effQuestionActionLabel}
+	                            </button>
                             {!aulaHasVqData(effAula)&&(
                               <button
                                 onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
                                 className={`flex items-center justify-center px-3.5 border-l transition-all ${dm?'border-yellow-700/50 text-yellow-600 active:bg-yellow-900/30':'border-yellow-300 text-yellow-600 active:bg-yellow-50'}`}>
                                 <SettingsIcon className="w-4 h-4"/>
                               </button>
-                            )}
-                          </div>
-
-                          {/* Marcar assistida */}
-                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
-                            className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white active:bg-green-600':('border '+(dm?'border-gray-600 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-600 active:bg-gray-100'))}`}>
-                            <CheckIcon className="w-4 h-4"/>
-                            {watchedAulas[getAulaId(effAula)]?'✓':'Assistida'}
-                          </button>
-                        </div>
+	                            )}
+	                          </div>
+	                        </div>
                       </div>
 
                       {/* MOBILE: scrollable aula list */}
@@ -10615,7 +11784,7 @@ export default function QuestionBankApp() {
                                 {watched?<CheckIcon className="w-3 h-3"/>:isAct?<PlayIcon className="w-2.5 h-2.5" style={{marginLeft:'1px'}}/>:null}
                               </div>
                               <span className={`text-sm truncate ${isAct?'font-semibold '+(dm?'text-yellow-300':'text-yellow-700'):(watched?'text-gray-400':(dm?'text-gray-300':'text-gray-700'))}`}>
-                                {cleanAulaTitle(aula.title)}
+                                {courseLessonDisplayTitle(aula)}
                               </span>
                             </button>
                           );
@@ -10682,78 +11851,90 @@ export default function QuestionBankApp() {
                         </div>
                       )}
 
-                      {/* DESKTOP info block */}
-                      <div className="hidden md:block px-6 lg:px-8 py-4">
-                        <p className={`text-xs mb-2 flex items-center gap-1 flex-wrap ${textMuted}`}>
-                          <span>{effSubject}</span>
-                          <ChevronRight className="w-3 h-3 opacity-40"/>
-                          <span>{shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
-                          <ChevronRight className="w-3 h-3 opacity-40"/>
-                          <span className={dm?'text-gray-200':'text-gray-700'}>{cleanAulaTitle(effAula.title)}</span>
-                        </p>
-                        <div className="flex items-center justify-between gap-3 mb-4">
-                          <h2 className={`text-xl font-serif font-bold truncate ${dm?'text-white':'text-gray-900'}`}>{cleanAulaTitle(effAula.title)}</h2>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {effAula.duration_formatted&&(
-                              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>⏱ {effAula.duration_formatted}</span>
-                            )}
-                            <button onClick={()=>{
-                              if(aulaHasVqData(effAula)){
-                                setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
-                              } else {
-                                gerarQuestoesDireto(effAula, effSubject, effTopic);
-                              }
-                            }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${aulaHasVqData(effAula)?(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-500 text-green-700 hover:bg-green-50'):(dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}>
-                              <GraduationCap className="w-4 h-4"/>{aulaHasVqData(effAula)?'Ver Questões':'Questões'}
-                            </button>
-                            {!aulaHasVqData(effAula)&&(
-                              <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
-                                title="Configurações das questões"
-                                className={`p-2 rounded-xl border transition-all ${dm?'border-gray-600 text-gray-400 hover:bg-gray-700 hover:text-gray-200':'border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}>
-                                <SettingsIcon className="w-4 h-4"/>
-                              </button>
-                            )}
-                            <button onClick={async()=>{
-                              try {
-                                const docId=(effAula.title||'').replace(/\//g,'-');
-                                const snap=await getDoc(doc(db,'lessons',docId));
-                                const transcript=snap.exists()?snap.data().transcript:'';
-                                if(!transcript){addToast('Transcrição não disponível para esta aula.', 'info', 3500);return;}
-                                const blob=new Blob([`${effAula.title}\n${'='.repeat(effAula.title.length)}\n\n${transcript}`],{type:'text/plain;charset=utf-8'});
-                                const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-                                a.download=`${effAula.title.substring(0,60).replace(/[^a-zA-Z0-9\s\-]/g,'')}.txt`;a.click();
-                                addToast('Transcrição exportada.', 'success', 2500);
-                              } catch(e){addToast('Erro ao exportar transcrição.', 'error', 3500);}
-                            }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm transition-all border ${dm?'border-gray-600 text-gray-400 hover:bg-gray-700':'border-gray-200 text-gray-500 hover:bg-gray-50'}`} title="Exportar transcrição">
-                              <DownloadIcon className="w-4 h-4"/>
-                            </button>
-                            <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
-                              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'))}`}>
-                              <CheckIcon className="w-4 h-4"/>
-                              {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-stretch gap-3">
-                          <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                            <SkipBack className="w-4 h-4 flex-shrink-0"/>
-                            <div className="text-left min-w-0">
-                              <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Anterior</p>
-                              <p className="truncate text-xs">{cleanAulaTitle(prevAula?.title||'—')}</p>
-                            </div>
-                          </button>
-                          <div className={`flex items-center px-3 rounded-xl text-xs font-bold flex-shrink-0 ${dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'}`}>{effIdx+1}/{effAulas.length}</div>
-                          <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold flex-1 border transition-colors disabled:opacity-30 justify-end text-right ${dm?'border-gray-700 hover:bg-gray-800 text-gray-300':'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                            <div className="min-w-0">
-                              <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-0.5">Próxima</p>
-                              <p className="truncate text-xs">{cleanAulaTitle(nextAula?.title||'—')}</p>
-                            </div>
-                            <SkipForward className="w-4 h-4 flex-shrink-0"/>
-                          </button>
-                        </div>
-                      </div>
+	                      {/* DESKTOP info block */}
+	                      <div className="hidden md:block px-6 lg:px-8 py-5">
+	                        <div className={`rounded-2xl border p-5 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-200 bg-gray-50'}`}>
+	                          <div className="flex items-start justify-between gap-6">
+	                            <div className="min-w-0 flex-1">
+	                              <p className={`text-xs mb-2 flex items-center gap-1.5 flex-wrap ${textMuted}`}>
+	                                <span>{effSubject}</span>
+	                                <ChevronRight className="w-3 h-3 opacity-40"/>
+	                                <span>{shortTopicName(effTopic||'')}</span>
+	                              </p>
+		                              <h2 className={`text-2xl font-serif font-bold leading-tight ${dm?'text-white':'text-gray-900'}`}>{courseLessonDisplayTitle(effAula)}</h2>
+		                              {effDescription&&<p className={`text-sm mt-3 leading-relaxed max-w-3xl ${dm?'text-gray-400':'text-gray-600'}`}>{effDescription}</p>}
+		                              <div className={`mt-4 rounded-xl border px-4 py-3 ${effWatched?(dm?'border-green-800/50 bg-green-900/10':'border-green-200 bg-green-50'):(dm?'border-yellow-800/50 bg-yellow-900/10':'border-yellow-200 bg-yellow-50')}`}>
+		                                <p className={`text-xs font-bold uppercase tracking-widest ${effWatched?(dm?'text-green-400':'text-green-700'):(dm?'text-yellow-400':'text-yellow-700')}`}>Próximo passo</p>
+		                                <p className={`text-sm font-bold mt-1 ${dm?'text-gray-200':'text-gray-800'}`}>{effNextStepLabel}</p>
+		                              </div>
+		                              <div className="flex items-center gap-2 mt-4">
+	                                {effAula.duration_formatted&&(
+	                                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-600 border border-gray-200'}`}>⏱ {effAula.duration_formatted}</span>
+	                                )}
+	                                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-600 border border-gray-200'}`}>Aula {effIdx+1} de {effAulas.length}</span>
+	                              </div>
+		                            </div>
+		                            <div className="flex flex-col gap-2 w-56 flex-shrink-0">
+		                              <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
+		                                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 bg-white text-green-700 hover:bg-green-50'))}`}>
+		                                <CheckIcon className="w-4 h-4"/>
+		                                {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
+		                              </button>
+		                              <button onClick={()=>{
+		                                if(aulaHasVqData(effAula)){
+		                                  setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
+	                                } else {
+	                                  gerarQuestoesDireto(effAula, effSubject, effTopic);
+	                                }
+		                              }} className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border ${effWatched&&effQuestionNeedsAction?'border-yellow-600 bg-yellow-600 text-white hover:bg-yellow-700':aulaHasVqData(effAula)?(dm?'border-green-700 bg-green-900/15 text-green-400 hover:bg-green-900/30':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-yellow-700 bg-yellow-900/15 text-yellow-400 hover:bg-yellow-900/30':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')}`}>
+			                                <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
+			                              </button>
+		                              <div className="grid grid-cols-2 gap-2">
+	                                {!aulaHasVqData(effAula)&&(
+	                                  <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
+	                                    title="Configurações das questões"
+	                                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-200':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`}>
+	                                    <SettingsIcon className="w-4 h-4"/>Config.
+	                                  </button>
+	                                )}
+	                                <button onClick={async()=>{
+	                                  try {
+	                                    const docId=effAula.doc_id || (effAula.title||'').replace(/\//g,'-');
+	                                    const snap=await getDoc(doc(db,'lessons',docId));
+	                                    const transcript=snap.exists()?snap.data().transcript:'';
+	                                    if(!transcript){addToast('Transcrição não disponível para esta aula.', 'info', 3500);return;}
+	                                    const title = courseLessonDisplayTitle(effAula);
+	                                    const blob=new Blob([`${title}\n${'='.repeat(title.length)}\n\n${transcript}`],{type:'text/plain;charset=utf-8'});
+	                                    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+	                                    a.download=`${title.substring(0,60).replace(/[^a-zA-Z0-9\s\-]/g,'')}.txt`;a.click();
+	                                    addToast('Transcrição exportada.', 'success', 2500);
+	                                  } catch(e){addToast('Erro ao exportar transcrição.', 'error', 3500);}
+	                                }} className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`} title="Exportar transcrição">
+	                                  <DownloadIcon className="w-4 h-4"/>Transcrição
+	                                </button>
+	                              </div>
+	                            </div>
+	                          </div>
+	                          <div className={`mt-5 pt-4 border-t grid grid-cols-2 gap-3 ${dm?'border-gray-800':'border-gray-200'}`}>
+	                            <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
+	                              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-30 ${dm?'border-gray-800 hover:bg-gray-900 text-gray-300':'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'}`}>
+	                              <SkipBack className="w-4 h-4 flex-shrink-0"/>
+	                              <div className="text-left min-w-0">
+	                                <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-1">Anterior</p>
+	                                <p className="truncate text-xs">{prevAula?courseLessonDisplayTitle(prevAula):'—'}</p>
+	                              </div>
+	                            </button>
+	                            <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
+	                              className={`flex items-center justify-end gap-3 px-4 py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-30 text-right ${dm?'border-gray-800 hover:bg-gray-900 text-gray-300':'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'}`}>
+	                              <div className="min-w-0">
+	                                <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-1">Próxima</p>
+	                                <p className="truncate text-xs">{nextAula?courseLessonDisplayTitle(nextAula):'—'}</p>
+	                              </div>
+	                              <SkipForward className="w-4 h-4 flex-shrink-0"/>
+	                            </button>
+	                          </div>
+	                        </div>
+	                      </div>
                     </div>
                   </div>
                 )}
@@ -10764,8 +11945,8 @@ export default function QuestionBankApp() {
         {/* ── QUESTÕES DO CURSO ── */}
         {view==='videoquestions'&&canSeeVideoaulas&&(()=>{
           const dm = darkMode;
-          const data     = parseVideoaulasData(videoaulasData || {});
-          const subjects = sortSubjects(Object.keys(data));
+          const data     = parseVideoaulasData(appliedVideoaulasData || {});
+          const subjects = sortCourseSubjectsForDisplay(Object.keys(data));
 
           // Count total questions for an aula
           const aulaQCount = (aula) => {
@@ -10785,9 +11966,25 @@ export default function QuestionBankApp() {
             const blocks    = Array.isArray(rawBlocks) ? {} : rawBlocks;
             const meta      = aulaData.meta || {};
             const blockList = Object.entries(blocks).sort((a,b)=>a[0].localeCompare(b[0]));
-            const hasSetup  = aulaHasVqData(vqAula); // usa busca em todos os formatos de chave
-            const durationSecs = vqAula.duration_seconds || 0;
-            const suggestedQ   = durationSecs > 0 ? Math.ceil(durationSecs/90) : 10;
+	            const hasSetup  = aulaHasVqData(vqAula); // usa busca em todos os formatos de chave
+	            const durationSecs = vqAula.duration_seconds || 0;
+	            const suggestedQ   = getCourseVqQuestionPlan({ durationSecs, suggestedQ:10, isAdmin, maxPerBlock:20 }).totalQ;
+	            const totalLessonQuestions = blockList.reduce((sum, [, block]) => sum + ((Array.isArray(block.questions) ? block.questions : []).length), 0);
+	            const answeredLessonQuestions = blockList.reduce((sum, [, block]) => {
+	              const ans = (block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers)) ? block.answers : {};
+	              return sum + Object.keys(ans).length;
+	            }, 0);
+	            const allLessonQuestionsDone = totalLessonQuestions > 0 && answeredLessonQuestions >= totalLessonQuestions;
+	            const courseLessonFlow = flattenCourseLessons(appliedVideoaulasData || {});
+	            const currentCourseLessonIndex = courseLessonFlow.findIndex(lesson => getAulaId(lesson.aula) === getAulaId(vqAula));
+	            const nextCourseLesson = currentCourseLessonIndex >= 0 ? courseLessonFlow[currentCourseLessonIndex + 1] : null;
+	            const openCourseLessonFromVq = (lesson) => {
+	              if (!lesson) return;
+	              setView('videoaulas');
+	              setActiveSubjectVid(lesson.subject);
+	              setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
+	              setActiveAulaAndReset(lesson.aula);
+	            };
 
             // ── VIEW COMPLETA DE UM BLOCO ── usa o mesmo QuestionView do topic
             if(vqActiveBlockView) {
@@ -10890,40 +12087,6 @@ export default function QuestionBankApp() {
               );
             }
 
-            if (reviewListMode) {
-              return (
-                <div className="max-w-3xl mx-auto">
-                  <button onClick={()=>setReviewSession(null)} className={`flex items-center gap-2 mb-4 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Sair</button>
-                  <div className={`mb-5 flex items-center gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
-                    <div className={`flex-1 h-2 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}><div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${done/total*100}%`}}/></div>
-                    <span className={`text-xs font-bold ${dm?'text-gray-400':'text-gray-500'}`}>{done}/{total}</span>
-                  </div>
-                  {sessionItems.map((item, i)=>(
-                    <QuestionCard
-                      key={`${item.blockId}-${item.qId}`}
-                      question={item.question}
-                      index={i}
-                      selectedLetter={sessionAnswers[item.qId]}
-                      onAnswer={async (letter)=>{
-                        const correct = isAnswerCorrect(item.question, letter);
-                        trackQuestionAnswered(`review:${item.aulaId}:${item.blockId}:${item.qId}:${item.item?.dueDate||getTodayKey()}`);
-                        setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [item.qId]:letter}, sessionResults:{...(p?.sessionResults||{}), [item.qId]:correct}}));
-                        if (!correct) setReviewNotebook(item, 'add');
-                        await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
-                      }}
-                      darkMode={dm}
-                      isFavorite={isReviewItemFavorite(item)}
-                      onToggleFavorite={()=>toggleReviewFavorite(item)}
-                      showErrorNotebook={false}
-                      apiKey={getKey()}
-                      oracleLength={settings.oracleLength}
-                      onCall={callWithRotation}
-                    />
-                  ))}
-                </div>
-              );
-            }
-
             // ── LISTA DE BLOCOS DA AULA ──
             return (
               <div className="max-w-3xl mx-auto">
@@ -10939,12 +12102,13 @@ export default function QuestionBankApp() {
                   <span className={`font-bold truncate max-w-[180px] ${dm?'text-yellow-400':'text-yellow-700'}`}>{vqAula.title}</span>
                 </div>
 
-                <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 pb-6 border-b ${dm?'border-gray-700':'border-gray-200'}`}>
-                  <div>
-                    <h2 className="text-2xl font-serif font-bold text-yellow-600">{vqAula.title}</h2>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      {vqAula.duration_formatted&&<p className="text-sm opacity-50">⏱ {vqAula.duration_formatted}</p>}
-                      {/* Progresso dos blocos */}
+	                <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 pb-6 border-b ${dm?'border-gray-700':'border-gray-200'}`}>
+	                  <div>
+	                    <h2 className="text-2xl font-serif font-bold text-yellow-600">{vqAula.title}</h2>
+	                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+	                      {vqAula.duration_formatted&&<p className="text-sm opacity-50">⏱ {vqAula.duration_formatted}</p>}
+	                      {totalLessonQuestions>0&&<p className="text-sm opacity-50">{answeredLessonQuestions}/{totalLessonQuestions} respondidas</p>}
+	                      {/* Progresso dos blocos */}
                       {blockList.length>0&&(()=>{
                         const done = blockList.filter(([,b])=>{
                           const qs = Array.isArray(b.questions)?b.questions:[];
@@ -10990,10 +12154,31 @@ export default function QuestionBankApp() {
                   />
                 )}
 
-                {/* Cards de bloco */}
-                {blockList.length>0&&(
-                  <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase opacity-40 mb-1">{blockList.length} bloco(s) · {aulaQCount(vqAula)} questões</p>
+	                {/* Cards de bloco */}
+	                {blockList.length>0&&(
+	                  <div className="space-y-3">
+	                    {allLessonQuestionsDone&&(
+	                      <div className={`rounded-2xl border p-5 ${dm?'border-green-800 bg-green-900/10':'border-green-200 bg-green-50'}`}>
+	                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+	                          <div>
+	                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-green-400':'text-green-700'}`}>Aula concluída</p>
+	                            <h3 className={`text-lg font-serif font-bold mt-1 ${dm?'text-white':'text-gray-900'}`}>Questões de fixação finalizadas</h3>
+	                            <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-600'}`}>Agora siga o próximo comando do plano ou avance para a próxima aula.</p>
+	                          </div>
+	                          <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+	                            <button onClick={()=>{setCursoTab('plano');setView('curso');}}
+	                              className={`px-4 py-3 rounded-xl font-bold text-sm border ${dm?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
+	                              Voltar ao Meu Plano
+	                            </button>
+	                            <button onClick={()=>openCourseLessonFromVq(nextCourseLesson)} disabled={!nextCourseLesson}
+	                              className={`px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-40 ${nextCourseLesson?'bg-yellow-600 hover:bg-yellow-700 text-white':(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400')}`}>
+	                              Próxima aula
+	                            </button>
+	                          </div>
+	                        </div>
+	                      </div>
+	                    )}
+	                    <p className="text-xs font-bold uppercase opacity-40 mb-1">{blockList.length} bloco(s) · {aulaQCount(vqAula)} questões</p>
                     {blockList.map(([blockId, block])=>{
                       const qs  = Array.isArray(block.questions) ? block.questions : [];
                       const ans = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
@@ -11030,12 +12215,22 @@ export default function QuestionBankApp() {
 
                       return (
                         <div key={blockId} className={`relative rounded-2xl border overflow-visible transition-all ${dm?'bg-gray-800 border-gray-700 hover:border-gray-600':'bg-white border-gray-200 hover:border-gray-300'}`}>
-                          <button
+                          <div
+                            role="button"
+                            tabIndex={block.generating ? -1 : 0}
                             onClick={()=>{
+                              if (block.generating) return;
                               if(hasQs) setVqActiveBlockView({blockId,showWrong:false});
                               else generateVqBlock(aulaIdNew,blockId);
                             }}
-                            disabled={block.generating}
+                            onKeyDown={e=>{
+                              if (block.generating) return;
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                if(hasQs) setVqActiveBlockView({blockId,showWrong:false});
+                                else generateVqBlock(aulaIdNew,blockId);
+                              }
+                            }}
                             className="w-full p-5 flex items-center gap-4 text-left">
                             {/* Número / progresso — verde SÓ quando tudo respondido */}
                             <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-bold font-serif text-lg ${allDone?'bg-green-500 text-white':hasQs?(dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
@@ -11064,7 +12259,7 @@ export default function QuestionBankApp() {
                               </div>
                             </div>
                             <ChevronRight className={`w-5 h-5 flex-shrink-0 ${dm?'text-gray-600':'text-gray-300'}`}/>
-                          </button>
+                          </div>
                           {cardActions.length>0&&(
                             <div className="absolute right-3 top-3">
                               <button
@@ -11204,7 +12399,7 @@ export default function QuestionBankApp() {
               <h2 className="text-2xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Zap className="w-7 h-7"/>Configurar Prova</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões</label><input type="number" value={examQCount} onChange={e=>setExamQCount(parseInt(e.target.value)||10)} min="1" max="100" className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/></div>
-                <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Tempo</label><select value={examTime} onChange={e=>setExamTime(parseInt(e.target.value))} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}>{[15,30,45,60,90,120].map(t=><option key={t} value={t}>{t} min</option>)}</select></div>
+                <div><label className="block text-xs font-bold uppercase mb-2 opacity-50">Tempo</label><select value={examTime} onChange={e=>setExamTime(parseInt(e.target.value))} style={{colorScheme:darkMode?'dark':'light'}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}>{[15,30,45,60,90,120].map(t=><option key={t} value={t}>{t} min</option>)}</select></div>
               </div>
               {/* Blind mode */}
               <div className={`flex items-center justify-between p-4 rounded-xl border mb-6 ${darkMode?'border-gray-700 bg-gray-700/50':'border-gray-200 bg-gray-50'}`}>
@@ -11727,6 +12922,174 @@ export default function QuestionBankApp() {
                 </SettingsSection>
               );
             })()}
+            {isAdmin&&(
+              <SettingsSection
+                id="course-catalog"
+                title="Catálogo das aulas"
+                icon={<BookOpen className="w-4 h-4"/>}
+                className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
+                titleClassName="text-yellow-600"
+              >
+                <p className={`text-sm leading-relaxed mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>
+                  Gera uma ficha curta por aula usando título, duração e transcrição. Por enquanto está limitado a Cardio, Pneumo, Gastro e Endócrino. Nada é renomeado automaticamente.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  <button
+                    disabled={courseCatalogRun.running}
+                    onClick={()=>startCourseCatalogAnalysis({ force:false })}
+                    className="px-4 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                    {courseCatalogRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Sparkles className="w-4 h-4"/>}
+                    Gerar pendentes
+                  </button>
+                  <button
+                    disabled={courseCatalogRun.running}
+                    onClick={()=>startCourseCatalogAnalysis({ force:true })}
+                    className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 ${darkMode?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                    Refazer todas
+                  </button>
+                  {courseCatalogRun.running&&(
+                    <>
+                      <button
+                        onClick={courseCatalogRun.paused ? resumeCourseCatalogAnalysis : pauseCourseCatalogAnalysis}
+                        disabled={courseCatalogRun.stopping}
+                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 ${darkMode?'border-yellow-700 text-yellow-300 hover:bg-yellow-900/20':'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}`}>
+                        {courseCatalogRun.paused ? 'Continuar' : 'Pausar'}
+                      </button>
+                      <button
+                        onClick={stopCourseCatalogAnalysis}
+                        disabled={courseCatalogRun.stopping}
+                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 ${darkMode?'border-red-800 text-red-400 hover:bg-red-900/20':'border-red-300 text-red-600 hover:bg-red-50'}`}>
+                        {courseCatalogRun.stopping ? 'Parando...' : 'Parar'}
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                  <div className={`px-4 py-3 border-b flex items-center justify-between ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-100 bg-gray-50'}`}>
+                    <span className="text-xs font-bold uppercase tracking-widest opacity-50">Progresso</span>
+                    <span className="text-xs font-bold text-yellow-600">
+                      {courseCatalogRun.paused ? 'pausado · ' : courseCatalogRun.stopping ? 'parando · ' : ''}
+                      {courseCatalogRun.total ? `${courseCatalogRun.current}/${courseCatalogRun.total}` : 'parado'}
+                    </span>
+                  </div>
+                  <div ref={courseCatalogLogRef} className="max-h-56 overflow-y-auto p-3 space-y-2">
+                    {courseCatalogRun.logs.length===0&&<p className="text-sm opacity-50 italic p-2">Os logs aparecem aqui durante a análise.</p>}
+                    {courseCatalogRun.logs.map(log=>{
+                      const cls = log.type==='success'
+                        ? (darkMode?'text-green-400':'text-green-700')
+                        : log.type==='error'
+                          ? (darkMode?'text-red-400':'text-red-700')
+                          : (darkMode?'text-gray-300':'text-gray-700');
+                      return (
+                        <div key={log.id} className={`text-xs rounded-lg px-3 py-2 ${darkMode?'bg-gray-900/40':'bg-gray-50'}`}>
+                          <span className="opacity-40 font-mono mr-2">{log.time}</span>
+                          <span className={cls}>{log.msg}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className={`mt-5 rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                      <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Prévia</p>
+                      <h4 className="text-lg font-serif font-bold text-yellow-600">Proposta de organização</h4>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        disabled={courseOrgRun.running || courseCatalogRun.running}
+                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:false })}
+                        className="px-4 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                        {courseOrgRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Sparkles className="w-4 h-4"/>}
+                        Com bônus separado
+                      </button>
+                      <button
+                        disabled={courseOrgRun.running || courseCatalogRun.running}
+                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:true })}
+                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-yellow-700 text-yellow-300 hover:bg-yellow-900/20':'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}`}>
+                        {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <CheckIcon className="w-4 h-4"/>}
+                        Sem separar bônus
+                      </button>
+                      <button
+                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
+                        onClick={applyCourseOrgProposalToPlan}
+                        className={`px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'bg-gray-800 text-yellow-300 hover:bg-gray-700':'bg-gray-900 text-yellow-100 hover:bg-gray-800'}`}>
+                        <CalendarCheck className="w-4 h-4"/>
+                        Aplicar ao Meu Plano
+                      </button>
+                    </div>
+                  </div>
+                  {courseOrgRun.logs.length>0&&(
+                    <div className={`rounded-xl border overflow-hidden mb-4 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                      <div className={`px-3 py-2 border-b flex items-center justify-between ${darkMode?'border-gray-700 bg-gray-950/40':'border-gray-100 bg-white'}`}>
+                        <span className="text-xs font-bold uppercase tracking-widest opacity-50">Log da proposta</span>
+                        <span className="text-xs font-bold text-yellow-600">{courseOrgRun.total ? `${courseOrgRun.current}/${courseOrgRun.total}` : 'parado'}</span>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto p-2 space-y-1">
+                        {courseOrgRun.logs.map(log=>{
+                          const cls = log.type==='success'
+                            ? (darkMode?'text-green-400':'text-green-700')
+                            : log.type==='error'
+                              ? (darkMode?'text-red-400':'text-red-700')
+                              : (darkMode?'text-gray-300':'text-gray-700');
+                          return (
+                            <div key={log.id} className={`text-xs rounded-lg px-2 py-1.5 ${darkMode?'bg-gray-950/50':'bg-white'}`}>
+                              <span className="opacity-40 font-mono mr-2">{log.time}</span>
+                              <span className={cls}>{log.msg}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {!displayCourseOrgProposal?.subjects?.length ? (
+                    <p className={`text-sm ${darkMode?'text-gray-500':'text-gray-500'}`}>Gere a proposta depois que as fichas do catálogo estiverem prontas.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className={`text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>
+                        Prévia {displayCourseOrgProposal.mode === 'integrated' ? 'sem separar bônus' : 'com bônus separado'} gerada em {new Date(displayCourseOrgProposal.generatedAt || Date.now()).toLocaleString('pt-BR')}. Ainda não aplica nada no curso.
+                      </p>
+                      {displayCourseOrgProposal.subjects.map(subjectProposal=>(
+                        <div key={subjectProposal.subject} className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-white'}`}>
+                          <div className={`px-4 py-3 border-b ${darkMode?'border-gray-700':'border-gray-100'}`}>
+                            <p className="font-serif font-bold text-yellow-600">{subjectProposal.subject}</p>
+                            {subjectProposal.notes&&<p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>{subjectProposal.notes}</p>}
+                          </div>
+                          <div className="p-3 space-y-3">
+                            {(subjectProposal.modules || []).map((module, mi)=>(
+                              <div key={`${subjectProposal.subject}-${module.title}-${mi}`}>
+                                <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>{String(mi + 1).padStart(2,'0')}. {module.title}</p>
+                                <div className="space-y-1">
+                                  {(module.lessons || []).map((lesson, li)=>(
+                                    <div key={lesson.lessonId} className={`rounded-lg px-3 py-2 ${darkMode?'bg-gray-950/60':'bg-gray-50'}`}>
+                                      <p className="text-sm font-bold">{String(li + 1).padStart(2,'0')}. {lesson.title}</p>
+                                      {lesson.reason&&<p className={`text-[11px] mt-0.5 ${darkMode?'text-gray-500':'text-gray-500'}`}>{lesson.reason}</p>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            {!!subjectProposal.bonus?.length&&(
+                              <div>
+                                <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Bônus</p>
+                                <div className="space-y-1">
+                                  {subjectProposal.bonus.map((lesson, li)=>(
+                                    <div key={lesson.lessonId} className={`rounded-lg px-3 py-2 ${darkMode?'bg-yellow-900/10':'bg-yellow-50'}`}>
+                                      <p className="text-sm font-bold">B{String(li + 1).padStart(2,'0')}. {lesson.title}</p>
+                                      {lesson.reason&&<p className={`text-[11px] mt-0.5 ${darkMode?'text-yellow-200/60':'text-yellow-800/60'}`}>{lesson.reason}</p>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </SettingsSection>
+            )}
 
             {/* Zona de perigo */}
             {canSeeVideoaulas&&(
@@ -11769,6 +13132,7 @@ export default function QuestionBankApp() {
         isReset={!!vqGenModal.reset}
         darkMode={darkMode}
         savedSettings={settings}
+        isAdmin={isAdmin}
         onClose={(prefs={})=>{
           // Salvar preferências mesmo ao fechar sem confirmar
           if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined) {

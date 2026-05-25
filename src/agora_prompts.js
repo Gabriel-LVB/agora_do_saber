@@ -358,9 +358,9 @@ ${TEMPLATE_QUESTAO(alts)}`;
 
 // ─── PROMPT: SUMÁRIO DAS AULAS (VIDEOAULAS) ──────────────────────────────────
 
-export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, extraPrompt = '') => {
+export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, extraPrompt = '', options = {}) => {
   const minPerBlock = SYLLABUS_LIMITS.videoaulas.minSubtopicsPerBlock;
-  const maxPerBlock = SYLLABUS_LIMITS.videoaulas.maxSubtopicsPerBlock;
+  const maxPerBlock = Math.max(minPerBlock, Math.min(30, options.maxSubtopicsPerBlock || SYLLABUS_LIMITS.videoaulas.maxSubtopicsPerBlock));
   const idealPerBlock = Math.max(minPerBlock, Math.min(maxPerBlock, qPerBlock || 6));
   return `Você é um especialista em avaliações médicas. Sua tarefa é criar um guia de questões para a aula "${aula.title}".
 
