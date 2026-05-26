@@ -85,6 +85,7 @@ const TrendingUp  = ic('<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyli
 const Printer     = ic('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>');
 const MessageCircle=ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>');
 const Zap         = ic('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>');
+const ShieldAlert = ic('<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="M12 8v4"/><path d="M12 16h.01"/>');
 const BarChart2   = ic('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>');
 const CalendarCheck=ic('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/>');
 const ImageIcon   = ic('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>');
@@ -1485,9 +1486,36 @@ const applyCourseOrgProposalToVideoData = (raw, proposal) => {
   if (!normalized?.subjects?.length || !raw || !Object.keys(raw).length) return raw;
   const allLessons = flattenCourseLessons(raw);
   const byId = new Map();
+  const byTitle = new Map();
+  const addTitleMatch = (value, lesson) => {
+    const key = cleanAulaTitle(value || '');
+    if (!key || byTitle.has(key)) return;
+    byTitle.set(key, lesson);
+  };
   allLessons.forEach(lesson => {
     [lesson.docId, lesson.id, getAulaId(lesson.aula)].filter(Boolean).forEach(id => byId.set(String(id), lesson));
+    [
+      lesson.title,
+      lesson.aula?.title,
+      lesson.aula?.display_title,
+      lesson.aula?.ai_catalog?.cleanTitle,
+      lesson.aula?.ai_catalog?.originalTitle,
+    ].forEach(value => addTitleMatch(value, lesson));
   });
+  const findSourceLesson = (proposalLesson) => {
+    const idHit = byId.get(String(proposalLesson?.lessonId || ''));
+    if (idHit) return idHit;
+    const candidates = [
+      proposalLesson?.title,
+      proposalLesson?.originalTitle,
+      proposalLesson?.cleanTitle,
+    ];
+    for (const value of candidates) {
+      const hit = byTitle.get(cleanAulaTitle(value || ''));
+      if (hit) return hit;
+    }
+    return null;
+  };
   const used = new Set();
   const result = {};
   normalized.subjects.forEach(subjectProposal => {
@@ -1497,15 +1525,25 @@ const applyCourseOrgProposalToVideoData = (raw, proposal) => {
       const topicKey = `${String(moduleIndex + 1).padStart(2, '0')} - ${module.title || `Módulo ${moduleIndex + 1}`}`;
       result[subjectProposal.subject][topicKey] = { 'Aulas Principais': [], 'Bônus': [] };
       (module.lessons || []).forEach((proposalLesson, lessonIndex) => {
-        const source = byId.get(String(proposalLesson.lessonId || ''));
+        const source = findSourceLesson(proposalLesson);
         if (!source) return;
+        const sourceSubject = getCourseOrganizationSubjectName({
+          ...source.aula,
+          subject:source.subject,
+          originalSubject:source.subject,
+        });
+        if (normalizeTextKey(sourceSubject) !== normalizeTextKey(normalizeCourseSubjectName(subjectProposal.subject))) return;
+        if (used.has(source.id) || used.has(source.docId) || used.has(getAulaId(source.aula))) return;
         used.add(source.id);
         if (source.docId) used.add(source.docId);
+        if (getAulaId(source.aula)) used.add(getAulaId(source.aula));
         result[subjectProposal.subject][topicKey]['Aulas Principais'].push({
           ...source.aula,
           display_title:proposalLesson.title || source.title,
           display_topic:module.title || source.topicTitle,
           display_order:lessonIndex + 1,
+          display_plan_order:moduleIndex * 1000 + lessonIndex + 1,
+          display_proposal_lesson_id:proposalLesson.lessonId || source.docId || source.id,
         });
       });
     });
@@ -1535,19 +1573,118 @@ const getCourseVqQuestionPlan = ({ durationSecs = 0, suggestedQ = 10, isAdmin = 
 };
 
 const isLikelyValidGeminiKey = (value = '') => /^AIza[0-9A-Za-z_-]{30,80}$/.test(String(value || '').trim());
-const COURSE_CATALOG_TARGET_SUBJECTS = ['Cardiologia', 'Pneumologia', 'Gastroenterologia', 'Endocrinologia'];
-const COURSE_CATALOG_TARGET_TOKENS = ['cardio', 'pneumo', 'gastro', 'endocr'];
+const COURSE_CATALOG_SCOPE_LABEL = 'todas as matérias';
 const COURSE_CATALOG_KEY_COOLDOWN_MS = 75 * 1000;
 const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
-const COURSE_CATALOG_DELAY_MIN_MS = 5000;
-const COURSE_CATALOG_DELAY_MAX_MS = 5000;
+const DEFAULT_COURSE_CATALOG_DELAY_SECONDS = 2;
+const COURSE_CATALOG_KEY_STATS_STORAGE = 'agora_course_catalog_key_stats_v1';
 
 const normalizeTextKey = (value = '') =>
   String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+const COURSE_SUBJECT_ALIASES = [
+  ['Cirurgia', ['cirurgia vascular', 'cirurgia geral', 'cirurgia pediatrica', 'cirurgia do aparelho digestivo', 'cirurgia endocrina', 'urologia']],
+  ['Gastroenterologia', ['gastrologia', 'hepatologia', 'gastroenterologia e hepatologia']],
+  ['Endocrinologia', ['endocrinologia pediatrica']],
+  ['Preventiva', ['medicina preventiva', 'medicina preventiva e social', 'saude coletiva e preventiva', 'saude coletiva', 'epidemiologia', 'medicina do trabalho']],
+  ['Ortopedia', ['ortopedia pediatrica']],
+];
+
+const COURSE_GENERIC_SUBJECTS = new Set([
+  'anatomia humana',
+  'farmacologia',
+]);
+
+const COURSE_ORG_RECLASSIFY_FROM_SUBJECTS = new Set([
+  'cirurgia',
+  'pediatria',
+  'reumatologia',
+]);
+
+const COURSE_ORG_TITLE_SUBJECT_RULES = [
+  ['Cirurgia', /\b(cirurgia bariatrica|hernia|hernias|queimadura|queimaduras|cicatrizacao|feridas?|fios? de sutura|pre[- ]?operatorio|pos[- ]?operatorio|anestesiologia|proctologia|aneurisma|disseccao da aorta|trauma|choque hipovolemico)\b/],
+  ['Neurologia', /\b(demencia|parkinson|ave|avc|acidente vascular|cefaleia|epilepsia|crises febris|placa motora|miastenia|lambert|botulismo|sindromes neurologicas|fraqueza muscular)\b/],
+  ['Cardiologia', /\b(eletrocardiograma|bloqueios? de ramo|taquicardia|bradicardia|flutter|fibrilacao|marca[- ]?passo|parada cardiorrespiratoria|coronariana|infarto|hipertensao arterial|crise hipertensiva|valvopatias?|estenose aortica|insuficiencia aortica|estenose mitral|insuficiencia mitral|insuficiencia cardiaca|cardiomiopatia|pericardiopatias?)\b/],
+  ['Endocrinologia', /\b(diabetes|diabetica|diabetico|hipoglicemia|tireoide|tireoid\w*|hipotireoid\w*|eutireoideo|paratireoid\w*|hipoparatireoid\w*|hiperparatireoid\w*|adrenal|obesidade|dislipidemia|hipofise|hipotalamo|neoplasia endocrina multipla|nem)\b/],
+  ['Gastroenterologia', /\b(esofago|drge|refluxo|hiato|acalasia|zenker|gastric|gastrico|ulcerosa peptica|hepat|cirrose|colangite|colelit|colecist|coledocolit|vias biliares|pancrea|apendicite|diverticul|intestin|isquemia intestinal|hemorragia digestiva|gist)\b/],
+  ['Ginecologia', /\b(ciclo menstrual|anticoncepc|amenorreia|ovario policistico|sop|sangramento uterino|mioma|polipos? endometr|dismenorreia|climaterio|mamas?|ovarios?|colo uterino|hpv|vulva|vulvovaginit|cervicite|doenca inflamatoria pelvica|dip|violencia sexual)\b/],
+  ['Obstetricia', /\b(gestacao|gravidez|gravida|pre[- ]?natal|parto|puerperio|abortamento|ectopica|trofoblastica|placenta|amniorrexe|cesariana|sofrimento fetal|forceps|vacuo extrator)\b/],
+  ['Pneumologia', /\b(espirometria|asma|dpoc|pneumonia|abscesso pulmonar|derrame pleural|pneumopatias?|sarcoidose|sdra|sara|ventilacao mecanica|cancer de pulmao|nodulo pulmonar|tromboembolismo pulmonar|tep)\b/],
+  ['Hematologia', /\b(anemia|hemoglobin|talassemia|hemolise|mielodisplasia|aplasica|leucemia|hemostasia|hemofilia|tromboelastograma|policitemia|esplenomegalia)\b/],
+  ['Ortopedia', /\b(fraturas?|luxacoes|entorses|ortopedia|osgood|plexo braquial|quadril|osteomielite|tumores osseos|periarticulares?)\b/],
+  ['Dermatologia', /\b(hanseniase|micoses?|mpox|variola dos macacos|farmacodermias?|urticaria|acne|psoriase|bolhosas?)\b/],
+  ['Oftalmologia', /\b(olho|ocular|conjuntivite|catarata|glaucoma|retinopatia|retinoblastoma|fundo de olho)\b/],
+  ['Clínica Médica', /\b(intoxicacoes? exogenas?|ulceras? de pressao)\b/],
+];
+
+const normalizeCourseSubjectName = (subject = '', fallbackSubject = '') => {
+  const fallback = String(fallbackSubject || '').trim();
+  const raw = String(subject || '').trim();
+  let base = raw || fallback || 'Sem matéria';
+  const baseKey = normalizeTextKey(base);
+  if (fallback && COURSE_GENERIC_SUBJECTS.has(baseKey)) base = fallback;
+  const normalized = normalizeTextKey(base);
+  for (const [canonical, aliases] of COURSE_SUBJECT_ALIASES) {
+    if (aliases.some(alias => normalized === alias || normalized.includes(alias))) return canonical;
+  }
+  return base;
+};
+
+const inferCourseSubjectFromLessonTitle = (lesson = {}) => {
+  const haystack = normalizeTextKey([
+    lesson.title,
+    lesson.cleanTitle,
+    lesson.originalTitle,
+    lesson.ai_catalog?.cleanTitle,
+    lesson.ai_catalog?.originalTitle,
+  ].filter(Boolean).join(' '));
+  if (!haystack) return '';
+  const hit = COURSE_ORG_TITLE_SUBJECT_RULES.find(([, pattern]) => pattern.test(haystack));
+  return hit?.[0] || '';
+};
+
+const getCourseOriginalSubjectName = (lesson = {}) =>
+  normalizeCourseSubjectName(lesson.subject || lesson.originalSubject || '', 'Sem matéria');
+
+const getCourseOrganizationSubjectName = (lesson = {}) => {
+  const original = getCourseOriginalSubjectName(lesson);
+  const originalKey = normalizeTextKey(original);
+  const inferred = inferCourseSubjectFromLessonTitle(lesson);
+  if (
+    inferred
+    && normalizeTextKey(inferred) !== originalKey
+    && COURSE_ORG_RECLASSIFY_FROM_SUBJECTS.has(originalKey)
+  ) {
+    return inferred;
+  }
+  const suggestedRaw = String(lesson.ai_catalog?.suggestedSubject || '').trim();
+  const suggested = suggestedRaw ? normalizeCourseSubjectName(suggestedRaw, original) : '';
+  const confidence = Number(lesson.ai_catalog?.confidence) || 0;
+  if (
+    suggested
+    && suggested !== 'Sem matéria'
+    && normalizeTextKey(suggested) !== originalKey
+    && !COURSE_GENERIC_SUBJECTS.has(normalizeTextKey(suggested))
+    && confidence >= 0.65
+    && (COURSE_ORG_RECLASSIFY_FROM_SUBJECTS.has(originalKey) || normalizeTextKey(suggested) === normalizeTextKey(inferred))
+  ) {
+    return suggested;
+  }
+  return original;
+};
+
+const fingerprintGeminiKey = (value = '') => {
+  const clean = String(value || '').trim();
+  let hash = 2166136261;
+  for (let i = 0; i < clean.length; i += 1) {
+    hash ^= clean.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `gk_${(hash >>> 0).toString(36)}_${clean.length}`;
+};
+
 const isCourseCatalogTargetSubject = (lesson = {}) => {
-  const haystack = normalizeTextKey([lesson.subject, lesson.topic, lesson.title].filter(Boolean).join(' '));
-  return COURSE_CATALOG_TARGET_TOKENS.some(token => haystack.includes(token));
+  return !!String(lesson.title || '').trim();
 };
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -1583,6 +1720,7 @@ REGRAS:
 - Não invente conteúdo fora do título/transcrição.
 - O título limpo deve ser curto, específico e sem numeração.
 - Descrição: 1 parágrafo, 25 a 55 palavras, português do Brasil.
+- suggestedSubject: prefira manter a "Matéria atual". Não transforme aula de anatomia, fisiologia, farmacologia ou tema básico em matéria nova se ela pertence a uma matéria maior; coloque esse detalhe em suggestedTopic/tags.
 - isBonus=true apenas se parecer aula extra, revisão, plantão, resolução de questões, caso complementar, aprofundamento ou conteúdo acessório.
 - lessonType deve ser um destes: "principal", "bonus", "revisao", "questoes", "casos", "plantao", "intro", "extra".
 - confidence: número entre 0 e 1.
@@ -1639,6 +1777,9 @@ const buildCourseOrganizationPrompt = ({ subject = '', lessons = [], integrateBo
 REGRAS:
 - Não invente lessonId.
 - Cada lessonId deve aparecer exatamente uma vez em modules[].lessons.
+- Se uma aula foi enviada em AULAS, ela pertence a "${subject}" para esta organização. Não omita, não ignore e não diga que ela é de outra matéria.
+- Nunca escreva nas notes que aulas foram omitidas, excluídas ou ignoradas por pertencerem a outra especialidade.
+- Se alguma aula parecer de interface com outra especialidade, posicione-a no módulo mais próximo ou crie um módulo temático específico, mantendo o lessonId.
 - O campo bonus deve existir, mas precisa ser [].
 - Use títulos limpos, curtos e específicos, sem número no começo.
 - module title deve ser didático e curto.
@@ -1657,6 +1798,9 @@ REGRAS:
 REGRAS:
 - Não invente lessonId.
 - Cada lessonId deve aparecer exatamente uma vez: em modules[].lessons OU em bonus[].
+- Se uma aula foi enviada em AULAS, ela pertence a "${subject}" para esta organização. Não omita, não ignore e não diga que ela é de outra matéria.
+- Nunca escreva nas notes que aulas foram omitidas, excluídas ou ignoradas por pertencerem a outra especialidade.
+- Se alguma aula parecer de interface com outra especialidade, posicione-a no módulo mais próximo, crie um módulo temático específico ou coloque em bonus, mantendo o lessonId.
 - Use títulos limpos, curtos e específicos, sem número no começo.
 - module title deve ser didático e curto.
 - A ordem deve ir de bases/conceitos para diagnóstico, tratamento, complicações e questões.
@@ -1750,7 +1894,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
 
   // Helpers de mudança — mantém consistência entre os 3 campos
   const handleTotalChange = (v) => {
-    const t = Math.max(1, Math.min(300, parseInt(v)||1));
+    const t = Math.max(1, Math.min(isAdmin ? 9999 : 300, parseInt(v)||1));
     setTotalQ(t);
     const perB = Math.min(MAX_PER_BLOCK, qPerBlock);
     setQPerBlock(perB);
@@ -1811,7 +1955,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
                 <p className="text-sm font-bold">Duração: {durationFmt}</p>
                 <p className={`text-xs mt-0.5 ${dm?'text-gray-400':'text-gray-500'}`}>
                   {isAdmin
-                    ? `Sugestão admin: ${calculatedQ} questões (${Math.ceil(durationSecs/60)} min × 1; até ${ADMIN_COURSE_TOPIC_QUESTION_MAX} por bloco)`
+                    ? `Modo admin: cobertura integral da aula, sem limite total; até ${ADMIN_COURSE_TOPIC_QUESTION_MAX} subtópicos por bloco/tópico`
                     : `Sugestão: ${calculatedQ} questões (${Math.ceil(durationSecs/60)} min ÷ 2, arredondado para dezena)`}
                 </p>
               </div>
@@ -1831,6 +1975,13 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
               <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
             </div>
           </button>
+
+          {isAdmin && autoMode && (
+            <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40 text-yellow-300':'bg-yellow-50 border border-yellow-200 text-yellow-800'}`}>
+              <Sparkles className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
+              <span>O sumário vai cobrir a aula inteira na ordem do professor. O único limite é de até {ADMIN_COURSE_TOPIC_QUESTION_MAX} subtópicos por bloco/tópico.</span>
+            </div>
+          )}
 
           {/* Configuração numérica */}
           <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity ${autoMode?'opacity-30 pointer-events-none':''}`}>
@@ -1913,7 +2064,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, syllabusMaxPerBlock:isAdmin?effectivePerBlock:undefined, adminMinuteRule:isAdmin})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, syllabusMaxPerBlock:isAdmin?ADMIN_COURSE_TOPIC_QUESTION_MAX:undefined, adminMinuteRule:isAdmin, adminFullCoverage:isAdmin})}
             className="flex-[2] px-5 py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
@@ -3926,7 +4077,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100 };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -4527,6 +4678,7 @@ export default function QuestionBankApp() {
   const [coursePlanLocked, setCoursePlanLocked] = useState(false);
   const [courseCycleReviews, setCourseCycleReviews] = useState({});
   const [courseCatalogRun, setCourseCatalogRun] = useState({ running:false, paused:false, stopping:false, current:0, total:0, logs:[] });
+  const [courseCatalogStats, setCourseCatalogStats] = useState({ loading:false, rows:[], total:0, pending:0 });
   const [courseOrgRun, setCourseOrgRun] = useState({ running:false, current:0, total:0, logs:[] });
   const [courseOrgProposal, setCourseOrgProposal] = useState(null);
   const courseCatalogControlRef = useRef({ paused:false, stop:false });
@@ -4535,7 +4687,7 @@ export default function QuestionBankApp() {
   useEffect(() => {
     const el = courseCatalogLogRef.current;
     if (!el) return;
-    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    requestAnimationFrame(() => { el.scrollTop = 0; });
   }, [courseCatalogRun.logs.length]);
 
   useEffect(() => {
@@ -6492,31 +6644,108 @@ export default function QuestionBankApp() {
 
   const addCourseCatalogLog = (type, msg) => {
     const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    setCourseCatalogRun(p => ({ ...p, logs:[...p.logs.slice(-80), { id:Date.now()+Math.random(), type, msg, time }] }));
+    setCourseCatalogRun(p => ({ ...p, logs:[{ id:Date.now()+Math.random(), type, msg, time }, ...p.logs].slice(0, 80) }));
   };
+
+  const getCourseCatalogSubject = (lesson = {}) =>
+    normalizeCourseSubjectName(lesson.subject || lesson.ai_catalog?.suggestedSubject, lesson.ai_catalog?.suggestedSubject || 'Sem matéria');
+  const getOriginalCourseSubject = (lesson = {}) =>
+    getCourseOriginalSubjectName(lesson);
+  const getCourseOrganizationSubject = (lesson = {}) =>
+    getCourseOrganizationSubjectName(lesson);
+
+  const buildCourseCatalogStats = (lessons = []) => {
+    const bySubject = new Map();
+    lessons.forEach(lesson => {
+      if (!isCourseCatalogTargetSubject(lesson)) return;
+      const subject = getCourseCatalogSubject(lesson);
+      const row = bySubject.get(subject) || { subject, total:0, done:0, pending:0 };
+      const done = !!(lesson.ai_catalog?.description && lesson.ai_catalog?.cleanTitle);
+      row.total += 1;
+      if (done) row.done += 1;
+      else row.pending += 1;
+      bySubject.set(subject, row);
+    });
+    const rows = sortSubjects([...bySubject.keys()]).map(subject => bySubject.get(subject)).filter(Boolean);
+    return {
+      rows,
+      total:rows.reduce((sum, row) => sum + row.total, 0),
+      pending:rows.reduce((sum, row) => sum + row.pending, 0),
+    };
+  };
+
+  const refreshCourseCatalogStats = async () => {
+    if (!isAdmin) return;
+    setCourseCatalogStats(p => ({ ...p, loading:true }));
+    try {
+      const snap = await getDocs(collection(db, 'lessons'));
+      const lessons = [];
+      snap.forEach(lessonDoc => lessons.push(lessonDoc.data() || {}));
+      setCourseCatalogStats({ loading:false, ...buildCourseCatalogStats(lessons) });
+    } catch(e) {
+      setCourseCatalogStats(p => ({ ...p, loading:false }));
+      addCourseCatalogLog('error', 'Não consegui atualizar os contadores do catálogo.');
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    refreshCourseCatalogStats();
+  }, [isAdmin]); // eslint-disable-line
 
   const collectLikelySiteGeminiKeys = async () => {
     const byValue = new Map();
-    const addKey = (value, label='Chave') => {
+    const addKey = (value, label='Chave', ownerLabel=label) => {
       const clean = String(value || '').trim();
       if (!isLikelyValidGeminiKey(clean) || byValue.has(clean)) return;
-      byValue.set(clean, { value:clean, label });
+      byValue.set(clean, { value:clean, label, ownerLabel, fingerprint:fingerprintGeminiKey(clean) });
     };
-    getConfiguredGeminiKeys(settingsRef.current).forEach((key, idx) => addKey(key.k, `Minhas chaves ${idx + 1}`));
+    getConfiguredGeminiKeys(settingsRef.current).forEach((key, idx) => addKey(key.k, `Minhas chaves ${idx + 1}`, 'Minhas chaves'));
     if (!isAdmin) return [...byValue.values()];
     try {
       const snap = await getDocs(collection(db, 'users'));
       snap.forEach(userDoc => {
         const data = userDoc.data() || {};
         const label = data.username || data.email || userDoc.id;
-        addKey(data.apiKey, label);
-        normalizeGeminiKeys(data.settings || {}).forEach(key => addKey(key.value, label));
-        normalizeGeminiKeys({ geminiKeysBackup:data.settings?.geminiKeysBackup || [] }).forEach(key => addKey(key.value, label));
+        addKey(data.apiKey, label, label);
+        normalizeGeminiKeys(data.settings || {}).forEach(key => addKey(key.value, label, label));
+        normalizeGeminiKeys({ geminiKeysBackup:data.settings?.geminiKeysBackup || [] }).forEach(key => addKey(key.value, label, label));
       });
     } catch(e) {
       addCourseCatalogLog('error', 'Não consegui buscar as chaves dos usuários; usando apenas as suas.');
     }
     return [...byValue.values()];
+  };
+
+  const readCourseCatalogKeyStats = () => {
+    const raw = readStorageJson(COURSE_CATALOG_KEY_STATS_STORAGE, {});
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  };
+
+  const writeCourseCatalogKeyStats = (stats = {}) => {
+    const cutoff = Date.now() - 1000 * 60 * 60 * 24 * 45;
+    const compact = Object.fromEntries(
+      Object.entries(stats || {})
+        .filter(([, row]) => !row?.lastUsedAt || row.lastUsedAt >= cutoff)
+        .slice(-1000)
+    );
+    writeStorageJson(COURSE_CATALOG_KEY_STATS_STORAGE, compact);
+  };
+
+  const updateCourseCatalogKeyStat = (fingerprint, patcher) => {
+    if (!fingerprint) return {};
+    const stats = readCourseCatalogKeyStats();
+    const current = stats[fingerprint] || {};
+    const next = typeof patcher === 'function' ? patcher(current) : { ...current, ...(patcher || {}) };
+    const merged = { ...current, ...next, updatedAt:Date.now() };
+    stats[fingerprint] = merged;
+    writeCourseCatalogKeyStats(stats);
+    return merged;
+  };
+
+  const clearCourseCatalogKeyStats = () => {
+    writeStorageJson(COURSE_CATALOG_KEY_STATS_STORAGE, {});
+    addCourseCatalogLog('info', 'Memória de uso das chaves zerada para o catálogo.');
   };
 
   const pauseCourseCatalogAnalysis = () => {
@@ -6543,38 +6772,242 @@ export default function QuestionBankApp() {
     setCourseOrgRun(p => ({ ...p, logs:[...p.logs.slice(-40), { id:Date.now()+Math.random(), type, msg, time }] }));
   };
 
-  const startCourseOrganizationProposal = async ({ integrateBonus=false } = {}) => {
+  const startCourseOrganizationProposal = async ({ integrateBonus=false, onlyMissing=false, onlyProblematic=false } = {}) => {
     if (!isAdmin || courseOrgRun.running) return;
-    setCourseOrgRun({ running:true, current:0, total:COURSE_CATALOG_TARGET_SUBJECTS.length, logs:[] });
+    setCourseOrgRun({ running:true, current:0, total:0, logs:[] });
     const modeLabel = integrateBonus ? 'sem separar bônus' : 'com bônus separado';
-    const toastId = addToast(`Gerando proposta ${modeLabel}...`, 'loading', 0);
+    const runLabel = onlyProblematic ? 'Corrigindo' : onlyMissing ? 'Completando' : 'Gerando';
+    const toastId = addToast(`${runLabel} proposta ${modeLabel}...`, 'loading', 0);
     try {
       const keys = shuffleList(await collectLikelySiteGeminiKeys());
       if (!keys.length) {
         updateToast(toastId, 'Nenhuma chave Gemini com formato plausível foi encontrada.', 'error');
         setCourseOrgRun(p => ({ ...p, running:false }));
-        return;
+          return;
       }
+      const portalLessons = flattenCourseLessons(videoaulasData || {});
+      const portalById = new Map();
+      const portalByTitle = new Map();
+      const addPortalId = (id, lesson) => {
+        if (!id) return;
+        portalById.set(String(id), lesson);
+      };
+      const addPortalTitle = (title, lesson) => {
+        const key = cleanAulaTitle(title || '');
+        if (!key || portalByTitle.has(key)) return;
+        portalByTitle.set(key, lesson);
+      };
+      portalLessons.forEach(lesson => {
+        [lesson.id, lesson.docId, getAulaId(lesson.aula), lesson.aula?.bunny_id].forEach(id => addPortalId(id, lesson));
+        [lesson.title, lesson.aula?.title, lesson.aula?.ai_catalog?.cleanTitle, lesson.aula?.ai_catalog?.originalTitle].forEach(title => addPortalTitle(title, lesson));
+      });
+      const findPortalLessonForCatalog = (lessonDocId, data = {}) => {
+        const ids = [
+          lessonDocId,
+          data.id,
+          data.doc_id,
+          data.bunny_id,
+          data.embed_url,
+        ].filter(Boolean);
+        for (const id of ids) {
+          const hit = portalById.get(String(id));
+          if (hit) return hit;
+        }
+        const titleCandidates = [
+          data.title,
+          data.ai_catalog?.cleanTitle,
+          data.ai_catalog?.originalTitle,
+          data.originalTitle,
+        ];
+        for (const title of titleCandidates) {
+          const hit = portalByTitle.get(cleanAulaTitle(title || ''));
+          if (hit) return hit;
+        }
+        return null;
+      };
       const snap = await getDocs(collection(db, 'lessons'));
       const lessons = [];
       snap.forEach(lessonDoc => {
         const data = lessonDoc.data() || {};
         if (!data.title || !isCourseCatalogTargetSubject(data)) return;
         if (!data.ai_catalog?.cleanTitle && !data.ai_catalog?.description) return;
-        lessons.push({ id:lessonDoc.id, ...data });
+        const originalSubject = getOriginalCourseSubject(data);
+        const organizationSubject = getCourseOrganizationSubject(data);
+        lessons.push({
+          ...data,
+          id:lessonDoc.id,
+          doc_id:data.doc_id || lessonDoc.id,
+          title:data.title || data.ai_catalog?.originalTitle || data.ai_catalog?.cleanTitle || '',
+          subject:organizationSubject,
+          originalSubject:data.subject || '',
+          sourceSubject:originalSubject,
+          topic:data.topic || '',
+          duration_formatted:data.duration_formatted || '',
+          is_bonus:!!data.is_bonus || !!data.ai_catalog?.isBonus || normalizeTextKey(data.topic || '').includes('bonus'),
+          ai_catalog:data.ai_catalog || {},
+          description:data.ai_catalog?.description || data.description || '',
+        });
       });
-      const proposals = [];
+      const subjectOfLesson = (lesson) => getCourseOrganizationSubject(lesson);
+      const subjectScope = sortCourseSubjectsForDisplay([...new Set(lessons.map(subjectOfLesson))]);
+      if (!lessons.length) {
+        updateToast(toastId, 'Nenhuma aula catalogada encontrada no banco para montar a proposta.', 'error');
+        return;
+      }
+      const reclassifiedCount = lessons.filter(lesson => normalizeTextKey(lesson.sourceSubject || '') !== normalizeTextKey(lesson.subject || '')).length;
+      addCourseOrgLog('info', `Fonte da proposta: ${lessons.length} aulas da coleção lessons; ${reclassifiedCount} reclassificada${reclassifiedCount!==1?'s':''} pela ficha catalogada antes de chamar a IA.`);
+      const existingProposal = normalizeCourseOrgProposal(courseOrgProposal);
+      const sameMode = existingProposal?.mode === (integrateBonus ? 'integrated' : 'separate-bonus');
+      const existingSubjects = sameMode && Array.isArray(existingProposal?.subjects) ? existingProposal.subjects : [];
+      const existingBySubject = new Map(existingSubjects.map(item => [normalizeTextKey(item.subject), item]));
+      const lessonsById = new Map(lessons.map(lesson => [String(lesson.id), lesson]));
+      const allowedBySubject = new Map();
+      const addAllowed = (subject, lesson) => {
+        const key = normalizeTextKey(normalizeCourseSubjectName(subject));
+        const row = allowedBySubject.get(key) || { ids:new Set(), titles:new Set() };
+        [
+          lesson.id,
+          lesson.doc_id,
+          lesson.bunny_id,
+          lesson.embed_url,
+        ].filter(Boolean).forEach(id => row.ids.add(String(id)));
+        [
+          lesson.title,
+          lesson.ai_catalog?.cleanTitle,
+          lesson.ai_catalog?.originalTitle,
+          lesson.originalTitle,
+        ].forEach(title => {
+          const clean = cleanAulaTitle(title || '');
+          if (clean) row.titles.add(clean);
+        });
+        allowedBySubject.set(key, row);
+      };
+      lessons.forEach(lesson => addAllowed(subjectOfLesson(lesson), lesson));
+      portalLessons.forEach(lesson => {
+        const key = normalizeTextKey(normalizeCourseSubjectName(lesson.subject));
+        const row = allowedBySubject.get(key) || { ids:new Set(), titles:new Set() };
+        [lesson.id, lesson.docId, getAulaId(lesson.aula), lesson.aula?.bunny_id].filter(Boolean).forEach(id => row.ids.add(String(id)));
+        [lesson.title, lesson.aula?.title, lesson.aula?.ai_catalog?.cleanTitle, lesson.aula?.ai_catalog?.originalTitle].forEach(title => {
+          const clean = cleanAulaTitle(title || '');
+          if (clean) row.titles.add(clean);
+        });
+        allowedBySubject.set(key, row);
+      });
+      const lessonsByCleanTitle = new Map();
+      lessons.forEach(lesson => {
+        [
+          lesson.title,
+          lesson.ai_catalog?.cleanTitle,
+          lesson.ai_catalog?.originalTitle,
+        ].forEach(title => {
+          const key = cleanAulaTitle(title || '');
+          if (key && !lessonsByCleanTitle.has(key)) lessonsByCleanTitle.set(key, lesson);
+        });
+      });
+      const findSourceForProposalLesson = (proposalLesson = {}) => {
+        const idCandidates = [
+          proposalLesson.lessonId,
+          proposalLesson.id,
+          proposalLesson.docId,
+          proposalLesson.bunny_id,
+        ].filter(Boolean);
+        for (const id of idCandidates) {
+          const idText = String(id);
+          const catalogHit = lessonsById.get(idText);
+          if (catalogHit) return catalogHit;
+          const portalHit = portalById.get(idText);
+          if (portalHit) return { id:idText, subject:portalHit.subject, topic:portalHit.topic, title:portalHit.title };
+        }
+        const titleCandidates = [
+          proposalLesson.title,
+          proposalLesson.cleanTitle,
+          proposalLesson.originalTitle,
+          proposalLesson.lessonId,
+        ];
+        for (const title of titleCandidates) {
+          const clean = cleanAulaTitle(title || '');
+          if (!clean) continue;
+          const catalogHit = lessonsByCleanTitle.get(clean);
+          if (catalogHit) return catalogHit;
+          const portalHit = portalByTitle.get(clean);
+          if (portalHit) return { id:portalHit.docId || portalHit.id, subject:portalHit.subject, topic:portalHit.topic, title:portalHit.title };
+        }
+        return null;
+      };
+      const proposalHasWrongSubject = (subjectProposal) => {
+        const subjectKey = normalizeTextKey(subjectProposal?.subject || '');
+        const allowed = allowedBySubject.get(subjectKey) || { ids:new Set(), titles:new Set() };
+        const notesKey = normalizeTextKey(subjectProposal?.notes || '');
+        if (/(omitid|excluid|ignorado|ignorada|nao pertenc|outra especialidade|outras especialidades)/.test(notesKey)) return true;
+        if ((subjectProposal?.modules || []).some(module => /complementos.*revis/.test(normalizeTextKey(module?.title || '')))) return true;
+        const proposalLessons = [
+          ...(subjectProposal?.modules || []).flatMap(module => module.lessons || []),
+          ...(subjectProposal?.bonus || []),
+        ];
+        return proposalLessons.some(proposalLesson => {
+          const idCandidates = [
+            proposalLesson.lessonId,
+            proposalLesson.id,
+            proposalLesson.docId,
+            proposalLesson.bunny_id,
+          ].filter(Boolean).map(String);
+          if (idCandidates.some(id => allowed.ids.has(id))) return false;
+          const titleCandidates = [
+            proposalLesson.title,
+            proposalLesson.cleanTitle,
+            proposalLesson.originalTitle,
+            proposalLesson.lessonId,
+          ].map(title => cleanAulaTitle(title || '')).filter(Boolean);
+          if (titleCandidates.some(title => allowed.titles.has(title))) return false;
+          const source = findSourceForProposalLesson(proposalLesson);
+          if (!source) return true;
+          return normalizeTextKey(subjectOfLesson(source)) !== subjectKey;
+        });
+      };
+      const problematicSubjects = subjectScope.filter(subject => {
+        const existing = existingBySubject.get(normalizeTextKey(subject));
+        return existing && proposalHasWrongSubject(existing);
+      });
+      const targetSubjects = onlyProblematic
+        ? problematicSubjects
+        : onlyMissing
+        ? subjectScope.filter(subject => !existingBySubject.has(normalizeTextKey(subject)))
+        : subjectScope;
+      setCourseOrgRun(p => ({ ...p, total:targetSubjects.length }));
+      if (!targetSubjects.length) {
+        const keptSubjects = subjectScope.map(subject => existingBySubject.get(normalizeTextKey(subject))).filter(Boolean);
+        const nextProposal = {
+          subjects:keptSubjects,
+          generatedAt:Date.now(),
+          scope:subjectScope,
+          mode:integrateBonus ? 'integrated' : 'separate-bonus',
+        };
+        setCourseOrgProposal(nextProposal);
+        updateToast(toastId, onlyProblematic ? 'Nenhuma matéria contaminada detectada. Mantive a proposta atual.' : 'Nada faltante nessa prévia. Mantive a proposta atual.', 'success');
+        setTimeout(() => removeToast(toastId), 5000);
+        return;
+      }
+      if (onlyMissing) {
+        addCourseOrgLog('info', `Gerando só faltantes: ${targetSubjects.join(', ')}.`);
+      }
+      if (onlyProblematic) {
+        addCourseOrgLog('info', `Regerando matérias contaminadas: ${targetSubjects.join(', ')}.`);
+      }
+      const generatedBySubject = new Map();
+      const failedSubjectKeys = new Set();
+      const targetSubjectKeys = new Set(targetSubjects.map(subject => normalizeTextKey(subject)));
       let keyCursor = 0;
-      for (let i = 0; i < COURSE_CATALOG_TARGET_SUBJECTS.length; i += 1) {
-        const subject = COURSE_CATALOG_TARGET_SUBJECTS[i];
-        const token = COURSE_CATALOG_TARGET_TOKENS[i];
-        const subjectLessons = lessons.filter(lesson => isCourseCatalogTargetSubject(lesson) && normalizeTextKey([lesson.subject, lesson.topic, lesson.title, lesson.ai_catalog?.suggestedSubject].join(' ')).includes(token));
-        setCourseOrgRun(p => ({ ...p, current:i + 1, total:COURSE_CATALOG_TARGET_SUBJECTS.length }));
+      for (let i = 0; i < targetSubjects.length; i += 1) {
+        const subject = targetSubjects[i];
+        const subjectKey = normalizeTextKey(subject);
+        const subjectLessons = lessons.filter(lesson => normalizeTextKey(subjectOfLesson(lesson)) === subjectKey);
+        setCourseOrgRun(p => ({ ...p, current:i + 1, total:targetSubjects.length }));
         if (!subjectLessons.length) {
           addCourseOrgLog('info', `${subject}: nenhuma ficha encontrada.`);
+          failedSubjectKeys.add(subjectKey);
           continue;
         }
-        updateToast(toastId, `Organizando ${subject} ${modeLabel} (${i + 1}/${COURSE_CATALOG_TARGET_SUBJECTS.length})...`, 'loading');
+        updateToast(toastId, `Organizando ${subject} ${modeLabel} (${i + 1}/${targetSubjects.length})...`, 'loading');
         let parsed = null;
         let lastErr = null;
         for (let attempt = 0; attempt < Math.min(keys.length, 8); attempt += 1) {
@@ -6598,6 +7031,7 @@ export default function QuestionBankApp() {
         }
         if (!parsed) {
           addCourseOrgLog('error', `${subject}: ${ERROR_CONFIGS[lastErr?.message]?.title || lastErr?.message || 'erro'}.`);
+          failedSubjectKeys.add(subjectKey);
           continue;
         }
         const lessonIds = new Set(subjectLessons.map(lesson => lesson.id));
@@ -6647,21 +7081,42 @@ export default function QuestionBankApp() {
           notes:String(parsed.notes || '').trim().slice(0, 500),
           generatedAt:Date.now(),
         });
-        proposals.push(proposal);
+        const proposalLessonIds = new Set([
+          ...proposal.modules.flatMap(module => module.lessons || []),
+          ...(proposal.bonus || []),
+        ].map(lesson => String(lesson.lessonId || '')).filter(Boolean));
+        const missingLessons = subjectLessons.filter(lesson => !proposalLessonIds.has(String(lesson.id)));
+        if (missingLessons.length || proposalHasWrongSubject(proposal)) {
+          addCourseOrgLog('error', `${subject}: proposta suspeita ou incompleta (${missingLessons.length} aula${missingLessons.length!==1?'s':''} sem bloco válido).`);
+          failedSubjectKeys.add(subjectKey);
+          continue;
+        }
+        generatedBySubject.set(subjectKey, proposal);
         addCourseOrgLog('success', `${subject}: ${proposal.modules.length} módulo(s)${integrateBonus ? ' integrados' : `, ${proposal.bonus.length} bônus`}.`);
         await wait(1000);
       }
+      const finalSubjects = subjectScope
+        .map(subject => {
+          const subjectKey = normalizeTextKey(subject);
+          if (generatedBySubject.has(subjectKey)) return generatedBySubject.get(subjectKey);
+          if (failedSubjectKeys.has(subjectKey) || targetSubjectKeys.has(subjectKey)) return null;
+          return existingBySubject.get(subjectKey) || null;
+        })
+        .filter(Boolean);
+      const generatedCount = generatedBySubject.size;
+      const preservedCount = finalSubjects.length - generatedCount;
+      const failedCount = failedSubjectKeys.size;
       const nextProposal = {
-        subjects:proposals,
+        subjects:finalSubjects,
         generatedAt:Date.now(),
-        scope:COURSE_CATALOG_TARGET_SUBJECTS,
+        scope:subjectScope,
         mode:integrateBonus ? 'integrated' : 'separate-bonus',
       };
       setCourseOrgProposal(nextProposal);
       if (user && !user.isAnonymous) {
         await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { courseOrgProposal:nextProposal }, { merge:true });
       }
-      updateToast(toastId, `Proposta gerada para ${proposals.length} matéria${proposals.length!==1?'s':''}.`, proposals.length ? 'success' : 'info');
+      updateToast(toastId, `Proposta atualizada: ${generatedCount} gerada${generatedCount!==1?'s':''}, ${preservedCount} preservada${preservedCount!==1?'s':''}${failedCount ? `, ${failedCount} faltante${failedCount!==1?'s':''} por erro` : ''}.`, failedCount ? 'info' : finalSubjects.length ? 'success' : 'info');
       setTimeout(() => removeToast(toastId), 10000);
     } catch(e) {
       updateToast(toastId, 'Erro ao gerar proposta de organização.', 'error');
@@ -6684,30 +7139,62 @@ export default function QuestionBankApp() {
         return;
       }
       addCourseCatalogLog('info', `${keys.length} chave${keys.length!==1?'s':''} plausível${keys.length!==1?'is':''} encontrada${keys.length!==1?'s':''}.`);
-      const shuffledKeys = shuffleList(keys.map((key, originalIndex) => ({ ...key, originalIndex })));
-      addCourseCatalogLog('info', 'Ordem das chaves embaralhada para esta execução.');
-      const keyStates = shuffledKeys.map((key, index) => ({
+      const persistedKeyStats = readCourseCatalogKeyStats();
+      const ownerKeyCounts = keys.reduce((map, key) => {
+        const owner = key.ownerLabel || key.label || 'Chave';
+        map.set(owner, (map.get(owner) || 0) + 1);
+        return map;
+      }, new Map());
+      const orderedKeys = keys
+        .map((key, originalIndex) => {
+          const stat = persistedKeyStats[key.fingerprint] || {};
+          return {
+            ...key,
+            originalIndex,
+            ownerKeyCount:ownerKeyCounts.get(key.ownerLabel || key.label || 'Chave') || 1,
+            persistedUses:Number(stat.uses) || 0,
+            persistedQuotaHits:Number(stat.quotaHits) || 0,
+            persistedCooldownUntil:Number(stat.cooldownUntil) || 0,
+            persistedInvalid:!!stat.invalid,
+          };
+        })
+        .sort((a, b) =>
+          (a.persistedInvalid === b.persistedInvalid ? 0 : a.persistedInvalid ? 1 : -1)
+          || ((a.persistedCooldownUntil > Date.now()) === (b.persistedCooldownUntil > Date.now()) ? 0 : a.persistedCooldownUntil > Date.now() ? 1 : -1)
+          || (a.persistedUses - b.persistedUses)
+          || (a.persistedQuotaHits - b.persistedQuotaHits)
+          || (a.ownerKeyCount - b.ownerKeyCount)
+          || String(a.ownerLabel || a.label).localeCompare(String(b.ownerLabel || b.label), 'pt')
+          || a.originalIndex - b.originalIndex
+        );
+      const rememberedUses = orderedKeys.filter(key => key.persistedUses > 0).length;
+      addCourseCatalogLog('info', `Ordem das chaves: menos usadas primeiro${rememberedUses ? ` (${rememberedUses} com histórico lembrado)` : ''}; donos com mais chaves ficam por último em caso de empate.`);
+      const keyStates = orderedKeys.map((key, index) => ({
         ...key,
         index,
-        uses:0,
-        quotaHits:0,
-        invalid:false,
-        cooldownUntil:0,
+        uses:Number(key.persistedUses) || 0,
+        sessionUses:0,
+        quotaHits:Number(key.persistedQuotaHits) || 0,
+        invalid:!!key.persistedInvalid,
+        cooldownUntil:Number(key.persistedCooldownUntil) || 0,
       }));
-      let keyCursor = 0;
       const keyLabel = (key) => `${key.label || 'chave'} #${(key.originalIndex ?? key.index) + 1}`;
       const getNextCatalogKey = async () => {
         while (!courseCatalogControlRef.current.stop) {
           const now = Date.now();
           const usable = keyStates.filter(key => !key.invalid);
           if (!usable.length) return null;
-          for (let offset = 0; offset < keyStates.length; offset += 1) {
-            const idx = (keyCursor + offset) % keyStates.length;
-            const key = keyStates[idx];
-            if (key.invalid || key.cooldownUntil > now) continue;
-            keyCursor = (idx + 1) % keyStates.length;
-            return key;
-          }
+          const ready = usable
+            .filter(key => key.cooldownUntil <= now)
+            .sort((a, b) =>
+              (a.uses - b.uses)
+              || (a.sessionUses - b.sessionUses)
+              || (a.quotaHits - b.quotaHits)
+              || (a.ownerKeyCount - b.ownerKeyCount)
+              || String(a.ownerLabel || a.label).localeCompare(String(b.ownerLabel || b.label), 'pt')
+              || a.originalIndex - b.originalIndex
+            );
+          if (ready.length) return ready[0];
           const nextAt = Math.min(...usable.map(key => key.cooldownUntil).filter(Boolean));
           const waitMs = Math.max(500, Math.min(15000, nextAt - now));
           updateToast(toastId, `Todas as chaves disponíveis estão em cooldown. Aguardando ${Math.ceil(waitMs/1000)}s...`, 'info');
@@ -6716,25 +7203,43 @@ export default function QuestionBankApp() {
         return null;
       };
       const snap = await getDocs(collection(db, 'lessons'));
+      const allLessons = [];
       const targets = [];
       snap.forEach(lessonDoc => {
         const data = lessonDoc.data() || {};
+        allLessons.push(data);
         if (!data.title) return;
         if (!isCourseCatalogTargetSubject(data)) return;
         if (!force && data.ai_catalog?.description && data.ai_catalog?.cleanTitle) return;
-        targets.push({ id:lessonDoc.id, data });
+        targets.push({ id:lessonDoc.id, data, subject:getCourseCatalogSubject(data) });
+      });
+      setCourseCatalogStats({ loading:false, ...buildCourseCatalogStats(allLessons) });
+      const subjectOrder = sortSubjects([...new Set(targets.map(item => item.subject))]);
+      const subjectRank = new Map(subjectOrder.map((subject, index) => [subject, index]));
+      targets.sort((a, b) => {
+        const bySubject = (subjectRank.get(a.subject) ?? 9999) - (subjectRank.get(b.subject) ?? 9999);
+        if (bySubject) return bySubject;
+        const byTopic = String(a.data.topic || '').localeCompare(String(b.data.topic || ''), 'pt');
+        if (byTopic) return byTopic;
+        return String(a.data.title || '').localeCompare(String(b.data.title || ''), 'pt');
       });
       setCourseCatalogRun(p => ({ ...p, total:targets.length }));
       if (!targets.length) {
-        updateToast(toastId, 'Nada pendente em Cardio, Pneumo, Gastro e Endócrino.', 'success');
-        addCourseCatalogLog('success', 'Nada pendente nessas matérias.');
+        updateToast(toastId, 'Nada pendente no catálogo do curso.', 'success');
+        addCourseCatalogLog('success', 'Nada pendente em nenhuma matéria do curso.');
         setCourseCatalogRun(p => ({ ...p, running:false }));
         setTimeout(() => removeToast(toastId), 4000);
         return;
       }
-      addCourseCatalogLog('info', `Escopo atual: ${COURSE_CATALOG_TARGET_SUBJECTS.join(', ')}.`);
+      addCourseCatalogLog('info', `Escopo atual: ${COURSE_CATALOG_SCOPE_LABEL}.`);
+      addCourseCatalogLog('info', `Fila por matéria: ${subjectOrder.map(subject => {
+        const total = allLessons.filter(lesson => getCourseCatalogSubject(lesson) === subject).length;
+        const pending = targets.filter(item => item.subject === subject).length;
+        return `${subject} ${pending}/${total}`;
+      }).join(' · ')}.`);
       let ok = 0;
       let fail = 0;
+      let currentCatalogSubject = '';
       for (let i = 0; i < targets.length; i += 1) {
         while (courseCatalogControlRef.current.paused && !courseCatalogControlRef.current.stop) {
           updateToast(toastId, `Catálogo pausado (${i}/${targets.length}).`, 'info');
@@ -6745,11 +7250,18 @@ export default function QuestionBankApp() {
           break;
         }
         const item = targets[i];
+        if (item.subject !== currentCatalogSubject) {
+          currentCatalogSubject = item.subject;
+          const subjectTotal = allLessons.filter(lesson => getCourseCatalogSubject(lesson) === item.subject).length;
+          const subjectPending = targets.filter(target => target.subject === item.subject).length;
+          addCourseCatalogLog('info', `Começando ${item.subject}: ${subjectPending} pendente${subjectPending!==1?'s':''} de ${subjectTotal} aula${subjectTotal!==1?'s':''}.`);
+        }
         setCourseCatalogRun(p => ({ ...p, current:i + 1, total:targets.length }));
-        updateToast(toastId, `Catalogando aulas (${i + 1}/${targets.length})...`, 'loading');
+        updateToast(toastId, `${item.subject}: catalogando aulas (${i + 1}/${targets.length})...`, 'loading');
         let saved = false;
         let lastErr = null;
         let quotaBurst = 0;
+        const wasPending = !(item.data.ai_catalog?.description && item.data.ai_catalog?.cleanTitle);
         const maxAttemptsForLesson = Math.max(1, keyStates.length);
         for (let attempt = 1; attempt <= maxAttemptsForLesson; attempt += 1) {
           if (courseCatalogControlRef.current.stop) break;
@@ -6760,40 +7272,68 @@ export default function QuestionBankApp() {
           }
           try {
             key.uses += 1;
-          const raw = await callGemini(
-            'Gere a ficha JSON desta aula.',
-            buildLessonCatalogPrompt({ lesson:item.data, subject:item.data.subject, topic:item.data.topic }),
-            key.value,
-            [],
-            { maxTokens:1200 }
-          );
-          const parsed = parseJsonObject(raw);
-          const catalog = {
-            cleanTitle:String(parsed.cleanTitle || item.data.title || '').trim().slice(0, 120),
-            description:String(parsed.description || '').trim().slice(0, 450),
-            suggestedSubject:String(parsed.suggestedSubject || item.data.subject || '').trim().slice(0, 80),
-            suggestedTopic:String(parsed.suggestedTopic || item.data.topic || '').trim().slice(0, 100),
-            isBonus:!!parsed.isBonus,
-            lessonType:String(parsed.lessonType || (parsed.isBonus ? 'bonus' : 'principal')).trim().slice(0, 30),
-            orderHint:Number(parsed.orderHint) || null,
-            tags:Array.isArray(parsed.tags) ? parsed.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 8) : [],
-            confidence:Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
-            generatedAt:Date.now(),
-            originalTitle:item.data.title || '',
-          };
-          await setDoc(doc(db, 'lessons', item.id), {
-            description:catalog.description,
-            ai_catalog:catalog,
-          }, { merge:true });
-          ok += 1;
+            key.sessionUses += 1;
+            updateCourseCatalogKeyStat(key.fingerprint, current => ({
+              uses:(Number(current.uses) || 0) + 1,
+              lastUsedAt:Date.now(),
+              ownerLabel:key.ownerLabel || key.label || '',
+              label:key.label || '',
+              invalid:false,
+            }));
+            const raw = await callGemini(
+              'Gere a ficha JSON desta aula.',
+              buildLessonCatalogPrompt({ lesson:item.data, subject:item.data.subject, topic:item.data.topic }),
+              key.value,
+              [],
+              { maxTokens:1200 }
+            );
+            const parsed = parseJsonObject(raw);
+            const catalog = {
+              cleanTitle:String(parsed.cleanTitle || item.data.title || '').trim().slice(0, 120),
+              description:String(parsed.description || '').trim().slice(0, 450),
+              suggestedSubject:String(parsed.suggestedSubject || item.data.subject || '').trim().slice(0, 80),
+              suggestedTopic:String(parsed.suggestedTopic || item.data.topic || '').trim().slice(0, 100),
+              isBonus:!!parsed.isBonus,
+              lessonType:String(parsed.lessonType || (parsed.isBonus ? 'bonus' : 'principal')).trim().slice(0, 30),
+              orderHint:Number(parsed.orderHint) || null,
+              tags:Array.isArray(parsed.tags) ? parsed.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 8) : [],
+              confidence:Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
+              generatedAt:Date.now(),
+              originalTitle:item.data.title || '',
+            };
+            await setDoc(doc(db, 'lessons', item.id), {
+              description:catalog.description,
+              ai_catalog:catalog,
+            }, { merge:true });
+            ok += 1;
+            updateCourseCatalogKeyStat(key.fingerprint, current => ({
+              success:(Number(current.success) || 0) + 1,
+              lastSuccessAt:Date.now(),
+              cooldownUntil:0,
+              invalid:false,
+            }));
+            if (wasPending) {
+              setCourseCatalogStats(p => ({
+                ...p,
+                pending:Math.max(0, (p.pending || 0) - 1),
+                rows:(p.rows || []).map(row => row.subject === item.subject
+                  ? { ...row, done:Math.min(row.total, row.done + 1), pending:Math.max(0, row.pending - 1) }
+                  : row),
+              }));
+            }
             saved = true;
-          addCourseCatalogLog('success', `${catalog.cleanTitle || item.data.title}: ficha salva.`);
+            addCourseCatalogLog('success', `${item.subject} · ${catalog.cleanTitle || item.data.title}: ficha salva.`);
             break;
           } catch(e) {
             lastErr = e;
             if (e.message === 'QUOTA_EXCEEDED') {
               key.quotaHits += 1;
               key.cooldownUntil = Date.now() + COURSE_CATALOG_KEY_COOLDOWN_MS;
+              updateCourseCatalogKeyStat(key.fingerprint, current => ({
+                quotaHits:(Number(current.quotaHits) || 0) + 1,
+                cooldownUntil:key.cooldownUntil,
+                lastQuotaAt:Date.now(),
+              }));
               quotaBurst += 1;
               addCourseCatalogLog('info', `${keyLabel(key)} em cooldown por quota; tentando outra chave.`);
               if (quotaBurst >= COURSE_CATALOG_QUOTA_STORM_THRESHOLD) {
@@ -6809,6 +7349,11 @@ export default function QuestionBankApp() {
             }
             if (e.message === 'API_KEY_INVALID') {
               key.invalid = true;
+              updateCourseCatalogKeyStat(key.fingerprint, current => ({
+                invalid:true,
+                invalidAt:Date.now(),
+                quotaHits:Number(current.quotaHits) || 0,
+              }));
               addCourseCatalogLog('error', `${keyLabel(key)} removida da rodada: chave inválida.`);
               continue;
             }
@@ -6829,7 +7374,9 @@ export default function QuestionBankApp() {
           }
         }
         if (!courseCatalogControlRef.current.stop && i < targets.length - 1) {
-          const delay = randomBetween(COURSE_CATALOG_DELAY_MIN_MS, COURSE_CATALOG_DELAY_MAX_MS);
+          const delaySeconds = Math.max(0, Math.min(120, Number(settingsRef.current.courseCatalogDelaySeconds ?? DEFAULT_COURSE_CATALOG_DELAY_SECONDS) || 0));
+          const delay = Math.round(delaySeconds * 1000);
+          if (!delay) continue;
           updateToast(toastId, `Aguardando ${Math.round(delay/1000)}s antes da próxima aula...`, 'info');
           for (let elapsed = 0; elapsed < delay && !courseCatalogControlRef.current.stop; elapsed += 500) {
             while (courseCatalogControlRef.current.paused && !courseCatalogControlRef.current.stop) await wait(600);
@@ -6842,6 +7389,7 @@ export default function QuestionBankApp() {
       if (user && !user.isAnonymous) {
         refreshVideoaulasInBackground(user, `agora_videoaulas_${user.uid}`, `agora_watched_${user.uid}`, false);
       }
+      refreshCourseCatalogStats();
     } catch(e) {
       updateToast(toastId, 'Erro ao organizar catálogo das aulas.', 'error');
       addCourseCatalogLog('error', e.message || 'Erro desconhecido.');
@@ -6958,8 +7506,9 @@ export default function QuestionBankApp() {
       numAlternatives: s.numAlternatives || 5,
       questionStyle: s.questionStyle || 'mixed',
       autoMode: s.autoMode !== false,
-      syllabusMaxPerBlock: isAdmin ? qPerBlock : undefined,
+      syllabusMaxPerBlock: isAdmin ? ADMIN_COURSE_TOPIC_QUESTION_MAX : undefined,
       adminMinuteRule: isAdmin,
+      adminFullCoverage: isAdmin,
       extraPrompt: '',
       subject, topic,
       toastId,
@@ -6995,11 +7544,10 @@ export default function QuestionBankApp() {
       const size = Math.ceil(paras.length / n);
       return Array.from({length: n}, (_, i) => paras.slice(i*size, (i+1)*size).join('\n\n'));
     };
-    const transcriptSlices = splitByParagraph(transcript, numBlocks);
-
     // 3. Gerar sumário
     const summaryPrompt = buildVqSyllabusPrompt(aula, numBlocks, qPerBlock, transcript, extraPrompt, {
       maxSubtopicsPerBlock: cfg.syllabusMaxPerBlock,
+      fullCoverage: !!cfg.adminFullCoverage,
     });
     const orderedKeys = getOrderedKeys();
     let summaryText = null;
@@ -7030,12 +7578,12 @@ export default function QuestionBankApp() {
       parsedBlocks[blockId] = {
         title: match[2].trim() || `Bloco ${blockNum}`,
         subtopics,
-        transcriptSlice: transcriptSlices[blockIndex] || '', // só em memória, não salvo no Firestore
         questions: [], answers: {}, generating: true,
       };
       blockIndex++;
     }
     if (Object.keys(parsedBlocks).length === 0) {
+      const transcriptSlices = splitByParagraph(transcript, numBlocks);
       for (let i = 1; i <= numBlocks; i++) {
         const blockId = `block${String(i).padStart(2,'0')}`;
         parsedBlocks[blockId] = {
@@ -7045,6 +7593,11 @@ export default function QuestionBankApp() {
         };
       }
     }
+    const parsedBlockIds = Object.keys(parsedBlocks).sort();
+    const transcriptSlices = splitByParagraph(transcript, parsedBlockIds.length || numBlocks);
+    parsedBlockIds.forEach((blockId, index) => {
+      parsedBlocks[blockId].transcriptSlice = transcriptSlices[index] || transcript || '';
+    });
 
     // 5. Salvar estrutura inicial SEM transcriptSlice (evita exceder limite do Firestore)
     const blocksForFirestore = Object.fromEntries(
@@ -7055,10 +7608,12 @@ export default function QuestionBankApp() {
     );
     const aulaData = {
       meta: {
-        totalQuestions: totalQ, numBlocks, qPerBlock,
+        totalQuestions: parsedBlockIds.reduce((sum, id) => sum + (parsedBlocks[id].subtopics?.length || 0), 0) || totalQ,
+        numBlocks: parsedBlockIds.length || numBlocks,
+        qPerBlock,
         numAlternatives, aulaTitle: aula.title,
         subject: cfg.subject||'', topic: cfg.topic||'',
-        questionStyle, createdAt: Date.now(),
+        questionStyle, fullCoverage:!!cfg.adminFullCoverage, createdAt: Date.now(),
       },
       blocks: blocksForFirestore,
     };
@@ -7067,7 +7622,7 @@ export default function QuestionBankApp() {
     setVqGenModal(null);
     // NÃO redireciona — aluno continua onde estava
 
-    const blockIds = Object.keys(parsedBlocks).sort();
+    const blockIds = parsedBlockIds;
     const total = blockIds.length;
     if(toastId) updateToast(toastId, `⚡ Gerando questões (0/${total} blocos)...`, 'loading');
 
@@ -11066,15 +11621,36 @@ export default function QuestionBankApp() {
 
                   const normalizedSubjects = effectivePlanSubjects;
                   const dueCourseItems = getDueReviews().filter(item => item.source === 'curso' || vqBlocks[item.aulaId]);
+                  const blockEntriesForLesson = (lesson) => {
+                    const data = vqBlocks[aulaDocId(lesson.aula)] || vqBlocks[aulaVqKey(lesson.aula)];
+                    const rawBlocks = data?.blocks || {};
+                    const entries = Array.isArray(rawBlocks)
+                      ? rawBlocks.map((block, index) => [`block${index + 1}`, block])
+                      : Object.entries(rawBlocks);
+                    return entries.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+                  };
                   const questionInfoForLesson = (lesson) => {
-                    const data = vqBlocks[aulaVqKey(lesson.aula)];
-                    const blocks = blockValues(data?.blocks);
-                    const total = blocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
-                    const answered = blocks.reduce((sum, block) => sum + Object.keys(block.answers || {}).length, 0);
-                    return { total, answered, blocks:blocks.length };
+                    const blockEntries = blockEntriesForLesson(lesson);
+                    const total = blockEntries.reduce((sum, [, block]) => sum + ((Array.isArray(block.questions) ? block.questions : []).length), 0);
+                    const answered = blockEntries.reduce((sum, [, block]) => {
+                      const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
+                      return sum + Object.keys(answers).length;
+                    }, 0);
+                    return { total, answered, blocks:blockEntries.length, blockEntries };
+                  };
+                  const firstQuestionBlockForLesson = (lesson, mode = 'pending') => {
+                    const entries = questionInfoForLesson(lesson).blockEntries;
+                    if (!entries.length) return null;
+                    if (mode === 'review') return entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
+                    return entries.find(([, block]) => {
+                      const questions = Array.isArray(block.questions) ? block.questions : [];
+                      const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
+                      return questions.length > 0 && Object.keys(answers).length < questions.length;
+                    }) || entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
                   };
                   const lessonOrderIndex = new Map((coursePlanLessonOrder || []).map((id, index) => [String(id), index]));
                   const planLessonRank = (lesson) => {
+                    if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
                     const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
                     const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
                     return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
@@ -11097,18 +11673,23 @@ export default function QuestionBankApp() {
                   const subjectSummaries = normalizedSubjects.map(subject => {
                     const lessons = lessonsBySubject(subject);
                     const watched = lessons.filter(lesson => watchedAulas[lesson.id]).length;
+                    const completed = lessons.filter(lesson => {
+                      const qi = questionInfoForLesson(lesson);
+                      return !!watchedAulas[lesson.id] && qi.total > 0 && qi.answered >= qi.total;
+                    }).length;
                     const questionCount = lessons.reduce((acc, lesson) => acc + questionInfoForLesson(lesson).total, 0);
                     return {
                       subject,
                       lessons,
                       watched,
+                      completed,
                       total:lessons.length,
                       topics:Object.keys(topicsBySubject(subject)).length,
-                      pct:lessons.length ? Math.round(watched / lessons.length * 100) : 0,
+                      pct:lessons.length ? Math.round(completed / lessons.length * 100) : 0,
                       questions:questionCount,
                     };
                   });
-                  const firstUnfinishedSubject = subjectSummaries.findIndex(item => item.total && item.watched < item.total);
+                  const firstUnfinishedSubject = subjectSummaries.findIndex(item => item.total && item.completed < item.total);
                   const unlockedSubjectLimit = firstUnfinishedSubject >= 0
                     ? Math.min(subjectSummaries.length, firstUnfinishedSubject + 4)
                     : Infinity;
@@ -11129,12 +11710,18 @@ export default function QuestionBankApp() {
                     setActiveAulaAndReset(lesson.aula);
                     setView('videoaulas');
                   };
-                  const openQuestions = (lesson) => {
+                  const openQuestions = (lesson, mode = 'pending') => {
                     setVqSubject(lesson.subject);
                     setVqTopic(lesson.topic);
                     setVqAula(lesson.aula);
                     setVqActiveBlock(null);
-                    setVqActiveBlockView(null);
+                    const targetBlock = firstQuestionBlockForLesson(lesson, mode === 'review-r3' || mode === 'review-r10' ? 'review' : 'pending');
+                    setVqActiveBlockView(targetBlock ? {
+                      blockId:targetBlock[0],
+                      showWrong:false,
+                      fromPlan:true,
+                      cycleStage:mode === 'review-r3' ? 'r3' : mode === 'review-r10' ? 'r10' : null,
+                    } : null);
                     if (aulaHasVqData(lesson.aula)) setView('videoquestions');
                     else setVqGenModal({aula:lesson.aula,aulaId:aulaDocId(lesson.aula),suggestedQ:10,subject:lesson.subject,topic:lesson.topic,fromConfig:true});
                   };
@@ -11156,7 +11743,7 @@ export default function QuestionBankApp() {
                   };
                   const openCycleReview = async (lesson, stage) => {
                     await saveCourseCycleReview(lesson.id, stage);
-                    openQuestions(lesson);
+                    openQuestions(lesson, stage === 'r10' ? 'review-r10' : 'review-r3');
                   };
                   const reviewSubject = (items) => {
                     setView('spaced-review');
@@ -11298,7 +11885,7 @@ export default function QuestionBankApp() {
                                     <span className={`h-6 w-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${item.pct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700')}`}>{item.pct===100?'✓':idx+1}</span>
                                     <div className="min-w-0 flex-1">
                                       <p className="text-sm font-bold truncate">{item.subject}</p>
-                                      <p className={`text-[10px] ${dm?'text-gray-500':'text-gray-500'}`}>{item.watched}/{item.total} aulas</p>
+                                      <p className={`text-[10px] ${dm?'text-gray-500':'text-gray-500'}`}>{item.completed}/{item.total} concluídas · {item.watched} assistidas</p>
                                     </div>
                                     <button onClick={()=>moveSubject(idx,-1)} disabled={idx===0} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↑</button>
                                     <button onClick={()=>moveSubject(idx,1)} disabled={idx===subjectSummaries.length-1} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↓</button>
@@ -11960,7 +12547,7 @@ export default function QuestionBankApp() {
           if(vqAula && vqSubject && vqTopic) {
             const aulaId    = aulaVqKey(vqAula);
             const aulaIdNew = aulaDocId(vqAula);
-            const aulaData  = vqBlocks[aulaId] || {};
+            const aulaData  = vqBlocks[aulaIdNew] || vqBlocks[aulaId] || {};
             // blocks pode vir como array do Firestore em edge cases — normalizar para objeto
             const rawBlocks = aulaData.blocks || {};
             const blocks    = Array.isArray(rawBlocks) ? {} : rawBlocks;
@@ -11985,20 +12572,66 @@ export default function QuestionBankApp() {
 	              setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
 	              setActiveAulaAndReset(lesson.aula);
 	            };
+	            const openCurrentCourseAulaFromVq = () => {
+	              setVqActiveBlockView(null);
+	              setView('videoaulas');
+	              setActiveSubjectVid(vqSubject);
+	              setActiveSubtopicVid(`${vqTopic}::main`);
+	              setActiveAulaAndReset(vqAula);
+	            };
+	            const backFromCourseQuestions = () => {
+	              if (vqActiveBlockView?.fromPlan) {
+	                setVqActiveBlockView(null);
+	                setCursoTab('plano');
+	                setView('curso');
+	                return;
+	              }
+	              openCurrentCourseAulaFromVq();
+	            };
 
             // ── VIEW COMPLETA DE UM BLOCO ── usa o mesmo QuestionView do topic
             if(vqActiveBlockView) {
-              const { blockId } = vqActiveBlockView;
+              const { blockId, cycleStage } = vqActiveBlockView;
               const block = blocks[blockId] || {};
               const qs      = Array.isArray(block.questions) ? block.questions : [];
 	              const ans     = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
 	              const blockFavs = Array.isArray(block.favorites) ? block.favorites : [];
 	              const blockNotebook = Array.isArray(block.errorNotebook) ? block.errorNotebook : [];
               const blockTitle = block.title||`Bloco ${blockId.replace('block','')}`;
+              const currentBlockIndex = blockList.findIndex(([id]) => id === blockId);
+              const nextBlockEntry = currentBlockIndex >= 0 ? blockList[currentBlockIndex + 1] : null;
+              const nextBlockTitle = nextBlockEntry?.[1]?.title || (nextBlockEntry ? `Bloco ${nextBlockEntry[0].replace('block','')}` : '');
+              const missedQuestions = qs.filter(q => ans[q.id] && !isAnswerCorrect(q, ans[q.id]));
+              const cycleBaseQuestions = cycleStage === 'r3' ? (missedQuestions.length ? missedQuestions : qs) : qs;
+              const visibleQuestions = cycleStage === 'r10'
+                ? cycleBaseQuestions.map(q => {
+                    const correct = (q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || '';
+                    return {
+                      ...q,
+                      id:`${q.id}__cycle_r10`,
+                      statement:`Explique de forma objetiva: ${String(q.statement || '').replace(/\s+/g, ' ').trim()}`,
+                      options:[],
+                      expectedAnswer:[correct, q.explanation].filter(Boolean).join('. '),
+                      explanation:q.explanation || correct,
+                      isOpen:true,
+                      isEssay:false,
+                    };
+                  })
+                : cycleStage === 'r3'
+                  ? cycleBaseQuestions.map(q => ({...q, id:`${q.id}__cycle_r3`}))
+                  : qs;
+              const visibleAnswers = cycleStage
+                ? Object.fromEntries(Object.entries(ans).filter(([id]) => visibleQuestions.some(q => q.id === id)))
+                : ans;
+              const visibleTitle = cycleStage === 'r10'
+                ? `${blockTitle} · Revisão +10`
+                : cycleStage === 'r3'
+                  ? `${blockTitle} · Revisão +3`
+                  : blockTitle;
               const blockErrorReviews = findErrorNotebookReviewsForSource({
                 subjectTitle:vqAula.title,
                 topicTitle:blockTitle,
-                questionIds:qs.map(q=>q.id),
+                questionIds:visibleQuestions.map(q=>q.id),
               });
 
   const handleVqAnswer = async (qId, letter) => {
@@ -12008,7 +12641,8 @@ export default function QuestionBankApp() {
     const freshBlock = freshBlocks[blockId] || block;
     const freshAnswers = (freshBlock.answers && typeof freshBlock.answers === 'object' && !Array.isArray(freshBlock.answers)) ? freshBlock.answers : {};
     const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
-    const q = (Array.isArray(freshBlock.questions) ? freshBlock.questions : qs).find(x => x.id === qId);
+    const q = (Array.isArray(freshBlock.questions) ? freshBlock.questions : qs).find(x => x.id === qId)
+      || visibleQuestions.find(x => x.id === qId);
 	                const nextNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshNotebook, qId) : freshNotebook;
 	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,answers:{...freshAnswers,[qId]:letter},errorNotebook:nextNotebook}}});
 	              };
@@ -12026,39 +12660,45 @@ export default function QuestionBankApp() {
     const freshBlock = freshBlocks[blockId] || block;
     const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
 	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,errorNotebook:toggleInList(freshNotebook,qId)}}});
-	              };
+              };
               const handleVqReset = async () => {
+                if (cycleStage) {
+                  const visibleIds = new Set(visibleQuestions.map(q => q.id));
+                  const nextAnswers = Object.fromEntries(Object.entries(ans).filter(([id]) => !visibleIds.has(id)));
+                  await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:nextAnswers}}});
+                  return;
+                }
                 await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}});
               };
 
               return (
                 <div className="max-w-3xl mx-auto">
                   <QuestionView
-                    title={block.title||`Bloco ${blockId.replace('block','')}`}
-                    onBack={()=>setVqActiveBlockView(null)}
-                    backLabel={vqAula.title}
-                    questions={qs}
-                    answers={ans}
+                    title={visibleTitle}
+                    onBack={backFromCourseQuestions}
+                    backLabel={vqActiveBlockView?.fromPlan ? 'Voltar ao plano' : 'Voltar à aula'}
+                    questions={visibleQuestions}
+                    answers={visibleAnswers}
 	                    favorites={blockFavs}
 	                    onAnswer={handleVqAnswer}
 	                    onToggleFavorite={handleVqFavorite}
 	                    errorNotebook={blockNotebook}
 	                    showErrorNotebook={canUseAdvancedFeatures}
 	                    onToggleErrorNotebook={handleVqNotebook}
-                    onReset={qs.length>0?handleVqReset:null}
-                    onRegenerate={qs.length>0?()=>generateVqBlock(aulaIdNew,blockId):null}
-                    onExport={qs.length>0?()=>setExportModal({topic:{title:`${vqAula.title} — ${block.title||`Bloco ${blockId.replace('block','')}`}`,questions:qs},subject:null}):null}
+                    onReset={visibleQuestions.length>0?handleVqReset:null}
+                    onRegenerate={!cycleStage&&qs.length>0?()=>generateVqBlock(aulaIdNew,blockId):null}
+                    onExport={visibleQuestions.length>0?()=>setExportModal({topic:{title:`${vqAula.title} — ${visibleTitle}`,questions:visibleQuestions},subject:null}):null}
                     isGenerating={!!block.generating}
                     streamCount={streamCount}
                     showBizuario={qs.length>0}
                     onBizuario={()=>{
                       if(!checkKey()) return;
-                      const syntheticTopic = {title: block.title||`Bloco ${blockId.replace('block','')}`, questions:qs, subtopics:block.subtopics||[]};
+                      const syntheticTopic = {title: visibleTitle, questions:visibleQuestions, subtopics:block.subtopics||[]};
                       const cachedText = block.bizuario||null;
                       const onSave = async (txt) => {
                         await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,bizuario:txt}}});
                       };
-                      setBizuarioModal({topicTitle:syntheticTopic.title,subjectTitle:vqAula.title,questions:qs,subtopics:block.subtopics||[],cachedText,onSave});
+                      setBizuarioModal({topicTitle:syntheticTopic.title,subjectTitle:vqAula.title,questions:visibleQuestions,subtopics:block.subtopics||[],cachedText,onSave});
                     }}
                     bizuarioCached={!!block.bizuario}
                     darkMode={darkMode}
@@ -12067,18 +12707,23 @@ export default function QuestionBankApp() {
                     onCall={callWithRotation}
                     onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 	                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
-	                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:block.title||`Bloco ${blockId.replace('block','')}`, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:block.title||`Bloco ${blockId.replace('block','')}`}})}
+	                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
                     onReviewErrorNotebook={blockNotebook.length ? (()=>openErrorReviewModal({
                       subject:{id:aulaIdNew, title:vqAula.title, source:'curso'},
                       topic:{id:blockId, title:blockTitle},
-                      questions:qs,
+                      questions:visibleQuestions,
                       notebookIds:blockNotebook,
                       sourceLabel:'Curso',
                     })) : null}
                     onOpenErrorReviewResult={blockErrorReviews.length ? (()=>openErrorNotebookReviewResult(blockErrorReviews[0])) : null}
                     errorReviewResultCount={blockErrorReviews.length}
                     inReviewCount={Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length}
-                    onGoToAula={()=>{setVqActiveBlockView(null); setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}}
+                    onGoToAula={openCurrentCourseAulaFromVq}
+                    onNextUnit={cycleStage
+                      ? (()=>{setVqActiveBlockView(null); setCursoTab('plano'); setView('curso');})
+                      : (nextBlockEntry ? (()=>setVqActiveBlockView({blockId:nextBlockEntry[0],showWrong:false,fromPlan:vqActiveBlockView?.fromPlan||false})) : (nextCourseLesson ? (()=>openCourseLessonFromVq(nextCourseLesson)) : null))}
+                    nextUnitLabel={cycleStage ? 'Voltar ao plano' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
+                    nextUnitHelper={cycleStage ? 'Continuar o roteiro guiado' : (nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência'))}
                     generateLabel="Gerar Questões"
                     onGenerate={()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}
@@ -12931,8 +13576,92 @@ export default function QuestionBankApp() {
                 titleClassName="text-yellow-600"
               >
                 <p className={`text-sm leading-relaxed mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>
-                  Gera uma ficha curta por aula usando título, duração e transcrição. Por enquanto está limitado a Cardio, Pneumo, Gastro e Endócrino. Nada é renomeado automaticamente.
+                  Gera uma ficha curta por aula usando título, duração e transcrição. Agora o Gerar pendentes varre todas as matérias do curso. Nada é renomeado automaticamente.
                 </p>
+                <div className={`rounded-xl border p-4 mb-4 ${darkMode?'bg-gray-900/30 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Aulas catalogadas</p>
+                      <p className="text-sm font-bold mt-1">
+                        {courseCatalogStats.loading ? 'Atualizando...' : `${Math.max(0, (courseCatalogStats.total || 0) - (courseCatalogStats.pending || 0))}/${courseCatalogStats.total || 0} prontas`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={refreshCourseCatalogStats}
+                      disabled={courseCatalogStats.loading || courseCatalogRun.running}
+                      className={`px-3 py-2 rounded-lg border text-xs font-bold disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-white'}`}>
+                      Atualizar
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-950/60 border-gray-800':'bg-white border-gray-200'}`}>
+                      <p className="text-2xl font-serif font-bold text-yellow-600">{courseCatalogStats.total || 0}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">aulas totais</p>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-950/60 border-gray-800':'bg-white border-gray-200'}`}>
+                      <p className={`text-2xl font-serif font-bold ${(courseCatalogStats.pending || 0) ? 'text-red-500' : 'text-green-500'}`}>{courseCatalogStats.pending || 0}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">faltando</p>
+                    </div>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto space-y-1 pr-1" style={{overflowAnchor:'none'}}>
+                    {(courseCatalogStats.rows || []).length === 0 && (
+                      <p className={`text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}>Os contadores aparecem aqui quando as aulas carregarem.</p>
+                    )}
+                    {(courseCatalogStats.rows || []).map(row => (
+                      <div key={row.subject} className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs ${darkMode?'bg-gray-950/60':'bg-white'}`}>
+                        <span className="font-bold truncate">{row.subject}</span>
+                        <span className={`font-bold flex-shrink-0 ${row.pending ? 'text-yellow-600' : 'text-green-500'}`}>
+                          {row.pending} faltando · {row.total} total
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className={`rounded-xl border p-4 mb-4 ${darkMode?'bg-gray-900/30 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Intervalo entre aulas</p>
+                      <p className={`text-xs mt-1 ${darkMode?'text-gray-400':'text-gray-500'}`}>Use para testar o menor tempo sem cair em bloqueio global.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="120"
+                        step="0.5"
+                        value={settings.courseCatalogDelaySeconds ?? DEFAULT_COURSE_CATALOG_DELAY_SECONDS}
+                        onChange={e=>{
+                          const value = Math.max(0, Math.min(120, Number(e.target.value) || 0));
+                          setSettings({...settingsRef.current, courseCatalogDelaySeconds:value});
+                        }}
+                        onBlur={()=>saveSettings(settingsRef.current)}
+                        className={`w-24 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold text-center ${darkMode?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}
+                      />
+                      <span className={`text-sm font-bold ${darkMode?'text-gray-400':'text-gray-500'}`}>s</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[0, 0.5, 1, 2, 3, 5].map(sec=>(
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={()=>saveSettings({...settingsRef.current, courseCatalogDelaySeconds:sec})}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${(Number(settings.courseCatalogDelaySeconds ?? DEFAULT_COURSE_CATALOG_DELAY_SECONDS) === sec)
+                          ? (darkMode?'border-yellow-600 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700')
+                          : (darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-white')}`}>
+                        {sec}s
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={clearCourseCatalogKeyStats}
+                      disabled={courseCatalogRun.running}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-white'}`}>
+                      Zerar memória das chaves
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <button
                     disabled={courseCatalogRun.running}
@@ -13009,6 +13738,20 @@ export default function QuestionBankApp() {
                         className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-yellow-700 text-yellow-300 hover:bg-yellow-900/20':'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}`}>
                         {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <CheckIcon className="w-4 h-4"/>}
                         Sem separar bônus
+                      </button>
+                      <button
+                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
+                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:displayCourseOrgProposal?.mode === 'integrated', onlyMissing:true })}
+                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                        {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <RotateCcw className="w-4 h-4"/>}
+                        Gerar faltantes
+                      </button>
+                      <button
+                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
+                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:displayCourseOrgProposal?.mode === 'integrated', onlyProblematic:true })}
+                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-red-900/70 text-red-300 hover:bg-red-950/40':'border-red-200 text-red-700 hover:bg-red-50'}`}>
+                        {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <ShieldAlert className="w-4 h-4"/>}
+                        Regerar com erros
                       </button>
                       <button
                         disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}

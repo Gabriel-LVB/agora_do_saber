@@ -362,13 +362,22 @@ export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, ex
   const minPerBlock = SYLLABUS_LIMITS.videoaulas.minSubtopicsPerBlock;
   const maxPerBlock = Math.max(minPerBlock, Math.min(30, options.maxSubtopicsPerBlock || SYLLABUS_LIMITS.videoaulas.maxSubtopicsPerBlock));
   const idealPerBlock = Math.max(minPerBlock, Math.min(maxPerBlock, qPerBlock || 6));
-  return `Você é um especialista em avaliações médicas. Sua tarefa é criar um guia de questões para a aula "${aula.title}".
-
-ESTRUTURA OBRIGATÓRIA:
+  const fullCoverage = !!options.fullCoverage;
+  const structureBlock = fullCoverage
+    ? `ESTRUTURA OBRIGATÓRIA:
+- Cubra TODA a aula/transcrição, do início ao fim, seguindo a ordem em que o professor apresentou o conteúdo.
+- Crie quantos blocos forem necessários para representar a aula inteira. NÃO há limite total de blocos, subtópicos ou questões por aula.
+- Cada bloco/tópico deve corresponder a um trecho coerente da aula e ter entre ${minPerBlock} e ${maxPerBlock} subtópicos.
+- Se um trecho passaria de ${maxPerBlock} subtópicos, divida em blocos consecutivos menores sem pular conteúdo.
+- Não compacte a aula para economizar geração: detalhes cobraveis, exceções, critérios, condutas, classificações e pegadinhas devem virar subtópicos próprios quando forem testáveis.`
+    : `ESTRUTURA OBRIGATÓRIA:
 - ${numBlocks} bloco(s) de questões
 - Entre ${minPerBlock} e ${maxPerBlock} subtópicos por bloco (ideal: ${idealPerBlock})
 - Ordem OBRIGATORIAMENTE didática dentro de cada bloco: conceitos gerais → específicos, mecanismo → clínica → tratamento
-- Nunca coloque um detalhe, exceção ou efeito adverso antes de ter coberto o conceito principal
+- Nunca coloque um detalhe, exceção ou efeito adverso antes de ter coberto o conceito principal`;
+  return `Você é um especialista em avaliações médicas. Sua tarefa é criar um guia de questões para a aula "${aula.title}".
+
+${structureBlock}
 
 REGRAS DOS SUBTÓPICOS:
 - Cada subtópico = 1 conceito médico específico e testável
