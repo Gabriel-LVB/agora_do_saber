@@ -1527,11 +1527,7 @@ const applyCourseOrgProposalToVideoData = (raw, proposal) => {
       (module.lessons || []).forEach((proposalLesson, lessonIndex) => {
         const source = findSourceLesson(proposalLesson);
         if (!source) return;
-        const sourceSubject = getCourseOrganizationSubjectName({
-          ...source.aula,
-          subject:source.subject,
-          originalSubject:source.subject,
-        });
+        const sourceSubject = normalizeCourseSubjectName(source.subject || source.aula?.subject || '', 'Sem matéria');
         if (normalizeTextKey(sourceSubject) !== normalizeTextKey(normalizeCourseSubjectName(subjectProposal.subject))) return;
         if (used.has(source.id) || used.has(source.docId) || used.has(getAulaId(source.aula))) return;
         used.add(source.id);
@@ -1578,6 +1574,7 @@ const COURSE_CATALOG_KEY_COOLDOWN_MS = 75 * 1000;
 const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
 const DEFAULT_COURSE_CATALOG_DELAY_SECONDS = 2;
 const COURSE_CATALOG_KEY_STATS_STORAGE = 'agora_course_catalog_key_stats_v1';
+const COURSE_ORG_SOURCE_MODE = 'firestore-original-subject-v1';
 
 const normalizeTextKey = (value = '') =>
   String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -1760,10 +1757,8 @@ const buildCourseOrganizationPrompt = ({ subject = '', lessons = [], integrateBo
     cleanTitle: lesson.ai_catalog?.cleanTitle || lesson.title || '',
     description: lesson.ai_catalog?.description || lesson.description || '',
     suggestedTopic: lesson.ai_catalog?.suggestedTopic || '',
-    suggestedSubject: lesson.ai_catalog?.suggestedSubject || '',
     lessonType: lesson.ai_catalog?.lessonType || '',
     suggestedBonus: !!lesson.ai_catalog?.isBonus,
-    confidence: lesson.ai_catalog?.confidence || 0,
     originalIndex:index + 1,
   }));
   const modeInstructions = integrateBonus
@@ -2116,6 +2111,9 @@ const QuestionView = ({
   onGoToAula=null,
   goToAulaLabel='Assistir aula',
   onGenerateExtra=null,
+  onNextUnit=null,
+  nextUnitLabel='Próxima unidade',
+  nextUnitHelper='Continuar sequência',
   inReviewCount=0,
   displayMode='list',
 }) => {
@@ -2230,6 +2228,12 @@ const QuestionView = ({
   const renderCompletion = () => {
     const wrongCount = questions.length - correctCount;
     const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
+    const nextUnitAction = onNextUnit ? {
+      label:nextUnitLabel,
+      helper:nextUnitHelper,
+      icon:<ChevronRight className="w-5 h-5"/>,
+      fn:onNextUnit,
+    } : null;
     const spacedReviewAction = onAddToReview ? {
       label:inReviewCount>0?`Gerenciar revisão espaçada (${inReviewCount})`:'Adicionar à revisão espaçada',
       helper:inReviewCount>0?'Ajustar as questões que já estão no ciclo.':'Colocar este bloco no ciclo de retenção.',
@@ -2238,7 +2242,7 @@ const QuestionView = ({
     } : null;
     const notebookActions = [
       onReviewErrorNotebook && errorNotebook.length > 0 ? {
-        label:'Gerar nova revisão',
+        label:'Gerar caderno de erros',
         icon:<BookOpen className="w-4 h-4"/>,
         fn:onReviewErrorNotebook,
       } : null,
@@ -2248,7 +2252,7 @@ const QuestionView = ({
         fn:onOpenErrorReviewResult,
       } : null,
     ].filter(Boolean);
-    const utilityActions = [
+    const navigationActions = [
       singleMode ? {
         label:'Ver questões',
         icon:<ArrowLeft className="w-4 h-4"/>,
@@ -2259,6 +2263,13 @@ const QuestionView = ({
         icon:goToAulaIcon,
         fn:onGoToAula,
       } : null,
+      nextUnitAction,
+    ].filter(Boolean);
+    const reviewActions = [
+      spacedReviewAction,
+      ...notebookActions,
+    ].filter(Boolean);
+    const extraActions = [
       onGenerateExtra ? {
         label:'Gerar bloco extra',
         icon:<PlusIcon className="w-4 h-4"/>,
@@ -2277,6 +2288,7 @@ const QuestionView = ({
     const utilityBtnClass = dm
       ? 'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-200'
       : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800';
+    const primaryBtnClass = 'border-yellow-600 bg-yellow-600 text-white hover:bg-yellow-700';
     return (
       <div className={`max-w-2xl mx-auto rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
         <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
@@ -2296,38 +2308,33 @@ const QuestionView = ({
           </div>
         </div>
         <div className="space-y-5 text-left">
-          {spacedReviewAction && (
-            <button onClick={spacedReviewAction.fn}
-              className="w-full min-h-[58px] rounded-xl border border-yellow-600 bg-yellow-600 px-5 py-3 text-left font-bold text-white transition-colors hover:bg-yellow-700">
-              <span className="flex items-center gap-3">
-                {spacedReviewAction.icon}
-                <span className="min-w-0">
-                  <span className="block text-base">{spacedReviewAction.label}</span>
-                  <span className="block text-xs font-semibold text-yellow-100/80">{spacedReviewAction.helper}</span>
-                </span>
-              </span>
-            </button>
+          {navigationActions.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:justify-center gap-2">
+              {navigationActions.map(action=>(
+                <button key={action.label} onClick={action.fn} title={action.helper}
+                  className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${action.primary?primaryBtnClass:utilityBtnClass}`}>
+                    {action.icon}
+                    <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
           )}
-          {notebookActions.length > 0 && (
+          {reviewActions.length > 0 && (
             <div className={`border-t pt-4 ${dm?'border-gray-800':'border-gray-100'}`}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Caderno de erros</p>
-                <p className={`text-xs font-bold ${dm?'text-yellow-500':'text-yellow-700'}`}>{wrongCount} para reforçar</p>
-              </div>
-              <div className={`grid grid-cols-1 ${notebookActions.length > 1 ? 'sm:grid-cols-2' : ''} gap-2`}>
-                {notebookActions.map(action=>(
+              <div className="flex flex-wrap justify-center gap-2">
+                {reviewActions.map(action=>(
                   <button key={action.label} onClick={action.fn}
-                    className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${notebookBtnClass}`}>
+                    className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${notebookBtnClass}`}>
                     {action.icon}{action.label}
                   </button>
                 ))}
               </div>
             </div>
           )}
-          {utilityActions.length > 0 && (
+          {extraActions.length > 0 && (
             <div className={`border-t pt-4 ${dm?'border-gray-800':'border-gray-100'}`}>
               <div className="flex flex-wrap justify-center gap-2">
-                {utilityActions.map(action=>(
+                {extraActions.map(action=>(
                   <button key={action.label} onClick={action.fn}
                     className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-bold transition-colors ${action.active?(dm?'border-green-700 text-green-400 bg-green-900/10':'border-green-300 text-green-700 bg-green-50'):utilityBtnClass}`}>
                     {action.icon}{action.label}
@@ -4681,6 +4688,7 @@ export default function QuestionBankApp() {
   const [courseCatalogStats, setCourseCatalogStats] = useState({ loading:false, rows:[], total:0, pending:0 });
   const [courseOrgRun, setCourseOrgRun] = useState({ running:false, current:0, total:0, logs:[] });
   const [courseOrgProposal, setCourseOrgProposal] = useState(null);
+  const [courseOrgSelectedSubject, setCourseOrgSelectedSubject] = useState('');
   const courseCatalogControlRef = useRef({ paused:false, stop:false });
   const courseCatalogLogRef = useRef(null);
 
@@ -5035,6 +5043,10 @@ export default function QuestionBankApp() {
 
   const applyCourseOrgProposalToPlan = async () => {
     const proposal = normalizeCourseOrgProposal(courseOrgProposal);
+    if (proposal?.sourceMode !== COURSE_ORG_SOURCE_MODE) {
+      addToast('Essa proposta é da lógica antiga. Gere novamente por subject original antes de aplicar.', 'info', 4500);
+      return;
+    }
     const subjects = (proposal?.subjects || []).map(item => item.subject).filter(Boolean);
     const lessonOrder = (proposal?.subjects || []).flatMap(subjectProposal =>
       (subjectProposal.modules || []).flatMap(module => (module.lessons || []).map(lesson => lesson.lessonId))
@@ -6652,7 +6664,7 @@ export default function QuestionBankApp() {
   const getOriginalCourseSubject = (lesson = {}) =>
     getCourseOriginalSubjectName(lesson);
   const getCourseOrganizationSubject = (lesson = {}) =>
-    getCourseOrganizationSubjectName(lesson);
+    getCourseOriginalSubjectName(lesson);
 
   const buildCourseCatalogStats = (lessons = []) => {
     const bySubject = new Map();
@@ -6772,11 +6784,37 @@ export default function QuestionBankApp() {
     setCourseOrgRun(p => ({ ...p, logs:[...p.logs.slice(-40), { id:Date.now()+Math.random(), type, msg, time }] }));
   };
 
-  const startCourseOrganizationProposal = async ({ integrateBonus=false, onlyMissing=false, onlyProblematic=false } = {}) => {
+  const listCourseOriginalSubjects = async () => {
+    if (!isAdmin) return;
+    const toastId = addToast('Lendo subjects originais do Firebase...', 'loading', 0);
+    try {
+      const snap = await getDocs(collection(db, 'lessons'));
+      const bySubject = new Map();
+      snap.forEach(lessonDoc => {
+        const data = lessonDoc.data() || {};
+        const subject = normalizeCourseSubjectName(data.subject || '', 'Sem matéria');
+        const row = bySubject.get(subject) || { subject, total:0, cataloged:0 };
+        row.total += 1;
+        if (data.ai_catalog?.cleanTitle || data.ai_catalog?.description) row.cataloged += 1;
+        bySubject.set(subject, row);
+      });
+      const rows = [...bySubject.values()].sort((a, b) => a.subject.localeCompare(b.subject, 'pt'));
+      console.table(rows);
+      addCourseOrgLog('info', `Subjects originais no console: ${rows.map(row => `${row.subject} (${row.total})`).join(', ')}.`);
+      updateToast(toastId, `${rows.length} subject(s) originais enviados ao console.`, 'success');
+      setTimeout(() => removeToast(toastId), 5000);
+    } catch(e) {
+      updateToast(toastId, 'Erro ao listar subjects originais.', 'error');
+      addCourseOrgLog('error', e.message || 'Erro desconhecido ao listar subjects.');
+    }
+  };
+
+  const startCourseOrganizationProposal = async ({ integrateBonus=false, onlyMissing=false, onlyProblematic=false, targetSubject='' } = {}) => {
     if (!isAdmin || courseOrgRun.running) return;
     setCourseOrgRun({ running:true, current:0, total:0, logs:[] });
     const modeLabel = integrateBonus ? 'sem separar bônus' : 'com bônus separado';
-    const runLabel = onlyProblematic ? 'Corrigindo' : onlyMissing ? 'Completando' : 'Gerando';
+    const singleSubject = String(targetSubject || '').trim();
+    const runLabel = singleSubject ? 'Gerando matéria' : onlyProblematic ? 'Corrigindo' : onlyMissing ? 'Completando' : 'Gerando';
     const toastId = addToast(`${runLabel} proposta ${modeLabel}...`, 'loading', 0);
     try {
       const keys = shuffleList(await collectLikelySiteGeminiKeys());
@@ -6832,14 +6870,13 @@ export default function QuestionBankApp() {
         if (!data.title || !isCourseCatalogTargetSubject(data)) return;
         if (!data.ai_catalog?.cleanTitle && !data.ai_catalog?.description) return;
         const originalSubject = getOriginalCourseSubject(data);
-        const organizationSubject = getCourseOrganizationSubject(data);
         lessons.push({
           ...data,
           id:lessonDoc.id,
           doc_id:data.doc_id || lessonDoc.id,
           title:data.title || data.ai_catalog?.originalTitle || data.ai_catalog?.cleanTitle || '',
-          subject:organizationSubject,
-          originalSubject:data.subject || '',
+          subject:originalSubject,
+          originalSubject:originalSubject,
           sourceSubject:originalSubject,
           topic:data.topic || '',
           duration_formatted:data.duration_formatted || '',
@@ -6848,16 +6885,16 @@ export default function QuestionBankApp() {
           description:data.ai_catalog?.description || data.description || '',
         });
       });
-      const subjectOfLesson = (lesson) => getCourseOrganizationSubject(lesson);
+      const subjectOfLesson = (lesson) => getCourseOriginalSubject(lesson);
       const subjectScope = sortCourseSubjectsForDisplay([...new Set(lessons.map(subjectOfLesson))]);
       if (!lessons.length) {
         updateToast(toastId, 'Nenhuma aula catalogada encontrada no banco para montar a proposta.', 'error');
         return;
       }
-      const reclassifiedCount = lessons.filter(lesson => normalizeTextKey(lesson.sourceSubject || '') !== normalizeTextKey(lesson.subject || '')).length;
-      addCourseOrgLog('info', `Fonte da proposta: ${lessons.length} aulas da coleção lessons; ${reclassifiedCount} reclassificada${reclassifiedCount!==1?'s':''} pela ficha catalogada antes de chamar a IA.`);
+      addCourseOrgLog('info', `Fonte da proposta: ${lessons.length} aulas da coleção lessons, agrupadas pelo subject original do Firebase. A IA só decide módulos dentro de cada matéria.`);
       const existingProposal = normalizeCourseOrgProposal(courseOrgProposal);
-      const sameMode = existingProposal?.mode === (integrateBonus ? 'integrated' : 'separate-bonus');
+      const sameMode = existingProposal?.mode === (integrateBonus ? 'integrated' : 'separate-bonus')
+        && existingProposal?.sourceMode === COURSE_ORG_SOURCE_MODE;
       const existingSubjects = sameMode && Array.isArray(existingProposal?.subjects) ? existingProposal.subjects : [];
       const existingBySubject = new Map(existingSubjects.map(item => [normalizeTextKey(item.subject), item]));
       const lessonsById = new Map(lessons.map(lesson => [String(lesson.id), lesson]));
@@ -6968,24 +7005,36 @@ export default function QuestionBankApp() {
         const existing = existingBySubject.get(normalizeTextKey(subject));
         return existing && proposalHasWrongSubject(existing);
       });
-      const targetSubjects = onlyProblematic
+      const normalizedTargetSubject = normalizeCourseSubjectName(singleSubject || '', '');
+      const targetSubjects = normalizedTargetSubject
+        ? subjectScope.filter(subject => normalizeTextKey(subject) === normalizeTextKey(normalizedTargetSubject))
+        : onlyProblematic
         ? problematicSubjects
         : onlyMissing
         ? subjectScope.filter(subject => !existingBySubject.has(normalizeTextKey(subject)))
         : subjectScope;
       setCourseOrgRun(p => ({ ...p, total:targetSubjects.length }));
       if (!targetSubjects.length) {
+        if (normalizedTargetSubject) {
+          updateToast(toastId, `Não encontrei "${normalizedTargetSubject}" no subject original das aulas catalogadas.`, 'error');
+          addCourseOrgLog('error', `Subject original não encontrado: ${normalizedTargetSubject}. Use "Listar subjects".`);
+          return;
+        }
         const keptSubjects = subjectScope.map(subject => existingBySubject.get(normalizeTextKey(subject))).filter(Boolean);
         const nextProposal = {
           subjects:keptSubjects,
           generatedAt:Date.now(),
           scope:subjectScope,
           mode:integrateBonus ? 'integrated' : 'separate-bonus',
+          sourceMode:COURSE_ORG_SOURCE_MODE,
         };
         setCourseOrgProposal(nextProposal);
         updateToast(toastId, onlyProblematic ? 'Nenhuma matéria contaminada detectada. Mantive a proposta atual.' : 'Nada faltante nessa prévia. Mantive a proposta atual.', 'success');
         setTimeout(() => removeToast(toastId), 5000);
         return;
+      }
+      if (normalizedTargetSubject) {
+        addCourseOrgLog('info', `Gerando só a matéria original: ${targetSubjects.join(', ')}.`);
       }
       if (onlyMissing) {
         addCourseOrgLog('info', `Gerando só faltantes: ${targetSubjects.join(', ')}.`);
@@ -7111,6 +7160,7 @@ export default function QuestionBankApp() {
         generatedAt:Date.now(),
         scope:subjectScope,
         mode:integrateBonus ? 'integrated' : 'separate-bonus',
+        sourceMode:COURSE_ORG_SOURCE_MODE,
       };
       setCourseOrgProposal(nextProposal);
       if (user && !user.isAnonymous) {
@@ -9266,15 +9316,36 @@ export default function QuestionBankApp() {
   // ─────────────────────────────────────────────────────────────────────────
   if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
   const displayCourseOrgProposal = normalizeCourseOrgProposal(courseOrgProposal);
-  const appliedVideoaulasData = isAdmin && coursePlanLessonOrder.length && displayCourseOrgProposal?.subjects?.length
+  const courseOrgProposalUsesOriginalSubjects = displayCourseOrgProposal?.sourceMode === COURSE_ORG_SOURCE_MODE;
+  const effectiveCoursePlanLessonOrder = courseOrgProposalUsesOriginalSubjects ? coursePlanLessonOrder : [];
+  const appliedVideoaulasData = isAdmin && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.subjects?.length
     ? applyCourseOrgProposalToVideoData(videoaulasData || {}, displayCourseOrgProposal)
     : videoaulasData;
-  const appliedCourseSubjectOrder = (displayCourseOrgProposal?.subjects || []).map(item => item.subject).filter(Boolean);
+  const appliedCourseSubjectOrder = courseOrgProposalUsesOriginalSubjects
+    ? (displayCourseOrgProposal?.subjects || []).map(item => item.subject).filter(Boolean)
+    : [];
+  const originalSubjectOptions = sortSubjects((courseCatalogStats.rows || []).map(row => row.subject).filter(Boolean));
   const sortCourseSubjectsForDisplay = (subjects = []) => {
-    if (!isAdmin || !coursePlanLessonOrder.length || !appliedCourseSubjectOrder.length) return sortSubjects(subjects);
+    if (!isAdmin || !effectiveCoursePlanLessonOrder.length || !appliedCourseSubjectOrder.length) return sortSubjects(subjects);
     const seen = new Set();
     const ordered = appliedCourseSubjectOrder.filter(subject => subjects.includes(subject) && !seen.has(subject) && seen.add(subject));
     return [...ordered, ...sortSubjects(subjects.filter(subject => !seen.has(subject)))];
+  };
+  const activeAcademiaOrigin = activeTopic?.origin?.source === 'academia' ? (() => {
+    const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
+    const topics = originSubject?.topics || [];
+    const originIndex = topics.findIndex(t => String(t.id) === String(activeTopic.origin.topicId));
+    const originTopic = originIndex >= 0 ? topics[originIndex] : null;
+    const nextTopic = originIndex >= 0 ? topics[originIndex + 1] : null;
+    return originSubject && originTopic ? { subject:originSubject, topic:originTopic, nextTopic } : null;
+  })() : null;
+  const openAcademiaTopicView = (subject, topic) => {
+    if (!subject || !topic) return;
+    setLibFilter('academia');
+    setActiveFolderId(subject.folderId || null);
+    setActiveSubjectId(subject.id);
+    setActiveTopicId(topic.id);
+    setView('academia-topic');
   };
 
   if (!username) return (
@@ -10470,23 +10541,15 @@ export default function QuestionBankApp() {
               })) : null}
               onOpenErrorReviewResult={activeTopicErrorReviews.length ? (()=>openErrorNotebookReviewResult(activeTopicErrorReviews[0])) : null}
               errorReviewResultCount={activeTopicErrorReviews.length}
-              onGoToAula={activeTopic.origin?.source==='academia' ? ()=>{
-                const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
-                const originTopic = originSubject?.topics?.find(t => String(t.id) === String(activeTopic.origin.topicId));
-                if (!originSubject || !originTopic) return;
-                setLibFilter('academia');
-                setActiveFolderId(originSubject.folderId || null);
-                setActiveSubjectId(originSubject.id);
-                setActiveTopicId(originTopic.id);
-                setView('academia-topic');
-              } : null}
+              onGoToAula={activeAcademiaOrigin?.topic ? ()=>openAcademiaTopicView(activeAcademiaOrigin.subject, activeAcademiaOrigin.topic) : null}
               goToAulaLabel={activeTopic.origin?.source==='academia' ? 'Ler aula' : 'Assistir aula'}
               onGenerateExtra={canUseAcademia && activeTopic.origin?.source==='academia' ? ()=>{
-                const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
-                const originTopic = originSubject?.topics?.find(t => String(t.id) === String(activeTopic.origin.topicId));
-                if (!originSubject || !originTopic) return;
-                setAcademiaExtraModal({topic:originTopic, subject:originSubject});
+                if (!activeAcademiaOrigin?.subject || !activeAcademiaOrigin?.topic) return;
+                setAcademiaExtraModal({topic:activeAcademiaOrigin.topic, subject:activeAcademiaOrigin.subject});
               } : null}
+              onNextUnit={activeAcademiaOrigin?.nextTopic ? ()=>openAcademiaTopicView(activeAcademiaOrigin.subject, activeAcademiaOrigin.nextTopic) : null}
+              nextUnitLabel="Próxima aula"
+              nextUnitHelper={activeAcademiaOrigin?.nextTopic?.title || 'Continuar no assunto'}
               inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}
             />
           </div>
@@ -11165,7 +11228,9 @@ export default function QuestionBankApp() {
           const globalPct    = totalAulas>0?Math.round(totalWatched/totalAulas*100):0;
           const courseLessons = flattenCourseLessons(appliedVideoaulasData || {});
           const courseSubjects = sortCourseSubjectsForDisplay([...new Set(courseLessons.map(lesson => lesson.subject))]);
-          const savedPlanSubjects = coursePlanSubjects.filter(subject => courseSubjects.includes(subject));
+          const savedPlanSubjects = courseOrgProposalUsesOriginalSubjects
+            ? coursePlanSubjects.filter(subject => courseSubjects.includes(subject))
+            : [];
           const effectivePlanSubjects = [
             ...savedPlanSubjects,
             ...courseSubjects.filter(subject => !savedPlanSubjects.includes(subject)),
@@ -11648,7 +11713,7 @@ export default function QuestionBankApp() {
                       return questions.length > 0 && Object.keys(answers).length < questions.length;
                     }) || entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
                   };
-                  const lessonOrderIndex = new Map((coursePlanLessonOrder || []).map((id, index) => [String(id), index]));
+                  const lessonOrderIndex = new Map((effectiveCoursePlanLessonOrder || []).map((id, index) => [String(id), index]));
                   const planLessonRank = (lesson) => {
                     if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
                     const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
@@ -12071,7 +12136,7 @@ export default function QuestionBankApp() {
 	          const sideBorder  = dm?'border-gray-700':'border-gray-200';
 	          const sideBg      = dm?'bg-gray-800/50':'bg-white';
 	          const textMuted   = dm?'text-gray-400':'text-gray-500';
-	          const useIntegratedCourseNav = isAdmin && coursePlanLessonOrder.length && displayCourseOrgProposal?.mode === 'integrated';
+	          const useIntegratedCourseNav = isAdmin && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.mode === 'integrated';
 	          const effQuestionData = effAula ? vqBlocks[aulaVqKey(effAula)] : null;
 	          const effQuestionBlocks = blockValues(effQuestionData?.blocks);
 	          const effQuestionTotal = effQuestionBlocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
@@ -13719,47 +13784,84 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
                 <div className={`mt-5 rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <div>
+                  <div className="flex flex-col gap-4 mb-4">
+                    <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
+                      <div>
                       <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Prévia</p>
                       <h4 className="text-lg font-serif font-bold text-yellow-600">Proposta de organização</h4>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                        <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Fluxo recomendado: gere todas em fila. O site processa uma matéria original por vez.</p>
+                      </div>
                       <button
-                        disabled={courseOrgRun.running || courseCatalogRun.running}
-                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:false })}
-                        className="px-4 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                        {courseOrgRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Sparkles className="w-4 h-4"/>}
-                        Com bônus separado
-                      </button>
-                      <button
-                        disabled={courseOrgRun.running || courseCatalogRun.running}
-                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:true })}
-                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-yellow-700 text-yellow-300 hover:bg-yellow-900/20':'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}`}>
-                        {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <CheckIcon className="w-4 h-4"/>}
-                        Sem separar bônus
-                      </button>
-                      <button
-                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
-                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:displayCourseOrgProposal?.mode === 'integrated', onlyMissing:true })}
-                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                        {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <RotateCcw className="w-4 h-4"/>}
-                        Gerar faltantes
-                      </button>
-                      <button
-                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
-                        onClick={()=>startCourseOrganizationProposal({ integrateBonus:displayCourseOrgProposal?.mode === 'integrated', onlyProblematic:true })}
-                        className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-red-900/70 text-red-300 hover:bg-red-950/40':'border-red-200 text-red-700 hover:bg-red-50'}`}>
-                        {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <ShieldAlert className="w-4 h-4"/>}
-                        Regerar com erros
-                      </button>
-                      <button
-                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
+                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length || !courseOrgProposalUsesOriginalSubjects}
                         onClick={applyCourseOrgProposalToPlan}
                         className={`px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'bg-gray-800 text-yellow-300 hover:bg-gray-700':'bg-gray-900 text-yellow-100 hover:bg-gray-800'}`}>
                         <CalendarCheck className="w-4 h-4"/>
                         Aplicar ao Meu Plano
                       </button>
+                    </div>
+
+                    <div className={`rounded-xl border p-3 ${darkMode?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-white'}`}>
+                      <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Matéria original do Firebase</label>
+                      <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_auto_auto] gap-2">
+                        <select
+                          value={courseOrgSelectedSubject}
+                          onChange={e=>setCourseOrgSelectedSubject(e.target.value)}
+                          disabled={courseOrgRun.running || courseCatalogRun.running}
+                          style={darkMode ? { backgroundColor:'#030712', color:'#e5e7eb' } : { backgroundColor:'#ffffff', color:'#374151' }}
+                          className={`w-full min-w-0 px-3 py-3 rounded-xl border text-sm font-bold disabled:opacity-50 outline-none ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                          <option value="">Escolha uma matéria...</option>
+                          {originalSubjectOptions.map(subject => (
+                            <option key={subject} value={subject}>{subject}</option>
+                          ))}
+                        </select>
+                        <button
+                          disabled={courseOrgRun.running || courseCatalogRun.running}
+                          onClick={listCourseOriginalSubjects}
+                          className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                          <FileText className="w-4 h-4"/>
+                          Listar subjects
+                        </button>
+                        <button
+                          disabled={courseOrgRun.running || courseCatalogRun.running || !courseOrgSelectedSubject}
+                          onClick={()=>startCourseOrganizationProposal({ integrateBonus:true, targetSubject:courseOrgSelectedSubject })}
+                          className="px-4 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                          {courseOrgRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Sparkles className="w-4 h-4"/>}
+                          Gerar esta matéria
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className={`text-[11px] font-bold uppercase tracking-widest mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Fila automática</p>
+                      <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,1.3fr)_1fr_1fr_1fr] gap-2">
+                        <button
+                          disabled={courseOrgRun.running || courseCatalogRun.running}
+                          onClick={()=>startCourseOrganizationProposal({ integrateBonus:true })}
+                          className="px-4 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                          {courseOrgRun.running ? <Spinner className="w-4 h-4 text-white"/> : <Sparkles className="w-4 h-4"/>}
+                          Gerar todas em fila
+                        </button>
+                        <button
+                          disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
+                          onClick={()=>startCourseOrganizationProposal({ integrateBonus:displayCourseOrgProposal?.mode === 'integrated', onlyMissing:true })}
+                          className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                          {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <RotateCcw className="w-4 h-4"/>}
+                          Gerar faltantes
+                        </button>
+                        <button
+                          disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length || !courseOrgProposalUsesOriginalSubjects}
+                          onClick={()=>startCourseOrganizationProposal({ integrateBonus:displayCourseOrgProposal?.mode === 'integrated', onlyProblematic:true })}
+                          className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-red-900/70 text-red-300 hover:bg-red-950/40':'border-red-200 text-red-700 hover:bg-red-50'}`}>
+                          {courseOrgRun.running ? <Spinner className="w-4 h-4"/> : <ShieldAlert className="w-4 h-4"/>}
+                          Regerar erros
+                        </button>
+                        <button
+                          disabled={courseOrgRun.running || courseCatalogRun.running}
+                          onClick={()=>startCourseOrganizationProposal({ integrateBonus:false })}
+                          className={`px-4 py-3 rounded-xl border font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                          Bônus separado
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {courseOrgRun.logs.length>0&&(
@@ -13789,6 +13891,11 @@ export default function QuestionBankApp() {
                     <p className={`text-sm ${darkMode?'text-gray-500':'text-gray-500'}`}>Gere a proposta depois que as fichas do catálogo estiverem prontas.</p>
                   ) : (
                     <div className="space-y-4">
+                      {!courseOrgProposalUsesOriginalSubjects&&(
+                        <p className={`text-xs rounded-xl border px-3 py-2 ${darkMode?'border-red-900/70 bg-red-950/30 text-red-300':'border-red-200 bg-red-50 text-red-700'}`}>
+                          Esta prévia foi gerada pela lógica antiga e não será usada para reorganizar o portal. Gere novamente por subject original do Firebase.
+                        </p>
+                      )}
                       <p className={`text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>
                         Prévia {displayCourseOrgProposal.mode === 'integrated' ? 'sem separar bônus' : 'com bônus separado'} gerada em {new Date(displayCourseOrgProposal.generatedAt || Date.now()).toLocaleString('pt-BR')}. Ainda não aplica nada no curso.
                       </p>
