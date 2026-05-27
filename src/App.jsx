@@ -1527,7 +1527,12 @@ const applyCourseOrgProposalToVideoData = (raw, proposal) => {
       (module.lessons || []).forEach((proposalLesson, lessonIndex) => {
         const source = findSourceLesson(proposalLesson);
         if (!source) return;
-        const sourceSubject = normalizeCourseSubjectName(source.subject || source.aula?.subject || '', 'Sem matéria');
+        const sourceSubject = getManualCorrectedCourseSubjectName({
+          ...source.aula,
+          title:source.title || source.aula?.title || '',
+          subject:source.subject || source.aula?.subject || '',
+          aula:source.aula,
+        });
         if (normalizeTextKey(sourceSubject) !== normalizeTextKey(normalizeCourseSubjectName(subjectProposal.subject))) return;
         if (used.has(source.id) || used.has(source.docId) || used.has(getAulaId(source.aula))) return;
         used.add(source.id);
@@ -1574,7 +1579,89 @@ const COURSE_CATALOG_KEY_COOLDOWN_MS = 75 * 1000;
 const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
 const DEFAULT_COURSE_CATALOG_DELAY_SECONDS = 2;
 const COURSE_CATALOG_KEY_STATS_STORAGE = 'agora_course_catalog_key_stats_v1';
-const COURSE_ORG_SOURCE_MODE = 'firestore-original-subject-v1';
+const COURSE_CATALOG_ADMIN_ENABLED = false;
+const COURSE_ORG_SOURCE_MODE = 'firestore-subject-manual-corrections-v2';
+const COURSE_SCHEDULE_DEFAULT_WEEKS = 24;
+const COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE = 2;
+const COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE = 6;
+const COURSE_SCHEDULE_DEFAULT_ORDER_PRESET = 'systems-flow';
+const COURSE_SCHEDULE_DEFAULT_MIX_PRESET = 'subject-batches';
+const COURSE_SCHEDULE_PRESETS = [
+  {
+    id:'systems-flow',
+    label:'Por sistemas',
+    desc:'Cardio-respiratório, digestivo, renal, endócrino e depois blocos finais.',
+    subjects:['Cardiologia','Pneumologia','Gastroenterologia','Nefrologia','Endocrinologia','Hematologia','Infectologia','Reumatologia','Preventiva','Cirurgia','Ginecologia','Obstetricia','Pediatria','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'],
+  },
+  {
+    id:'residencia',
+    label:'Residência',
+    desc:'Prioriza áreas de maior peso geral em prova.',
+    subjects:['Preventiva','Clínica Médica','Cirurgia','Pediatria','Ginecologia','Obstetricia','Cardiologia','Gastroenterologia','Infectologia','Pneumologia','Nefrologia','Endocrinologia','Reumatologia','Hematologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'],
+  },
+  {
+    id:'clinic-first',
+    label:'Clínica primeiro',
+    desc:'Começa pelas grandes clínicas e deixa cirúrgicas depois.',
+    subjects:['Cardiologia','Pneumologia','Gastroenterologia','Nefrologia','Endocrinologia','Infectologia','Hematologia','Reumatologia','Psiquiatria','Preventiva','Cirurgia','Ginecologia','Obstetricia','Pediatria','Ortopedia','Dermatologia','Oftalmologia'],
+  },
+  {
+    id:'surgical-go',
+    label:'Cirurgia + GO primeiro',
+    desc:'Acelera cirurgia, gineco-obstetrícia e pediatria.',
+    subjects:['Cirurgia','Ginecologia','Obstetricia','Pediatria','Preventiva','Gastroenterologia','Cardiologia','Pneumologia','Nefrologia','Endocrinologia','Infectologia','Reumatologia','Hematologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'],
+  },
+  {
+    id:'big-first',
+    label:'Grandes primeiro',
+    desc:'Ataca logo as matérias mais longas e densas.',
+    subjects:['Gastroenterologia','Cirurgia','Nefrologia','Pediatria','Ginecologia','Obstetricia','Reumatologia','Cardiologia','Infectologia','Preventiva','Endocrinologia','Hematologia','Pneumologia','Psiquiatria','Oftalmologia','Ortopedia','Dermatologia'],
+  },
+  {
+    id:'small-first',
+    label:'Pequenos primeiro',
+    desc:'Fecha matérias curtas antes das grandes.',
+    subjects:['Dermatologia','Oftalmologia','Ortopedia','Psiquiatria','Pneumologia','Hematologia','Endocrinologia','Preventiva','Infectologia','Cardiologia','Ginecologia','Obstetricia','Reumatologia','Pediatria','Nefrologia','Cirurgia','Gastroenterologia'],
+  },
+];
+const COURSE_SCHEDULE_MIX_PRESETS = [
+  {
+    id:'importance-life',
+    label:'Importância prática',
+    desc:'Prioriza o que mais ajuda no dia a dia do médico generalista.',
+    strategy:'importance-life',
+  },
+  {
+    id:'basic-advanced',
+    label:'Básico ao avançado',
+    desc:'Começa por fundamentos, diagnóstico e manejo; deixa raridades por último.',
+    strategy:'basic-advanced',
+  },
+  {
+    id:'ufc-flow',
+    label:'Ordem UFC',
+    desc:'Segue a matriz curricular UFC Medicina 2018.1 do ciclo básico ao 8º semestre.',
+    strategy:'ufc-flow',
+  },
+  {
+    id:'medico-bicho',
+    label:'Médico Bicho',
+    desc:'Segue a lógica da Ordem UFC, mas sem as aulas de Preventiva.',
+    strategy:'medico-bicho',
+  },
+  {
+    id:'high-yield',
+    label:'Alta cobrança',
+    desc:'Puxa temas clássicos de prova antes dos assuntos menos recorrentes.',
+    strategy:'high-yield',
+  },
+  {
+    id:'emergency-first',
+    label:'Urgências primeiro',
+    desc:'Começa por choque, trauma, PCR, sangramentos, sepse e quadros graves.',
+    strategy:'emergency-first',
+  },
+];
 
 const normalizeTextKey = (value = '') =>
   String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -1614,6 +1701,14 @@ const COURSE_ORG_TITLE_SUBJECT_RULES = [
   ['Clínica Médica', /\b(intoxicacoes? exogenas?|ulceras? de pressao)\b/],
 ];
 
+const COURSE_MANUAL_SUBJECT_OVERRIDES = [
+  ['Endocrinologia', /\b(complicacoes agudas da diabetes mellitus|doencas da adrenal|hipoparatireoidismo|raquitismo e osteomalacia)\b/],
+  ['Cardiologia', /\b(complicacoes pos[- ]infarto agudo do miocardio|bloqueios? de ramo no eletrocardiograma|cardiomiopatia hipertrofica)\b/],
+  ['Gastroenterologia', /\b(isquemia intestinal|colangite esclerosante primaria)\b/],
+  ['Ginecologia', /\b(dismenorreia e polipos endometriais)\b/],
+  ['Cirurgia', /\b(queimaduras|ulceras de pressao|cicatrizacao de feridas|hernias? inguinal e femoral|hernias?: abordagem videolaparoscopica)\b/],
+];
+
 const normalizeCourseSubjectName = (subject = '', fallbackSubject = '') => {
   const fallback = String(fallbackSubject || '').trim();
   const raw = String(subject || '').trim();
@@ -1642,6 +1737,110 @@ const inferCourseSubjectFromLessonTitle = (lesson = {}) => {
 
 const getCourseOriginalSubjectName = (lesson = {}) =>
   normalizeCourseSubjectName(lesson.subject || lesson.originalSubject || '', 'Sem matéria');
+
+const getManualCourseSubjectOverride = (lesson = {}) => {
+  const haystack = normalizeTextKey([
+    lesson.title,
+    lesson.cleanTitle,
+    lesson.originalTitle,
+    lesson.display_title,
+    lesson.ai_catalog?.cleanTitle,
+    lesson.ai_catalog?.originalTitle,
+    lesson.aula?.title,
+    lesson.aula?.display_title,
+    lesson.aula?.ai_catalog?.cleanTitle,
+    lesson.aula?.ai_catalog?.originalTitle,
+  ].filter(Boolean).join(' '));
+  if (!haystack) return '';
+  const hit = COURSE_MANUAL_SUBJECT_OVERRIDES.find(([, pattern]) => pattern.test(haystack));
+  return hit?.[0] || '';
+};
+
+const getManualCorrectedCourseSubjectName = (lesson = {}) =>
+  getManualCourseSubjectOverride(lesson) || getCourseOriginalSubjectName(lesson);
+
+const COURSE_MANUAL_RELOCATED_MODULE_TITLE = 'Aulas realocadas manualmente';
+
+const repairCourseOrgProposalWithManualOverrides = (proposal) => {
+  const normalized = normalizeCourseOrgProposal(proposal);
+  if (!normalized?.subjects?.length) return normalized;
+  const subjectMap = new Map();
+  const subjectOrder = [];
+  const moved = [];
+  normalized.subjects.forEach(subjectProposal => {
+    const subject = normalizeCourseSubjectName(subjectProposal.subject || '', '');
+    if (!subject) return;
+    const subjectKey = normalizeTextKey(subject);
+    subjectOrder.push(subject);
+    const nextSubject = {
+      ...subjectProposal,
+      subject,
+      modules:(subjectProposal.modules || []).map(module => ({ ...module, lessons:[...(module.lessons || [])] })),
+      bonus:[...(subjectProposal.bonus || [])],
+    };
+    nextSubject.modules = nextSubject.modules
+      .map(module => {
+        const kept = [];
+        (module.lessons || []).forEach(lesson => {
+          const override = getManualCourseSubjectOverride(lesson);
+          if (override && normalizeTextKey(override) !== subjectKey) {
+            moved.push({ lesson, from:subject, to:override });
+            return;
+          }
+          kept.push(lesson);
+        });
+        return { ...module, lessons:kept };
+      })
+      .filter(module => (module.lessons || []).length);
+    const keptBonus = [];
+    nextSubject.bonus.forEach(lesson => {
+      const override = getManualCourseSubjectOverride(lesson);
+      if (override && normalizeTextKey(override) !== subjectKey) {
+        moved.push({ lesson, from:subject, to:override });
+        return;
+      }
+      keptBonus.push(lesson);
+    });
+    nextSubject.bonus = keptBonus;
+    subjectMap.set(subjectKey, nextSubject);
+  });
+  moved.forEach(({ lesson, from, to }) => {
+    const targetSubject = normalizeCourseSubjectName(to, to);
+    const targetKey = normalizeTextKey(targetSubject);
+    if (!subjectMap.has(targetKey)) {
+      subjectOrder.push(targetSubject);
+      subjectMap.set(targetKey, { subject:targetSubject, modules:[], bonus:[], notes:'' });
+    }
+    const target = subjectMap.get(targetKey);
+    let module = (target.modules || []).find(item => normalizeTextKey(item.title) === normalizeTextKey(COURSE_MANUAL_RELOCATED_MODULE_TITLE));
+    if (!module) {
+      module = { title:COURSE_MANUAL_RELOCATED_MODULE_TITLE, lessons:[] };
+      target.modules = [...(target.modules || []), module];
+    }
+    if ((module.lessons || []).some(item => String(item.lessonId || '') === String(lesson.lessonId || ''))) return;
+    module.lessons.push({
+      ...lesson,
+      reason:`Realocada manualmente de ${from}.`,
+      order:module.lessons.length + 1,
+    });
+  });
+  const subjects = subjectOrder
+    .map(subject => subjectMap.get(normalizeTextKey(subject)))
+    .filter(subjectProposal => subjectProposal && ((subjectProposal.modules || []).length || (subjectProposal.bonus || []).length))
+    .map(subjectProposal => normalizeCourseOrganizationTitles(subjectProposal));
+  return {
+    ...normalized,
+    subjects,
+    sourceMode:COURSE_ORG_SOURCE_MODE,
+    manualCorrections:moved.map(item => ({
+      lessonId:String(item.lesson.lessonId || ''),
+      title:item.lesson.title || '',
+      from:item.from,
+      to:item.to,
+    })),
+    repairedAt:Date.now(),
+  };
+};
 
 const getCourseOrganizationSubjectName = (lesson = {}) => {
   const original = getCourseOriginalSubjectName(lesson);
@@ -1774,7 +1973,8 @@ REGRAS:
 - Cada lessonId deve aparecer exatamente uma vez em modules[].lessons.
 - Se uma aula foi enviada em AULAS, ela pertence a "${subject}" para esta organização. Não omita, não ignore e não diga que ela é de outra matéria.
 - Nunca escreva nas notes que aulas foram omitidas, excluídas ou ignoradas por pertencerem a outra especialidade.
-- Se alguma aula parecer de interface com outra especialidade, posicione-a no módulo mais próximo ou crie um módulo temático específico, mantendo o lessonId.
+- Não use "interface com outra especialidade" como justificativa. Organize pelo tema real da aula dentro do pacote recebido.
+- Se uma aula parecer pouco relacionada ao restante da matéria, coloque no final em "Complementos do subject original", sem inventar relação clínica forçada.
 - O campo bonus deve existir, mas precisa ser [].
 - Use títulos limpos, curtos e específicos, sem número no começo.
 - module title deve ser didático e curto.
@@ -1795,7 +1995,8 @@ REGRAS:
 - Cada lessonId deve aparecer exatamente uma vez: em modules[].lessons OU em bonus[].
 - Se uma aula foi enviada em AULAS, ela pertence a "${subject}" para esta organização. Não omita, não ignore e não diga que ela é de outra matéria.
 - Nunca escreva nas notes que aulas foram omitidas, excluídas ou ignoradas por pertencerem a outra especialidade.
-- Se alguma aula parecer de interface com outra especialidade, posicione-a no módulo mais próximo, crie um módulo temático específico ou coloque em bonus, mantendo o lessonId.
+- Não use "interface com outra especialidade" como justificativa. Organize pelo tema real da aula dentro do pacote recebido.
+- Se uma aula parecer pouco relacionada ao restante da matéria, coloque no final em "Complementos do subject original" ou em bonus, sem inventar relação clínica forçada.
 - Use títulos limpos, curtos e específicos, sem número no começo.
 - module title deve ser didático e curto.
 - A ordem deve ir de bases/conceitos para diagnóstico, tratamento, complicações e questões.
@@ -4683,12 +4884,20 @@ export default function QuestionBankApp() {
   const [coursePlanSubjects, setCoursePlanSubjects] = useState([]);
   const [coursePlanLessonOrder, setCoursePlanLessonOrder] = useState([]);
   const [coursePlanLocked, setCoursePlanLocked] = useState(false);
+  const [courseScheduleWeeks, setCourseScheduleWeeks] = useState(COURSE_SCHEDULE_DEFAULT_WEEKS);
+  const [courseScheduleSubjectBatchSize, setCourseScheduleSubjectBatchSize] = useState(COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE);
+  const [courseSchedulePreset, setCourseSchedulePreset] = useState(COURSE_SCHEDULE_DEFAULT_ORDER_PRESET);
+  const [courseScheduleMixPreset, setCourseScheduleMixPreset] = useState(COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
+  const [courseScheduleSubjectsOpen, setCourseScheduleSubjectsOpen] = useState(false);
+  const [courseScheduleSettingsOpen, setCourseScheduleSettingsOpen] = useState(false);
   const [courseCycleReviews, setCourseCycleReviews] = useState({});
   const [courseCatalogRun, setCourseCatalogRun] = useState({ running:false, paused:false, stopping:false, current:0, total:0, logs:[] });
   const [courseCatalogStats, setCourseCatalogStats] = useState({ loading:false, rows:[], total:0, pending:0 });
   const [courseOrgRun, setCourseOrgRun] = useState({ running:false, current:0, total:0, logs:[] });
   const [courseOrgProposal, setCourseOrgProposal] = useState(null);
   const [courseOrgSelectedSubject, setCourseOrgSelectedSubject] = useState('');
+  const courseManualRepairAppliedRef = useRef(false);
+  const courseGlobalOrgPublishedRef = useRef(false);
   const courseCatalogControlRef = useRef({ paused:false, stop:false });
   const courseCatalogLogRef = useRef(null);
 
@@ -4934,6 +5143,33 @@ export default function QuestionBankApp() {
     };
   }, [canUseAdvancedFeatures, view, activeAula?.bunny_id, activeAula?.embed_url]);
 
+  const applyCoursePrefsPayload = (prefs = {}, { includeSchedule = true, includeSubjects = true } = {}) => {
+    if (!prefs || typeof prefs !== 'object') return false;
+    if (includeSubjects && Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
+    if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
+    if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
+    if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') setCourseOrgProposal(normalizeCourseOrgProposal(prefs.courseOrgProposal));
+    if (includeSchedule) {
+      if (prefs.startDate) setCronStartDate(prefs.startDate);
+      if (Number(prefs.courseScheduleWeeks) > 0) setCourseScheduleWeeks(Math.max(1, Math.min(104, Number(prefs.courseScheduleWeeks))));
+      if (Number(prefs.courseScheduleSubjectBatchSize) > 0) setCourseScheduleSubjectBatchSize(Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(prefs.courseScheduleSubjectBatchSize))));
+      if (prefs.courseSchedulePreset) setCourseSchedulePreset(String(prefs.courseSchedulePreset));
+      if (prefs.courseScheduleMixPreset) setCourseScheduleMixPreset(String(prefs.courseScheduleMixPreset));
+      if (prefs.courseCycleReviews && typeof prefs.courseCycleReviews === 'object') setCourseCycleReviews(prefs.courseCycleReviews);
+    }
+    return !!(prefs.courseOrgProposal && Array.isArray(prefs.coursePlanLessonOrder) && prefs.coursePlanLessonOrder.length);
+  };
+
+  const loadGlobalCourseOrganizationPrefs = async ({ includeSubjects = true } = {}) => {
+    try {
+      const snap = await getDoc(doc(db, 'config', 'curso_organization'));
+      if (!snap.exists()) return false;
+      return applyCoursePrefsPayload(snap.data() || {}, { includeSchedule:false, includeSubjects });
+    } catch(e) {
+      return false;
+    }
+  };
+
   // Load cronograma from Firestore — carrega UMA VEZ no login com cache localStorage
   const cronLoadedRef = useRef(false);
   useEffect(() => {
@@ -4946,16 +5182,12 @@ export default function QuestionBankApp() {
       if (cached) {
         setCronograma(JSON.parse(cached));
         // Carregar prefs do usuário (data de início) em background
-        getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main')).then(prefSnap => {
-          if (!prefSnap.exists()) return;
-          const prefs = prefSnap.data() || {};
-          if (prefs.startDate) setCronStartDate(prefs.startDate);
-          if (Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
-          if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
-          if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
-          if (prefs.courseCycleReviews && typeof prefs.courseCycleReviews === 'object') setCourseCycleReviews(prefs.courseCycleReviews);
-          if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') setCourseOrgProposal(normalizeCourseOrgProposal(prefs.courseOrgProposal));
-        }).catch(()=>{});
+        getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main')).then(async prefSnap => {
+          const prefs = prefSnap.exists() ? (prefSnap.data() || {}) : {};
+          const hasUserSubjects = Array.isArray(prefs.coursePlanSubjects) && prefs.coursePlanSubjects.length;
+          applyCoursePrefsPayload(prefs);
+          await loadGlobalCourseOrganizationPrefs({ includeSubjects:!hasUserSubjects });
+        }).catch(()=>{ loadGlobalCourseOrganizationPrefs(); });
         return;
       }
     } catch(e) {}
@@ -4971,15 +5203,13 @@ export default function QuestionBankApp() {
         setCronograma(weeks);
         try { localStorage.setItem(cacheKey, JSON.stringify(weeks)); } catch(e) {}
         const prefSnap = await getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'));
+        let hasUserSubjects = false;
         if (prefSnap.exists()) {
           const prefs = prefSnap.data() || {};
-          if (prefs.startDate) setCronStartDate(prefs.startDate);
-          if (Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
-          if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
-          if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
-          if (prefs.courseCycleReviews && typeof prefs.courseCycleReviews === 'object') setCourseCycleReviews(prefs.courseCycleReviews);
-          if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') setCourseOrgProposal(normalizeCourseOrgProposal(prefs.courseOrgProposal));
+          hasUserSubjects = Array.isArray(prefs.coursePlanSubjects) && prefs.coursePlanSubjects.length;
+          applyCoursePrefsPayload(prefs);
         }
+        await loadGlobalCourseOrganizationPrefs({ includeSubjects:!hasUserSubjects });
       } catch(e) { setCronograma([]); }
       finally { setCronLoading(false); }
     })();
@@ -4992,9 +5222,16 @@ export default function QuestionBankApp() {
       setCoursePlanSubjects([]);
       setCoursePlanLessonOrder([]);
       setCoursePlanLocked(false);
+      setCourseScheduleWeeks(COURSE_SCHEDULE_DEFAULT_WEEKS);
+      setCourseScheduleSubjectBatchSize(COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE);
+      setCourseSchedulePreset(COURSE_SCHEDULE_DEFAULT_ORDER_PRESET);
+      setCourseScheduleMixPreset(COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
+      setCourseScheduleSubjectsOpen(false);
+      setCourseScheduleSettingsOpen(false);
       setCourseCycleReviews({});
       setCourseOrgProposal(null);
       setCourseOrgRun({ running:false, current:0, total:0, logs:[] });
+      courseGlobalOrgPublishedRef.current = false;
     }
   }, [user]);
 
@@ -5041,25 +5278,100 @@ export default function QuestionBankApp() {
     }
   };
 
-  const applyCourseOrgProposalToPlan = async () => {
-    const proposal = normalizeCourseOrgProposal(courseOrgProposal);
-    if (proposal?.sourceMode !== COURSE_ORG_SOURCE_MODE) {
-      addToast('Essa proposta é da lógica antiga. Gere novamente por subject original antes de aplicar.', 'info', 4500);
-      return;
+  const saveCourseSchedulePrefs = async ({ weeks = courseScheduleWeeks, subjectBatchSize = courseScheduleSubjectBatchSize, preset = courseSchedulePreset, mixPreset = courseScheduleMixPreset, subjects = coursePlanSubjects } = {}) => {
+    const cleanWeeks = Math.max(1, Math.min(104, Number(weeks) || COURSE_SCHEDULE_DEFAULT_WEEKS));
+    const cleanSubjectBatchSize = Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(subjectBatchSize) || COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE));
+    const cleanPreset = String(preset || 'custom');
+    const cleanMixPreset = String(mixPreset || COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
+    const cleanSubjects = [...new Set((subjects || []).filter(Boolean))];
+    setCourseScheduleWeeks(cleanWeeks);
+    setCourseScheduleSubjectBatchSize(cleanSubjectBatchSize);
+    setCourseSchedulePreset(cleanPreset);
+    setCourseScheduleMixPreset(cleanMixPreset);
+    if (cleanSubjects.length) setCoursePlanSubjects(cleanSubjects);
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
+        courseScheduleWeeks:cleanWeeks,
+        courseScheduleSubjectBatchSize:cleanSubjectBatchSize,
+        courseSchedulePreset:cleanPreset,
+        courseScheduleMixPreset:cleanMixPreset,
+        ...(cleanSubjects.length ? { coursePlanSubjects:cleanSubjects } : {}),
+      }, { merge:true });
+    } catch(e) {
+      addToast('Não consegui sincronizar o cronograma agora, mas mantive na tela.', 'info', 3500);
     }
-    const subjects = (proposal?.subjects || []).map(item => item.subject).filter(Boolean);
-    const lessonOrder = (proposal?.subjects || []).flatMap(subjectProposal =>
+  };
+
+  const getCourseOrgPlanParts = (proposal) => ({
+    subjects:(proposal?.subjects || []).map(item => item.subject).filter(Boolean),
+    lessonOrder:(proposal?.subjects || []).flatMap(subjectProposal =>
       (subjectProposal.modules || []).flatMap(module => (module.lessons || []).map(lesson => lesson.lessonId))
-    ).filter(Boolean);
+    ).filter(Boolean),
+  });
+
+  useEffect(() => {
+    if (!isAdmin || !user || user.isAnonymous || courseGlobalOrgPublishedRef.current) return;
+    const proposal = normalizeCourseOrgProposal(courseOrgProposal);
+    const { subjects, lessonOrder } = getCourseOrgPlanParts(proposal);
+    if (!proposal?.subjects?.length || !subjects.length || !lessonOrder.length) return;
+    courseGlobalOrgPublishedRef.current = true;
+    setDoc(doc(db, 'config', 'curso_organization'), {
+      courseOrgProposal:proposal,
+      coursePlanSubjects:subjects,
+      coursePlanLessonOrder:lessonOrder,
+      coursePlanLocked:true,
+      updatedAt:Date.now(),
+      updatedBy:user?.email || null,
+    }, { merge:true }).catch(() => {
+      addToast('Não consegui publicar automaticamente a organização global.', 'info', 4500);
+    });
+  }, [isAdmin, user?.uid, courseOrgProposal, coursePlanLessonOrder.length]); // eslint-disable-line
+
+  const applyCourseOrgProposalToPlan = async (proposalOverride = null, options = {}) => {
+    const proposal = repairCourseOrgProposalWithManualOverrides(proposalOverride || courseOrgProposal);
+    const subjects = (proposal?.subjects || []).map(item => item.subject).filter(Boolean);
+    const { lessonOrder } = getCourseOrgPlanParts(proposal);
     if (!subjects.length || !lessonOrder.length) {
       addToast('Gere uma proposta antes de aplicar ao plano.', 'info', 3500);
       return;
     }
+    setCourseOrgProposal(proposal);
+    if (user && !user.isAnonymous) {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { courseOrgProposal:proposal }, { merge:true });
+    }
+    if (isAdmin) {
+      try {
+        await setDoc(doc(db, 'config', 'curso_organization'), {
+          courseOrgProposal:proposal,
+          coursePlanSubjects:subjects,
+          coursePlanLessonOrder:lessonOrder,
+          coursePlanLocked:true,
+          updatedAt:Date.now(),
+          updatedBy:user?.email || null,
+        }, { merge:true });
+      } catch(e) {
+        addToast('Apliquei para você, mas não consegui publicar a organização global.', 'info', 4500);
+      }
+    }
     await saveCoursePlanPrefs(subjects, true, lessonOrder);
     setCursoTab('plano');
     setView('curso');
-    addToast('Proposta aplicada ao Meu Plano.', 'success', 3500);
+    const movedCount = proposal.manualCorrections?.length || 0;
+    addToast(options.auto ? `Lista corrigida manualmente e aplicada (${movedCount} aula${movedCount!==1?'s':''} movida${movedCount!==1?'s':''}).` : 'Proposta corrigida e aplicada ao Meu Plano.', 'success', 4500);
   };
+
+  useEffect(() => {
+    if (!isAdmin || !user || user.isAnonymous || courseManualRepairAppliedRef.current || courseOrgRun.running) return;
+    const current = normalizeCourseOrgProposal(courseOrgProposal);
+    if (!current?.subjects?.length) return;
+    const repaired = repairCourseOrgProposalWithManualOverrides(current);
+    const needsRepair = current.sourceMode !== COURSE_ORG_SOURCE_MODE || (repaired.manualCorrections?.length || 0) > 0;
+    if (!needsRepair) return;
+    courseManualRepairAppliedRef.current = true;
+    applyCourseOrgProposalToPlan(repaired, { auto:true }).catch(() => {
+      addToast('Não consegui aplicar a correção manual automaticamente.', 'error', 5000);
+    });
+  }, [isAdmin, user?.uid, courseOrgProposal, courseOrgRun.running]); // eslint-disable-line
 
   const saveCourseCycleReview = async (lessonId, stage) => {
     if (!lessonId || !stage) return;
@@ -6664,7 +6976,7 @@ export default function QuestionBankApp() {
   const getOriginalCourseSubject = (lesson = {}) =>
     getCourseOriginalSubjectName(lesson);
   const getCourseOrganizationSubject = (lesson = {}) =>
-    getCourseOriginalSubjectName(lesson);
+    getManualCorrectedCourseSubjectName(lesson);
 
   const buildCourseCatalogStats = (lessons = []) => {
     const bySubject = new Map();
@@ -6687,7 +6999,7 @@ export default function QuestionBankApp() {
   };
 
   const refreshCourseCatalogStats = async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !COURSE_CATALOG_ADMIN_ENABLED) return;
     setCourseCatalogStats(p => ({ ...p, loading:true }));
     try {
       const snap = await getDocs(collection(db, 'lessons'));
@@ -6701,7 +7013,7 @@ export default function QuestionBankApp() {
   };
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !COURSE_CATALOG_ADMIN_ENABLED) return;
     refreshCourseCatalogStats();
   }, [isAdmin]); // eslint-disable-line
 
@@ -6870,14 +7182,17 @@ export default function QuestionBankApp() {
         if (!data.title || !isCourseCatalogTargetSubject(data)) return;
         if (!data.ai_catalog?.cleanTitle && !data.ai_catalog?.description) return;
         const originalSubject = getOriginalCourseSubject(data);
+        const correctedSubject = getCourseOrganizationSubject(data);
+        const manualSubjectOverride = getManualCourseSubjectOverride(data);
         lessons.push({
           ...data,
           id:lessonDoc.id,
           doc_id:data.doc_id || lessonDoc.id,
           title:data.title || data.ai_catalog?.originalTitle || data.ai_catalog?.cleanTitle || '',
-          subject:originalSubject,
+          subject:correctedSubject,
           originalSubject:originalSubject,
           sourceSubject:originalSubject,
+          manualSubjectOverride,
           topic:data.topic || '',
           duration_formatted:data.duration_formatted || '',
           is_bonus:!!data.is_bonus || !!data.ai_catalog?.isBonus || normalizeTextKey(data.topic || '').includes('bonus'),
@@ -6885,13 +7200,14 @@ export default function QuestionBankApp() {
           description:data.ai_catalog?.description || data.description || '',
         });
       });
-      const subjectOfLesson = (lesson) => getCourseOriginalSubject(lesson);
+      const subjectOfLesson = (lesson) => getCourseOrganizationSubject(lesson);
       const subjectScope = sortCourseSubjectsForDisplay([...new Set(lessons.map(subjectOfLesson))]);
       if (!lessons.length) {
         updateToast(toastId, 'Nenhuma aula catalogada encontrada no banco para montar a proposta.', 'error');
         return;
       }
-      addCourseOrgLog('info', `Fonte da proposta: ${lessons.length} aulas da coleção lessons, agrupadas pelo subject original do Firebase. A IA só decide módulos dentro de cada matéria.`);
+      const manualCorrectionsCount = lessons.filter(lesson => normalizeTextKey(lesson.originalSubject) !== normalizeTextKey(subjectOfLesson(lesson))).length;
+      addCourseOrgLog('info', `Fonte da proposta: ${lessons.length} aulas da coleção lessons, agrupadas pelo subject do Firebase com ${manualCorrectionsCount} correção(ões) manual(is). A IA só decide módulos dentro de cada matéria.`);
       const existingProposal = normalizeCourseOrgProposal(courseOrgProposal);
       const sameMode = existingProposal?.mode === (integrateBonus ? 'integrated' : 'separate-bonus')
         && existingProposal?.sourceMode === COURSE_ORG_SOURCE_MODE;
@@ -6921,7 +7237,13 @@ export default function QuestionBankApp() {
       };
       lessons.forEach(lesson => addAllowed(subjectOfLesson(lesson), lesson));
       portalLessons.forEach(lesson => {
-        const key = normalizeTextKey(normalizeCourseSubjectName(lesson.subject));
+        const correctedPortalSubject = getManualCorrectedCourseSubjectName({
+          ...lesson.aula,
+          title:lesson.title || lesson.aula?.title || '',
+          subject:lesson.subject,
+          aula:lesson.aula,
+        });
+        const key = normalizeTextKey(correctedPortalSubject);
         const row = allowedBySubject.get(key) || { ids:new Set(), titles:new Set() };
         [lesson.id, lesson.docId, getAulaId(lesson.aula), lesson.aula?.bunny_id].filter(Boolean).forEach(id => row.ids.add(String(id)));
         [lesson.title, lesson.aula?.title, lesson.aula?.ai_catalog?.cleanTitle, lesson.aula?.ai_catalog?.originalTitle].forEach(title => {
@@ -6953,7 +7275,7 @@ export default function QuestionBankApp() {
           const catalogHit = lessonsById.get(idText);
           if (catalogHit) return catalogHit;
           const portalHit = portalById.get(idText);
-          if (portalHit) return { id:idText, subject:portalHit.subject, topic:portalHit.topic, title:portalHit.title };
+          if (portalHit) return { id:idText, subject:portalHit.subject, topic:portalHit.topic, title:portalHit.title, aula:portalHit.aula };
         }
         const titleCandidates = [
           proposalLesson.title,
@@ -6967,16 +7289,13 @@ export default function QuestionBankApp() {
           const catalogHit = lessonsByCleanTitle.get(clean);
           if (catalogHit) return catalogHit;
           const portalHit = portalByTitle.get(clean);
-          if (portalHit) return { id:portalHit.docId || portalHit.id, subject:portalHit.subject, topic:portalHit.topic, title:portalHit.title };
+          if (portalHit) return { id:portalHit.docId || portalHit.id, subject:portalHit.subject, topic:portalHit.topic, title:portalHit.title, aula:portalHit.aula };
         }
         return null;
       };
       const proposalHasWrongSubject = (subjectProposal) => {
         const subjectKey = normalizeTextKey(subjectProposal?.subject || '');
         const allowed = allowedBySubject.get(subjectKey) || { ids:new Set(), titles:new Set() };
-        const notesKey = normalizeTextKey(subjectProposal?.notes || '');
-        if (/(omitid|excluid|ignorado|ignorada|nao pertenc|outra especialidade|outras especialidades)/.test(notesKey)) return true;
-        if ((subjectProposal?.modules || []).some(module => /complementos.*revis/.test(normalizeTextKey(module?.title || '')))) return true;
         const proposalLessons = [
           ...(subjectProposal?.modules || []).flatMap(module => module.lessons || []),
           ...(subjectProposal?.bonus || []),
@@ -7005,7 +7324,7 @@ export default function QuestionBankApp() {
         const existing = existingBySubject.get(normalizeTextKey(subject));
         return existing && proposalHasWrongSubject(existing);
       });
-      const normalizedTargetSubject = normalizeCourseSubjectName(singleSubject || '', '');
+      const normalizedTargetSubject = singleSubject ? normalizeCourseSubjectName(singleSubject, '') : '';
       const targetSubjects = normalizedTargetSubject
         ? subjectScope.filter(subject => normalizeTextKey(subject) === normalizeTextKey(normalizedTargetSubject))
         : onlyProblematic
@@ -7016,8 +7335,8 @@ export default function QuestionBankApp() {
       setCourseOrgRun(p => ({ ...p, total:targetSubjects.length }));
       if (!targetSubjects.length) {
         if (normalizedTargetSubject) {
-          updateToast(toastId, `Não encontrei "${normalizedTargetSubject}" no subject original das aulas catalogadas.`, 'error');
-          addCourseOrgLog('error', `Subject original não encontrado: ${normalizedTargetSubject}. Use "Listar subjects".`);
+          updateToast(toastId, `Não encontrei "${normalizedTargetSubject}" nas matérias corrigidas das aulas catalogadas.`, 'error');
+          addCourseOrgLog('error', `Matéria corrigida não encontrada: ${normalizedTargetSubject}. Use "Listar subjects".`);
           return;
         }
         const keptSubjects = subjectScope.map(subject => existingBySubject.get(normalizeTextKey(subject))).filter(Boolean);
@@ -7034,7 +7353,7 @@ export default function QuestionBankApp() {
         return;
       }
       if (normalizedTargetSubject) {
-        addCourseOrgLog('info', `Gerando só a matéria original: ${targetSubjects.join(', ')}.`);
+        addCourseOrgLog('info', `Gerando só a matéria corrigida: ${targetSubjects.join(', ')}.`);
       }
       if (onlyMissing) {
         addCourseOrgLog('info', `Gerando só faltantes: ${targetSubjects.join(', ')}.`);
@@ -7055,6 +7374,33 @@ export default function QuestionBankApp() {
           addCourseOrgLog('info', `${subject}: nenhuma ficha encontrada.`);
           failedSubjectKeys.add(subjectKey);
           continue;
+        }
+        const manualCorrectionsForSubject = subjectLessons.filter(lesson =>
+          lesson.manualSubjectOverride
+          && normalizeTextKey(lesson.originalSubject) !== subjectKey
+        );
+        if (manualCorrectionsForSubject.length) {
+          const preview = manualCorrectionsForSubject
+            .slice(0, 8)
+            .map(lesson => `${lesson.ai_catalog?.cleanTitle || lesson.title || lesson.id} (${lesson.originalSubject} → ${subject})`)
+            .join('; ');
+          addCourseOrgLog('info', `${subject}: ${manualCorrectionsForSubject.length} aula(s) realocada(s) manualmente: ${preview}${manualCorrectionsForSubject.length > 8 ? '...' : ''}.`);
+        }
+        const suspiciousOriginalSubjectLessons = subjectLessons
+          .map(lesson => ({ lesson, inferredSubject:inferCourseSubjectFromLessonTitle(lesson) }))
+          .filter(item => item.inferredSubject && normalizeTextKey(item.inferredSubject) !== subjectKey);
+        if (suspiciousOriginalSubjectLessons.length) {
+          const preview = suspiciousOriginalSubjectLessons
+            .slice(0, 6)
+            .map(item => `${item.lesson.ai_catalog?.cleanTitle || item.lesson.title || item.lesson.id} → ${item.inferredSubject}`)
+            .join('; ');
+          console.table(suspiciousOriginalSubjectLessons.map(item => ({
+            firebaseSubject:subject,
+            inferredByTitle:item.inferredSubject,
+            title:item.lesson.ai_catalog?.cleanTitle || item.lesson.title || '',
+            lessonId:item.lesson.id,
+          })));
+          addCourseOrgLog('info', `${subject}: ${suspiciousOriginalSubjectLessons.length} aula(s) ainda parecem de outro tema pelo título. Veja console: ${preview}${suspiciousOriginalSubjectLessons.length > 6 ? '...' : ''}.`);
         }
         updateToast(toastId, `Organizando ${subject} ${modeLabel} (${i + 1}/${targetSubjects.length})...`, 'loading');
         let parsed = null;
@@ -7177,7 +7523,7 @@ export default function QuestionBankApp() {
   };
 
   const startCourseCatalogAnalysis = async ({ force=false } = {}) => {
-    if (!isAdmin || courseCatalogRun.running) return;
+    if (!isAdmin || !COURSE_CATALOG_ADMIN_ENABLED || courseCatalogRun.running) return;
     courseCatalogControlRef.current = { paused:false, stop:false };
     setCourseCatalogRun({ running:true, paused:false, stopping:false, current:0, total:0, logs:[] });
     const toastId = addToast('Organizando catálogo das aulas...', 'loading', 0);
@@ -9318,7 +9664,8 @@ export default function QuestionBankApp() {
   const displayCourseOrgProposal = normalizeCourseOrgProposal(courseOrgProposal);
   const courseOrgProposalUsesOriginalSubjects = displayCourseOrgProposal?.sourceMode === COURSE_ORG_SOURCE_MODE;
   const effectiveCoursePlanLessonOrder = courseOrgProposalUsesOriginalSubjects ? coursePlanLessonOrder : [];
-  const appliedVideoaulasData = isAdmin && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.subjects?.length
+  const canUseCourseOrganization = isAdmin || canSeeVideoaulas;
+  const appliedVideoaulasData = canUseCourseOrganization && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.subjects?.length
     ? applyCourseOrgProposalToVideoData(videoaulasData || {}, displayCourseOrgProposal)
     : videoaulasData;
   const appliedCourseSubjectOrder = courseOrgProposalUsesOriginalSubjects
@@ -9326,7 +9673,7 @@ export default function QuestionBankApp() {
     : [];
   const originalSubjectOptions = sortSubjects((courseCatalogStats.rows || []).map(row => row.subject).filter(Boolean));
   const sortCourseSubjectsForDisplay = (subjects = []) => {
-    if (!isAdmin || !effectiveCoursePlanLessonOrder.length || !appliedCourseSubjectOrder.length) return sortSubjects(subjects);
+    if (!canUseCourseOrganization || !effectiveCoursePlanLessonOrder.length || !appliedCourseSubjectOrder.length) return sortSubjects(subjects);
     const seen = new Set();
     const ordered = appliedCourseSubjectOrder.filter(subject => subjects.includes(subject) && !seen.has(subject) && seen.add(subject));
     return [...ordered, ...sortSubjects(subjects.filter(subject => !seen.has(subject)))];
@@ -11244,10 +11591,9 @@ export default function QuestionBankApp() {
             {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
             {id:'questoes',   label:'Questões',     icon:<GraduationCap className="w-4 h-4"/>},
             {id:'revisoes',   label:'Revisões',     icon:<RepeatIcon className="w-4 h-4"/>, badge: dueCount},
-            isAdmin
-              ? {id:'plano', label:'Meu Plano', icon:<CalendarCheck className="w-4 h-4"/>}
-              : {id:'cronograma', label:'Cronograma', icon:<CalendarCheck className="w-4 h-4"/>},
-          ];
+            {id:'cronograma', label:'Cronograma', icon:<CalendarCheck className="w-4 h-4"/>},
+            isAdmin ? {id:'plano', label:'Meu Plano', icon:<CalendarCheck className="w-4 h-4"/>} : null,
+          ].filter(Boolean);
 
           return (
             <div className={`min-h-screen ${dm?'bg-gray-950':'bg-gray-50'}`}>
@@ -11838,7 +12184,7 @@ export default function QuestionBankApp() {
                       const lesson = item.lessons[idx];
                       const done = courseCycleReviews?.[lesson.id] || {};
                       const completedAfter = completedCount - idx - 1;
-                      if (!done.r3 && completedAfter >= 3) {
+                      if (!done.r3 && completedAfter >= 4) {
                         return {
                           label:'Revisar +3',
                           tone:'red',
@@ -11975,98 +12321,433 @@ export default function QuestionBankApp() {
                 })()}
 
                 {cursoTab==='cronograma'&&(()=>{
-                  // Config de data de início
-                  const hasStart = !!cronStartDate;
+                  if(videoaulasLoading) return <LoadingState darkMode={dm} label="Montando cronograma..."/>;
+                  if(!courseLessons.length) return (
+                    <EmptyState
+                      darkMode={dm}
+                      icon={<CalendarCheck className="w-7 h-7"/>}
+                      title="Nenhuma aula para montar cronograma"
+                      message="Quando as videoaulas carregarem, o cronograma será montado pela organização atual do curso."
+                    />
+                  );
+
+                  const lessonOrderIndex = new Map((effectiveCoursePlanLessonOrder || []).map((id, index) => [String(id), index]));
+                  const lessonRank = (lesson) => {
+                    if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
+                    const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
+                    const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
+                    return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
+                  };
+                  const orderedSubjects = effectivePlanSubjects.filter(subject => courseSubjects.includes(subject));
+                  const subjectBatchSize = Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(courseScheduleSubjectBatchSize) || COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE));
+                  const activeMixPreset = COURSE_SCHEDULE_MIX_PRESETS.find(preset => preset.id === courseScheduleMixPreset) || null;
+                  const mixedScheduleActive = !!activeMixPreset;
+                  const lessonsBySubject = new Map(orderedSubjects.map(subject => [
+                    subject,
+                    courseLessons
+                      .filter(lesson => lesson.subject === subject)
+                      .sort((a, b) => {
+                        const byRank = lessonRank(a) - lessonRank(b);
+                        if (byRank) return byRank;
+                        return a.title.localeCompare(b.title, 'pt');
+                      }),
+                  ]));
+                  const getSubjectLessons = subject => lessonsBySubject.get(subject) || [];
+                  const interleaveSubjectBatch = (subjects) => {
+                    const queues = subjects.map(getSubjectLessons).filter(queue => queue.length);
+                    const max = queues.reduce((highest, queue) => Math.max(highest, queue.length), 0);
+                    const lessons = [];
+                    for (let index = 0; index < max; index += 1) {
+                      queues.forEach(queue => {
+                        if (queue[index]) lessons.push(queue[index]);
+                      });
+                    }
+                    return lessons;
+                  };
+                  const allOrderedSubjectLessons = orderedSubjects.flatMap(getSubjectLessons);
+                  const lessonText = (lesson) => normalizeTextKey([
+                    lesson.subject,
+                    lesson.topic,
+                    lesson.topicTitle,
+                    lesson.title,
+                    lesson.aula?.ai_catalog?.description,
+                  ].filter(Boolean).join(' '));
+                  const patternRank = (text, rules, fallback = rules.length) => {
+                    const hit = rules.findIndex(pattern => pattern.test(text));
+                    return hit >= 0 ? hit : fallback;
+                  };
+                  const subjectRankFrom = (subjects = []) => {
+                    const map = new Map(subjects.map((subject, index) => [normalizeTextKey(subject), index]));
+                    return (subject) => map.has(normalizeTextKey(subject)) ? map.get(normalizeTextKey(subject)) : subjects.length + orderedSubjects.indexOf(subject);
+                  };
+                  const sortLessonsByStrategy = (strategy) => {
+                    const ufcSubjectRank = subjectRankFrom(['Cardiologia','Pneumologia','Gastroenterologia','Endocrinologia','Nefrologia','Cirurgia','Obstetricia','Pediatria','Ginecologia','Infectologia','Dermatologia','Hematologia','Reumatologia','Ortopedia','Psiquiatria','Oftalmologia']);
+                    const defaultSubjectRank = subjectRankFrom(orderedSubjects);
+                    const ruleSets = {
+                      'importance-life': [
+                        /\b(sepse|choque|parada|pcr|trauma|traumatismo|hemorragia|sangramento|ave|iam|infarto|crise hipertensiva|ectopica|descolamento prematuro|hipercalemia|sdra|insuficiencia respiratoria)\b/,
+                        /\b(hipertensao|diabetes|pneumonia|asma|dpoc|tuberculose|hiv|dengue|itu|pre[- ]?natal|parto|puerperio|anticoncepcao|depressao|ansiedade|anemia|apendicite|colecistite|drge|cirrose)\b/,
+                        /\b(diagnostico|classificacao|rastreamento|prevencao|vacina|calendario|avaliacao)\b/,
+                        /\b(tratamento|manejo|terapia|profilaxia|conduta)\b/,
+                        /\b(neoplasia|tumor|cancer|transplante|cirurgias?|sindrome|hereditarias?|vasculites?)\b/,
+                      ],
+                      'basic-advanced': [
+                        /\b(introducao|conceitos?|fundamentos?|anatomia|fisiologia|historia natural|nocoes|classificacao|bases?)\b/,
+                        /\b(semiologia|diagnostico|avaliacao|rastreamento|achados|sorologia)\b/,
+                        /\b(tratamento|manejo|terapia|profilaxia|assistencia|conduta)\b/,
+                        /\b(complicacoes?|emergencias?|aguda|choque|hemorragia|insuficiencia|crise)\b/,
+                        /\b(neoplasia|tumor|cancer|transplante|cirurgias?|rar[ao]s?|sindrome|malign[ao])\b/,
+                      ],
+                      'high-yield': [
+                        /\b(sus|epidemiologia|testes diagnosticos|hipertensao|diabetes|pre[- ]?natal|parto|abortamento|ectopica|placenta previa|dpp|pneumonia|tuberculose|hiv|dengue|sepse|trauma|apendicite|colecistite|pancreatite|cirrose|anemia|leucemia|artrite reumatoide|lupus|vacinas?)\b/,
+                        /\b(diagnostico|tratamento|manejo|classificacao|rastreamento|prevencao|complicacoes?)\b/,
+                        /\b(anatomia|fisiologia|neoplasia|tumores?|rar[ao]s?|cirurgias?|transplante)\b/,
+                      ],
+                      'emergency-first': [
+                        /\b(sepse|choque|parada|pcr|trauma|traumatismo|tce|ave|hemorragia|sangramento|dpp|ectopica|hipercalemia|hipoglicemia|cetoacidose|sdra|pneumotorax|queimaduras|intoxicacoes?|sofrimento fetal|prematuridade|amniorrexe)\b/,
+                        /\b(aguda|crise|emergencia|urgencia|insuficiencia|obstrucao|isquemia|perfura[cç][aã]o)\b/,
+                        /\b(tratamento|manejo|conduta|suporte|monitorizacao|profilaxia)\b/,
+                        /\b(introducao|anatomia|fisiologia|neoplasia|tumor|cronica)\b/,
+                      ],
+                    };
+                    const rules = ruleSets[strategy] || ruleSets['importance-life'];
+                    const strategyLessons = strategy === 'medico-bicho'
+                      ? allOrderedSubjectLessons.filter(lesson => normalizeTextKey(lesson.subject) !== 'preventiva')
+                      : allOrderedSubjectLessons;
+                    return [...strategyLessons].sort((a, b) => {
+                      if (strategy === 'ufc-flow' || strategy === 'medico-bicho') {
+                        const ufcValue = (lesson) => strategy === 'ufc-flow' && normalizeTextKey(lesson.subject) === 'preventiva'
+                          ? lessonRank(lesson) * 250 + 1
+                          : ufcSubjectRank(lesson.subject) * 1000 + lessonRank(lesson) + 2;
+                        const ufcDiff = ufcValue(a) - ufcValue(b);
+                        if (ufcDiff) return ufcDiff;
+                        const subjectDiff = ufcSubjectRank(a.subject) - ufcSubjectRank(b.subject);
+                        if (subjectDiff) return subjectDiff;
+                        const rankDiff = lessonRank(a) - lessonRank(b);
+                        if (rankDiff) return rankDiff;
+                        return a.title.localeCompare(b.title, 'pt');
+                      }
+                      const textA = lessonText(a);
+                      const textB = lessonText(b);
+                      const ruleDiff = patternRank(textA, rules) - patternRank(textB, rules);
+                      if (ruleDiff) return ruleDiff;
+                      const subjectDiff = defaultSubjectRank(a.subject) - defaultSubjectRank(b.subject);
+                      if (subjectDiff) return subjectDiff;
+                      const rankDiff = lessonRank(a) - lessonRank(b);
+                      if (rankDiff) return rankDiff;
+                      return a.title.localeCompare(b.title, 'pt');
+                    });
+                  };
+                  const orderedLessons = mixedScheduleActive
+                    ? sortLessonsByStrategy(activeMixPreset.strategy)
+                    : (() => {
+                      const lessons = [];
+                      for (let index = 0; index < orderedSubjects.length; index += subjectBatchSize) {
+                        lessons.push(...interleaveSubjectBatch(orderedSubjects.slice(index, index + subjectBatchSize)));
+                      }
+                      return lessons;
+                    })();
+                  const weeksCount = Math.max(1, Math.min(104, Number(courseScheduleWeeks) || COURSE_SCHEDULE_DEFAULT_WEEKS));
+                  const baseLessonsPerWeek = orderedLessons.length ? Math.floor(orderedLessons.length / weeksCount) : 0;
+                  const extraLessonWeeks = orderedLessons.length ? orderedLessons.length % weeksCount : 0;
+                  const maxLessonsPerWeek = orderedLessons.length ? Math.ceil(orderedLessons.length / weeksCount) : 0;
+                  const lessonsPerWeekLabel = baseLessonsPerWeek === maxLessonsPerWeek
+                    ? String(maxLessonsPerWeek)
+                    : `${baseLessonsPerWeek}-${maxLessonsPerWeek}`;
+                  const scheduleWeeks = Array.from({ length:weeksCount }, (_, index) => {
+                    const start = index * baseLessonsPerWeek + Math.min(index, extraLessonWeeks);
+                    const count = baseLessonsPerWeek + (index < extraLessonWeeks ? 1 : 0);
+                    const lessons = orderedLessons.slice(start, start + count);
+                    const watched = lessons.filter(lesson => watchedAulas[lesson.id]).length;
+                    const subjects = [...new Set(lessons.map(lesson => lesson.subject))];
+                    return {
+                      week:index + 1,
+                      lessons,
+                      subjects,
+                      watched,
+                      pct:lessons.length ? Math.round(watched / lessons.length * 100) : 0,
+                    };
+                  }).filter(week => week.lessons.length || week.week <= weeksCount);
+                  const scheduleCurrentWeek = cronStartDate
+                    ? Math.max(1, Math.min(weeksCount, Math.floor((new Date() - new Date(cronStartDate)) / (7 * 24 * 60 * 60 * 1000)) + 1))
+                    : 1;
+                  const selectedWeek = Math.max(1, Math.min(weeksCount, curWeek || scheduleCurrentWeek || 1));
+                  const selectedWeekData = scheduleWeeks.find(week => week.week === selectedWeek) || scheduleWeeks[0];
+                  const openScheduleLesson = (lesson) => {
+                    if (!lesson) return;
+                    setActiveSubjectVid(lesson.subject);
+                    setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
+                    setActiveAulaAndReset(lesson.aula);
+                    setView('videoaulas');
+                  };
+                  const applyPreset = async (preset) => {
+                    const ordered = [
+                      ...preset.subjects.filter(subject => courseSubjects.includes(subject)),
+                      ...courseSubjects.filter(subject => !preset.subjects.includes(subject)),
+                    ];
+                    await saveCoursePlanPrefs(ordered, coursePlanLocked, coursePlanLessonOrder);
+                    await saveCourseSchedulePrefs({ preset:preset.id, mixPreset:COURSE_SCHEDULE_DEFAULT_MIX_PRESET, subjects:ordered });
+                    addToast(`Preset "${preset.label}" aplicado ao cronograma.`, 'success', 2500);
+                  };
+                  const applyMixPreset = async (preset) => {
+                    setCourseScheduleSubjectsOpen(false);
+                    await saveCourseSchedulePrefs({ mixPreset:preset.id });
+                    addToast(`Trilha "${preset.label}" aplicada.`, 'success', 2500);
+                  };
+                  const moveSubject = async (idx, dir) => {
+                    const next = [...orderedSubjects];
+                    const target = idx + dir;
+                    if (target < 0 || target >= next.length) return;
+                    [next[idx], next[target]] = [next[target], next[idx]];
+                    await saveCoursePlanPrefs(next, coursePlanLocked, coursePlanLessonOrder);
+                    await saveCourseSchedulePrefs({ preset:'custom', mixPreset:COURSE_SCHEDULE_DEFAULT_MIX_PRESET, subjects:next });
+                  };
+                  const activePresetLabel = COURSE_SCHEDULE_PRESETS.find(preset => preset.id === courseSchedulePreset)?.label || 'Personalizado';
+                  const activeMixLabel = activeMixPreset?.label || 'Ordem manual';
+                  const completedLessons = orderedLessons.filter(lesson => watchedAulas[lesson.id]).length;
+                  const schedulePct = orderedLessons.length ? Math.round(completedLessons / orderedLessons.length * 100) : 0;
+                  const nextScheduleLesson = orderedLessons.find(lesson => !watchedAulas[lesson.id]) || orderedLessons[0] || null;
+                  const currentWeekData = scheduleWeeks.find(week => week.week === selectedWeek) || selectedWeekData;
+                  const nearbyWeeks = scheduleWeeks;
+
                   return (
-                    <div>
-                      {/* Configuração de data */}
-                      <div className={`rounded-2xl border p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                        <CalendarCheck className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5 sm:mt-0"/>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm">Data de início do curso</p>
-                          <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
-                            {hasStart?`Semana atual calculada automaticamente: Semana ${currentWeek??'—'} de 46`:'Defina a data para calcular sua semana atual automaticamente.'}
-                          </p>
+                    <div className="space-y-5">
+                      <section className={`rounded-2xl border p-5 md:p-6 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+                          <div className="min-w-0">
+                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Cronograma</p>
+                            <h2 className="text-2xl font-serif font-bold text-yellow-600 mt-1">Seu plano da semana</h2>
+                            <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Acompanhe o avanço e abra a próxima aula sem mexer nas configurações.</p>
+                          </div>
+                          <button onClick={()=>setCourseScheduleSettingsOpen(open => !open)}
+                            className={`px-4 py-3 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 ${dm?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                            <SettingsIcon className="w-4 h-4"/>
+                            Configurações
+                            {courseScheduleSettingsOpen?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
+                          </button>
                         </div>
-                        <input type="date" value={cronStartDate||''} onChange={e=>saveCronStartDate(e.target.value)}
-                          className={`flex-shrink-0 p-2.5 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-medium ${dm?'bg-gray-800 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
-                      </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.25fr] gap-4 mt-5">
+                          <div className={`rounded-2xl border p-4 ${dm?'bg-gray-950/50 border-gray-800':'bg-gray-50 border-gray-100'}`}>
+                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Progresso</p>
+                            <div className="flex items-end justify-between gap-4 mt-2">
+                              <div>
+                                <p className="text-4xl font-serif font-bold text-yellow-600">{schedulePct}%</p>
+                                <p className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>{completedLessons}/{orderedLessons.length} aulas concluídas</p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-center">
+                                <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
+                                  <p className="text-lg font-bold text-yellow-600">{weeksCount}</p>
+                                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>semanas</p>
+                                </div>
+                                <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
+                                  <p className="text-lg font-bold text-yellow-600">{lessonsPerWeekLabel}</p>
+                                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>aulas/sem</p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`h-2 rounded-full overflow-hidden mt-4 ${dm?'bg-gray-800':'bg-gray-200'}`}>
+                              <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${schedulePct}%`}}/>
+                            </div>
+                          </div>
+                          <button onClick={()=>openScheduleLesson(nextScheduleLesson)} disabled={!nextScheduleLesson}
+                            className={`rounded-2xl border p-4 text-left transition-all disabled:opacity-50 ${dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-700':'bg-gray-50 border-gray-100 hover:border-yellow-300'}`}>
+                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Próxima aula</p>
+                            <h3 className="text-xl font-serif font-bold text-yellow-600 mt-2">{nextScheduleLesson?.title || 'Nenhuma aula pendente'}</h3>
+                            <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-500'}`}>{nextScheduleLesson ? `${nextScheduleLesson.subject} · ${shortTopicName(nextScheduleLesson.topic)}` : 'Tudo certo por aqui.'}</p>
+                            {nextScheduleLesson&&<p className={`text-xs font-bold mt-4 ${dm?'text-yellow-300':'text-yellow-700'}`}>Abrir aula</p>}
+                          </button>
+                        </div>
+                      </section>
 
-                      {cronLoading&&<div className="flex justify-center py-16"><Spinner className="w-8 h-8 text-yellow-600"/></div>}
+                      {courseScheduleSettingsOpen&&(
+                        <div className="space-y-5">
+                          <section className={`rounded-2xl border p-5 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <div className={`grid grid-cols-1 ${mixedScheduleActive?'lg:grid-cols-[1fr_1.3fr]':'lg:grid-cols-[1fr_1.3fr_1fr]'} gap-4`}>
+                              <div className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
+                                <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Data de início</label>
+                                <input type="date" value={cronStartDate||''} onChange={e=>saveCronStartDate(e.target.value)}
+                                  className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-medium ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                              </div>
+                              <div className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
+                                <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Quero terminar em</label>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                  <input type="number" min="1" max="104" value={weeksCount} onChange={e=>saveCourseSchedulePrefs({ weeks:e.target.value })}
+                                    className={`w-full sm:w-28 p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                                  <div className="grid grid-cols-4 gap-1 flex-1 min-h-[46px]">
+                                    {[12,16,24,36].map(weeks => (
+                                      <button key={weeks} onClick={()=>saveCourseSchedulePrefs({ weeks })} className={`rounded-xl border text-xs font-bold ${weeksCount===weeks?(dm?'border-yellow-600 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                                        {weeks} semanas
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                              {!mixedScheduleActive&&(
+                                <div className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
+                                  <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Matérias em paralelo</label>
+                                  <div className="grid grid-cols-6 gap-1 min-h-[46px]">
+                                    {[1,2,3,4,5,6].map(size => (
+                                      <button key={size} onClick={()=>saveCourseSchedulePrefs({ subjectBatchSize:size, mixPreset:COURSE_SCHEDULE_DEFAULT_MIX_PRESET })}
+                                        className={`rounded-xl border py-3 text-sm font-bold ${subjectBatchSize===size?(dm?'border-yellow-600 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                                        {size}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </section>
 
-                      {/* Grade de semanas */}
-                      {!cronLoading&&(
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {(cronograma||[]).map(week=>{
-                            const isActive = week.week===activeWeek;
-                            const isCurrent = week.week===currentWeek;
-                            const isPast = currentWeek!==null&&week.week<currentWeek;
-                            // Calcular progresso da semana
-                            const weekTopics=[...new Set(week.entries.map(e=>e.topic))];
-                            const weekWatched=weekTopics.reduce((acc,t)=>acc+(watchedByTopic[t]?.watched||0),0);
-                            const weekTotal=weekTopics.reduce((acc,t)=>acc+(watchedByTopic[t]?.total||0),0);
-                            const weekPct=weekTotal>0?Math.round(weekWatched/weekTotal*100):0;
-                            const weekSubjects=[...new Set(week.entries.map(e=>e.subject))];
+                          <section className={`rounded-2xl border p-5 space-y-5 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <div>
+                              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Presets prontos</p>
+                              <h3 className="text-xl font-serif font-bold text-yellow-600">Escolha como o cronograma deve montar sua jornada</h3>
+                            </div>
 
-                            if(isActive){
-                              // Card expandido para semana ativa
-                              return (
-                                <div key={week.week} className={`sm:col-span-2 lg:col-span-3 rounded-2xl border-2 border-yellow-500 overflow-hidden ${dm?'bg-gray-900':'bg-white'}`}>
-                                  <div className="p-4 pb-3">
-                                    <div className="flex items-center gap-3 mb-3">
-                                      <div className="w-10 h-10 rounded-xl bg-yellow-600 text-white flex items-center justify-center font-bold font-serif text-lg flex-shrink-0">
-                                        {week.week}
-                                      </div>
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <h3 className="font-bold text-yellow-600">Semana {week.week}</h3>
-                                          {isCurrent&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-500 text-white">📍 Esta semana</span>}
+                            <div className={`rounded-2xl border p-4 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
+                              <div className="mb-3">
+                                <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Estudar por matérias</p>
+                                <h4 className="text-lg font-serif font-bold text-yellow-600">{mixedScheduleActive?'Desativado por uma mistura aula a aula':activePresetLabel}</h4>
+                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>Mantém blocos de uma ou mais matérias por vez. Use quando quiser sentir que está fechando disciplinas.</p>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                                {COURSE_SCHEDULE_PRESETS.map(preset => {
+                                  const active = !mixedScheduleActive && courseSchedulePreset===preset.id;
+                                  return (
+                                    <button key={preset.id} onClick={()=>applyPreset(preset)}
+                                      className={`rounded-xl border p-4 text-left transition-all h-full ${active?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-950/40 hover:border-gray-700':'border-gray-200 bg-white hover:bg-gray-50')}`}>
+                                      <p className="text-sm font-bold">{preset.label}</p>
+                                      <p className={`text-xs mt-1 leading-snug ${dm?'text-gray-500':'text-gray-500'}`}>{preset.desc}</p>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className={`rounded-2xl border p-4 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
+                              <div className="mb-3">
+                                <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Misturar aulas automaticamente</p>
+                                <h4 className="text-lg font-serif font-bold text-yellow-600">{activeMixLabel}</h4>
+                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>Ignora a ordem manual das matérias e mistura cada aula por prioridade, base, cobrança ou currículo.</p>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                                {COURSE_SCHEDULE_MIX_PRESETS.map(preset => (
+                                  <button key={preset.id} onClick={()=>applyMixPreset(preset)}
+                                    className={`rounded-xl border p-4 text-left transition-all h-full ${courseScheduleMixPreset===preset.id?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-950/40 hover:border-gray-700':'border-gray-200 bg-white hover:bg-gray-50')}`}>
+                                    <p className="text-sm font-bold">{preset.label}</p>
+                                    <p className={`text-xs mt-1 leading-snug ${dm?'text-gray-500':'text-gray-500'}`}>{preset.desc}</p>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </section>
+
+                          <aside className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <button disabled={mixedScheduleActive} onClick={()=>setCourseScheduleSubjectsOpen(open => !open)}
+                              className={`w-full flex items-center justify-between gap-3 text-left disabled:cursor-not-allowed ${mixedScheduleActive?'opacity-60':''}`}>
+                              <div>
+                                <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Ordem das matérias</p>
+                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>{mixedScheduleActive?`Bloqueada por "${activeMixLabel}".`:`${orderedSubjects.length} matérias na ordem manual.`}</p>
+                              </div>
+                              {!mixedScheduleActive&&(courseScheduleSubjectsOpen?<ChevronDown className="w-4 h-4 text-yellow-600"/>:<ChevronRight className="w-4 h-4 text-yellow-600"/>)}
+                            </button>
+                            {mixedScheduleActive ? (
+                              <div className={`mt-4 rounded-xl border p-3 text-xs leading-relaxed ${dm?'border-yellow-900/50 bg-yellow-950/20 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+                                Esta trilha ordena as aulas automaticamente, então a ordem manual fica fechada.
+                              </div>
+                            ) : courseScheduleSubjectsOpen ? (
+                              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {orderedSubjects.map((subject, idx) => {
+                                  const total = courseLessons.filter(lesson => lesson.subject === subject).length;
+                                  return (
+                                    <div key={subject} className={`rounded-xl border p-3 ${dm?'bg-gray-950/60 border-gray-800':'bg-gray-50 border-gray-200'}`}>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`h-6 w-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>{idx + 1}</span>
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-bold truncate">{subject}</p>
+                                          <p className={`text-[10px] ${dm?'text-gray-500':'text-gray-500'}`}>{total} aula{total!==1?'s':''}</p>
                                         </div>
-                                        <p className={`text-xs mt-0.5 ${dm?'text-gray-400':'text-gray-500'}`}>{weekSubjects.join(' · ')}</p>
-                                      </div>
-                                      <div className="text-right flex-shrink-0">
-                                        <div className={`text-xl font-bold font-serif ${weekPct===100?'text-green-500':'text-yellow-600'}`}>{weekPct}%</div>
-                                        <div className={`text-[10px] ${dm?'text-gray-500':'text-gray-400'}`}>{weekWatched}/{weekTotal}</div>
+                                        <button onClick={()=>moveSubject(idx,-1)} disabled={idx===0} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↑</button>
+                                        <button onClick={()=>moveSubject(idx,1)} disabled={idx===orderedSubjects.length-1} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↓</button>
                                       </div>
                                     </div>
-                                    <div className={`h-1.5 rounded-full overflow-hidden mb-3 ${dm?'bg-gray-800':'bg-gray-100'}`}>
-                                      <div className={`h-full rounded-full transition-all ${weekPct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${weekPct}%`}}/>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      {week.entries.map((entry,i)=>(
-                                        <button key={i} onClick={()=>{setActiveSubjectVid(entry.subject);setActiveSubtopicVid(`${entry.topic}::main`);setActiveAula(null);setView('videoaulas');}}
-                                          className={`flex items-center gap-2 p-3 rounded-xl text-left transition-colors ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-50 hover:bg-gray-100'}`}>
-                                          <PlayIcon className="w-3 h-3 text-yellow-600 flex-shrink-0"/>
-                                          <div className="min-w-0">
-                                            <p className={`text-xs font-bold truncate ${dm?'text-gray-200':'text-gray-700'}`}>{entry.label}</p>
-                                            <p className={`text-[10px] truncate ${dm?'text-gray-500':'text-gray-400'}`}>{entry.subject}</p>
-                                          </div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            // Cards normais
-                            return (
-                              <button key={week.week} onClick={()=>setCurWeek(week.week)}
-                                className={`rounded-2xl border p-4 text-left transition-all hover:border-yellow-400 ${isCurrent?'border-yellow-400':(dm?'border-gray-800':'border-gray-200')} ${dm?'bg-gray-900 hover:bg-gray-800':'bg-white hover:bg-gray-50'}`}>
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${weekPct===100?'bg-green-500 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 ring-1 ring-yellow-500':'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400'):(isPast?(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500'):(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400'))}`}>
-                                    {weekPct===100?<CheckIcon className="w-3.5 h-3.5"/>:week.week}
-                                  </div>
-                                  <span className={`text-[10px] font-bold ${weekPct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{weekPct}%</span>
-                                </div>
-                                <p className={`text-xs font-bold truncate mb-0.5 ${dm?'text-gray-300':'text-gray-700'}`}>{weekSubjects.join(' + ')}</p>
-                                <p className={`text-[10px] truncate ${dm?'text-gray-600':'text-gray-400'}`}>{week.entries[0]?.label}{week.entries.length>1?` +${week.entries.length-1}`:''}</p>
-                              </button>
-                            );
-                          })}
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className={`mt-4 rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/40':'border-gray-100 bg-gray-50'}`}>
+                                <p className={`text-xs ${dm?'text-gray-500':'text-gray-500'}`}>Fechado por padrão. Abra só quando quiser ajustar a sequência manual.</p>
+                              </div>
+                            )}
+                          </aside>
                         </div>
                       )}
-                    </div>
+
+                      <section className="space-y-3">
+                          {currentWeekData&&(
+                            <div className={`rounded-2xl border-2 border-yellow-500 overflow-hidden ${dm?'bg-gray-900':'bg-white'}`}>
+                              <div className={`p-4 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Agenda da semana</p>
+                                    <h3 className="text-xl font-serif font-bold text-yellow-600">Semana {currentWeekData.week}</h3>
+                                    <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>{currentWeekData.subjects.join(' · ') || 'Sem aulas nessa semana'}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className={`text-2xl font-serif font-bold ${currentWeekData.pct===100?'text-green-500':'text-yellow-600'}`}>{currentWeekData.pct}%</p>
+                                    <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{currentWeekData.watched}/{currentWeekData.lessons.length}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {currentWeekData.lessons.map((lesson, index) => {
+                                  const watched = !!watchedAulas[lesson.id];
+                                  return (
+                                    <div key={`${lesson.id}-${index}`} onClick={()=>openScheduleLesson(lesson)} role="button" tabIndex={0}
+                                      onKeyDown={event => {
+                                        if (event.key === 'Enter' || event.key === ' ') openScheduleLesson(lesson);
+                                      }}
+                                      className={`rounded-xl border p-3 text-left transition-all ${watched?(dm?'border-green-800 bg-green-900/10':'border-green-200 bg-green-50'):(dm?'border-gray-800 bg-gray-950/50 hover:border-yellow-800':'border-gray-200 bg-gray-50 hover:bg-white hover:border-yellow-300')}`}>
+                                      <div className="flex items-start gap-2">
+                                        <span className={`mt-0.5 h-5 w-5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':(dm?'border border-gray-700 text-gray-500':'border border-gray-300 text-gray-400')}`}>
+                                          {watched ? <CheckIcon className="w-3 h-3"/> : <PlayIcon className="w-3 h-3"/>}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-bold truncate">{lesson.title}</p>
+                                          <p className={`text-[11px] mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{lesson.subject} · {shortTopicName(lesson.topic)}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Agendas prévias e próximas</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {nearbyWeeks.map(week => {
+                              const isSelected = week.week === selectedWeek;
+                              const isCurrent = week.week === scheduleCurrentWeek;
+                              return (
+                                <button key={week.week} onClick={()=>setCurWeek(week.week)}
+                                  className={`rounded-2xl border p-4 text-left transition-all ${isSelected?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-900 hover:border-gray-700':'border-gray-200 bg-white hover:border-yellow-300')}`}>
+                                  <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${week.pct===100?'bg-green-500 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 ring-1 ring-yellow-500':'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400'):(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                                      {week.pct===100?<CheckIcon className="w-3.5 h-3.5"/>:week.week}
+                                    </div>
+                                    <span className={`text-[10px] font-bold ${week.pct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{week.pct}%</span>
+                                  </div>
+                                  <p className={`text-xs font-bold truncate mb-0.5 ${dm?'text-gray-300':'text-gray-700'}`}>{week.subjects.join(' + ') || 'Semana vazia'}</p>
+                                  <p className={`text-[10px] truncate ${dm?'text-gray-600':'text-gray-400'}`}>{week.lessons[0]?.title || 'Sem aulas'}{week.lessons.length>1?` +${week.lessons.length-1}`:''}</p>
+                                </button>
+                              );
+                            })}
+                            </div>
+                          </div>
+                        </section>
+                      </div>
                   );
                 })()}
               </div>
@@ -12136,7 +12817,7 @@ export default function QuestionBankApp() {
 	          const sideBorder  = dm?'border-gray-700':'border-gray-200';
 	          const sideBg      = dm?'bg-gray-800/50':'bg-white';
 	          const textMuted   = dm?'text-gray-400':'text-gray-500';
-	          const useIntegratedCourseNav = isAdmin && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.mode === 'integrated';
+	          const useIntegratedCourseNav = canUseCourseOrganization && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.mode === 'integrated';
 	          const effQuestionData = effAula ? vqBlocks[aulaVqKey(effAula)] : null;
 	          const effQuestionBlocks = blockValues(effQuestionData?.blocks);
 	          const effQuestionTotal = effQuestionBlocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
@@ -12173,9 +12854,6 @@ export default function QuestionBankApp() {
                     <button onClick={()=>setView('library')} className={`p-1 rounded ${dm?'hover:bg-gray-700 text-gray-500':'hover:bg-gray-100 text-gray-400'}`}><ArrowLeft className="w-4 h-4"/></button>
                     <span className="font-bold text-sm text-yellow-600 flex items-center gap-1.5"><VideoIcon className="w-4 h-4"/>Videoaulas</span>
                     {isDemo&&<span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto ${dm?'bg-yellow-900/40 text-yellow-500':'bg-yellow-100 text-yellow-600'}`}>DEMO</span>}
-                    {!isDemo&&Object.keys(watchedAulas).length>0&&(
-                      <button onClick={()=>{if(confirm('Resetar todo o progresso de aulas assistidas?')) resetWatchedProgress();}} title="Resetar progresso" className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded ${dm?'text-gray-500 hover:text-red-400':'text-gray-400 hover:text-red-500'}`}>resetar</button>
-                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`}><div className="h-full bg-yellow-500 transition-all" style={{width:`${allAulas.length?watchedCount/allAulas.length*100:0}%`}}/></div>
@@ -13632,7 +14310,7 @@ export default function QuestionBankApp() {
                 </SettingsSection>
               );
             })()}
-            {isAdmin&&(
+            {isAdmin&&COURSE_CATALOG_ADMIN_ENABLED&&(
               <SettingsSection
                 id="course-catalog"
                 title="Catálogo das aulas"
@@ -13789,11 +14467,11 @@ export default function QuestionBankApp() {
                       <div>
                       <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Prévia</p>
                       <h4 className="text-lg font-serif font-bold text-yellow-600">Proposta de organização</h4>
-                        <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Fluxo recomendado: gere todas em fila. O site processa uma matéria original por vez.</p>
+                        <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Fluxo recomendado: gere todas em fila. O site processa uma matéria por vez, usando o Firebase com correções manuais.</p>
                       </div>
                       <button
-                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length || !courseOrgProposalUsesOriginalSubjects}
-                        onClick={applyCourseOrgProposalToPlan}
+                        disabled={courseOrgRun.running || courseCatalogRun.running || !displayCourseOrgProposal?.subjects?.length}
+                        onClick={()=>applyCourseOrgProposalToPlan()}
                         className={`px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 ${darkMode?'bg-gray-800 text-yellow-300 hover:bg-gray-700':'bg-gray-900 text-yellow-100 hover:bg-gray-800'}`}>
                         <CalendarCheck className="w-4 h-4"/>
                         Aplicar ao Meu Plano
@@ -13801,7 +14479,7 @@ export default function QuestionBankApp() {
                     </div>
 
                     <div className={`rounded-xl border p-3 ${darkMode?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-white'}`}>
-                      <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Matéria original do Firebase</label>
+                      <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Matéria corrigida</label>
                       <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_auto_auto] gap-2">
                         <select
                           value={courseOrgSelectedSubject}
@@ -13893,7 +14571,7 @@ export default function QuestionBankApp() {
                     <div className="space-y-4">
                       {!courseOrgProposalUsesOriginalSubjects&&(
                         <p className={`text-xs rounded-xl border px-3 py-2 ${darkMode?'border-red-900/70 bg-red-950/30 text-red-300':'border-red-200 bg-red-50 text-red-700'}`}>
-                          Esta prévia foi gerada pela lógica antiga e não será usada para reorganizar o portal. Gere novamente por subject original do Firebase.
+                          Esta prévia foi gerada pela lógica antiga e não será usada para reorganizar o portal. Gere novamente com as correções manuais.
                         </p>
                       )}
                       <p className={`text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>
