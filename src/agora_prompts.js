@@ -69,6 +69,24 @@ Resposta esperada: [resposta completa cobrindo os pontos principais, em 4-6 fras
 Explicação: [feedback sobre o que uma boa resposta deve conter]
 ---
 NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa correta:". Apenas o formato acima.`,
+
+  flashcard: `
+TIPO: FLASHCARD
+Crie flashcards em português do Brasil, de alto rendimento, atômicos e não redundantes.
+QUANTIDADE: não use quantidade fixa. Gere apenas a quantidade ideal para cobrir os conceitos mais importantes do material sem criar pilhas repetitivas.
+REGRAS CRÍTICAS:
+- Cada flashcard deve ser indivisível, autossuficiente e cobrar apenas uma ideia.
+- Toda pergunta deve terminar com ponto de interrogação.
+- A resposta curta deve ter no máximo poucas palavras. Se a resposta ficaria longa, divida em cartões menores.
+- Depois da resposta curta, inclua uma explicação didática completa o suficiente para revisar o tema se o aluno errar.
+- Não repita cartões sobre a mesma cobrança, mesmo que o conteúdo reapareça.
+- Se pedir uma lista, indique a quantidade de itens entre parênteses na pergunta.
+FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
+## Flashcard N
+Pergunta: [pergunta curta e objetiva?]
+Resposta: [resposta curta, poucas palavras]
+Explicação: [aula breve sobre o conceito, com exemplos, exceções ou pegadinhas relevantes]
+---`,
 };
 
 export const buildTypeInst = (types = ['direct']) => {
@@ -83,6 +101,7 @@ const QUESTION_TYPE_LABELS = {
   cespe: 'Certo ou Errado (CESPE)',
   open: 'Resposta Curta (aberta)',
   essay: 'Dissertativa',
+  flashcard: 'Flashcards',
 };
 
 export const STYLE_INST = {
@@ -211,8 +230,16 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const expectedSubtopics = Math.max(1, Number(s.numSubtopics) || 1);
   const expectedQPerSub = Math.max(1, Number(s.qPerSub) || 1);
   const expectedTotal = expectedSubtopics * expectedQPerSub;
+  const types = s.questionTypes || ['direct'];
+  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
 
-  const estruturaInst = autoMode
+  const estruturaInst = onlyFlashcards
+    ? `
+ESTRUTURA PARA FLASHCARDS:
+- Cubra os subtópicos/conceitos obrigatórios quando eles forem fornecidos.
+- Não use meta numérica fixa. Crie apenas flashcards de alto rendimento, sem redundância.
+- Priorize conceitos cobrados, esquecíveis, diferenciadores e clinicamente úteis.`
+    : autoMode
     ? `
 ESTRUTURA (modo automático):
 Quando uma lista de subtópicos obrigatórios for fornecida, ela substitui esta seção.
@@ -235,10 +262,19 @@ ESTRUTURA OBRIGATÓRIA:
 - Ordem: do conceito mais fundamental ao mais específico`;
 
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
-  const types = s.questionTypes || ['direct'];
   const onlyOpen = types.every(t => ['open','essay'].includes(t));
 
-  const templateBlock = onlyOpen ? `
+  const templateBlock = onlyFlashcards ? `
+FORMATO OBRIGATÓRIO para cada flashcard (separe com ---):
+## Flashcard 1
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta]
+Explicação: [explicação/aula breve]
+---
+
+REGRA DE QUANTIDADE:
+- Ignore qualquer quantidade fixa citada em outras seções.
+- Gere a quantidade ideal de flashcards para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.` : onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ## Questão 1.1.1
 [Enunciado]
@@ -254,9 +290,9 @@ ${typeInst ? typeInst + '\n' : ''}${estruturaInst}
 ${REGRAS_ENUNCIADO}
 ${templateBlock}
 
-Use o ID no formato TOPICO.SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 3.2.1).
+${onlyFlashcards ? 'Use o ID no formato sequencial simples (ex: ## Flashcard 1, ## Flashcard 2).' : 'Use o ID no formato TOPICO.SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 3.2.1).'}
 ${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` : ''}
-Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.`;
+${onlyFlashcards ? 'Gere os flashcards sem interromper. Não resuma, não pergunte, não comente — apenas flashcards.' : 'Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.'}`;
 };
 
 // ─── PROMPT: SUMÁRIO DO ORÁCULO ───────────────────────────────────────────────
@@ -266,6 +302,7 @@ export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
 OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
+O sumário será usado assim: cada subtópico vira um eixo de cobrança para questões/flashcards. Portanto, cada subtópico deve ter uma fronteira de cobrança clara e não pode ser apenas variação redundante de outro subtópico.
 FAIXA DE REFERÊNCIA:
 - Assunto comum: ${l.minTopics} a ${l.targetMaxTopics} tópicos no total
 - ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma ser suficiente
@@ -273,18 +310,67 @@ FAIXA DE REFERÊNCIA:
 - Use mais subtópicos quando o material realmente exigir cobertura própria
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
 - Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros
-- PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.`
+- PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.
+Crie subtópicos como UNIDADES DE COBRANÇA: cada um deve permitir uma questão/flashcard próprio, com resposta ou explicação diferente dos vizinhos.
+Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
+Não crie subtópicos guarda-chuva que misturem definição, diagnóstico, classificação, complicações, exames e tratamento quando esses blocos renderem cobranças próprias.`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
   return `Você é o Arquiteto de Alexandria. Crie um sumário para "${subjectName}" baseado no material do usuário.
 
 ${estrutura}
 
-REGRAS:
-- Baseie os subtópicos no material fornecido — não extrapole para fora do que foi pedido
+FONTE OBRIGATÓRIA — SIGA O MATERIAL:
+O sumário deve ser um índice fiel do material fornecido.
+Siga a ordem do material sempre que ela fizer sentido didático.
+Não extrapole para fora do que foi pedido. Não junte tópicos vizinhos apenas para economizar geração.
+
+MODO DE ESTUDO RÁPIDO E ENXUTO:
+Monte o sumário para revisão e criação de questões de alto rendimento, não para uma apostila enciclopédica.
+Evite tópicos ou subtópicos de "introdução", "epidemiologia", "histórico", "conceitos gerais" ou "aspectos gerais" quando eles não forem diretamente úteis para prova, diagnóstico, conduta, mecanismo, classificação, fator de risco, complicação ou pegadinha.
+Se uma informação contextual puder ser explicada em 1 ou 2 frases dentro de outro subtópico, NÃO crie um subtópico próprio para ela.
+Prefira menos subtópicos, porém mais fortes e cobradores, a muitos subtópicos pequenos.
+Só mantenha epidemiologia, definição ampla ou introdução quando isso gerar cobrança real de prova ou mudar conduta/raciocínio.
+
+REGRA DE FRONTEIRA DE COBRANÇA:
+Antes de finalizar o sumário, pergunte para cada subtópico: "que tipo de questão ou flashcard diferente este subtópico permite gerar?".
+Mantenha o subtópico apenas se a resposta for clara e diferente dos subtópicos vizinhos.
+Se dois subtópicos gerariam praticamente a mesma pergunta, funda-os ou reescreva-os para separar eixos diferentes de cobrança.
+Evite repetir a mesma entidade em vários tópicos. Se a repetição for inevitável, o título deve explicitar um eixo novo, como anatomia, mecanismo, clínica, morfologia, fator de risco, diagnóstico, tratamento, complicação ou prognóstico.
+Não separe artificialmente "patogenia", "fatores", "mecanismos" e "consequências" quando isso só produziria variações da mesma questão.
+Não coloque exemplos específicos em tópicos errados só porque apareceram cedo no material; mantenha cada doença, síndrome ou tema no bloco temático onde será cobrado.
+
+EXEMPLOS DE CALIBRAÇÃO:
+
+ERRADO — granularidade excessiva sem conceito próprio:
+  - Hérnias: distinção entre hérnia e evisceração
+  - Hérnias: fisiopatologia do aprisionamento venoso
+  - Hérnias: comprometimento arterial e venoso
+  - Hérnias: incidência de hérnias incisionais
+  - Hérnias: risco em cirurgias contaminadas
+
+CERTO — unidade de cobrança específica:
+  - Hérnias: encarceramento, estrangulamento e conduta inicial
+  - Hérnias incisionais: fatores de risco e prevenção
+  - Hérnias inguinais congênitas: fisiopatologia e conduta
+
+ERRADO — mesma entidade repetida sem eixo novo:
+  - Anatomia: hérnias de hiato
+  - Esofagites: hérnia de hiato e refluxo
+  - Complicações: hérnia de hiato por deslizamento
+
+CERTO — entidade localizada uma vez ou retomada com eixo explícito:
+  - Hérnias de hiato: deslizamento versus paraesofágica
+  - Doença do refluxo: barreira anti-refluxo, esofagite e fatores predisponentes
+
+REGRAS FINAIS:
 - Ordem obrigatória dentro de cada tópico: fundamentos antes de detalhes, mecanismo antes da aplicação clínica, regra antes da exceção
 - Subtópicos concretos e objetivos — nada de "Generalidades", "Introdução" ou "Aspectos gerais"
-- Se o material for muito grande, preserve a cobertura por importância de prova e crie mais tópicos/subtópicos quando necessário
+- Proibido transformar cada bullet do material em um subtópico
+- Proibido repetir a mesma síndrome/doença/tema em tópicos diferentes sem eixo de cobrança explicitamente novo
+- Obrigatório cobrir todo o material relevante, sem cortar conteúdo importante para caber em uma quantidade fixa
+- Obrigatório revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado
+- Obrigatório revisar tópicos gigantes e dividir qualquer tópico que passe de 30 subtópicos
 
 FORMATO:
 Tópico 1: [Nome]
@@ -409,27 +495,36 @@ ${transcript
 export const buildVqBlockPrompt = (block, meta, subtopicsArr, transcriptSlice, alts) => {
   const styleInst = STYLE_INST[meta.questionStyle || 'mixed'];
   const total = subtopicsArr.length || meta.qPerBlock || 5;
+  const types = meta.questionTypes || ['direct'];
+  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const typeInst = buildTypeInst(types);
 
   return `Você é um examinador de residência médica criando questões sobre "${block.title}" (aula: ${meta.aulaTitle}).
 
 ESTILO: ${styleInst}
+${typeInst ? `${typeInst}\n` : ''}
 
-SUBTÓPICOS (gere 1 questão por subtópico, nesta ordem exata):
+SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-TOTAL: EXATAMENTE ${total} questões.
+${onlyFlashcards ? 'QUANTIDADE: a IA deve decidir a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição.' : `TOTAL: EXATAMENTE ${total} questões.`}
 ${REGRAS_ENUNCIADO}
-${REGRAS_ALTERNATIVAS}
+${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
+## Flashcard 1
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta]
+Explicação: [explicação/aula breve]
+---` : `${REGRAS_ALTERNATIVAS}
 ${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}
+${TEMPLATE_QUESTAO(alts)}`}
 
-Use o ID como número sequencial simples (1, 2, 3...).
+Use o ID como número sequencial simples (${onlyFlashcards ? 'Flashcard 1, Flashcard 2...' : '1, 2, 3...'}).
 
 ${transcriptSlice
   ? `REFERÊNCIA DO CONTEÚDO (trecho da aula):\n${transcriptSlice.substring(0, 40000)}`
   : '[Sem transcrição — baseie-se nos subtópicos e no título da aula]'}
 
-Gere TODAS as ${total} questões sem interromper ou comentar.`;
+${onlyFlashcards ? 'Gere os flashcards sem interromper ou comentar.' : `Gere TODAS as ${total} questões sem interromper ou comentar.`}`;
 };
 
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
@@ -604,6 +699,8 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
 
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+  const types = s.questionTypes || ['direct'];
+  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
     ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
@@ -614,17 +711,17 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
-SUBTÓPICOS DA AULA E QUANTIDADE OBRIGATÓRIA:
-${subtopicsArr.map((s, i) => `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
+SUBTÓPICOS DA AULA${onlyFlashcards ? ' (cubra alto rendimento, sem quantidade fixa)' : ' E QUANTIDADE OBRIGATÓRIA'}:
+${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
 
-TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.
+${onlyFlashcards ? 'QUANTIDADE: gere a quantidade ideal de flashcards para revisar o essencial da aula, sem redundância.' : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
-- Gere no mínimo 2 questões por subtópico, seguindo exatamente a quantidade indicada acima.
+- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Gere no mínimo 2 questões por subtópico, seguindo exatamente a quantidade indicada acima.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
-- Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.
-- Subtópicos maiores, mais importantes, mais densos ou com mais contrastes recebem 3 ou 4 questões.
-- Cada subtópico deve ter questões suficientes para revisar seus conceitos centrais sem virar repetição.
+- ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
+- ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'Subtópicos maiores, mais importantes, mais densos ou com mais contrastes recebem 3 ou 4 questões.'}
+- Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
 - É proibido criar duas questões que testem praticamente a mesma ideia, mesmo com enunciados, casos ou alternativas diferentes.
 - Se subtópicos vizinhos falarem do mesmo fenômeno, una mentalmente a cobrança e varie o eixo; não repita a pergunta.
@@ -632,26 +729,31 @@ REGRA DE FIXAÇÃO (CRÍTICA):
 - Antes de finalizar, confira se cada subtópico recebeu exatamente a quantidade pedida e se não há repetição conceitual.
 
 ${REGRAS_ENUNCIADO}
-${REGRAS_ALTERNATIVAS}
+${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
 REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
 - 1 a 2 parágrafos curtos
-- Por que a correta está certa e por que cada distrator está errado — pelo conteúdo
+- ${onlyFlashcards ? 'Explique o conceito da resposta curta como uma mini-aula de revisão.' : 'Por que a correta está certa e por que cada distrator está errado — pelo conteúdo'}
 - Não aprofunde teoria além do necessário
 - PROIBIDO: referir-se a letras A, B, C, D, E
-${TEMPLATE_QUESTAO(alts)}
+${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
+## Flashcard 1
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta]
+Explicação: [explicação/aula breve]
+---` : TEMPLATE_QUESTAO(alts)}
 
-Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
+${onlyFlashcards ? 'Use IDs sequenciais simples: ## Flashcard 1, ## Flashcard 2...' : `Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
 ## Questão 1.1
 ## Questão 1.2
 ## Questão 1.3
 ## Questão 2.1
-Não pule subtópicos. Não crie IDs fora do plano.
+Não pule subtópicos. Não crie IDs fora do plano.`}
 
 ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
 ${previousQuestions ? `QUESTÕES JÁ EXISTENTES SOBRE ESTA AULA (não copie; varie foco, cenário e distratores):\n${previousQuestions.substring(0, 8000)}` : ''}
 
-Gere a bateria de fixação completa sem interromper.`;
+${onlyFlashcards ? 'Gere a bateria de flashcards sem interromper.' : 'Gere a bateria de fixação completa sem interromper.'}`;
 };
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
@@ -664,6 +766,8 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
 
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
+  const types = s.questionTypes || ['direct'];
+  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
     ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
@@ -674,24 +778,30 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
-ESTRUTURA E QUANTIDADE OBRIGATÓRIA:
-${subtopicsArr.map((sub, i) => `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
-Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.
+ESTRUTURA${onlyFlashcards ? '' : ' E QUANTIDADE OBRIGATÓRIA'}:
+${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"` : `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
+${onlyFlashcards ? 'Quantidade: gere a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição.' : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
 
 REGRA DA BATERIA EXTRA:
-- Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.
-- Subtópicos maiores, mais densos, mais importantes ou com mais contrastes recebem 3 ou 4 questões, conforme indicado acima.
+- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento e menor número útil de cartões.' : 'Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.'}
+- ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes recebem 3 ou 4 questões, conforme indicado acima.'}
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
 - Não pule subtópicos e não crie questões fora do plano.
 
 ${REGRAS_ENUNCIADO}
-${REGRAS_ALTERNATIVAS}
+${onlyFlashcards ? '' : `${REGRAS_ALTERNATIVAS}
 ${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}
+${TEMPLATE_QUESTAO(alts)}`}
+${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
+## Flashcard 1
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta]
+Explicação: [explicação/aula breve]
+---` : ''}
 
-Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).
+${onlyFlashcards ? 'Use IDs sequenciais simples: ## Flashcard 1, ## Flashcard 2...' : 'Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).'}
 ${lessonText ? `\nCONTEXTO DA AULA/EXPLICAÇÕES (base obrigatória das questões):\n${lessonText.substring(0, 12000)}` : ''}
 ${previousQuestions ? `\nQUESTÕES ANTERIORES (faça algo ligeiramente diferente, sem repetir a mesma ideia):\n${previousQuestions.substring(0, 8000)}` : ''}
-Gere TODAS as questões sem interromper.`;
+${onlyFlashcards ? 'Gere os flashcards sem interromper.' : 'Gere TODAS as questões sem interromper.'}`;
 };

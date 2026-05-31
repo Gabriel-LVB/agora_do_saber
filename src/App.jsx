@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 import {
   SYLLABUS_LIMITS,
@@ -116,12 +116,19 @@ const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obste
 const MAX_MATERIAL_CHARS = 180000;
 const MATERIAL_CHUNK_CHARS = 170000;
 const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
+const ACCESS_DENIED_MESSAGE = 'Este site agora é fechado. Entre com um Google cadastrado na whitelist.';
+const ERROR_REVIEW_MAX_GENERATED_PER_REQUEST = 30;
+const FLASHCARD_CORRECT = 'CORRECT';
+const FLASHCARD_WRONG = 'WRONG';
+const GEMINI_THINKING_BUDGET_OFF = 0;
+const GEMINI_THINKING_BUDGET_DYNAMIC = -1;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const EXPLANATION_LENGTHS = [
   { k:'essential', label:'Nível 1', desc:'Resumo ultra-direto com pontos essenciais' },
   { k:'balanced', label:'Nível 2', desc:'Explicação enxuta com raciocínio e exemplos' },
   { k:'complete', label:'Nível 3', desc:'Explicação mais aprofundada e contextualizada' },
 ];
+const getGeminiThinkingBudget = (enabled) => enabled ? GEMINI_THINKING_BUDGET_DYNAMIC : GEMINI_THINKING_BUDGET_OFF;
 
 const buildAcademiaMaterialText = (text = '', files = [], maxChars = MAX_MATERIAL_CHARS) => {
   const sections = [];
@@ -300,6 +307,7 @@ const getCorrectLetter = (question) => question?.options?.find(o => o.isCorrect)
 
 const isAnswerCorrect = (question, answer) => {
   if (!question || !answer || answer === 'SKIPPED') return false;
+  if (question.isFlashcard) return answer === FLASHCARD_CORRECT;
   if (question.isOpen) {
     try { return (JSON.parse(answer)?.score ?? 0) >= 70; } catch(e) { return false; }
   }
@@ -355,9 +363,11 @@ const hasAcademiaOriginTopic = (item) =>
   !isFolderItem(item) && (item.topics || []).some(t => t.origin?.source === 'academia');
 
 const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questions=[], settings={} }) => {
-  const total = Math.max(1, questions.length * 2);
+  const perError = Math.max(1, Math.min(10, Number(settings.errorReviewPerQuestion) || 2));
+  const total = Math.max(1, questions.length * perError);
   const type = (settings.questionTypes || ['direct'])[0] || 'direct';
   const typeInst = buildTypeInst([type]);
+  const isFlashcard = type === 'flashcard';
   const styleInst = {
     clinical: 'Use enunciados clínicos quando isso ajudar a testar aplicação, com idade/sexo/contexto e achados relevantes.',
     direct: 'Use questões diretas, objetivas, sobre definição, mecanismo, classificação, diagnóstico, conduta ou complicação.',
@@ -385,10 +395,15 @@ Contexto do bloco original:
 - Bloco/tópico: ${topicTitle || 'Não informado'}
 
 Objetivo:
-Gerar EXATAMENTE ${total} questões novas, sendo 2 questões para cada questão errada listada abaixo.
-Para cada questão errada:
+${isFlashcard
+  ? `Gerar uma bateria de flashcards de alto rendimento a partir das questões erradas listadas abaixo. Não use multiplicador fixo: crie apenas a quantidade necessária para cobrir os conceitos que explicam os erros, sem redundância.`
+  : `Gerar EXATAMENTE ${total} questões novas, sendo ${perError} questão(ões) para cada questão errada listada abaixo.`}
+${isFlashcard ? `Para cada erro:
+1. Identifique o conceito que provavelmente causou o erro.
+2. Crie flashcards atômicos e autossuficientes sobre esse conceito, suas pegadinhas e diferenciações próximas.
+3. Não repita cartões sobre a mesma cobrança.` : `Para cada questão errada:
 1. A primeira questão deve cobrar o conceito central que provavelmente causou o erro.
-2. A segunda questão deve cobrar uma variação, pegadinha, aplicação clínica ou diferenciação próxima.
+2. Se houver mais questões por erro, as seguintes devem cobrar variações, pegadinhas, aplicações clínicas ou diferenciações próximas.`}
 
 REGRAS CRÍTICAS:
 - Não copie o enunciado, alternativas ou explicação da questão original.
@@ -399,7 +414,12 @@ REGRAS CRÍTICAS:
 
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
-${openMode ? `FORMATO OBRIGATÓRIO:
+${isFlashcard ? `FORMATO OBRIGATÓRIO:
+## Flashcard N
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta, poucas palavras]
+Explicação: [explicação didática completa o suficiente para revisar o tema]
+---` : openMode ? `FORMATO OBRIGATÓRIO:
 ## Questão N
 [Enunciado]
 Resposta esperada: [resposta]
@@ -414,7 +434,7 @@ Explicação: [por que a correta está certa e por que os distratores estão err
 QUESTÕES ERRADAS DO CADERNO:
 ${sourceQuestions}
 
-Gere TODAS as ${total} questões sem interromper.`;
+${isFlashcard ? 'Gere os flashcards sem interromper.' : `Gere TODAS as ${total} questões sem interromper.`}`;
 };
 
 const isLikelySyllabusGroupTitle = (subtopic = '') => {
@@ -783,7 +803,7 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
     contents:[{parts}],
     systemInstruction:{parts:[{text:systemPrompt}]},
     generationConfig: {
-      thinkingConfig: { thinkingBudget: opts.thinking ?? 0 },
+      thinkingConfig: { thinkingBudget: opts.thinkingBudget ?? opts.thinking ?? GEMINI_THINKING_BUDGET_OFF },
       ...(opts.maxTokens ? {maxOutputTokens: opts.maxTokens} : {}),
     },
   };
@@ -807,7 +827,7 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
   }
 };
 
-const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images=[]) => {
+const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images=[], opts={}) => {
   if (!apiKey) throw new Error("API_KEY_MISSING");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
   const parts = [{text:prompt}];
@@ -815,7 +835,7 @@ const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images
   const payload = {
     contents:[{parts}],
     systemInstruction:{parts:[{text:systemPrompt}]},
-    generationConfig:{ thinkingConfig:{ thinkingBudget:0 } },
+    generationConfig:{ thinkingConfig:{ thinkingBudget: opts.thinkingBudget ?? opts.thinking ?? GEMINI_THINKING_BUDGET_OFF } },
   };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120000); // 2min timeout para streaming
@@ -836,7 +856,7 @@ const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images
         const t = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
         if (t) {
           full += t;
-          onProgress?.(full, (full.match(/##\s*Quest[aã]o\s*\[?\d/gi) || []).length);
+          onProgress?.(full, (full.match(/##\s*(?:Quest[aã]o|Flashcard)\s*\[?\d/gi) || []).length);
         }
       } catch(e) {}
     };
@@ -1278,6 +1298,93 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
   });
 
   return { questions, summary: '' };
+};
+
+const parseFlashcards = (text, namespace='') => {
+  const norm = String(text || '').replace(/\r\n/g, '\n');
+  const questions = [];
+  let qCount = 0;
+
+  const pipeLines = norm.split('\n').map(l => l.trim()).filter(l =>
+    l.includes('|') && !/^question\s*\|/i.test(l) && !/^pergunta\s*\|/i.test(l)
+  );
+  if (pipeLines.length >= 2 && !/##\s*Flashcard/i.test(norm)) {
+    pipeLines.forEach(line => {
+      const parts = line.split('|');
+      if (parts.length < 2) return;
+      const statement = parts.shift().trim();
+      const rawAnswer = parts.join('|').trim();
+      if (!statement || !rawAnswer) return;
+      const [shortAnswer, ...expParts] = rawAnswer.split(/<br\s*\/?><br\s*\/?>/i);
+      const rawId = `${++qCount}`;
+      const id = namespace ? `${namespace}_${rawId}` : rawId;
+      questions.push({
+        id,
+        statement,
+        expectedAnswer: shortAnswer.trim(),
+        explanation: cleanQuestionExplanation(expParts.join('<br><br>').trim()),
+        options: [],
+        isFlashcard: true,
+      });
+    });
+    return { questions, summary:'' };
+  }
+
+  const blocks = norm
+    .split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Flashcard(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*Flashcard\s+\d+)/im)
+    .filter(b => b.trim());
+
+  blocks.forEach(block => {
+    try {
+      const idM = block.match(/Flashcard(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i);
+      const rawId = idM ? idM[1] : `${++qCount}`;
+      const id = namespace ? `${namespace}_${rawId}` : rawId;
+      const questionM = block.match(/Pergunta:\s*([\s\S]*?)(?:\nResposta:|\nVerso:|\nExplica[çc][aã]o:|\n---|$)/i);
+      const answerM = block.match(/Resposta:\s*([\s\S]*?)(?:\nExplica[çc][aã]o:|\n---|$)/i);
+      const expM = block.match(/Explica[çc][aã]o:\s*([\s\S]*?)(?:\n---|$)/i);
+      let statement = questionM?.[1]?.trim() || '';
+      let expectedAnswer = answerM?.[1]?.trim() || '';
+      let explanation = expM?.[1]?.trim() || '';
+      if (!statement || !expectedAnswer) return;
+      const answerParts = expectedAnswer.split(/<br\s*\/?><br\s*\/?>/i);
+      if (!explanation && answerParts.length > 1) {
+        expectedAnswer = answerParts.shift().trim();
+        explanation = answerParts.join('<br><br>').trim();
+      }
+      questions.push({
+        id,
+        statement,
+        expectedAnswer,
+        explanation: cleanQuestionExplanation(explanation),
+        options: [],
+        isFlashcard: true,
+      });
+    } catch(e) {}
+  });
+
+  return { questions, summary:'' };
+};
+
+const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) => {
+  const selectedTypes = types || ['direct'];
+  let allQuestions = [];
+  if (selectedTypes.some(t => ['direct','vof','cespe'].includes(t))) {
+    const p = parseData(text, namespace);
+    allQuestions = [...allQuestions, ...p.questions];
+  }
+  if (selectedTypes.includes('open')) {
+    const p = parseOpenQuestions(text, namespace, false);
+    allQuestions = [...allQuestions, ...p.questions];
+  }
+  if (selectedTypes.includes('essay')) {
+    const p = parseOpenQuestions(text, namespace, true);
+    allQuestions = [...allQuestions, ...p.questions];
+  }
+  if (selectedTypes.includes('flashcard')) {
+    const p = parseFlashcards(text, namespace);
+    allQuestions = [...allQuestions, ...p.questions];
+  }
+  return { questions:allQuestions, summary:parseData(text).summary || '' };
 };
 
 // Carrega KaTeX uma vez para renderização de LaTeX
@@ -2062,6 +2169,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [questionStyle, setQuestionStyle] = useState(savedSettings.questionStyle || 'mixed');
   const [questionTypes, setQuestionTypes] = useState(savedSettings.questionTypes || ['direct']);
   const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false);
+  const [geminiThinkingEnabled, setGeminiThinkingEnabled] = useState(!!savedSettings.geminiThinkingEnabled);
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -2117,7 +2225,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     : `${fullBlocks > 0 ? `${fullBlocks} bloco(s) de ${effectivePerBlock} + ` : ''}1 bloco de ${lastBlock} = ${totalQ} no total`;
 
   // Salva preferências atuais e fecha — chamado em qualquer forma de fechar
-  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode });
+  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode, geminiThinkingEnabled });
 
   return (
     <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={handleClose}>
@@ -2204,7 +2312,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           {/* Tipo de questão */}
           <div>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
-            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true}/>
+            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true} isAdmin={isAdmin}/>
           </div>
 
           {/* Estilo clínico/direto — só aparece se "direta" está selecionada */}
@@ -2224,7 +2332,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           )}
 
           {/* Alternativas */}
-          <div>
+          {!questionTypes.includes('flashcard')&&<div>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas por questão</label>
             <div className="flex gap-3">
               {[4,5].map(n=>(
@@ -2234,7 +2342,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* Prompt extra */}
           <div>
@@ -2245,6 +2353,13 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
               className={`w-full h-20 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}
             />
           </div>
+
+          {isAdmin && (
+            <div>
+              <label className="block text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</label>
+              <GeminiThinkingSelector value={geminiThinkingEnabled} onChange={setGeminiThinkingEnabled} darkMode={dm}/>
+            </div>
+          )}
 
           {isReset&&(
             <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-red-900/20 border border-red-800/40 text-red-400':'bg-red-50 border border-red-200 text-red-700'}`}>
@@ -2260,7 +2375,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, syllabusMaxPerBlock:isAdmin?ADMIN_COURSE_TOPIC_QUESTION_MAX:undefined, adminMinuteRule:isAdmin, adminFullCoverage:isAdmin})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, geminiThinkingEnabled, syllabusMaxPerBlock:isAdmin?ADMIN_COURSE_TOPIC_QUESTION_MAX:undefined, adminMinuteRule:isAdmin, adminFullCoverage:isAdmin})}
             className="flex-[2] px-5 py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
@@ -2350,8 +2465,6 @@ const QuestionView = ({
     return () => clearTimeout(timer);
   }, []); // only on mount
 
-  const correctLetter = (q) => q.options?.find(o=>o.isCorrect)?.letter;
-
   const validAnswers = Object.fromEntries(
     Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
   );
@@ -2369,11 +2482,11 @@ const QuestionView = ({
 
   const wrongIds = questions.filter(q => {
     if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
-    return validAnswers[q.id] && validAnswers[q.id] !== correctLetter(q);
+    return validAnswers[q.id] && !isAnswerCorrect(q, validAnswers[q.id]);
   }).map(q=>q.id);
 
   const correctCount = questions.filter(q =>
-    q.isOpen ? isOpenCorrect(q) : validAnswers[q.id] === correctLetter(q)
+    q.isOpen ? isOpenCorrect(q) : isAnswerCorrect(q, validAnswers[q.id])
   ).length;
 
   const answeredCount = questions.filter(q =>
@@ -2810,8 +2923,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
 const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose, currentReview, notebookIds=[], isAdmin=false }) => {
   const dm = darkMode;
   const SR_LABELS = ['3d','7d','14d','30d','90d'];
-  const correctLetter = q => q.options?.find(o => o.isCorrect)?.letter;
-  const wrongIds = questions.filter(q => answers[q.id] && answers[q.id] !== correctLetter(q)).map(q => q.id);
+  const wrongIds = questions.filter(q => answers[q.id] && !isAnswerCorrect(q, answers[q.id])).map(q => q.id);
 
   // currentReview: object { [qId]: { interval, dueDate } } from reviewQueue[aulaId][blockId]
   const inReview = currentReview || {};
@@ -2886,7 +2998,7 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
           {questions.map((q, i) => {
             const isInReview = inReviewIds.includes(q.id);
             const isWrong = wrongIds.includes(q.id);
-            const isCorrect = answers[q.id] && answers[q.id] === correctLetter(q);
+            const isCorrect = answers[q.id] && isAnswerCorrect(q, answers[q.id]);
             const willAdd = selected.includes(q.id);
             const willRemove = toRemove.includes(q.id);
             const isDue = dueNow(q.id);
@@ -3192,6 +3304,61 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
   );
 };
 
+const FlashcardInline = ({ question, darkMode, savedAnswer, onSave }) => {
+  const dm = darkMode;
+  const [revealed, setRevealed] = useState(!!savedAnswer);
+  useEffect(() => { if (savedAnswer) setRevealed(true); }, [savedAnswer, question?.id]);
+  const answered = savedAnswer === FLASHCARD_CORRECT || savedAnswer === FLASHCARD_WRONG;
+  const answerTone = savedAnswer === FLASHCARD_CORRECT
+    ? (dm ? 'border-green-700 bg-green-900/20 text-green-100' : 'border-green-200 bg-green-50 text-green-900')
+    : savedAnswer === FLASHCARD_WRONG
+      ? (dm ? 'border-red-700 bg-red-900/20 text-red-100' : 'border-red-200 bg-red-50 text-red-900')
+      : (dm ? 'border-gray-700 bg-gray-900/40 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-800');
+
+  return (
+    <div className="space-y-4">
+      {!revealed ? (
+        <button
+          type="button"
+          onClick={()=>setRevealed(true)}
+          className="w-full sm:w-auto px-5 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+        >
+          <BookOpen className="w-4 h-4"/>Mostrar resposta
+        </button>
+      ) : (
+        <div className={`rounded-xl border p-4 ${answerTone}`}>
+          <div className="text-xs font-bold uppercase tracking-wider opacity-60 mb-2">Resposta</div>
+          <div className="text-lg font-bold leading-relaxed select-text" style={{userSelect:'text'}}>
+            {parseHtmlTextChat(question.expectedAnswer || '')}
+          </div>
+          {question.explanation && (
+            <div className={`mt-4 pt-4 border-t text-base leading-relaxed select-text ${dm?'border-gray-700':'border-gray-200'}`} style={{userSelect:'text'}}>
+              {parseHtmlTextChat(question.explanation)}
+            </div>
+          )}
+          <div className="flex gap-3 mt-5">
+            <button
+              type="button"
+              onClick={()=>onSave(FLASHCARD_WRONG)}
+              className={`flex-1 px-4 py-3 rounded-xl font-bold border transition-colors ${savedAnswer===FLASHCARD_WRONG ? 'bg-red-600 border-red-600 text-white' : (dm?'border-red-800 text-red-300 hover:bg-red-900/30':'border-red-200 text-red-700 hover:bg-red-50')}`}
+            >
+              Errei
+            </button>
+            <button
+              type="button"
+              onClick={()=>onSave(FLASHCARD_CORRECT)}
+              className={`flex-1 px-4 py-3 rounded-xl font-bold border transition-colors ${savedAnswer===FLASHCARD_CORRECT ? 'bg-green-600 border-green-600 text-white' : (dm?'border-green-800 text-green-300 hover:bg-green-900/30':'border-green-200 text-green-700 hover:bg-green-50')}`}
+            >
+              Acertei
+            </button>
+          </div>
+          {answered && <p className="text-xs opacity-50 mt-3">Resposta registrada.</p>}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── QUESTION TYPE SELECTOR ───────────────────────────────────────────────────
 const QUESTION_TYPES = [
   { k: 'direct',   label: '📋 Direta',       desc: 'Pergunta + alternativas' },
@@ -3199,9 +3366,10 @@ const QUESTION_TYPES = [
   { k: 'cespe',    label: '⚖️ Certo/Errado',  desc: 'Estilo CESPE — 1 afirmação' },
   { k: 'open',     label: '✏️ Aberta',        desc: 'Resposta curta corrigida pela IA' },
   { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
+  { k: 'flashcard', label:'🃏 Flashcards',    desc: 'Pergunta, resposta e explicação', adminOnly:true },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false }) => {
   const dm = darkMode;
   const toggle = (k) => {
     if (single) { onChange([k]); return; }
@@ -3211,7 +3379,7 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false })
   };
   return (
     <div className="space-y-2">
-      {QUESTION_TYPES.map(t => {
+      {QUESTION_TYPES.filter(t => !t.adminOnly || isAdmin).map(t => {
         const on = selected.includes(t.k);
         return (
           <button key={t.k} onClick={()=>toggle(t.k)}
@@ -3241,6 +3409,28 @@ const ExplanationLengthSelector = ({ value='complete', onChange, darkMode }) => 
             className={`py-3 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${on?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
             {opt.label}
             <p className="font-normal opacity-60 mt-1 leading-snug">{opt.desc}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const GeminiThinkingSelector = ({ value=false, onChange, darkMode, compact=false }) => {
+  const dm = darkMode;
+  const opts = [
+    { k:false, label:'Rápido', desc:'thinking desligado' },
+    { k:true, label:'Thinking', desc:'raciocínio dinâmico' },
+  ];
+  return (
+    <div className={`grid grid-cols-2 gap-2 ${compact ? '' : 'w-full'}`}>
+      {opts.map(opt => {
+        const on = !!value === opt.k;
+        return (
+          <button key={String(opt.k)} type="button" onClick={()=>onChange(opt.k)}
+            className={`py-2.5 px-3 rounded-xl border-2 text-xs font-bold transition-all text-center ${on?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
+            {opt.label}
+            {!compact && <p className="font-normal opacity-60 mt-1 leading-snug">{opt.desc}</p>}
           </button>
         );
       })}
@@ -3340,10 +3530,10 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     if (!question.isOpen || !selectedLetter || selectedLetter === 'SKIPPED') return false;
     try { const p = JSON.parse(selectedLetter); return !!(p?.answer); } catch(e) { return false; }
   })();
-  const isAnswered = question.isOpen ? isOpenAnswered : (effectiveLetter != null);
-  const showResults = question.isOpen ? false : ((revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped)));
+  const isAnswered = question.isOpen ? isOpenAnswered : question.isFlashcard ? !!effectiveLetter : (effectiveLetter != null);
+  const showResults = (question.isOpen || question.isFlashcard) ? false : ((revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped)));
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
-  const isCorrect = isAnswered && correctLetter === effectiveLetter;
+  const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
   const explanation = cleanQuestionExplanation(question.explanation);
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
@@ -3354,7 +3544,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     if (result && typeof result.catch === 'function') result.catch(() => setOptimisticNotebook(previous));
   };
   const handleAnswerClick = (letter) => {
-    if (showErrorNotebook && !question.isOpen && letter !== correctLetter) setOptimisticNotebook(true);
+    if (showErrorNotebook && !question.isOpen && !isAnswerCorrect(question, letter)) setOptimisticNotebook(true);
     return onAnswer(letter);
   };
 
@@ -3389,7 +3579,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       <div className={`text-base md:text-lg mb-6 leading-relaxed select-text ${darkMode?'text-gray-200':'text-gray-800'}`} style={{userSelect:'text'}}>{parseHtmlTextChat(question.statement)}</div>
 
       {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
-      {question.isOpen ? (
+      {question.isFlashcard ? (
+        <FlashcardInline
+          question={question}
+          darkMode={darkMode}
+          savedAnswer={selectedLetter && selectedLetter !== 'SKIPPED' ? selectedLetter : null}
+          onSave={l=>{
+            if (showErrorNotebook && l === FLASHCARD_WRONG) setOptimisticNotebook(true);
+            return onAnswer(l);
+          }}
+        />
+      ) : question.isOpen ? (
         <OpenAnswerInline
           question={question}
           darkMode={darkMode}
@@ -4000,7 +4200,7 @@ ${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radiu
 // onSave: callback(text) — called after generating to persist in DB
 // ─── BIZUÁRIO MODAL ───────────────────────────────────────────────────────────
 // High-yield topic summary (AnKing/First Aid/Mehlman style), cached in topic.bizuario
-const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], topicContexts=null, apiKey, darkMode, onClose, cachedText, onSave, onRotateKey }) => {
+const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], topicContexts=null, apiKey, darkMode, onClose, cachedText, onSave, onRotateKey, geminiOptions={} }) => {
   const [text, setText] = useState(cachedText || '');
   const [loading, setLoading] = useState(!cachedText);
   const [phase, setPhase] = useState(cachedText ? 'done' : 'loading');
@@ -4059,7 +4259,7 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
         prompt = `Crie o BIZUÁRIO ${scope}.\n\n${contextBlock?`CONTEÚDO BASE:\n${contextBlock}\n`:''}\nOBJETIVO: Cola de revisão ultra-rápida — o estudante lê 2 minutos antes da prova.\n\nFORMATO: Parágrafos corridos, densos, sem bullet points. Valores numéricos, critérios, associações clássicas. ${wordLimit}.`;
       }
 
-      const r = await callGemini(prompt, sys, apiKey);
+      const r = await callGemini(prompt, sys, apiKey, [], geminiOptions);
       setText(r); setPhase('done');
       if (onSave) onSave(r);
     } catch(e) {
@@ -4285,7 +4485,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -4297,7 +4497,7 @@ const FONT_SCALE_OPTIONS = [
 // ─── ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────────
 
 function AcademiaTopicView({
-  topic, subject, library, darkMode, isAdmin, canUseAcademia,
+  topic, subject, library, darkMode, isAdmin, canCreateFlashcards=false, canUseAcademia,
   academiaGenerating, academiaGenProgress,
   academiaTopicAnswers, setAcademiaTopicAnswers,
   academiaExtraBusy, settings, updateSubject,
@@ -4670,8 +4870,6 @@ function AcademiaTopicView({
 // ─── FIM ACADEMIA TOPIC VIEW ─────────────────────────────────────────────────
 
 export default function QuestionBankApp() {
-  const isCanvas = window.location.hostname.includes('scf.usercontent.goog')||window.location.hostname.includes('localhost')||window.location.hostname==='127.0.0.1';
-
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(()=>readStorageJson('qb_dark', false));
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
@@ -4787,13 +4985,17 @@ export default function QuestionBankApp() {
   const [errorReviewQStyle, setErrorReviewQStyle]     = useState('mixed');
   const [errorReviewQTypes, setErrorReviewQTypes]     = useState(['direct']);
   const [errorReviewQAlts, setErrorReviewQAlts]       = useState(5);
+  const [errorReviewPerQuestion, setErrorReviewPerQuestion] = useState(2);
+  const [errorReviewThinking, setErrorReviewThinking] = useState(false);
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
+  const [academiaExtraThinking, setAcademiaExtraThinking] = useState(false);
   const [academiaRegenLength, setAcademiaRegenLength] = useState('complete');
   const [academiaRegenQStyle, setAcademiaRegenQStyle] = useState('mixed');
   const [academiaRegenQTypes, setAcademiaRegenQTypes] = useState(['direct']);
   const [academiaRegenQAlts, setAcademiaRegenQAlts]   = useState(5);
+  const [academiaRegenThinking, setAcademiaRegenThinking] = useState(false);
 
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
@@ -4803,7 +5005,9 @@ export default function QuestionBankApp() {
   const [newWhitelistEmail, setNewWhitelistEmail] = useState('');
   const [userDevices, setUserDevices] = useState([]);
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  const canSeeVideoaulas = user?.email ? allowedEmails.map(e=>e.toLowerCase()).includes(user.email.toLowerCase()) : false;
+  const globalAllowedEmails = Array.from(new Set([ADMIN_EMAIL, ...(allowedEmails || [])].map(e => String(e || '').trim().toLowerCase()).filter(Boolean)));
+  const isWhitelistedUser = !!user?.email && globalAllowedEmails.includes(user.email.toLowerCase());
+  const canSeeVideoaulas = isWhitelistedUser;
   const canUseAcademia = isAdmin || canSeeVideoaulas;
   const canUseAdvancedFeatures = canUseAcademia;
 
@@ -4910,6 +5114,11 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!isAdmin && cursoTab === 'plano') setCursoTab('cronograma');
   }, [isAdmin, cursoTab]);
+
+  useEffect(() => {
+    if (!academiaExtraModal) return;
+    setAcademiaExtraThinking(!!settingsRef.current.geminiThinkingEnabled);
+  }, [academiaExtraModal?.topic?.id]); // eslint-disable-line
 
   useEffect(() => {
     reviewQueueRef.current = reviewQueue;
@@ -6004,7 +6213,7 @@ export default function QuestionBankApp() {
     const handleKey = (e) => {
       if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
       if (view!=='topic'||!activeTopic) return;
-      const unanswered = displayedQs.find(q=>!activeTopic.answers?.[q.id]);
+      const unanswered = displayedQs.find(q=>!q.isOpen && !q.isFlashcard && !activeTopic.answers?.[q.id]);
       if (!unanswered) return;
       const map={a:'A',b:'B',c:'C',d:'D',e:'E','1':'A','2':'B','3':'C','4':'D','5':'E'};
       if (map[e.key?.toLowerCase()]) handleAnswer(unanswered.id, map[e.key.toLowerCase()]);
@@ -6052,21 +6261,28 @@ export default function QuestionBankApp() {
     getRedirectResult(auth)
       .then(async result => {
         console.log('Google redirect result:', result?.user?.email || result?.user?.uid || 'empty');
-        if (result?.user) await applyAuthUser(result.user);
       })
       .catch(e => {
         console.error('Google redirect login failed:', e);
         if (mounted) setErrorModal({ title:'Erro no login Google', message:authErrorMessage(e), isAlert:true });
       });
     const unsub = onAuthStateChanged(auth, async(u)=>{
-      await applyAuthUser(u);
-      setAuthReady(true);
-      // Carregar whitelist de videoaulas do Firestore (público, qualquer usuário pode ler)
+      // Carregar whitelist global do Firestore (público, qualquer usuário autenticado pode ler)
+      let emails = [ADMIN_EMAIL];
       try {
         const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
-        if (wSnap.exists()) setAllowedEmails(wSnap.data().emails || []);
-        else setAllowedEmails([ADMIN_EMAIL]); // fallback: só o admin
-      } catch(e) { setAllowedEmails([ADMIN_EMAIL]); }
+        emails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
+      } catch(e) { emails = [ADMIN_EMAIL]; }
+      const normalized = Array.from(new Set([ADMIN_EMAIL, ...emails].map(e => String(e || '').trim().toLowerCase()).filter(Boolean)));
+      setAllowedEmails(normalized);
+      if (u && (u.isAnonymous || !normalized.includes(String(u.email || '').toLowerCase()))) {
+        setUser(u);
+        setUsername(null);
+        setLoginView('login');
+      } else {
+        await applyAuthUser(u);
+      }
+      setAuthReady(true);
     });
     return ()=>{ mounted = false; unsub(); };
   },[]);
@@ -6207,7 +6423,7 @@ export default function QuestionBankApp() {
         try { const p = JSON.parse(val); return !!(p?.answer) && (p?.score ?? 0) < 70; } catch(e) { return false; }
       }
       const a = activeTopic.answers?.[q.id];
-      return a && a !== q.options?.find(o=>o.isCorrect)?.letter;
+      return a && !isAnswerCorrect(q, a);
     });
     return activeTopic.questions;
   })();
@@ -6878,6 +7094,9 @@ export default function QuestionBankApp() {
     return keys.find(x => x.id === activeId)?.k || keys[0]?.k || s.apiKey1 || s.apiKey;
   };
   const checkKey = () => { if (!getKey()?.trim()){showApiError('API_KEY_MISSING');return false;} return true; };
+  const getGeminiOptions = (sourceSettings = settingsRef.current) => ({
+    thinkingBudget:getGeminiThinkingBudget(!!sourceSettings.geminiThinkingEnabled),
+  });
 
   // Show error modal with full context for each API error type
   const showApiError = (errCode, extra='') => {
@@ -6945,7 +7164,7 @@ export default function QuestionBankApp() {
     let lastErr;
     for (const {k} of orderedKeys) {
       try {
-        const r = await callGemini(prompt, sys, k);
+        const r = await callGemini(prompt, sys, k, [], getGeminiOptions());
         await rotateKey();
         return r;
       } catch(e) {
@@ -7414,7 +7633,7 @@ export default function QuestionBankApp() {
               buildCourseOrganizationPrompt({ subject, lessons:subjectLessons, integrateBonus }),
               key.value,
               [],
-              { maxTokens:6000 }
+              { ...getGeminiOptions(), maxTokens:6000 }
             );
             parsed = parseJsonObject(raw);
             break;
@@ -7681,7 +7900,7 @@ export default function QuestionBankApp() {
               buildLessonCatalogPrompt({ lesson:item.data, subject:item.data.subject, topic:item.data.topic }),
               key.value,
               [],
-              { maxTokens:1200 }
+              { ...getGeminiOptions(), maxTokens:1200 }
             );
             const parsed = parseJsonObject(raw);
             const catalog = {
@@ -7853,6 +8072,7 @@ export default function QuestionBankApp() {
     questionStyle:settingsRef.current.questionStyle || 'mixed',
     questionTypes:settingsRef.current.questionTypes || ['direct'],
     numAlternatives:settingsRef.current.numAlternatives || 5,
+    geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
     regenReason:'',
     mode,
   });
@@ -7901,6 +8121,8 @@ export default function QuestionBankApp() {
       aula, aulaId, totalQ, numBlocks, qPerBlock,
       numAlternatives: s.numAlternatives || 5,
       questionStyle: s.questionStyle || 'mixed',
+      questionTypes: s.questionTypes || ['direct'],
+      geminiThinkingEnabled: !!s.geminiThinkingEnabled,
       autoMode: s.autoMode !== false,
       syllabusMaxPerBlock: isAdmin ? ADMIN_COURSE_TOPIC_QUESTION_MAX : undefined,
       adminMinuteRule: isAdmin,
@@ -7926,7 +8148,7 @@ export default function QuestionBankApp() {
   // toastId: ID do toast de progresso já criado pelo chamador
   const generateVqSyllabus = async (cfg) => {
     if(!checkKey()) return;
-    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed', toastId } = cfg;
+    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed', questionTypes=['direct'], toastId } = cfg;
     setVqSyllabusLoading(true);
 
     // 1. Buscar transcrição
@@ -7949,7 +8171,7 @@ export default function QuestionBankApp() {
     let summaryText = null;
     for (const {k} of orderedKeys) {
       try {
-        summaryText = await callGemini('Gere o sumário.', summaryPrompt, k);
+        summaryText = await callGemini('Gere o sumário.', summaryPrompt, k, [], getGeminiOptions(cfg));
         await rotateKey(); break;
       } catch(e) {
         await rotateKey();
@@ -8009,7 +8231,7 @@ export default function QuestionBankApp() {
         qPerBlock,
         numAlternatives, aulaTitle: aula.title,
         subject: cfg.subject||'', topic: cfg.topic||'',
-        questionStyle, fullCoverage:!!cfg.adminFullCoverage, createdAt: Date.now(),
+        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, fullCoverage:!!cfg.adminFullCoverage, createdAt: Date.now(),
       },
       blocks: blocksForFirestore,
     };
@@ -8040,9 +8262,9 @@ export default function QuestionBankApp() {
         try {
           const full = await callGeminiStream(
             `Gere as questões do bloco "${block.title}" — ${aula.title}`,
-            PROMPT, k, ()=>{}
+            PROMPT, k, ()=>{}, [], getGeminiOptions(cfg)
           );
-          const parsed = parseData(full, `${aulaId}_${blockId}`);
+          const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, questionTypes);
           const { transcriptSlice: _ts, ...blockToSave } = block;
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
@@ -8127,9 +8349,11 @@ export default function QuestionBankApp() {
         const full = await callGeminiStream(
           `Gere as questões do bloco "${block.title}" — ${meta.aulaTitle}`,
           PROMPT, k,
-          (acc,qc)=>setStreamCount(qc)
+          (acc,qc)=>setStreamCount(qc),
+          [],
+          getGeminiOptions(meta)
         );
-        const parsed = parseData(full, `${aulaId}_${blockId}`);
+        const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, meta.questionTypes || ['direct']);
         const finalBlocks = {
           ...aulaData.blocks,
           [blockId]: { ...block, generating:false, questions:parsed.questions, answers:{} }
@@ -8202,16 +8426,7 @@ export default function QuestionBankApp() {
     const sr = { ...(freshTopic.spacedReview || {}) };
     let isRight = false;
 
-    if (q?.isOpen) {
-      try {
-        const parsed = JSON.parse(letter);
-        isRight = (parsed?.score ?? 0) >= 70;
-      } catch(e) {
-        isRight = false;
-      }
-    } else {
-      isRight = q?.options?.find(o=>o.isCorrect)?.letter === letter;
-    }
+    isRight = isAnswerCorrect(q, letter);
 
     if(canUseAdvancedFeatures && !isRight) sr[qId]={dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
     else if(canUseAdvancedFeatures && sr[qId]){const ni=Math.min((sr[qId].interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
@@ -8318,14 +8533,13 @@ export default function QuestionBankApp() {
     const wrong=(activeTopic.questions||[]).filter(q=>{
       const a=activeTopic.answers?.[q.id];
       if (!a) return false;
-      if (q.isOpen) { try { return (JSON.parse(a)?.score ?? 0) < 70; } catch(e) { return false; } }
-      return a!==q.options?.find(o=>o.isCorrect)?.letter;
+      return !isAnswerCorrect(q, a);
     }).map(q=>q.id);
     const na=Object.fromEntries(Object.entries(activeTopic.answers||{}).filter(([k])=>!wrong.includes(k)));
     await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:na}:t)});setShowOnlyWrong(false);
   };
 
-  const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress } = {}) => {
+  const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress, settingsOverride=null } = {}) => {
     const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{} } : t) };
     await updateSubject(cleared);
     const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
@@ -8344,25 +8558,31 @@ export default function QuestionBankApp() {
       ? 2
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
-    const subtopicsBlock = subtopicsArr.length > 0
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
-      : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
+    const topicTypes = clearedTopic.questionTypes || settingsRef.current.questionTypes || ['direct'];
+    const flashcardOnly = topicTypes.length === 1 && topicTypes[0] === 'flashcard';
+    const subtopicsBlock = flashcardOnly
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
+      : subtopicsArr.length > 0
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
+        : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
     const matInst = cleared.sourceMaterials
       ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
       : '';
     const s = {
       ...settingsRef.current,
+      ...(settingsOverride || {}),
       numSubtopics: promptSubtopicCount,
       qPerSub,
       questionStyle: topicStyle,
-      questionTypes: clearedTopic.questionTypes || settingsRef.current.questionTypes || ['direct'],
+      questionTypes: topicTypes,
     };
     const na = s.numAlternatives || 5;
     const types = s.questionTypes || ['direct'];
-    const hasOpen   = types.includes('open');
-    const hasEssay  = types.includes('essay');
     const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
-    const altSuffix = hasClosed
+    const hasFlashcardOnly = types.length === 1 && types[0] === 'flashcard';
+    const altSuffix = hasFlashcardOnly
+      ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
+      : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
@@ -8374,15 +8594,10 @@ export default function QuestionBankApp() {
     let lastErr = null;
     for (const { k } of orderedKeys) {
       try {
-        const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, PROMPT, k, (acc,qc)=>onProgress?.(qc));
-        let allQuestions = [];
-        if (hasClosed) {
-          const p = parseData(full, `${subject.id}_${clearedTopic.id}`);
-          allQuestions = [...allQuestions, ...p.questions];
-        }
-        if (hasOpen)  { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, false); allQuestions = [...allQuestions, ...p.questions]; }
-        if (hasEssay) { const p = parseOpenQuestions(full, `${subject.id}_${clearedTopic.id}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
-        const summary = parseData(full).summary;
+        const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, PROMPT, k, (acc,qc)=>onProgress?.(qc), [], getGeminiOptions(s));
+        const parsed = parseGeneratedQuestionsByTypes(full, `${subject.id}_${clearedTopic.id}`, types);
+        const allQuestions = parsed.questions;
+        const summary = parsed.summary;
         const updatedSubject = {
           ...cleared,
           topics: cleared.topics.map(t => t.id === clearedTopic.id
@@ -8427,9 +8642,13 @@ export default function QuestionBankApp() {
       ? 2
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
-    const subtopicsBlock = subtopicsArr.length > 0
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
-      : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
+    const topicTypes = topic.questionTypes || settingsRef.current.questionTypes || ['direct'];
+    const flashcardOnly = topicTypes.length === 1 && topicTypes[0] === 'flashcard';
+    const subtopicsBlock = flashcardOnly
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
+      : subtopicsArr.length > 0
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
+        : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
 
     // Material base como instrução PRIORITÁRIA — vem antes de tudo no system prompt
     const matInst = cleared.sourceMaterials
@@ -8441,15 +8660,16 @@ export default function QuestionBankApp() {
       numSubtopics: promptSubtopicCount,
       qPerSub,
       questionStyle: topicStyle,
-      questionTypes: topic.questionTypes || settingsRef.current.questionTypes || ['direct'],
+      questionTypes: topicTypes,
     };
     const na = s.numAlternatives || 5;
     const types = s.questionTypes || ['direct'];
-    const hasOpen   = types.includes('open');
-    const hasEssay  = types.includes('essay');
     const hasClosed = types.some(t=>['direct','vof','cespe'].includes(t));
 
-    const altSuffix = hasClosed
+    const hasFlashcardOnly = types.length === 1 && types[0] === 'flashcard';
+    const altSuffix = hasFlashcardOnly
+      ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
+      : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
 
@@ -8462,16 +8682,10 @@ export default function QuestionBankApp() {
     let err=null, ok=false;
     for (const {k} of orderedKeys) {
       try {
-        const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc));
-        // Separar questões fechadas (com alternativas) das abertas
-        let allQuestions = [];
-        if (hasClosed) {
-          const p = parseData(full, `${activeSubject.id}_${topicId}`);
-          allQuestions = [...allQuestions, ...p.questions];
-        }
-        if (hasOpen)  { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, false); allQuestions = [...allQuestions, ...p.questions]; }
-        if (hasEssay) { const p = parseOpenQuestions(full, `${activeSubject.id}_${topicId}`, true);  allQuestions = [...allQuestions, ...p.questions]; }
-        const summary = parseData(full).summary;
+        const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc), [], getGeminiOptions(s));
+        const parsed = parseGeneratedQuestionsByTypes(full, `${activeSubject.id}_${topicId}`, types);
+        const allQuestions = parsed.questions;
+        const summary = parsed.summary;
         await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
         await rotateKey();
         ok=true; break;
@@ -8522,7 +8736,7 @@ export default function QuestionBankApp() {
       let chunkOk = false;
       for (const {k} of orderedKeys) {
         try {
-          const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : []);
+          const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : [], getGeminiOptions(s));
           accumulated = normalizeOracleSyllabus(r, s);
           await rotateKey();
           chunkOk = true;
@@ -8554,7 +8768,7 @@ export default function QuestionBankApp() {
     const orderedKeys = getOrderedKeys();
     for (const {k} of orderedKeys) {
       try {
-        const r=await callGemini('Revise.',sys,k);
+        const r=await callGemini('Revise.',sys,k, [], getGeminiOptions());
         setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
         await rotateKey(); break;
       } catch(e) {
@@ -8793,7 +9007,7 @@ export default function QuestionBankApp() {
       const orderedKeys = getOrderedKeys();
       for (const { k } of orderedKeys) {
         try {
-          const r = await callGemini(userMsg, sys, k, i === 0 ? academiaUploadedImages : []);
+          const r = await callGemini(userMsg, sys, k, i === 0 ? academiaUploadedImages : [], getGeminiOptions(s));
           accumulated = normalizeAcademiaSyllabus(r, s);
           await rotateKey();
           chunkOk = true;
@@ -8827,7 +9041,7 @@ export default function QuestionBankApp() {
     const orderedKeys = getOrderedKeys();
     for (const { k } of orderedKeys) {
       try {
-        const r = await callGemini('Revise.', sys, k);
+        const r = await callGemini('Revise.', sys, k, [], getGeminiOptions());
         setAcademiaSyllabus(normalizeAcademiaSyllabus(r, settingsRef.current));
         setAcademiaSyllabusFB('');
         await rotateKey(); break;
@@ -8924,7 +9138,7 @@ export default function QuestionBankApp() {
             lessonSystemPrompt,
             k,
             [],
-            {}
+            getGeminiOptions(s)
           );
           await rotateKey();
           break;
@@ -8957,7 +9171,7 @@ export default function QuestionBankApp() {
       const orderedKeys2 = getOrderedKeys();
       for (const { k } of orderedKeys2) {
         try {
-          fixText = await callGemini(fixPrompt, 'Você é examinador de residência médica. Escreva em português.', k);
+          fixText = await callGemini(fixPrompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
           await rotateKey();
           break;
         } catch (e) {
@@ -8972,7 +9186,7 @@ export default function QuestionBankApp() {
       fixQuestions = [];
       if (fixText) {
         try {
-          fixQuestions = parseData(fixText, `acfix_${topic.id}_${Date.now()}`).questions;
+          fixQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}`, s.questionTypes || ['direct']).questions;
         } catch(e) {
           if (generationMode === 'questions') throw e;
           onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
@@ -9081,6 +9295,7 @@ export default function QuestionBankApp() {
       questionStyle:bulkConfig.questionStyle,
       questionTypes:bulkConfig.questionTypes,
       numAlternatives:bulkConfig.numAlternatives,
+      geminiThinkingEnabled:!!bulkConfig.geminiThinkingEnabled,
       regenReason:bulkConfig.regenReason || '',
     };
 
@@ -9134,7 +9349,8 @@ export default function QuestionBankApp() {
               result = await generateOracleTopicForSubject(workingSubject, topic, '', {
                 onProgress: count => {
                   if (count > 0) setStreamCount(count);
-                }
+                },
+                settingsOverride: operationSettings,
               });
             }
             break;
@@ -9184,7 +9400,7 @@ export default function QuestionBankApp() {
     let extraText = '';
     for (const { k } of orderedKeys) {
       try {
-        extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k);
+        extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
         await rotateKey();
         break;
       } catch (e) {
@@ -9193,7 +9409,7 @@ export default function QuestionBankApp() {
       }
     }
 
-    const parsed = parseData(extraText, `extra_${topic.id}_${Date.now()}`);
+    const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}`, s.questionTypes || ['direct']);
     if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
 
     const extraId = `eb_${Date.now()}`;
@@ -9267,6 +9483,8 @@ export default function QuestionBankApp() {
     setErrorReviewQStyle(settingsRef.current.questionStyle || 'mixed');
     setErrorReviewQTypes(settingsRef.current.questionTypes || ['direct']);
     setErrorReviewQAlts(settingsRef.current.numAlternatives || 5);
+    setErrorReviewPerQuestion(2);
+    setErrorReviewThinking(!!settingsRef.current.geminiThinkingEnabled);
     setErrorReviewModal({ subject, topic, questions:selected, notebookIds, sourceLabel, pathTitles });
   };
 
@@ -9372,36 +9590,55 @@ export default function QuestionBankApp() {
         questionStyle:cfg.questionStyle,
         questionTypes:cfg.questionTypes,
         numAlternatives:cfg.numAlternatives,
+        errorReviewPerQuestion:cfg.errorReviewPerQuestion,
+        geminiThinkingEnabled:!!cfg.geminiThinkingEnabled,
       };
-      const prompt = buildErrorNotebookReviewPrompt({
-        subjectTitle:errorReviewModal.subject?.title || sourceLabelForErrorReview(errorReviewModal.subject, errorReviewModal.sourceLabel),
-        topicTitle:errorReviewModal.topic?.title || 'Caderno de erros',
-        questions:errorReviewModal.questions || [],
-        settings:s,
-      });
+      if (isAdmin && settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled) {
+        saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled});
+      }
+      const sourceQuestions = errorReviewModal.questions || [];
+      const questionType = (s.questionTypes || ['direct'])[0];
+      const isFlashcardReview = questionType === 'flashcard';
+      const perError = Math.max(1, Math.min(10, Number(s.errorReviewPerQuestion) || 2));
+      const maxSourcePerRequest = isFlashcardReview
+        ? 12
+        : Math.max(1, Math.floor(ERROR_REVIEW_MAX_GENERATED_PER_REQUEST / perError));
+      const chunks = [];
+      for (let i = 0; i < sourceQuestions.length; i += maxSourcePerRequest) {
+        chunks.push(sourceQuestions.slice(i, i + maxSourcePerRequest));
+      }
       const orderedKeys = getOrderedKeys();
-      let text = '';
-      for (const { k } of orderedKeys) {
-        try {
-          text = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português do Brasil.', k);
-          await rotateKey();
-          break;
-        } catch (e) {
-          await rotateKey();
-          showApiError(e.message);
+      let parsedQuestions = [];
+      let mergedSummary = '';
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+        const prompt = buildErrorNotebookReviewPrompt({
+          subjectTitle:errorReviewModal.subject?.title || sourceLabelForErrorReview(errorReviewModal.subject, errorReviewModal.sourceLabel),
+          topicTitle:errorReviewModal.topic?.title || 'Caderno de erros',
+          questions:chunks[chunkIndex],
+          settings:s,
+        });
+        let text = '';
+        for (const { k } of orderedKeys) {
+          try {
+            text = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português do Brasil.', k, [], getGeminiOptions(s));
+            await rotateKey();
+            break;
+          } catch (e) {
+            await rotateKey();
+            showApiError(e.message);
+            return;
+          }
+        }
+        if (!text) {
+          showApiError('QUOTA_EXCEEDED');
           return;
         }
+        const namespace = `err_${Date.now()}_${chunkIndex + 1}`;
+        const parsed = parseGeneratedQuestionsByTypes(text, namespace, s.questionTypes || ['direct']);
+        parsedQuestions = [...parsedQuestions, ...parsed.questions];
+        if (parsed.summary) mergedSummary += `${mergedSummary ? '\n\n' : ''}${parsed.summary}`;
       }
-      if (!text) {
-        showApiError('QUOTA_EXCEEDED');
-        return;
-      }
-      const namespace = `err_${Date.now()}`;
-      const questionType = (s.questionTypes || ['direct'])[0];
-      const parsed = ['open', 'essay'].includes(questionType)
-        ? parseOpenQuestions(text, namespace, questionType === 'essay')
-        : parseData(text, namespace);
-      if (!parsed.questions.length) {
+      if (!parsedQuestions.length) {
         addToast('Não consegui ler as questões geradas. Tente de novo.', 'info', 5000);
         return;
       }
@@ -9412,8 +9649,8 @@ export default function QuestionBankApp() {
       const newTopic = {
         id:`err_topic_${Date.now()}`,
         title:`Revisão do caderno de erros`,
-        questions:parsed.questions,
-        summary:parsed.summary || `Questões geradas a partir de ${errorReviewModal.questions.length} questão(ões) no caderno de erros.`,
+        questions:parsedQuestions,
+        summary:mergedSummary || `${isFlashcardReview ? 'Flashcards' : 'Questões'} gerados a partir de ${sourceQuestions.length} questão(ões) no caderno de erros.`,
         answers:{},
         favorites:[],
         errorNotebook:[],
@@ -9445,7 +9682,7 @@ export default function QuestionBankApp() {
       setActiveTopicId(newTopic.id);
       setShowOnlyWrong(false);
       setView('topic');
-      addToast(`${parsed.questions.length} questões criadas no Caderno de erros.`, 'success', 5000);
+      addToast(`${parsedQuestions.length} ${isFlashcardReview ? 'flashcards criados' : 'questões criadas'} no Caderno de erros.`, 'success', 5000);
     } catch (e) {
       showApiError(e.message || 'CONNECTION_ERROR');
     } finally {
@@ -9458,8 +9695,7 @@ export default function QuestionBankApp() {
   const wrongCount = activeTopic?(activeTopic.questions||[]).filter(q=>{
     const a=activeTopic.answers?.[q.id];
     if (!a) return false;
-    if (q.isOpen) { try { return (JSON.parse(a)?.score ?? 0) < 70; } catch(e) { return false; } }
-    return a!==q.options?.find(o=>o.isCorrect)?.letter;
+    return !isAnswerCorrect(q, a);
   }).length:0;
   const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 	  const getTopicReviewQuestions = (subject, topic) => {
@@ -9631,7 +9867,6 @@ export default function QuestionBankApp() {
       setErrorModal({title:'Erro no login Google', message:authErrorMessage(e), isAlert:true});
     }
   };
-  const handleAnonLogin   = async () => { try{await setPersistence(auth, browserLocalPersistence);await signInAnonymously(auth);}catch(e){console.error('Anonymous login failed:', e);setErrorModal({title:'Erro',message:authErrorMessage(e, 'Login anônimo falhou.'),isAlert:true});} };
   const handleRegister    = async () => {
     if(!sigName.trim()||!sigKey.trim()||!user)return;
     const name=sigName.trim().toUpperCase(); const ns={...defaultSettings,apiKey:sigKey.trim(),apiKey1:sigKey.trim()};
@@ -9661,6 +9896,21 @@ export default function QuestionBankApp() {
 
   // ─────────────────────────────────────────────────────────────────────────
   if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
+  if (user && (user.isAnonymous || !isWhitelistedUser)) return (
+    <div className={`min-h-screen flex items-center justify-center p-4 ${darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900'}`}>
+      <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl border text-center ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+        <div className="mx-auto mb-5 h-14 w-14 rounded-xl bg-red-600 text-white flex items-center justify-center">
+          <ShieldAlert className="w-8 h-8"/>
+        </div>
+        <h1 className="text-2xl font-serif font-bold text-red-500 mb-2">Acesso negado</h1>
+        <p className="text-sm opacity-70 mb-2">{ACCESS_DENIED_MESSAGE}</p>
+        {user.email&&<p className="text-xs font-mono opacity-50 mb-6">{user.email}</p>}
+        <button onClick={handleLogout} className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold">
+          Sair
+        </button>
+      </div>
+    </div>
+  );
   const displayCourseOrgProposal = normalizeCourseOrgProposal(courseOrgProposal);
   const courseOrgProposalUsesOriginalSubjects = displayCourseOrgProposal?.sourceMode === COURSE_ORG_SOURCE_MODE;
   const effectiveCoursePlanLessonOrder = courseOrgProposalUsesOriginalSubjects ? coursePlanLessonOrder : [];
@@ -9706,7 +9956,6 @@ export default function QuestionBankApp() {
         {loginView==='login'?(
           <div className="space-y-4">
             <button onClick={handleGoogleLogin} className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-3 border ${darkMode?'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700':'bg-white border-gray-200 hover:bg-gray-50'}`}><GoogleIcon/>Entrar com Google</button>
-            {isCanvas&&<button onClick={handleAnonLogin} className="w-full bg-stone-700 hover:bg-stone-800 text-white py-4 rounded-xl font-bold">Entrar como Convidado</button>}
           </div>
         ):(
           <div className="space-y-4">
@@ -10912,6 +11161,7 @@ export default function QuestionBankApp() {
             library={library}
             darkMode={darkMode}
             isAdmin={canUseAdvancedFeatures}
+            canCreateFlashcards={isAdmin}
             canUseAcademia={canUseAcademia}
             academiaGenerating={academiaGenerating}
             academiaGenProgress={academiaGenProgress}
@@ -10929,6 +11179,7 @@ export default function QuestionBankApp() {
               setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
               setAcademiaRegenQTypes(settings.questionTypes || ['direct']);
               setAcademiaRegenQAlts(settings.numAlternatives || 5);
+              setAcademiaRegenThinking(!!settings.geminiThinkingEnabled);
               setAcademiaRegenReason('');
               setAcademiaRegenModal(payload);
             }}
@@ -11017,7 +11268,7 @@ export default function QuestionBankApp() {
                       </div>
                     ))}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {!(settings.questionTypes||[]).includes('flashcard')&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
                       <input type="number" min="1" max="10" value={settings.qPerSub}
@@ -11032,9 +11283,11 @@ export default function QuestionBankApp() {
                         <option value={5}>5 (A-E)</option>
                       </select>
                     </div>
-                  </div>
+                  </div>}
                   <p className={`text-xs mt-2 opacity-40`}>
-                    {settings.autoMode
+                    {(settings.questionTypes||[]).includes('flashcard')
+                      ? 'Flashcards: a IA decide a quantidade ideal, sem meta fixa por subtópico.'
+                      : settings.autoMode
                       ? `O sumário fica automático; cada subtópico gerado terá ${settings.qPerSub||1} questão(ões).`
                       : `Total estimado: ${(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões`}
                   </p>
@@ -11048,6 +11301,7 @@ export default function QuestionBankApp() {
                     onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
                     darkMode={darkMode}
                     single={true}
+                    isAdmin={isAdmin}
                   />
                 </div>
 
@@ -11064,6 +11318,17 @@ export default function QuestionBankApp() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {isAdmin&&(
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                    <GeminiThinkingSelector
+                      value={!!settings.geminiThinkingEnabled}
+                      onChange={enabled=>{const ns={...settings,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}}
+                      darkMode={darkMode}
+                    />
                   </div>
                 )}
 
@@ -11194,8 +11459,7 @@ export default function QuestionBankApp() {
                       darkMode={darkMode}
                     />
                   </div>
-                  {/* Alternativas — sempre visível, independente do autoMode */}
-                  <div className="mt-3">
+                  {!(settings.questionTypes||[]).includes('flashcard')&&<div className="mt-3">
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
                     <div className="flex gap-2">
                       {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(opt=>(
@@ -11206,13 +11470,13 @@ export default function QuestionBankApp() {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </div>}
                 </div>
 
                 {/* Tipo e estilo das questões de fixação */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões de fixação — tipo</div>
-                  <QuestionTypeSelector selected={settings.questionTypes||['direct']} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true}/>
+                  <QuestionTypeSelector selected={settings.questionTypes||['direct']} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={canCreateFlashcards}/>
                 </div>
                 {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
                   <div>
@@ -11225,6 +11489,17 @@ export default function QuestionBankApp() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {isAdmin&&(
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                    <GeminiThinkingSelector
+                      value={!!settings.geminiThinkingEnabled}
+                      onChange={enabled=>{const ns={...settings,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}}
+                      darkMode={darkMode}
+                    />
                   </div>
                 )}
 
@@ -13571,7 +13846,7 @@ export default function QuestionBankApp() {
                       const qs  = Array.isArray(block.questions) ? block.questions : [];
                       const ans = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
                       const answered = Object.keys(ans).length;
-                      const correct = qs.filter(q=>ans[q.id]===q.options?.find(o=>o.isCorrect)?.letter).length;
+                      const correct = qs.filter(q=>isAnswerCorrect(q, ans[q.id])).length;
                       const pct = answered>0?Math.round(correct/answered*100):null;
                       const allDone = qs.length>0&&answered===qs.length;
                       const hasQs = qs.length>0;
@@ -14109,6 +14384,18 @@ export default function QuestionBankApp() {
                 });
               })()}
             </SettingsSection>
+            {isAdmin&&(
+              <SettingsSection id="gemini-thinking" title="Modo Gemini" icon={<Sparkles className="w-4 h-4"/>}>
+                <GeminiThinkingSelector
+                  value={!!settings.geminiThinkingEnabled}
+                  onChange={enabled=>saveSettings({...settingsRef.current, geminiThinkingEnabled:enabled})}
+                  darkMode={darkMode}
+                />
+                <p className={`text-xs mt-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-400'}`}>
+                  Rápido usa `thinkingBudget: 0`. Thinking usa `thinkingBudget: -1`, deixando o Gemini decidir quando raciocinar mais.
+                </p>
+              </SettingsSection>
+            )}
             {/* Oracle Length */}
             <SettingsSection id="chat" title="Resposta do Chat" icon={<MessageCircle className="w-4 h-4"/>}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -14671,7 +14958,7 @@ export default function QuestionBankApp() {
         }}
         onConfirm={(cfg)=>{
           // Salvar preferências para próximas aulas
-          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, autoMode: cfg.autoMode};
+          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:cfg.questionTypes||settings.questionTypes, autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled};
           saveSettings(ns);
           setVqGenModal(null);
           const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
@@ -14712,6 +14999,13 @@ export default function QuestionBankApp() {
       {errorReviewModal&&(
         <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setErrorReviewModal(null)}>
           <div className={`w-full max-w-md rounded-2xl p-8 border overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
+            {(()=>{
+              const isFlashcardReview = errorReviewQTypes.includes('flashcard');
+              const estimatedTotal = errorReviewModal.questions.length * errorReviewPerQuestion;
+              const batchSize = isFlashcardReview ? 12 : Math.max(1, Math.floor(ERROR_REVIEW_MAX_GENERATED_PER_REQUEST / Math.max(1, errorReviewPerQuestion)));
+              const requestCount = Math.max(1, Math.ceil(errorReviewModal.questions.length / batchSize));
+              return (
+                <>
             <div className="flex items-start gap-4 mb-6">
               <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${darkMode?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>
                 <BookOpen className="w-6 h-6"/>
@@ -14720,15 +15014,36 @@ export default function QuestionBankApp() {
                 <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Caderno de erros</p>
                 <h3 className="text-xl font-serif font-bold text-yellow-600">Revisar caderno de erros</h3>
                 <p className="text-sm opacity-60 mt-1">
-                  {errorReviewModal.questions.length} {errorReviewModal.questions.length===1?'questão':'questões'} no caderno → cerca de {errorReviewModal.questions.length * 2} novas questões.
+                  {errorReviewModal.questions.length} {errorReviewModal.questions.length===1?'questão':'questões'} no caderno → {isFlashcardReview ? 'quantidade ideal de flashcards' : `${estimatedTotal} novas questões`}.
                 </p>
               </div>
             </div>
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true}/>
+                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
               </div>
+              {!isFlashcardReview&&(
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões por erro</div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[1,2,3,4,5].map(n=>(
+                      <button key={n} onClick={()=>setErrorReviewPerQuestion(n)}
+                        className={`py-2 rounded-xl border-2 text-sm font-bold transition-all ${errorReviewPerQuestion===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                        {n}x
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs opacity-50 mt-2">
+                    Total: {estimatedTotal} questões · {requestCount} request{requestCount!==1?'s':''} em lote.
+                  </p>
+                </div>
+              )}
+              {isFlashcardReview&&(
+                <div className={`p-3 rounded-xl text-xs leading-relaxed ${darkMode?'bg-yellow-900/20 text-yellow-200 border border-yellow-800/40':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
+                  Flashcards não usam quantidade fixa. O Oráculo decide o menor conjunto útil; se houver muito erro, roda em {requestCount} lote{requestCount!==1?'s':''}.
+                </div>
+              )}
               {errorReviewQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
@@ -14742,7 +15057,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
               )}
-              <div>
+              {errorReviewQTypes.some(t=>['direct','vof'].includes(t))&&<div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                 <div className="flex gap-2">
                   {[4,5].map(n=>(
@@ -14752,18 +15067,27 @@ export default function QuestionBankApp() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
+              {isAdmin&&(
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                  <GeminiThinkingSelector value={errorReviewThinking} onChange={setErrorReviewThinking} darkMode={darkMode}/>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setErrorReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button
                 disabled={isBusy}
-                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts})}
+                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking})}
                 className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {isBusy?<Spinner className="w-4 h-4 text-white"/>:<Sparkles className="w-4 h-4"/>}
                 {isBusy?'Gerando...':'Gerar revisão'}
               </button>
             </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -14783,7 +15107,7 @@ export default function QuestionBankApp() {
       {academiaExportModal&&<AcademiaExportModal topic={academiaExportModal.topic} subject={academiaExportModal.subject} onClose={()=>setAcademiaExportModal(null)} darkMode={darkMode}/>}
 
       {/* ── INSIGHTS MODAL ── */}
-      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey}/>}
+      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey} geminiOptions={getGeminiOptions()}/>}
 
       {/* ── RESET COURSE MODAL ── */}
       {resetCourseModal&&(
@@ -14847,7 +15171,7 @@ export default function QuestionBankApp() {
               </div>
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo das questões de fixação</div>
-                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true}/>
+                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
               </div>
               {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
@@ -14862,7 +15186,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
               )}
-              <div>
+              {!academiaRegenQTypes.includes('flashcard')&&<div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                 <div className="flex gap-2">
                   {[4,5].map(n=>(
@@ -14872,7 +15196,13 @@ export default function QuestionBankApp() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
+              {isAdmin&&(
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                  <GeminiThinkingSelector value={academiaRegenThinking} onChange={setAcademiaRegenThinking} darkMode={darkMode}/>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaRegenModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
@@ -14883,6 +15213,7 @@ export default function QuestionBankApp() {
                   questionStyle: academiaRegenQStyle,
                   questionTypes: academiaRegenQTypes,
                   numAlternatives: academiaRegenQAlts,
+                  geminiThinkingEnabled: academiaRegenThinking,
                 };
                 const { regenReason, ...persistedSettings } = regenSettings;
                 const ns = { ...settings, ...persistedSettings };
@@ -14908,7 +15239,7 @@ export default function QuestionBankApp() {
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true}/>
+                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
               </div>
               {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
@@ -14923,8 +15254,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
               )}
-              {/* Alternativas — sempre visível independente do autoMode */}
-              <div>
+              {!academiaExtraQTypes.includes('flashcard')&&<div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                 <div className="flex gap-2">
                   {[4,5].map(n=>(
@@ -14934,12 +15264,19 @@ export default function QuestionBankApp() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
+              {isAdmin&&(
+                <div>
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                  <GeminiThinkingSelector value={academiaExtraThinking} onChange={setAcademiaExtraThinking} darkMode={darkMode}/>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaExtraModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button onClick={()=>{
-                const extraSettings = {...settings, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts};
+                const extraSettings = {...settings, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts, geminiThinkingEnabled:academiaExtraThinking};
+                if (isAdmin) saveSettings({...settingsRef.current, geminiThinkingEnabled:academiaExtraThinking});
                 const {topic,subject} = academiaExtraModal;
                 setAcademiaExtraModal(null);
                 generateAcademiaExtraBattery(topic, subject, extraSettings);
@@ -14960,6 +15297,16 @@ export default function QuestionBankApp() {
               <h3 className="text-2xl font-serif font-bold mb-2">Recriar Bloco</h3>
               <p className="mb-6 opacity-70 text-sm">As questões atuais serão substituídas.</p>
               <textarea value={regenPrompt} onChange={e=>setRegenPrompt(e.target.value)} placeholder="Foco específico (opcional)..." className={`w-full h-20 p-3 rounded-lg border resize-none outline-none mb-6 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+              {isAdmin&&(
+                <div className="w-full mb-6 text-left">
+                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                  <GeminiThinkingSelector
+                    value={!!settings.geminiThinkingEnabled}
+                    onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}}
+                    darkMode={darkMode}
+                  />
+                </div>
+              )}
               <div className="flex gap-4 w-full">
                 <button onClick={()=>setRegenModal(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800':'bg-gray-100'}`}>Cancelar</button>
                 <button onClick={()=>{setRegenModal(false);generateBatch(activeTopic.id,regenPrompt);setRegenPrompt('');}} className="flex-1 px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"><Sparkles className="w-4 h-4"/>Recriar</button>
@@ -15160,7 +15507,7 @@ export default function QuestionBankApp() {
                     {showsQuestionConfig && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true}/>
+                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
                       </div>
                     )}
                     {showsQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
@@ -15176,7 +15523,7 @@ export default function QuestionBankApp() {
                         </div>
                       </div>
                     )}
-                    {showsQuestionConfig && (
+                    {showsQuestionConfig && !(cfg.questionTypes || []).includes('flashcard') && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                         <div className="flex gap-2">
@@ -15189,6 +15536,18 @@ export default function QuestionBankApp() {
                         </div>
                       </div>
                     )}
+                    {isAdmin && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                        <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isAdmin && !isAcademiaBulk && !bulkGenerateRun.running && (
+                  <div className={`rounded-xl border p-4 mb-5 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+                    <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
                   </div>
                 )}
 	              <div className={`rounded-xl border overflow-hidden mb-5 ${darkMode?'border-gray-700':'border-gray-200'}`}>
@@ -15218,14 +15577,15 @@ export default function QuestionBankApp() {
 	              <div className="flex gap-3">
 	                <button disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`flex-1 py-3 rounded-xl font-bold disabled:opacity-40 ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>{bulkGenerateRun.running?'Rodando...':'Cancelar'}</button>
 	                <button onClick={()=>{
-                    if (isAcademiaBulk && pending.length && !bulkGenerateRun.running) {
+                    if (pending.length && !bulkGenerateRun.running) {
                       const persist = {};
-                      if (showsLessonConfig) persist.explanationLength = cfg.explanationLength;
-                      if (showsQuestionConfig) {
+                      if (isAcademiaBulk && showsLessonConfig) persist.explanationLength = cfg.explanationLength;
+                      if (isAcademiaBulk && showsQuestionConfig) {
                         persist.questionStyle = cfg.questionStyle;
                         persist.questionTypes = cfg.questionTypes;
                         persist.numAlternatives = cfg.numAlternatives;
                       }
+                      if (isAdmin) persist.geminiThinkingEnabled = !!cfg.geminiThinkingEnabled;
                       if (Object.keys(persist).length) saveSettings({...settingsRef.current, ...persist});
                     }
                     closeOrStartBulk();
