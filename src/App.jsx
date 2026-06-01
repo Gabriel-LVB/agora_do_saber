@@ -117,12 +117,15 @@ const MAX_MATERIAL_CHARS = 180000;
 const MATERIAL_CHUNK_CHARS = 170000;
 const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
 const ACCESS_DENIED_MESSAGE = 'Você não tem permissão para acessar este site.';
+const normalizeEmailList = (emails = []) => Array.from(new Set((Array.isArray(emails) ? emails : [])
+  .map(e => String(e || '').trim().toLowerCase())
+  .filter(Boolean)));
 const ERROR_REVIEW_MAX_GENERATED_PER_REQUEST = 30;
 const FLASHCARD_CORRECT = 'CORRECT';
 const FLASHCARD_WRONG = 'WRONG';
 const QUICK_SOURCE = 'quick';
 const QUICK_SUBJECT_ID = 'quick-plantao-rapido';
-const QUICK_SUBJECT_TITLE = 'Plantão Rápido';
+const QUICK_SUBJECT_TITLE = 'Centelha do Saber';
 const GEMINI_THINKING_BUDGET_OFF = 0;
 const GEMINI_THINKING_BUDGET_DYNAMIC = -1;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
@@ -1275,7 +1278,7 @@ const createDocxBlob = (bodyXml) => {
 
 const parseData = (text, namespace = '') => {
   const norm = text.replace(/\r\n/g,'\n');
-  const questionStartRe = /(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im;
+  const questionStartRe = /(?=(?:^|\n)[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im;
 
   // Legacy summary
   let summary = '';
@@ -1294,7 +1297,7 @@ const parseData = (text, namespace = '') => {
     if (!hasOptions) return;
 
     try {
-      const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i) ||
+      const idM = block.match(/(?:\*\*|#{2,4})?[ \t]*Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i) ||
                   block.match(/(?:^|\n)[ \t]*(\d{1,3})[ \t]*[).]/m);
       const rawId = idM ? idM[1] : `${++qCount}`;
       // ID único: combina namespace (topicId/blockId) com o id da questão
@@ -1305,7 +1308,7 @@ const parseData = (text, namespace = '') => {
       const firstOptIdx = block.indexOf(firstOptMatch[0]);
 
       const inlineM = block.match(/(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t]*([^\n]{5,})/m);
-      const qHeaderM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o[^\n]*\n/i);
+      const qHeaderM = block.match(/(?:\*\*|#{2,4})?[ \t]*Quest[aã]o[^\n]*\n/i);
       let stmt = '';
       if (inlineM && inlineM.index <= firstOptIdx) {
         stmt = inlineM[1].trim();
@@ -1439,7 +1442,7 @@ const parseFlashcards = (text, namespace='') => {
   const pipeLines = norm.split('\n').map(l => l.trim()).filter(l =>
     l.includes('|') && !/^question\s*\|/i.test(l) && !/^pergunta\s*\|/i.test(l)
   );
-  if (pipeLines.length >= 2 && !/##\s*Flashcard/i.test(norm)) {
+  if (pipeLines.length >= 1 && !/(?:^|\n)\s*(?:##\s*)?Flashcard\s+\d+/i.test(norm)) {
     pipeLines.forEach(line => {
       const parts = line.split('|');
       if (parts.length < 2) return;
@@ -1496,15 +1499,33 @@ const parseFlashcards = (text, namespace='') => {
   return { questions, summary:'' };
 };
 
+const stripLooseMarkdownAsterisks = (text = '') => {
+  const src = String(text || '');
+  let out = '';
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (ch !== '*') { out += ch; continue; }
+    if (src[i - 1] === '*' || src[i + 1] === '*') out += ch;
+  }
+  return out;
+};
+
+const extractQuickSection = (text = '', heading = '') => {
+  const raw = String(text || '').replace(/\r\n/g, '\n');
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?:^|\\n)#{2,4}\\s*${escaped}\\s*\\n([\\s\\S]*?)(?=(?:^|\\n)#{2,4}\\s*(?:Aula\\s+r[aá]pida|Explica[çc][aã]o|Quest[õo]es|Flashcards)\\b|$)`, 'i');
+  return (raw.match(re)?.[1] || '').trim();
+};
+
 const extractQuickLesson = (text = '') => {
   const raw = String(text || '').replace(/\r\n/g, '\n');
   const match = raw.match(/(?:^|\n)##\s*Aula\s+r[aá]pida\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Quest[õo]es|Flashcards)\b|$)/i)
     || raw.match(/(?:^|\n)##\s*Explica[çc][aã]o\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Quest[õo]es|Flashcards)\b|$)/i);
-  const lesson = (match?.[1] || '').trim();
-  return lesson.replace(/\n{3,}/g, '\n\n').trim();
+  const lesson = (match?.[1] || extractQuickSection(raw, 'Aula rápida') || '').trim();
+  return stripLooseMarkdownAsterisks(lesson.replace(/:\*/g, ':')).replace(/\n{3,}/g, '\n\n').trim();
 };
 
-const buildQuickSessionPrompt = ({ title='', context='', questionCount=4, settings={} }) => {
+const buildQuickSessionPrompt = ({ title='', context='', settings={} }) => {
   const alts = Number(settings.numAlternatives || 5) === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -1514,7 +1535,7 @@ const buildQuickSessionPrompt = ({ title='', context='', questionCount=4, settin
     mixed:'Misture casos clínicos curtos e perguntas diretas.',
   }[settings.questionStyle || 'mixed'];
   return `
-Você vai criar um Plantão Rápido em português brasileiro para consolidar um tema pontual de medicina em 5-10 minutos.
+Você vai criar uma Centelha do Saber em português brasileiro para consolidar um tema pontual de medicina em 5-10 minutos.
 
 TEMA:
 ${title}
@@ -1523,44 +1544,58 @@ CONTEXTO DO USUÁRIO:
 ${context || 'Sem contexto adicional. Explique o tema do zero, mas sem fugir do foco.'}
 
 OBJETIVO:
-- Explicar rapidamente o que o usuário precisa lembrar.
-- Criar ${questionCount} questões de fixação de alto rendimento.
-- Criar uma quantidade ideal de flashcards atômicos, sem redundância, para exportar ao Anki.
+- Responder exatamente à lacuna do usuário, sem transformar a dúvida em uma aula genérica.
+- Criar uma quantidade compacta de questões de fixação que testem se o usuário realmente entendeu essa lacuna.
+- Criar flashcards obrigatórios, atômicos e exportáveis ao Anki para impedir que a lacuna volte.
 
 REGRAS DA AULA RÁPIDA:
 - Seja direto, clínico e high-yield.
-- Explique o essencial, a lógica por trás, principais indicações/contraindicações, pegadinhas e diferenças com temas próximos.
-- Não faça uma aula enorme. O usuário deve conseguir revisar em poucos minutos.
+- Explique o essencial, a lógica por trás, principais indicações/contraindicações, pegadinhas e diferenças com temas próximos somente quando isso ajudar a dúvida do usuário.
+- Se o contexto for uma dúvida leiga ou uma pergunta de outra pessoa, inclua uma forma simples de explicar o mecanismo sem perder precisão.
+- Pode ser didático e completo como uma mini-aula: explique o porquê, o mecanismo e como o aluno poderia explicar para outra pessoa.
+- Não seja seco demais. Use contexto clínico suficiente para o aluno entender e lembrar, mas sem virar apostila longa.
+- Tamanho alvo: 450 a 750 palavras, ajustando conforme a complexidade.
+- Use markdown simples com parágrafos curtos e bullets com hífen.
+- Não use asteriscos em nenhum ponto da aula. Não use negrito/itálico na aula.
 
 REGRAS DAS QUESTÕES:
 - ${styleInst}
-- Gere EXATAMENTE ${questionCount} questões.
+- Gere de 4 a 6 questões. A IA decide a quantidade ideal conforme a complexidade da lacuna.
+- Cada questão deve voltar ao problema central do usuário. Não cobre curiosidades periféricas só porque apareceram na explicação.
+- Priorize mecanismos causais, decisões práticas, pegadinhas diretamente relacionadas e reconstrução ativa do raciocínio.
+- Evite perguntas óbvias, decorebas inúteis e alternativas absurdas.
 - Questões com alternativas devem ter exatamente ${Number(settings.numAlternatives || 5)} alternativas no formato:
 ${alts}
 - Depois de cada questão inclua "Gabarito: X" e "Explicação:".
 
 REGRAS DOS FLASHCARDS:
-- Crie somente a quantidade útil para memorizar o assunto, sem pilha excessiva.
+- Gere de 4 a 8 flashcards. Nunca gere zero.
+- Crie somente a quantidade útil para memorizar a lacuna, sem pilha excessiva.
 - Cada flashcard deve ser atômico, autossuficiente e não redundante.
+- Use dificuldade desejável: a pergunta deve exigir recuperação ativa, não reconhecimento passivo.
+- Zero ambiguidade: a pergunta deve ter contexto suficiente para uma única resposta justa.
 - Toda pergunta deve terminar com ponto de interrogação.
 - Resposta curta, com no máximo poucas palavras.
-- Depois da resposta curta, use <br><br> e uma explicação clara para revisão.
-- Formato obrigatório: Pergunta? | Resposta curta<br><br>Explicação.
-- Não use o caractere | em nenhum outro lugar.
+- Depois da resposta curta, a explicação deve funcionar como "Notas/Lógica": uma mini-aula curta com mecanismo, exemplo, exceção ou pegadinha.
+- Não faça cartões que cobrem detalhes inúteis; faça cartões que, juntos, permitam revisar a dúvida inteira depois.
 
 FORMATO FINAL OBRIGATÓRIO:
 ## Aula rápida
 [aula em markdown]
 
 ## Questões
-Questão 1
+## Questão 1
 [enunciado]
 ${alts}
 Gabarito: A
 Explicação: [explicação]
 
 ## Flashcards
-Pergunta? | Resposta curta<br><br>Explicação
+## Flashcard 1
+Pergunta: [pergunta objetiva e específica?]
+Resposta: [resposta curta, poucas palavras]
+Explicação: [Notas/Lógica em mini-aula curta]
+---
 `.trim();
 };
 
@@ -2346,7 +2381,7 @@ AULAS:
 ${JSON.stringify(payload, null, 2)}`;
 };
 // Modal de configuração de geração de questões para uma videoaula
-const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading, savedSettings={}, isAdmin=false }) => {
+const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMode, onClose, onConfirm, loading, savedSettings={}, isAdmin=false, canCreateFlashcards=false }) => {
   const dm = darkMode;
   const MAX_PER_BLOCK = isAdmin ? ADMIN_COURSE_TOPIC_QUESTION_MAX : 20;
 
@@ -2511,7 +2546,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           {/* Tipo de questão */}
           <div>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
-            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true} isAdmin={isAdmin}/>
+            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true} isAdmin={canCreateFlashcards}/>
           </div>
 
           {/* Estilo clínico/direto — só aparece se "direta" está selecionada */}
@@ -2617,6 +2652,7 @@ const QuestionView = ({
   subtopics=[],
   topicStyle=null, onTopicStyleChange=null,
   topicType=null,
+  canCreateFlashcards=false,
   questionCountPerSub=1,
   numAlternatives=5,
   onAddToReview=null,
@@ -2673,7 +2709,7 @@ const QuestionView = ({
 	  const savedFlashcardAnswersKey = allFlashcards
 	    ? questions.map(q => `${q.id}:${answers?.[q.id] || ''}`).join('|')
 	    : '';
-	  const singleMode = displayMode === 'single' && questions.length > 0;
+	  const singleMode = (allFlashcards || displayMode === 'single') && questions.length > 0;
 	  const [singleIndex, setSingleIndex] = useState(0);
 	  const [showCompletion, setShowCompletion] = useState(false);
 	  const [flashcardQueue, setFlashcardQueue] = useState([]);
@@ -2837,7 +2873,7 @@ const QuestionView = ({
 	      key={entry ? entryKey : (q.id||i)}
 	      data-question-id={q.id}
 	      data-flashcard-entry={entry ? entryKey : undefined}
-	      className={allFlashcards ? 'scroll-mt-8' : undefined}
+	      className={allFlashcards ? 'scroll-mt-8 flex-1 min-h-0 flex flex-col' : undefined}
 	    >
 	      <QuestionCard question={q} index={i}
 	        selectedLetter={selected}
@@ -2984,11 +3020,11 @@ const QuestionView = ({
   if (!isGenerating && questions.length > 0 && showCompletion && allDone) {
     return (
       <div>
-        <div className={`mb-6 border-b pb-6 ${dm?'border-gray-700':'border-gray-200'}`}>
+        <div className={`mb-4 border-b pb-4 ${dm?'border-gray-700':'border-gray-200'}`}>
           <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
             <ArrowLeft className="w-4 h-4"/>{backLabel}
           </button>
-          <h2 className="text-2xl font-serif font-bold text-yellow-600">{title}</h2>
+          <h2 className={`${allFlashcards ? 'text-xl md:text-2xl' : 'text-2xl'} font-serif font-bold text-yellow-600`}>{title}</h2>
         </div>
         {renderCompletion()}
       </div>
@@ -2996,15 +3032,48 @@ const QuestionView = ({
   }
 
   return (
-    <div>
+    <div className={allFlashcards && singleMode ? 'h-[calc(100dvh-88px)] md:h-[calc(100dvh-96px)] -my-4 md:-my-6 flex flex-col overflow-hidden' : ''}>
       {/* ── Header ── */}
-      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b pb-6 ${dm?'border-gray-700':'border-gray-200'}`}>
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center ${allFlashcards ? 'mb-3 pb-3 gap-2' : 'mb-6 pb-6 gap-4'} border-b ${dm?'border-gray-700':'border-gray-200'}`}>
         <div className="min-w-0 flex-1">
-          <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
-            <ArrowLeft className="w-4 h-4"/>{backLabel}
-          </button>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="min-w-0 flex-1 text-2xl font-serif font-bold text-yellow-600 truncate">{title}</h2>
+          {allFlashcards && singleMode ? (
+            <div className="flex items-center justify-between gap-2">
+              <button onClick={onBack} className={`h-8 flex items-center gap-1.5 rounded-lg pr-2 text-sm font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                <ArrowLeft className="w-4 h-4"/>{backLabel}
+              </button>
+              <h2 className="min-w-0 flex-1 truncate text-sm font-serif font-bold text-yellow-600">{title}</h2>
+              <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
+              {actionMenuItems.length>0&&(
+                <div className="relative flex-shrink-0">
+                  <button
+                    onClick={()=>setHeaderActionsOpen(v=>!v)}
+                    title="Ações do bloco"
+                    aria-label="Ações do bloco"
+                    className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-yellow-700'}`}>
+                    <MoreIcon className="w-4 h-4"/>
+                  </button>
+                  {headerActionsOpen&&(
+                    <div className={`absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                      {actionMenuItems.map(item=>(
+                        <button
+                          key={item.label}
+                          onClick={()=>{setHeaderActionsOpen(false);item.fn();}}
+                          className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.danger?(dm?'text-red-400 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):item.active?(dm?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(dm?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                          {item.icon}{item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+            <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+              <ArrowLeft className="w-4 h-4"/>{backLabel}
+            </button>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="min-w-0 flex-1 text-2xl font-serif font-bold text-yellow-600 truncate">{title}</h2>
             {actionMenuItems.length>0&&(
               <div className="relative flex-shrink-0">
                 <button
@@ -3028,8 +3097,10 @@ const QuestionView = ({
                 )}
               </div>
             )}
-          </div>
-          {answeredCount>0&&<p className="text-sm opacity-60 mt-1">
+            </div>
+            </>
+          )}
+          {answeredCount>0&&!allFlashcards&&<p className="text-sm opacity-60 mt-1">
             {allDone
               ? `${correctCount}/${questions.length} corretas (${pct}%)`
               : `${answeredCount}/${questions.length} respondidas`}
@@ -3108,7 +3179,7 @@ const QuestionView = ({
           <div>
             <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Tipo de Questão</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {QUESTION_TYPES.map(t=>(
+              {QUESTION_TYPES.filter(t => !t.adminOnly || canCreateFlashcards).map(t=>(
                 <button key={t.k} onClick={()=>onTopicStyleChange(t.k,'type')}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${topicType===t.k?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
                   <span className={`text-sm font-bold ${topicType===t.k?(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-300':'text-gray-600')}`}>{t.label}</span>
@@ -3132,20 +3203,26 @@ const QuestionView = ({
 
       {/* ── Questões ── */}
       {!isGenerating&&(
-        <div>
+        <div className={allFlashcards && singleMode ? 'flex-1 min-h-0 flex flex-col' : ''}>
 	          {singleMode && currentQuestion ? (
-	            <div>
-	              <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
-	                <span className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>
-	                  {allFlashcards ? `Flashcard ${Math.min(flashcardMasteredCount + 1, questions.length)} de ${questions.length}` : `Questão ${singleIndex + 1} de ${questions.length}`}
-	                </span>
-	                <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}>
+	            <div className={allFlashcards ? 'flex-1 min-h-0 flex flex-col' : ''}>
+	              <div className={allFlashcards ? `mb-2 h-1 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}` : `mb-2 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
+	                {allFlashcards ? (
 	                  <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${questions.length ? (answeredCount / questions.length) * 100 : 0}%`}}/>
-	                </div>
-	                <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
+	                ) : (
+	                  <>
+	                    <span className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Questão {singleIndex + 1} de {questions.length}</span>
+	                    <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}>
+	                      <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${questions.length ? (answeredCount / questions.length) * 100 : 0}%`}}/>
+	                    </div>
+	                    <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
+	                  </>
+	                )}
 	              </div>
-	              {renderQuestion(currentQuestion, allFlashcards ? flashcardCursor : singleIndex, allFlashcards ? { flashcardEntry:activeFlashcardEntry } : {})}
-	              <div className="mt-4 flex items-center justify-between gap-3">
+	              <div className={allFlashcards ? 'flex-1 min-h-0 flex flex-col' : ''}>
+	                {renderQuestion(currentQuestion, allFlashcards ? flashcardCursor : singleIndex, allFlashcards ? { flashcardEntry:activeFlashcardEntry } : {})}
+	              </div>
+	              <div className={`${allFlashcards ? 'mt-2 pb-1' : 'mt-4'} flex items-center justify-between gap-3`}>
 	                {allFlashcards ? (
 	                  <>
 	                  <button disabled={flashcardCursor===0} onClick={()=>setFlashcardCursor(i=>Math.max(0,i-1))} className={navBtn(flashcardCursor===0)}>
@@ -3660,12 +3737,12 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false 
     : savedAnswer === FLASHCARD_WRONG
       ? (dm ? 'border-red-700/80 bg-red-950/30 text-red-100' : 'border-red-200 bg-red-50 text-red-900')
       : (dm ? 'border-gray-700 bg-gray-950/60 text-gray-200' : 'border-gray-200 bg-white text-gray-800');
-  const minHeight = large ? 'min-h-[34vh] md:min-h-[42vh]' : 'min-h-[260px]';
+  const minHeight = large ? 'flex-1 min-h-0' : 'min-h-[220px]';
 
   return (
-    <div className="space-y-5">
+    <div className={large ? 'flex-1 min-h-0 flex flex-col' : 'space-y-5'}>
       {!revealed ? (
-        <div className={`${minHeight} rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center px-5 md:px-8 py-10 ${dm?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-gray-50'}`}>
+        <div className={`${minHeight} rounded-2xl border-2 border-dashed flex flex-col items-center ${large?'justify-end pb-6 md:pb-8':'justify-center'} text-center px-5 md:px-8 py-8 ${dm?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-gray-50'}`}>
           <button
             type="button"
             onClick={()=>setRevealed(true)}
@@ -3678,11 +3755,11 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false 
         <div className={`${minHeight} rounded-2xl border p-5 md:p-7 flex flex-col ${answerTone}`}>
           <div className="flex-1">
             <div className="text-xs font-bold uppercase tracking-widest opacity-60 mb-3">Resposta</div>
-            <div className="text-xl md:text-2xl font-serif font-bold leading-snug select-text" style={{userSelect:'text'}}>
+            <div className="text-lg md:text-xl font-bold leading-snug select-text" style={{userSelect:'text'}}>
               {parseHtmlTextChat(question.expectedAnswer || '')}
             </div>
             {question.explanation && (
-              <div className={`mt-6 pt-5 border-t text-base leading-relaxed select-text ${dm?'border-white/10':'border-black/10'}`} style={{userSelect:'text'}}>
+              <div className={`mt-5 pt-4 border-t text-sm md:text-base leading-relaxed select-text ${dm?'border-white/10':'border-black/10'}`} style={{userSelect:'text'}}>
                 {parseHtmlTextChat(question.explanation)}
               </div>
             )}
@@ -3902,7 +3979,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   };
 
 	  const cardClass = question.isFlashcard && flashcardLarge
-	    ? `rounded-[1.75rem] shadow-md border p-5 md:p-8 mb-8 min-h-[62vh] flex flex-col ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`
+	    ? `rounded-2xl shadow-md border p-4 md:p-6 mb-0 flex-1 min-h-0 flex flex-col ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`
 	    : `rounded-xl shadow-sm border p-4 md:p-6 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`;
 
 		  return (
@@ -3934,7 +4011,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         </div>
       </div>
 	      <div
-	        className={`${question.isFlashcard ? 'text-xl md:text-2xl font-serif font-bold text-center leading-snug my-4 md:my-7 max-w-3xl mx-auto' : 'text-base md:text-lg mb-6 leading-relaxed'} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
+	        className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : 'text-base md:text-lg mb-6 leading-relaxed'} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
 	        style={{userSelect:'text'}}
 	      >
 	        {parseHtmlTextChat(question.statement)}
@@ -4848,7 +4925,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -5318,10 +5395,9 @@ export default function QuestionBankApp() {
   const [bulkGenerateRun, setBulkGenerateRun] = useState({ running:false, current:0, total:0, logs:[] });
   const [bulkActionMenu, setBulkActionMenu] = useState(null);
 
-  // ── Plantão Rápido ────────────────────────────────────────────────────────
+  // ── Centelha do Saber ─────────────────────────────────────────────────────
   const [quickTitle, setQuickTitle] = useState('');
   const [quickContext, setQuickContext] = useState('');
-  const [quickQuestionCount, setQuickQuestionCount] = useState(4);
   const [quickGenerating, setQuickGenerating] = useState(false);
   const [quickStudyTab, setQuickStudyTab] = useState('lesson');
 
@@ -5370,16 +5446,29 @@ export default function QuestionBankApp() {
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
 
-  // Whitelist de videoaulas — carregada do Firestore
+  // Whitelist global — alunos com curso e alunos sem curso
   const [allowedEmails, setAllowedEmails]       = useState([]);
+  const [siteOnlyAllowedEmails, setSiteOnlyAllowedEmails] = useState([]);
   const [newWhitelistEmail, setNewWhitelistEmail] = useState('');
+  const [newSiteWhitelistEmail, setNewSiteWhitelistEmail] = useState('');
   const [userDevices, setUserDevices] = useState([]);
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  const globalAllowedEmails = Array.from(new Set([ADMIN_EMAIL, ...(allowedEmails || [])].map(e => String(e || '').trim().toLowerCase()).filter(Boolean)));
+  const courseAllowedEmails = normalizeEmailList([ADMIN_EMAIL, ...(allowedEmails || [])]);
+  const siteOnlyAccessEmails = normalizeEmailList(siteOnlyAllowedEmails || []).filter(email => !courseAllowedEmails.includes(email));
+  const globalAllowedEmails = normalizeEmailList([ADMIN_EMAIL, ...courseAllowedEmails, ...siteOnlyAccessEmails]);
   const isWhitelistedUser = !!user?.email && globalAllowedEmails.includes(user.email.toLowerCase());
-  const canSeeVideoaulas = isWhitelistedUser;
-  const canUseAcademia = isAdmin || canSeeVideoaulas;
+  const canSeeVideoaulas = !!user?.email && courseAllowedEmails.includes(user.email.toLowerCase());
+  const canUseAcademia = isAdmin || isWhitelistedUser;
   const canUseAdvancedFeatures = canUseAcademia;
+  const adminHomeMode = isAdmin ? (settings.adminHomeMode || 'admin') : 'actual';
+  const homeShowsAdminTools = isAdmin && adminHomeMode === 'admin';
+  const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
+  const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
+  const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
+
+  useEffect(() => {
+    if (!canSeeVideoaulas && ['curso','videoaulas','videoquestions'].includes(view)) setView('library');
+  }, [canSeeVideoaulas, view]);
 
   // Exam
   const [examSetup, setExamSetup]       = useState(null);
@@ -5497,7 +5586,7 @@ export default function QuestionBankApp() {
   // Load videoaulas: carrega UMA VEZ no login e usa localStorage como cache entre sessões
   const videoaulasLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.isAnonymous || videoaulasLoadedRef.current) return;
+    if (!user || user.isAnonymous || !canSeeVideoaulas || videoaulasLoadedRef.current) return;
 
     // Tentar cache do localStorage primeiro (evita loading na abertura)
     const cacheKey = `agora_videoaulas_${user.uid}`;
@@ -5519,7 +5608,7 @@ export default function QuestionBankApp() {
     videoaulasLoadedRef.current = true;
     setVideoaulasLoading(true);
     refreshVideoaulasInBackground(user, cacheKey, watchedKey, true);
-  }, [user]); // eslint-disable-line
+  }, [user, canSeeVideoaulas]); // eslint-disable-line
 
   // Resetar ao fazer logout
   useEffect(() => {
@@ -5575,11 +5664,11 @@ export default function QuestionBankApp() {
   };
 
   useEffect(() => {
-    if (!user || user.isAnonymous || !coursePlanLessonOrder.length || !videoaulasData) return;
+    if (!user || user.isAnonymous || !canSeeVideoaulas || !coursePlanLessonOrder.length || !videoaulasData) return;
     const hasDocIds = flattenCourseLessons(videoaulasData).some(lesson => lesson.aula?.doc_id);
     if (hasDocIds) return;
     refreshVideoaulasInBackground(user, `agora_videoaulas_${user.uid}`, `agora_watched_${user.uid}`, false);
-  }, [user, coursePlanLessonOrder.length, videoaulasData]); // eslint-disable-line
+  }, [user, canSeeVideoaulas, coursePlanLessonOrder.length, videoaulasData]); // eslint-disable-line
 
   const markAulaWatched = async (bunnyId, aula = null) => {
     if (!bunnyId) return;
@@ -5752,7 +5841,7 @@ export default function QuestionBankApp() {
   // Load cronograma from Firestore — carrega UMA VEZ no login com cache localStorage
   const cronLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.isAnonymous || cronLoadedRef.current) return;
+    if (!user || user.isAnonymous || !canSeeVideoaulas || cronLoadedRef.current) return;
     cronLoadedRef.current = true;
 
     const cacheKey = `agora_cronograma_${user.uid}`;
@@ -5792,12 +5881,18 @@ export default function QuestionBankApp() {
       } catch(e) { setCronograma([]); }
       finally { setCronLoading(false); }
     })();
-  }, [user]); // eslint-disable-line
+  }, [user, canSeeVideoaulas]); // eslint-disable-line
 
   // Resetar ao logout
   useEffect(() => {
-    if (!user) {
+    if (!user || !canSeeVideoaulas) {
+      if (user && !canSeeVideoaulas) {
+        setVideoaulasData(null);
+        setWatchedAulas({});
+        videoaulasLoadedRef.current = false;
+      }
       cronLoadedRef.current = false;
+      setCronograma(null);
       setCoursePlanSubjects([]);
       setCoursePlanLessonOrder([]);
       setCoursePlanLocked(false);
@@ -5812,7 +5907,7 @@ export default function QuestionBankApp() {
       setCourseOrgRun({ running:false, current:0, total:0, logs:[] });
       courseGlobalOrgPublishedRef.current = false;
     }
-  }, [user]);
+  }, [user, canSeeVideoaulas]);
 
   // Load reviewQueue — carrega uma vez no login
   useEffect(() => {
@@ -6640,14 +6735,25 @@ export default function QuestionBankApp() {
       });
     const unsub = onAuthStateChanged(auth, async(u)=>{
       // Carregar whitelist global do Firestore (público, qualquer usuário autenticado pode ler)
-      let emails = [ADMIN_EMAIL];
+      let courseEmails = [ADMIN_EMAIL];
+      let siteOnlyEmails = [];
       try {
-        const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
-        emails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
-      } catch(e) { emails = [ADMIN_EMAIL]; }
-      const normalized = Array.from(new Set([ADMIN_EMAIL, ...emails].map(e => String(e || '').trim().toLowerCase()).filter(Boolean)));
-      setAllowedEmails(normalized);
-      if (u && (u.isAnonymous || !normalized.includes(String(u.email || '').toLowerCase()))) {
+        const accessSnap = await getDoc(doc(db, 'config', 'access_whitelist'));
+        if (accessSnap.exists()) {
+          const data = accessSnap.data() || {};
+          courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
+          siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
+        } else {
+          const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
+          courseEmails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
+        }
+      } catch(e) { courseEmails = [ADMIN_EMAIL]; siteOnlyEmails = []; }
+      const normalizedCourse = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
+      const normalizedSiteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !normalizedCourse.includes(email));
+      const normalizedGlobal = normalizeEmailList([ADMIN_EMAIL, ...normalizedCourse, ...normalizedSiteOnly]);
+      setAllowedEmails(normalizedCourse);
+      setSiteOnlyAllowedEmails(normalizedSiteOnly);
+      if (u && (u.isAnonymous || !normalizedGlobal.includes(String(u.email || '').toLowerCase()))) {
         setUser(u);
         setUsername(null);
         setLoginView('login');
@@ -7599,6 +7705,10 @@ export default function QuestionBankApp() {
 	  };
 
 	  const exportFlashcardsToAnki = async ({ questions = [], title = 'Flashcards', subjectTitle = '', source = 'agora', deckTitle = '' }) => {
+	    if (!isAdmin) {
+	      addToast('Exportar para Anki é exclusivo do admin.', 'info', 3500);
+	      return;
+	    }
 	    const flashcards = (questions || []).filter(q => q.isFlashcard);
 	    if (!flashcards.length) {
 	      addToast('Este bloco não tem flashcards para enviar ao Anki.', 'info', 3500);
@@ -9330,7 +9440,7 @@ export default function QuestionBankApp() {
   const resetQuickSessionAnswers = async (topic) => {
     if (!topic) return;
     await saveQuickSessionTopic({ ...topic, answers:{}, spacedReview:{}, errorNotebook:[] });
-    addToast('Progresso do plantão limpo.', 'success', 3000);
+    addToast('Progresso da centelha limpo.', 'success', 3000);
   };
 
   const deleteQuickSession = async (topicId) => {
@@ -9346,29 +9456,28 @@ export default function QuestionBankApp() {
       setActiveTopicId(null);
       setView('quick');
     }
-    addToast('Plantão removido.', 'success', 3000);
+    addToast('Centelha removida.', 'success', 3000);
   };
 
   const createQuickSession = async () => {
-    if (!isAdmin) return;
+    if (!canUseAdvancedFeatures) return;
     const title = quickTitle.trim();
     if (!title) {
-      setErrorModal({ title:'Tema obrigatório', message:'Digite o tema do Plantão Rápido antes de gerar.', isAlert:true });
+      setErrorModal({ title:'Tema obrigatório', message:`Digite o tema da ${QUICK_SUBJECT_TITLE} antes de gerar.`, isAlert:true });
       return;
     }
     if (!checkKey()) return;
     setQuickGenerating(true);
-    const toastId = addToast('Gerando Plantão Rápido...', 'loading', 0);
+    const toastId = addToast(`Gerando ${QUICK_SUBJECT_TITLE}...`, 'loading', 0);
     const now = Date.now();
-    const qCount = Math.max(1, Math.min(8, parseInt(quickQuestionCount, 10) || 4));
     const s = {
       ...settingsRef.current,
       questionTypes:['direct', 'flashcard'],
       questionStyle:settingsRef.current.questionStyle || 'mixed',
       numAlternatives:settingsRef.current.numAlternatives || 5,
     };
-    const prompt = buildQuickSessionPrompt({ title, context:quickContext.trim(), questionCount:qCount, settings:s });
-    const sys = 'Você é o Plantão Rápido da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.';
+    const prompt = buildQuickSessionPrompt({ title, context:quickContext.trim(), settings:s });
+    const sys = `Você é a ${QUICK_SUBJECT_TITLE} da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.`;
     let raw = '';
     try {
       for (const { k } of getOrderedKeys()) {
@@ -9381,8 +9490,11 @@ export default function QuestionBankApp() {
           throw e;
         }
       }
-      const parsed = parseGeneratedQuestionsByTypes(raw, `quick_${now}`, ['direct', 'flashcard']);
-      const questions = parsed.questions;
+      const questionSection = extractQuickSection(raw, 'Questões') || extractQuickSection(raw, 'Questoes');
+      const flashcardSection = extractQuickSection(raw, 'Flashcards');
+      const parsedQuestions = parseData(questionSection || raw, `quick_${now}_q`);
+      const parsedFlashcards = parseFlashcards(flashcardSection || raw, `quick_${now}_fc`);
+      const questions = [...parsedQuestions.questions, ...parsedFlashcards.questions];
       const quickLesson = extractQuickLesson(raw);
       if (!questions.length && !quickLesson) throw new Error('EMPTY_GENERATION');
       const topic = {
@@ -9391,7 +9503,7 @@ export default function QuestionBankApp() {
         subtopics:[title],
         questions,
         answers:{},
-        summary:parsed.summary || '',
+        summary:parsedQuestions.summary || '',
         favorites:[],
         errorNotebook:[],
         spacedReview:{},
@@ -9411,7 +9523,7 @@ export default function QuestionBankApp() {
           id:QUICK_SUBJECT_ID,
           title:QUICK_SUBJECT_TITLE,
           source:QUICK_SOURCE,
-          fullSyllabus:'Sessões rápidas criadas pelo Plantão Rápido.',
+          fullSyllabus:`Sessões rápidas criadas pela ${QUICK_SUBJECT_TITLE}.`,
           topics:[topic],
           createdAt:now,
         };
@@ -9422,11 +9534,11 @@ export default function QuestionBankApp() {
       setQuickStudyTab('lesson');
       setQuickTitle('');
       setQuickContext('');
-      updateToast(toastId, `Plantão criado: ${questions.filter(q=>!q.isFlashcard).length} questões e ${questions.filter(q=>q.isFlashcard).length} flashcards.`, 'success');
+      updateToast(toastId, `Centelha criada: ${questions.filter(q=>!q.isFlashcard).length} questões e ${questions.filter(q=>q.isFlashcard).length} flashcards.`, 'success');
       setTimeout(()=>removeToast(toastId), 6000);
       setView('quick-topic');
     } catch(e) {
-      updateToast(toastId, 'Não consegui gerar o Plantão Rápido.', 'error');
+      updateToast(toastId, `Não consegui gerar a ${QUICK_SUBJECT_TITLE}.`, 'error');
       setTimeout(()=>removeToast(toastId), 6000);
       showApiError(e.message || 'CONNECTION_ERROR');
     } finally {
@@ -9520,22 +9632,52 @@ export default function QuestionBankApp() {
     setView('exam');
   };
 
-  const saveWhitelist = async (emails) => {
+  const saveAccessWhitelists = async (courseEmails = allowedEmails, siteOnlyEmails = siteOnlyAllowedEmails) => {
     if (!isAdmin) return;
-    setAllowedEmails(emails);
-    try { await setDoc(doc(db,'config','videoaulas_whitelist'),{emails}); } catch(e) {}
+    const course = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
+    const siteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !course.includes(email));
+    setAllowedEmails(course);
+    setSiteOnlyAllowedEmails(siteOnly);
+    try {
+      await setDoc(doc(db,'config','access_whitelist'),{courseEmails:course,siteOnlyEmails:siteOnly,updatedAt:Date.now()});
+      await setDoc(doc(db,'config','videoaulas_whitelist'),{emails:course});
+    } catch(e) {}
   };
   const addToWhitelist = async () => {
     if (!isAdmin) return;
     const email = newWhitelistEmail.trim().toLowerCase();
-    if (!email || allowedEmails.map(e=>e.toLowerCase()).includes(email)) return;
-    await saveWhitelist([...allowedEmails, email]);
+    if (!email || courseAllowedEmails.includes(email)) return;
+    await saveAccessWhitelists([...courseAllowedEmails, email], siteOnlyAccessEmails.filter(e=>e!==email));
     setNewWhitelistEmail('');
   };
   const removeFromWhitelist = async (email) => {
     if (!isAdmin) return;
     if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return; // nunca remover o admin
-    await saveWhitelist(allowedEmails.filter(e=>e.toLowerCase()!==email.toLowerCase()));
+    await saveAccessWhitelists(courseAllowedEmails.filter(e=>e.toLowerCase()!==email.toLowerCase()), siteOnlyAccessEmails);
+  };
+  const addToSiteOnlyWhitelist = async () => {
+    if (!isAdmin) return;
+    const email = newSiteWhitelistEmail.trim().toLowerCase();
+    if (!email || globalAllowedEmails.includes(email)) return;
+    await saveAccessWhitelists(courseAllowedEmails, [...siteOnlyAccessEmails, email]);
+    setNewSiteWhitelistEmail('');
+  };
+  const removeFromSiteOnlyWhitelist = async (email) => {
+    if (!isAdmin) return;
+    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
+    await saveAccessWhitelists(courseAllowedEmails, siteOnlyAccessEmails.filter(e=>e.toLowerCase()!==email.toLowerCase()));
+  };
+  const moveSiteOnlyToCourse = async (email) => {
+    if (!isAdmin) return;
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) return;
+    await saveAccessWhitelists([...courseAllowedEmails, normalized], siteOnlyAccessEmails.filter(e=>e!==normalized));
+  };
+  const moveCourseToSiteOnly = async (email) => {
+    if (!isAdmin) return;
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized || normalized === ADMIN_EMAIL.toLowerCase()) return;
+    await saveAccessWhitelists(courseAllowedEmails.filter(e=>e!==normalized), [...siteOnlyAccessEmails, normalized]);
   };
 
   // Helpers
@@ -10956,7 +11098,7 @@ export default function QuestionBankApp() {
           <div className="hidden md:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 border rounded-full px-3 py-2 ${darkMode?'border-gray-700 bg-gray-900 text-gray-400':'border-gray-200 bg-white text-gray-500'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
-              isAdmin ? {icon:<Zap className="w-4 h-4"/>,       action:()=>setView('quick'),      title:QUICK_SUBJECT_TITLE} : null,
+              canUseAdvancedFeatures ? {icon:<Flame className="w-4 h-4"/>,       action:()=>setView('quick'),      title:QUICK_SUBJECT_TITLE} : null,
               {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
               {icon:<SettingsIcon className="w-4 h-4"/>,  action:()=>setView('settings'),  title:'Configurações'},
               {icon:darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>, action:()=>setDarkMode(!darkMode), title:'Tema'},
@@ -10988,7 +11130,7 @@ export default function QuestionBankApp() {
           <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
             <div className="px-4 py-2 grid grid-cols-2 gap-1">
               {[
-                isAdmin ? {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:QUICK_SUBJECT_TITLE, action:()=>setView('quick')} : null,
+                canUseAdvancedFeatures ? {icon:<Flame className="w-5 h-5 text-yellow-600"/>, label:QUICK_SUBJECT_TITLE, action:()=>setView('quick')} : null,
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
@@ -11010,13 +11152,16 @@ export default function QuestionBankApp() {
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
 	          (()=>{
-			    const homeCards = [
-			              isAdmin ? {key:'quick', icon:<Zap className="w-5 h-5"/>, title:QUICK_SUBJECT_TITLE, desc:'Explique uma lacuna pontual, gere questões e flashcards em poucos minutos.', meta:`${quickSessions.length} plantões`, action:()=>setView('quick')} : null,
-			              canUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aulas autorais com fixação no final.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
-			              canSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões e cronograma.', meta:'Acesso restrito', action:()=>setView('curso')} : null,
-			              {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Acervo do Oráculo', desc:'Assuntos, blocos e simulados gerados por IA.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
-			              {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', meta:`${sourceSubjects('external').length} assuntos · ${sourceFolders('external').length} pastas`, action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}},
-			            ].filter(Boolean);
+			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aulas autorais com fixação no final.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
+			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', meta:'curso', action:()=>setView('curso')} : null;
+			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Acervo do Oráculo', desc:'Assuntos, blocos e simulados gerados por IA.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
+			    const externalCard = {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', meta:`${sourceSubjects('external').length} assuntos · ${sourceFolders('external').length} pastas`, action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}};
+			    const studyCards = [cursoCard, academiaCard].filter(Boolean);
+			    const archiveCards = [geminiCard, externalCard].filter(Boolean);
+			    const homeSections = [
+			      studyCards.length ? {title:'Estudo', cards:studyCards, tone:'study'} : null,
+			      archiveCards.length ? {title:'Acervo', cards:archiveCards, tone:'archive'} : null,
+			    ].filter(Boolean);
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
@@ -11045,6 +11190,25 @@ export default function QuestionBankApp() {
                       </div>
                     );
                   };
+                  const renderHomeCard = (card, tone='study') => {
+                    const accent = tone === 'admin'
+                      ? (darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-100 text-yellow-800')
+                      : tone === 'archive'
+                        ? (darkMode?'bg-gray-800 text-yellow-400':'bg-white text-yellow-700')
+                        : (darkMode?'bg-gray-800 text-yellow-400':'bg-yellow-50 text-yellow-700');
+                    return (
+                    <button key={card.key} onClick={card.action} className="app-card group text-left rounded-xl p-4 md:p-5 flex items-center gap-4 transition-all min-h-[104px]">
+                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-serif font-bold text-lg text-yellow-600 truncate">{card.title}</h3>
+                        <p className={`text-sm mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
+                      </div>
+                      <div className="hidden sm:block text-right flex-shrink-0">
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${badge}`}>{card.meta}</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 opacity-30 flex-shrink-0"/>
+                    </button>
+                  );};
 				            return (
 				              <div className="space-y-6">
                         <section className="app-hero rounded-2xl p-5 md:p-7 overflow-hidden">
@@ -11058,20 +11222,25 @@ export default function QuestionBankApp() {
                               <p className={`mt-3 text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}> </p>
                             </div>
                             <div className="min-w-0 space-y-3">
-                              {canUseAdvancedFeatures&&(
+                              {homeCanUseAdvancedFeatures&&(
                                 <div className="glass-panel rounded-2xl p-3 md:p-4">
                                   <div className="mb-3 flex items-center gap-2 px-1">
                                     <CalendarCheck className="w-4 h-4 text-yellow-600"/>
                                     <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Progresso de hoje</span>
                                   </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div className={`grid grid-cols-1 ${homeCanSeeVideoaulas ? 'sm:grid-cols-2' : ''} gap-3`}>
                                     <DailyRing label="Questões" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
-                                    <DailyRing label="Tempo assistido" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min" accent="text-green-500"/>
+                                    {homeCanSeeVideoaulas&&<DailyRing label="Tempo assistido" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min" accent="text-green-500"/>}
                                   </div>
                                 </div>
                               )}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {canUseAdvancedFeatures&&(
+                              <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
+                                {homeCanUseAdvancedFeatures&&(
+                                  <button onClick={()=>setView('quick')} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
+                                    <Flame className="w-4 h-4 text-yellow-600"/>{QUICK_SUBJECT_TITLE}
+                                  </button>
+                                )}
+                                {homeCanUseAdvancedFeatures&&(
                                   <button onClick={()=>setView('spaced-review')} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
                                     <RepeatIcon className="w-4 h-4"/>Revisão
                                     {dueCount>0&&<span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-yellow-600 text-white">{dueCount}</span>}
@@ -11084,21 +11253,22 @@ export default function QuestionBankApp() {
                             </div>
                           </div>
                         </section>
-			                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-	                  {homeCards.map(card=>(
-	                    <button key={card.key} onClick={card.action} className="app-card group text-left rounded-xl p-4 md:p-5 flex items-center gap-4 transition-all">
-	                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${darkMode?'bg-gray-800 text-yellow-400 group-hover:bg-yellow-900/30':'bg-yellow-50 text-yellow-700 group-hover:bg-white'}`}>{card.icon}</div>
-	                      <div className="min-w-0 flex-1">
-	                        <h3 className="font-serif font-bold text-lg text-yellow-600 truncate">{card.title}</h3>
-	                        <p className={`text-sm mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
-	                      </div>
-	                      <div className="hidden sm:block text-right flex-shrink-0">
-	                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${badge}`}>{card.meta}</span>
-	                      </div>
-	                      <ChevronRight className="w-4 h-4 opacity-30 flex-shrink-0"/>
-	                    </button>
-	                  ))}
-	                </div>
+			                <div className="space-y-5">
+			                  {isAdmin&&adminHomeMode!=='admin'&&(
+			                    <div className={`rounded-xl border px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'bg-gray-900/70 border-gray-800 text-gray-400':'bg-white border-yellow-100 text-gray-600'}`}>
+			                      <span>Prévia ativa: {adminHomeMode==='course'?'aluno com curso':'aluno sem curso'}</span>
+			                      <button onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:'admin'})} className="text-xs font-bold text-yellow-600 hover:underline self-start sm:self-auto">Voltar para admin</button>
+			                    </div>
+			                  )}
+			                  {homeSections.map(section=>(
+			                    <section key={section.title} className="space-y-3">
+			                      <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>{section.title}</h3>
+			                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+			                        {section.cards.map(card=>renderHomeCard(card, section.tone))}
+			                      </div>
+			                    </section>
+			                  ))}
+			                </div>
 	              </div>
 	            );
 	          })()
@@ -11562,7 +11732,7 @@ export default function QuestionBankApp() {
 		                      fn:()=>openBizuarioSubject(activeSubject),
 		                      active:!!activeSubject.bizuario,
 		                    } : null,
-		                    subjectFlashcards.length > 0 ? {
+		                    isAdmin && subjectFlashcards.length > 0 ? {
 		                      label:`Enviar flashcards (${subjectFlashcards.length})`,
 		                      icon:<Send className="w-4 h-4"/>,
 		                      fn:()=>exportFlashcardsToAnki({
@@ -11766,18 +11936,19 @@ export default function QuestionBankApp() {
               onCall={callWithRotation}
 	              onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 	              displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
-	              onExportAnki={qs=>exportFlashcardsToAnki({
+	              onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 	                questions:qs,
 	                title:activeTopic.title,
 	                subjectTitle:activeSubject?.title || '',
 	                deckTitle:activeSubject?.title || '',
 	                source:activeSubject?.source || 'oraculo',
-	              })}
+	              })) : null}
 	              generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
 	              onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
               topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
+              canCreateFlashcards={canUseAdvancedFeatures}
               questionCountPerSub={settings.qPerSub||1}
               numAlternatives={settings.numAlternatives||5}
               onTopicStyleChange={activeSubject?.source==='gemini'?(val,kind)=>{
@@ -11835,7 +12006,7 @@ export default function QuestionBankApp() {
             library={library}
             darkMode={darkMode}
             isAdmin={canUseAdvancedFeatures}
-            canCreateFlashcards={isAdmin}
+            canCreateFlashcards={canUseAdvancedFeatures}
             canUseAcademia={canUseAcademia}
             academiaGenerating={academiaGenerating}
             academiaGenProgress={academiaGenProgress}
@@ -11975,7 +12146,7 @@ export default function QuestionBankApp() {
                     onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
                     darkMode={darkMode}
                     single={true}
-                    isAdmin={isAdmin}
+                    isAdmin={canUseAdvancedFeatures}
                   />
                 </div>
 
@@ -12223,7 +12394,7 @@ export default function QuestionBankApp() {
         )}
 
         {/* ── PLANTÃO RÁPIDO ── */}
-        {view==='quick'&&isAdmin&&(()=>{
+        {view==='quick'&&canUseAdvancedFeatures&&(()=>{
           const dm = darkMode;
           const totalFlashcards = quickSessions.reduce((sum, topic) => sum + (topic.questions || []).filter(q => q.isFlashcard).length, 0);
           const totalQuestions = quickSessions.reduce((sum, topic) => sum + (topic.questions || []).filter(q => !q.isFlashcard).length, 0);
@@ -12238,7 +12409,7 @@ export default function QuestionBankApp() {
                   <div>
                     <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Admin</p>
                     <h2 className="text-3xl font-serif font-bold text-yellow-600">{QUICK_SUBJECT_TITLE}</h2>
-                    <p className={`text-sm mt-2 max-w-2xl ${dm?'text-gray-400':'text-gray-600'}`}>Para lacunas pontuais: jogue o tema, receba uma explicação curta, questões e flashcards prontos para mandar ao Anki.</p>
+                    <p className={`text-sm mt-2 max-w-2xl ${dm?'text-gray-400':'text-gray-600'}`}>Para lacunas pontuais: jogue o tema, receba uma explicação curta, questões e flashcards para revisar na hora.</p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
                     {[
@@ -12262,7 +12433,7 @@ export default function QuestionBankApp() {
                       <Zap className="w-5 h-5"/>
                     </div>
                     <div>
-                      <h3 className="font-serif font-bold text-xl text-yellow-600">Novo plantão</h3>
+                      <h3 className="font-serif font-bold text-xl text-yellow-600">Nova centelha</h3>
                       <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>Feito para resolver um assunto sem montar pasta.</p>
                     </div>
                   </div>
@@ -12275,25 +12446,13 @@ export default function QuestionBankApp() {
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>O que aconteceu / material</label>
                       <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Cole a pergunta do professor, sua dúvida, trecho de material ou o contexto clínico." className={`w-full h-36 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Questões</label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[3,4,5,6].map(n=>(
-                            <button key={n} type="button" onClick={()=>setQuickQuestionCount(n)} className={`h-11 rounded-xl border-2 font-bold text-sm ${quickQuestionCount===n?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:border-gray-600':'border-gray-200 text-gray-600 hover:border-gray-300')}`}>
-                              {n}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Gemini</label>
-                        <GeminiThinkingSelector value={!!settings.geminiThinkingEnabled} onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}} darkMode={dm} compact/>
-                      </div>
+                    <div>
+                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Gemini</label>
+                      <GeminiThinkingSelector value={!!settings.geminiThinkingEnabled} onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}} darkMode={dm} compact/>
                     </div>
                     <button onClick={createQuickSession} disabled={quickGenerating || !quickTitle.trim()} className="w-full min-h-[52px] bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
                       {quickGenerating ? <Spinner className="w-5 h-5 text-white"/> : <Sparkles className="w-5 h-5"/>}
-                      {quickGenerating ? 'Gerando plantão...' : 'Gerar plantão'}
+                      {quickGenerating ? 'Gerando centelha...' : 'Gerar centelha'}
                     </button>
                   </div>
                 </section>
@@ -12305,7 +12464,7 @@ export default function QuestionBankApp() {
                   </div>
                   {quickSessions.length===0 ? (
                     <div className="p-6">
-                      <EmptyState darkMode={dm} icon={<Zap className="w-7 h-7"/>} title="Nenhum plantão ainda" message="Crie o primeiro a partir de uma dúvida específica."/>
+                      <EmptyState darkMode={dm} icon={<Zap className="w-7 h-7"/>} title="Nenhuma centelha ainda" message="Crie a primeira a partir de uma dúvida específica."/>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -12323,12 +12482,12 @@ export default function QuestionBankApp() {
                                 {topic.quickContext&&<p className={`text-sm mt-2 line-clamp-2 ${dm?'text-gray-400':'text-gray-600'}`}>{topic.quickContext}</p>}
                               </button>
                               <div className="flex items-center gap-2 flex-shrink-0">
-                                {fcs.length>0&&(
+                                {isAdmin&&fcs.length>0&&(
                                   <button onClick={()=>exportFlashcardsToAnki({questions:fcs,title:topic.title,subjectTitle:topic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} title="Enviar flashcards para Anki" aria-label="Enviar flashcards para Anki" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-yellow-400 hover:bg-gray-800':'border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}>
                                     <Send className="w-4 h-4"/>
                                   </button>
                                 )}
-                                <button onClick={()=>setDeleteId({type:'quick-topic', id:topic.id})} title="Excluir plantão" aria-label="Excluir plantão" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`}>
+                                  <button onClick={()=>setDeleteId({type:'quick-topic', id:topic.id})} title="Excluir centelha" aria-label="Excluir centelha" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`}>
                                   <Trash2 className="w-4 h-4"/>
                                 </button>
                               </div>
@@ -12344,7 +12503,7 @@ export default function QuestionBankApp() {
           );
         })()}
 
-        {view==='quick-topic'&&isAdmin&&activeSubject?.source===QUICK_SOURCE&&activeTopic&&(()=>{
+        {view==='quick-topic'&&canUseAdvancedFeatures&&activeSubject?.source===QUICK_SOURCE&&activeTopic&&(()=>{
           const dm = darkMode;
           const allQs = activeTopic.questions || [];
           const directQs = allQs.filter(q => !q.isFlashcard);
@@ -12363,12 +12522,12 @@ export default function QuestionBankApp() {
                 </button>
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Plantão</p>
+                    <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Centelha</p>
                     <h2 className="text-3xl font-serif font-bold text-yellow-600 leading-tight">{activeTopic.title}</h2>
                     <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-600'}`}>{directQs.length} questões · {flashcards.length} flashcards · {answered}/{allQs.length} respondidas</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {flashcards.length>0&&(
+                    {isAdmin&&flashcards.length>0&&(
                       <button onClick={()=>exportFlashcardsToAnki({questions:flashcards,title:activeTopic.title,subjectTitle:activeTopic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
                         <Send className="w-4 h-4"/>Anki
                       </button>
@@ -12376,7 +12535,7 @@ export default function QuestionBankApp() {
                     <button onClick={()=>resetQuickSessionAnswers(activeTopic)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                       <Eraser className="w-4 h-4"/>Limpar
                     </button>
-                    <button onClick={()=>setDeleteId({type:'quick-topic', id:activeTopic.id})} className={`h-10 w-10 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`} title="Excluir plantão" aria-label="Excluir plantão">
+                    <button onClick={()=>setDeleteId({type:'quick-topic', id:activeTopic.id})} className={`h-10 w-10 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`} title="Excluir centelha" aria-label="Excluir centelha">
                       <Trash2 className="w-4 h-4"/>
                     </button>
                   </div>
@@ -12399,7 +12558,7 @@ export default function QuestionBankApp() {
                   {activeTopic.quickLesson ? (
                     <div className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(activeTopic.quickLesson)}</div>
                   ) : (
-                    <EmptyState darkMode={dm} icon={<BookOpen className="w-7 h-7"/>} title="Sem aula rápida salva" message="Este plantão veio sem bloco de explicação, mas as questões continuam disponíveis."/>
+                    <EmptyState darkMode={dm} icon={<BookOpen className="w-7 h-7"/>} title="Sem aula rápida salva" message="Esta centelha veio sem bloco de explicação, mas as questões continuam disponíveis."/>
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-7">
                     <button disabled={!directQs.length} onClick={()=>setQuickStudyTab('questions')} className="min-h-[48px] rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold disabled:opacity-40 flex items-center justify-center gap-2"><FileText className="w-4 h-4"/>Fazer questões</button>
@@ -12409,12 +12568,12 @@ export default function QuestionBankApp() {
               )}
 
               {quickStudyTab==='questions'&&(directQs.length ? (
-                <QuestionView title="Questões do plantão" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={directQs} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} onExport={()=>setExportModal({topic:{...activeTopic, questions:directQs}, subject:activeSubject})} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
-              ) : <EmptyState darkMode={dm} icon={<FileText className="w-7 h-7"/>} title="Sem questões neste plantão" message="Use os flashcards ou gere um novo plantão com mais contexto."/>)}
+                <QuestionView title="Questões da centelha" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={directQs} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} onExport={()=>setExportModal({topic:{...activeTopic, questions:directQs}, subject:activeSubject})} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
+              ) : <EmptyState darkMode={dm} icon={<FileText className="w-7 h-7"/>} title="Sem questões nesta centelha" message="Use os flashcards ou gere uma nova centelha com mais contexto."/>)}
 
               {quickStudyTab==='flashcards'&&(flashcards.length ? (
-                <QuestionView title="Flashcards do plantão" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={flashcards} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onExportAnki={qs=>exportFlashcardsToAnki({questions:qs,title:activeTopic.title,subjectTitle:activeTopic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
-              ) : <EmptyState darkMode={dm} icon={<BrainIcon className="w-7 h-7"/>} title="Sem flashcards neste plantão" message="Gere um novo plantão para criar cartões exportáveis."/>)}
+                <QuestionView title="Flashcards da centelha" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={flashcards} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({questions:qs,title:activeTopic.title,subjectTitle:activeTopic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})) : null} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
+              ) : <EmptyState darkMode={dm} icon={<BrainIcon className="w-7 h-7"/>} title="Sem flashcards nesta centelha" message="Gere uma nova centelha para criar cartões exportáveis."/>)}
             </div>
           );
         })()}
@@ -14596,13 +14755,13 @@ export default function QuestionBankApp() {
 	                    onCall={callWithRotation}
 	                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 		                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
-		                    onExportAnki={qs=>exportFlashcardsToAnki({
+		                    onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 		                      questions:qs,
 		                      title:visibleTitle,
 		                      subjectTitle:vqAula.title,
 		                      deckTitle:'Curso',
 		                      source:'curso',
-		                    })}
+		                    })) : null}
 		                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
                     onReviewErrorNotebook={blockNotebook.length ? (()=>openErrorReviewModal({
                       subject:{id:aulaIdNew, title:vqAula.title, source:'curso'},
@@ -14962,7 +15121,7 @@ export default function QuestionBankApp() {
                   {source:'gemini', title:'Oráculo'},
                   {source:'external', title:'Externo'},
                   {source:'academia', title:'Academia'},
-                  isAdmin ? {source:QUICK_SOURCE, title:QUICK_SUBJECT_TITLE} : null,
+                  canUseAdvancedFeatures ? {source:QUICK_SOURCE, title:QUICK_SUBJECT_TITLE} : null,
                 ].filter(Boolean).map(root => {
                   const subjects = subjectsWithQuestions.filter(s=>s.source===root.source);
                   return {
@@ -15264,6 +15423,26 @@ export default function QuestionBankApp() {
               })()}
             </SettingsSection>
             {isAdmin&&(
+              <SettingsSection id="home-preview" title="Visualização do painel" icon={<UserIcon className="w-4 h-4"/>}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    {k:'admin', label:'Admin', desc:'Bancada, curso e acervos'},
+                    {k:'course', label:'Aluno com curso', desc:'Curso e funções comuns'},
+                    {k:'site', label:'Aluno sem curso', desc:'Sem mostrar o curso'},
+                  ].map(opt=>(
+                    <button key={opt.k} type="button" onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:opt.k})}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${(settings.adminHomeMode||'admin')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
+                      <span className="block text-sm font-bold">{opt.label}</span>
+                      <span className="block text-xs opacity-50 mt-0.5 leading-snug">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className={`text-xs mt-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-400'}`}>
+                  Isso muda só o que aparece no seu painel inicial e menus rápidos. Suas permissões de admin continuam ativas.
+                </p>
+              </SettingsSection>
+            )}
+            {isAdmin&&(
               <SettingsSection id="gemini-thinking" title="Modo Gemini" icon={<Sparkles className="w-4 h-4"/>}>
                 <GeminiThinkingSelector
                   value={!!settings.geminiThinkingEnabled}
@@ -15321,8 +15500,8 @@ export default function QuestionBankApp() {
 	            {canUseAdvancedFeatures&&(
 	              <SettingsSection id="goals" title="Metas diárias" icon={<CalendarCheck className="w-4 h-4"/>}>
 	                <div className={`rounded-2xl border p-4 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-	                  <p className={`text-xs mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>Sugestão inicial: 120 questões e 90 minutos úteis de aula por dia.</p>
-	                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+	                  <p className={`text-xs mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>{canSeeVideoaulas ? 'Sugestão inicial: 120 questões e 90 minutos úteis de aula por dia.' : 'Sugestão inicial: 120 questões por dia.'}</p>
+	                  <div className={`grid grid-cols-1 ${canSeeVideoaulas ? 'sm:grid-cols-2' : ''} gap-3`}>
 	                    <div>
 	                      <label className="block text-xs font-bold uppercase mb-2 opacity-50 leading-snug">Questões/dia</label>
 	                      <input
@@ -15334,7 +15513,7 @@ export default function QuestionBankApp() {
 	                        className={`w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-gray-50 border-gray-200'}`}
 	                      />
 	                    </div>
-	                    <div>
+	                    {canSeeVideoaulas&&<div>
 	                      <label className="block text-xs font-bold uppercase mb-2 opacity-50 leading-snug">Minutos de aula/dia</label>
 	                      <input
 	                        type="number"
@@ -15344,7 +15523,7 @@ export default function QuestionBankApp() {
 	                        onBlur={()=>saveSettings(settingsRef.current)}
 	                        className={`w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-gray-50 border-gray-200'}`}
 	                      />
-	                    </div>
+	                    </div>}
 	                  </div>
 	                </div>
 	              </SettingsSection>
@@ -15369,39 +15548,80 @@ export default function QuestionBankApp() {
                 <textarea value={settings.customPrompt} onChange={e=>setSettings({...settings,customPrompt:e.target.value})} onBlur={()=>saveSettings(settings)} placeholder="Instruções adicionais para o Oráculo..." className={`w-full h-28 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
               </SettingsSection>
 
-            {/* ── ADMIN: Whitelist de Videoaulas ── */}
+            {/* ── ADMIN: Whitelist de acesso ── */}
             {isAdmin&&(
               <SettingsSection
                 id="whitelist"
-                title="Acesso às Videoaulas"
+                title="Controle de acesso"
                 icon={<Sparkles className="w-4 h-4"/>}
                 className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-yellow-900/40':'bg-yellow-50 border-yellow-200'}`}
                 titleClassName="text-yellow-600"
               >
-                <div className="space-y-2 mb-4">
-                  {allowedEmails.map(email=>(
-                    <div key={email} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl ${darkMode?'bg-gray-700':'bg-white'} border ${darkMode?'border-gray-600':'border-gray-200'}`}>
-                      <span className="text-sm font-medium truncate">{email}</span>
-                      {email.toLowerCase()===ADMIN_EMAIL.toLowerCase()
-                        ? <span className="text-xs font-bold text-yellow-600 flex-shrink-0">admin</span>
-                        : <button type="button" aria-label={`Remover ${email}`} onClick={()=>removeFromWhitelist(email)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
-                      }
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className={`rounded-2xl border p-4 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-yellow-200'}`}>
+                    <div className="mb-3">
+                      <p className="text-sm font-bold">Alunos com curso</p>
+                      <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Acesso ao Portal do Curso e às funções não administrativas.</p>
                     </div>
-                  ))}
-                  {allowedEmails.length===0&&<p className="text-sm opacity-40 text-center py-2">Nenhum email cadastrado</p>}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="email" value={newWhitelistEmail}
-                    onChange={e=>setNewWhitelistEmail(e.target.value)}
-                    onKeyDown={e=>e.key==='Enter'&&addToWhitelist()}
-                    placeholder="novo@email.com"
-                    className={`flex-1 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-white border-gray-200'}`}
-                  />
-                  <button type="button" aria-label="Adicionar email" onClick={addToWhitelist} disabled={!newWhitelistEmail.trim()}
-                    className="px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold disabled:opacity-40">
-                    <PlusIcon className="w-4 h-4"/>
-                  </button>
+                    <div className="space-y-2 mb-4 max-h-72 overflow-y-auto pr-1">
+                      {courseAllowedEmails.map(email=>(
+                        <div key={email} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                          <span className="text-sm font-medium truncate">{email}</span>
+                          {email.toLowerCase()===ADMIN_EMAIL.toLowerCase()
+                            ? <span className="text-xs font-bold text-yellow-600 flex-shrink-0">admin</span>
+                            : <div className="flex items-center gap-1 flex-shrink-0">
+                                <button type="button" aria-label={`Mover ${email} para acesso sem curso`} title="Mover para sem curso" onClick={()=>moveCourseToSiteOnly(email)} className={`text-xs font-bold px-2 py-1 rounded-lg ${darkMode?'text-gray-300 hover:bg-gray-700':'text-gray-600 hover:bg-white'}`}>sem curso</button>
+                                <button type="button" aria-label={`Remover ${email}`} onClick={()=>removeFromWhitelist(email)} className="text-red-400 hover:text-red-600 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
+                              </div>
+                          }
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="email" value={newWhitelistEmail}
+                        onChange={e=>setNewWhitelistEmail(e.target.value)}
+                        onKeyDown={e=>e.key==='Enter'&&addToWhitelist()}
+                        placeholder="aluno@comcurso.com"
+                        className={`min-w-0 flex-1 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
+                      />
+                      <button type="button" aria-label="Adicionar aluno com curso" onClick={addToWhitelist} disabled={!newWhitelistEmail.trim()}
+                        className="px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold disabled:opacity-40">
+                        <PlusIcon className="w-4 h-4"/>
+                      </button>
+                    </div>
+                  </div>
+                  <div className={`rounded-2xl border p-4 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-yellow-200'}`}>
+                    <div className="mb-3">
+                      <p className="text-sm font-bold">Alunos sem curso</p>
+                      <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Acesso ao site, sem Portal do Curso, videoaulas, cronograma ou metas de aula.</p>
+                    </div>
+                    <div className="space-y-2 mb-4 max-h-72 overflow-y-auto pr-1">
+                      {siteOnlyAccessEmails.map(email=>(
+                        <div key={email} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                          <span className="text-sm font-medium truncate">{email}</span>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button type="button" aria-label={`Mover ${email} para curso`} title="Mover para com curso" onClick={()=>moveSiteOnlyToCourse(email)} className={`text-xs font-bold px-2 py-1 rounded-lg ${darkMode?'text-gray-300 hover:bg-gray-700':'text-gray-600 hover:bg-white'}`}>com curso</button>
+                            <button type="button" aria-label={`Remover ${email}`} onClick={()=>removeFromSiteOnlyWhitelist(email)} className="text-red-400 hover:text-red-600 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
+                          </div>
+                        </div>
+                      ))}
+                      {siteOnlyAccessEmails.length===0&&<p className="text-sm opacity-40 text-center py-2">Nenhum email sem curso.</p>}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="email" value={newSiteWhitelistEmail}
+                        onChange={e=>setNewSiteWhitelistEmail(e.target.value)}
+                        onKeyDown={e=>e.key==='Enter'&&addToSiteOnlyWhitelist()}
+                        placeholder="aluno@semcurso.com"
+                        className={`min-w-0 flex-1 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
+                      />
+                      <button type="button" aria-label="Adicionar aluno sem curso" onClick={addToSiteOnlyWhitelist} disabled={!newSiteWhitelistEmail.trim()}
+                        className="px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold disabled:opacity-40">
+                        <PlusIcon className="w-4 h-4"/>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </SettingsSection>
             )}
@@ -15409,7 +15629,7 @@ export default function QuestionBankApp() {
               const now = Date.now();
               const activeWindow = 3 * 60 * 1000;
               const recentWindow = 30 * 24 * 60 * 60 * 1000;
-              const whitelist = allowedEmails.map(e => e.toLowerCase());
+              const whitelist = globalAllowedEmails.map(e => e.toLowerCase());
               const devicesByEmail = new Map();
               userDevices
                 .filter(device => whitelist.includes(String(device.email || '').toLowerCase()))
@@ -15827,6 +16047,7 @@ export default function QuestionBankApp() {
         darkMode={darkMode}
         savedSettings={settings}
         isAdmin={isAdmin}
+        canCreateFlashcards={canUseAdvancedFeatures}
         onClose={(prefs={})=>{
           // Salvar preferências mesmo ao fechar sem confirmar
           if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined) {
@@ -15900,7 +16121,7 @@ export default function QuestionBankApp() {
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
+                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
               </div>
               {!isFlashcardReview&&(
                 <div>
@@ -16050,7 +16271,7 @@ export default function QuestionBankApp() {
               </div>
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo das questões de fixação</div>
-                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
+                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
               </div>
               {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
@@ -16118,7 +16339,7 @@ export default function QuestionBankApp() {
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
+                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
               </div>
               {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
@@ -16386,7 +16607,7 @@ export default function QuestionBankApp() {
                     {showsQuestionConfig && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={isAdmin}/>
+                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
                       </div>
                     )}
                     {showsQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
@@ -16540,7 +16761,7 @@ export default function QuestionBankApp() {
         }
         setDeleteId(null);
       }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
-      {deleteId?.type==='quick-topic'&&<GModal title="Excluir plantão?" message="A aula rápida, questões, flashcards e respostas deste plantão serão apagados." confirmText="Excluir" onConfirm={async()=>{await deleteQuickSession(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='quick-topic'&&<GModal title="Excluir centelha?" message="A aula rápida, questões, flashcards e respostas desta centelha serão apagados." confirmText="Excluir" onConfirm={async()=>{await deleteQuickSession(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {editingSub&&(()=>{
         const editableItem = library.find(x=>x.id===editingSub);

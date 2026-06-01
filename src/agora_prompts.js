@@ -72,20 +72,25 @@ NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa corr
 
   flashcard: `
 TIPO: FLASHCARD
-Crie flashcards em português do Brasil, de alto rendimento, atômicos e não redundantes.
-QUANTIDADE: não use quantidade fixa. Gere apenas a quantidade ideal para cobrir os conceitos mais importantes do material sem criar pilhas repetitivas.
+Crie flashcards em português do Brasil como especialista em educação médica, residência e neurociência da aprendizagem.
+OBJETIVO: os cartões devem servir como revisão ativa de longo prazo no estilo AnKing: se o aluno fizer os flashcards, deve conseguir reconstruir os conceitos centrais do conteúdo sem reler a aula.
+QUANTIDADE: não use quantidade fixa. Gere o menor conjunto útil que preserve cobertura de alto rendimento. Para caderno de erros, lacunas declaradas pelo usuário ou conteúdo explicitamente marcado como crítico, trate tudo como lacuna importante e não omita pontos acionáveis.
 REGRAS CRÍTICAS:
-- Cada flashcard deve ser indivisível, autossuficiente e cobrar apenas uma ideia.
+- Cada flashcard deve ser indivisível, autossuficiente e cobrar apenas uma ideia clínica/conceitual.
+- Use dificuldade desejável: force recuperação ativa. Evite pistas óbvias no enunciado que permitam acertar por familiaridade.
+- Zero ambiguidade: a pergunta precisa ter contexto suficiente para uma única resposta justa. A falha deve ser de memória/raciocínio, nunca de interpretação.
 - Toda pergunta deve terminar com ponto de interrogação.
 - A resposta curta deve ter no máximo poucas palavras. Se a resposta ficaria longa, divida em cartões menores.
-- Depois da resposta curta, inclua uma explicação didática completa o suficiente para revisar o tema se o aluno errar.
+- Depois da resposta curta, inclua uma explicação didática como "Notas/Lógica": mecanismo, justificativa, exemplo, exceção ou pegadinha em mini-aula curta.
 - Não repita cartões sobre a mesma cobrança, mesmo que o conteúdo reapareça.
-- Se pedir uma lista, indique a quantidade de itens entre parênteses na pergunta.
+- Evite perguntas "sim/não" e decorebas inúteis. Priorize mecanismo, diagnóstico, conduta, diferenciais, complicações graves/cobradas e armadilhas de prova.
+- Para listas: crie primeiro um cartão macro com categorias; depois atomize. Não peça listas longas. Se pedir uma lista, indique a quantidade entre parênteses e limite a no máximo 4 itens.
+- Antes de finalizar, faça uma auditoria mental: há redundância? faltou algum conceito essencial? algum cartão cobra detalhe baixo rendimento? corrija.
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Flashcard N
 Pergunta: [pergunta curta e objetiva?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [aula breve sobre o conceito, com exemplos, exceções ou pegadinhas relevantes]
+Explicação: [Notas/Lógica: aula breve sobre o conceito, com mecanismo, exemplos, exceções ou pegadinhas relevantes]
 ---`,
 };
 
@@ -238,7 +243,8 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
 ESTRUTURA PARA FLASHCARDS:
 - Cubra os subtópicos/conceitos obrigatórios quando eles forem fornecidos.
 - Não use meta numérica fixa. Crie apenas flashcards de alto rendimento, sem redundância.
-- Priorize conceitos cobrados, esquecíveis, diferenciadores e clinicamente úteis.`
+- Priorize conceitos cobrados, esquecíveis, diferenciadores e clinicamente úteis.
+- O conjunto final deve permitir revisar o conteúdo essencial sem reler o material. Não omita mecanismo, conduta, diagnóstico, diferencial ou pegadinha central quando forem parte do tópico.`
     : autoMode
     ? `
 ESTRUTURA (modo automático):
@@ -269,12 +275,13 @@ FORMATO OBRIGATÓRIO para cada flashcard (separe com ---):
 ## Flashcard 1
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta]
-Explicação: [explicação/aula breve]
+Explicação: [Notas/Lógica: explicação/aula breve]
 ---
 
 REGRA DE QUANTIDADE:
 - Ignore qualquer quantidade fixa citada em outras seções.
-- Gere a quantidade ideal de flashcards para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.` : onlyOpen ? `
+- Gere a quantidade ideal de flashcards para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.
+- Faça perguntas específicas, de recuperação ativa, com resposta curta e explicação em "Notas/Lógica".` : onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ## Questão 1.1.1
 [Enunciado]
@@ -507,13 +514,13 @@ ${typeInst ? `${typeInst}\n` : ''}
 SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-${onlyFlashcards ? 'QUANTIDADE: a IA deve decidir a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição.' : `TOTAL: EXATAMENTE ${total} questões.`}
+${onlyFlashcards ? 'QUANTIDADE: a IA deve decidir a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com perguntas específicas e explicação em Notas/Lógica.' : `TOTAL: EXATAMENTE ${total} questões.`}
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
 ## Flashcard 1
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta]
-Explicação: [explicação/aula breve]
+Explicação: [Notas/Lógica: explicação/aula breve]
 ---` : `${REGRAS_ALTERNATIVAS}
 ${REGRAS_EXPLICACAO}
 ${TEMPLATE_QUESTAO(alts)}`}
@@ -714,12 +721,12 @@ ${typeInst ? typeInst + '\n' : ''}
 SUBTÓPICOS DA AULA${onlyFlashcards ? ' (cubra alto rendimento, sem quantidade fixa)' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
 
-${onlyFlashcards ? 'QUANTIDADE: gere a quantidade ideal de flashcards para revisar o essencial da aula, sem redundância.' : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
+${onlyFlashcards ? 'QUANTIDADE: gere a quantidade ideal de flashcards para revisar o essencial da aula, sem redundância. O conjunto deve permitir reconstruir a aula ativa e clinicamente, como uma revisão AnKing-like.' : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
 - ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Gere no mínimo 2 questões por subtópico, seguindo exatamente a quantidade indicada acima.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
-- ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
+- ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'Subtópicos maiores, mais importantes, mais densos ou com mais contrastes recebem 3 ou 4 questões.'}
 - Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
@@ -732,14 +739,14 @@ ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
 REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
 - 1 a 2 parágrafos curtos
-- ${onlyFlashcards ? 'Explique o conceito da resposta curta como uma mini-aula de revisão.' : 'Por que a correta está certa e por que cada distrator está errado — pelo conteúdo'}
+- ${onlyFlashcards ? 'Explique o conceito da resposta curta como Notas/Lógica: mecanismo, justificativa, exceção ou pegadinha de prova.' : 'Por que a correta está certa e por que cada distrator está errado — pelo conteúdo'}
 - Não aprofunde teoria além do necessário
 - PROIBIDO: referir-se a letras A, B, C, D, E
 ${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
 ## Flashcard 1
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta]
-Explicação: [explicação/aula breve]
+Explicação: [Notas/Lógica: explicação/aula breve]
 ---` : TEMPLATE_QUESTAO(alts)}
 
 ${onlyFlashcards ? 'Use IDs sequenciais simples: ## Flashcard 1, ## Flashcard 2...' : `Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
@@ -780,10 +787,10 @@ ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
 ESTRUTURA${onlyFlashcards ? '' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"` : `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
-${onlyFlashcards ? 'Quantidade: gere a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição.' : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
+${onlyFlashcards ? 'Quantidade: gere a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.' : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
 
 REGRA DA BATERIA EXTRA:
-- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento e menor número útil de cartões.' : 'Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.'}
+- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes recebem 3 ou 4 questões, conforme indicado acima.'}
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
@@ -797,7 +804,7 @@ ${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
 ## Flashcard 1
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta]
-Explicação: [explicação/aula breve]
+Explicação: [Notas/Lógica: explicação/aula breve]
 ---` : ''}
 
 ${onlyFlashcards ? 'Use IDs sequenciais simples: ## Flashcard 1, ## Flashcard 2...' : 'Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).'}
