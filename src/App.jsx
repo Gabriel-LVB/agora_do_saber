@@ -120,6 +120,9 @@ const ACCESS_DENIED_MESSAGE = 'Este site agora é fechado. Entre com um Google c
 const ERROR_REVIEW_MAX_GENERATED_PER_REQUEST = 30;
 const FLASHCARD_CORRECT = 'CORRECT';
 const FLASHCARD_WRONG = 'WRONG';
+const QUICK_SOURCE = 'quick';
+const QUICK_SUBJECT_ID = 'quick-plantao-rapido';
+const QUICK_SUBJECT_TITLE = 'Plantão Rápido';
 const GEMINI_THINKING_BUDGET_OFF = 0;
 const GEMINI_THINKING_BUDGET_DYNAMIC = -1;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
@@ -1015,6 +1018,134 @@ const htmlishToText = (s = '') => String(s)
   .trim();
 const sanitizeFileName = (name = 'export') =>
   (name || 'export').substring(0, 70).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() || 'export';
+const sanitizeAnkiDeckSegment = (name = 'Flashcards') =>
+  sanitizeFileName(name).replace(/::/g, '-').replace(/\s+/g, ' ').trim() || 'Flashcards';
+const ankiTagSlug = (value = 'agora') =>
+  String(value || 'agora')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_ -]+/g, '')
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .slice(0, 48) || 'agora';
+const ankiSourceLabel = (source = '') => ({
+  gemini:'oraculo',
+  oraculo:'oraculo',
+  curso:'curso',
+  academia:'academia',
+  external:'externo',
+  imported:'externo',
+  quick:'plantao_rapido',
+  rapidinha:'rapidinha',
+}[String(source || '').toLowerCase()] || ankiTagSlug(source || 'agora'));
+const ankiHierTag = (group, value) => `${ankiTagSlug(group)}::${ankiTagSlug(value)}`;
+const ankiFieldHtml = (value = '') => escapeXml(String(value || ''))
+  .replace(/\r?\n/g, '<br>')
+  .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+  .replace(/&lt;(\/?)(b|strong)&gt;/gi, '<$1b>')
+  .replace(/&lt;(\/?)(i|em)&gt;/gi, '<$1i>');
+const ANKI_AGORA_MODEL = 'Ágora Flashcard v2';
+const ANKI_AGORA_CSS = `
+.card {
+  margin: 0;
+  padding: 0;
+  background: #f5f6f8;
+  color: #111827;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Arial, sans-serif;
+  font-size: 19px;
+  line-height: 1.58;
+  text-align: left;
+}
+.agora-card {
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 28px));
+  margin: clamp(10px, 3vw, 28px) auto;
+  padding: clamp(22px, 5vw, 44px);
+  border: 1px solid #e6e0d2;
+  border-radius: 18px;
+  background: #fffaf1;
+  box-shadow: 0 14px 34px rgba(21, 27, 38, 0.14);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.agora-label {
+  align-self: flex-start;
+  color: #7c5a16;
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid rgba(161, 98, 7, 0.18);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin-bottom: 22px;
+}
+.agora-front {
+  font-size: clamp(24px, 4.2vw, 34px);
+  font-weight: 760;
+  line-height: 1.22;
+  text-align: center;
+  letter-spacing: 0;
+}
+.agora-back-question {
+  color: #6b7280;
+  font-size: clamp(16px, 2.5vw, 19px);
+  line-height: 1.4;
+  margin-bottom: 22px;
+}
+.agora-answer {
+  color: #172033;
+  font-size: clamp(23px, 4vw, 31px);
+  font-weight: 780;
+  line-height: 1.23;
+  padding: 18px 20px;
+  margin: 0 0 22px;
+  border-radius: 14px;
+  background: #fff3cf;
+  border: 1px solid #ead69a;
+}
+.agora-explain {
+  border-top: 1px solid #e5ddca;
+  padding-top: 20px;
+  color: #344054;
+  font-size: clamp(16px, 2.5vw, 20px);
+}
+.nightMode.card {
+  background: #0a0f1a;
+  color: #e5e7eb;
+}
+.nightMode .agora-card {
+  background: #111827;
+  border-color: #273142;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+}
+.nightMode .agora-label {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.10);
+  border-color: rgba(250, 204, 21, 0.18);
+}
+.nightMode .agora-front,
+.nightMode .agora-answer { color: #f9fafb; }
+.nightMode .agora-back-question { color: #9ca3af; }
+.nightMode .agora-answer {
+  background: #1f2937;
+  border-color: #374151;
+}
+.nightMode .agora-explain {
+  color: #d1d5db;
+  border-top-color: #303a4c;
+}
+@media (max-width: 520px) {
+  .agora-card {
+    width: calc(100vw - 14px);
+    margin: 7px auto;
+    border-radius: 16px;
+    padding: 24px 20px;
+  }
+}
+`;
 const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1363,6 +1494,74 @@ const parseFlashcards = (text, namespace='') => {
   });
 
   return { questions, summary:'' };
+};
+
+const extractQuickLesson = (text = '') => {
+  const raw = String(text || '').replace(/\r\n/g, '\n');
+  const match = raw.match(/(?:^|\n)##\s*Aula\s+r[aá]pida\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Quest[õo]es|Flashcards)\b|$)/i)
+    || raw.match(/(?:^|\n)##\s*Explica[çc][aã]o\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Quest[õo]es|Flashcards)\b|$)/i);
+  const lesson = (match?.[1] || '').trim();
+  return lesson.replace(/\n{3,}/g, '\n\n').trim();
+};
+
+const buildQuickSessionPrompt = ({ title='', context='', questionCount=4, settings={} }) => {
+  const alts = Number(settings.numAlternatives || 5) === 4
+    ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
+    : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
+  const styleInst = {
+    clinical:'Prefira casos clínicos curtos e cobraveis.',
+    direct:'Prefira perguntas diretas sobre conceito, conduta, mecanismo ou critério.',
+    mixed:'Misture casos clínicos curtos e perguntas diretas.',
+  }[settings.questionStyle || 'mixed'];
+  return `
+Você vai criar um Plantão Rápido em português brasileiro para consolidar um tema pontual de medicina em 5-10 minutos.
+
+TEMA:
+${title}
+
+CONTEXTO DO USUÁRIO:
+${context || 'Sem contexto adicional. Explique o tema do zero, mas sem fugir do foco.'}
+
+OBJETIVO:
+- Explicar rapidamente o que o usuário precisa lembrar.
+- Criar ${questionCount} questões de fixação de alto rendimento.
+- Criar uma quantidade ideal de flashcards atômicos, sem redundância, para exportar ao Anki.
+
+REGRAS DA AULA RÁPIDA:
+- Seja direto, clínico e high-yield.
+- Explique o essencial, a lógica por trás, principais indicações/contraindicações, pegadinhas e diferenças com temas próximos.
+- Não faça uma aula enorme. O usuário deve conseguir revisar em poucos minutos.
+
+REGRAS DAS QUESTÕES:
+- ${styleInst}
+- Gere EXATAMENTE ${questionCount} questões.
+- Questões com alternativas devem ter exatamente ${Number(settings.numAlternatives || 5)} alternativas no formato:
+${alts}
+- Depois de cada questão inclua "Gabarito: X" e "Explicação:".
+
+REGRAS DOS FLASHCARDS:
+- Crie somente a quantidade útil para memorizar o assunto, sem pilha excessiva.
+- Cada flashcard deve ser atômico, autossuficiente e não redundante.
+- Toda pergunta deve terminar com ponto de interrogação.
+- Resposta curta, com no máximo poucas palavras.
+- Depois da resposta curta, use <br><br> e uma explicação clara para revisão.
+- Formato obrigatório: Pergunta? | Resposta curta<br><br>Explicação.
+- Não use o caractere | em nenhum outro lugar.
+
+FORMATO FINAL OBRIGATÓRIO:
+## Aula rápida
+[aula em markdown]
+
+## Questões
+Questão 1
+[enunciado]
+${alts}
+Gabarito: A
+Explicação: [explicação]
+
+## Flashcards
+Pergunta? | Resposta curta<br><br>Explicação
+`.trim();
 };
 
 const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) => {
@@ -2426,13 +2625,14 @@ const QuestionView = ({
   errorReviewResultCount=0,
   onGoToAula=null,
   goToAulaLabel='Assistir aula',
-  onGenerateExtra=null,
-  onNextUnit=null,
-  nextUnitLabel='Próxima unidade',
-  nextUnitHelper='Continuar sequência',
-  inReviewCount=0,
-  displayMode='list',
-}) => {
+	  onGenerateExtra=null,
+	  onNextUnit=null,
+	  nextUnitLabel='Próxima unidade',
+	  nextUnitHelper='Continuar sequência',
+	  inReviewCount=0,
+	  displayMode='list',
+	  onExportAnki=null,
+	}) => {
   const dm = darkMode;
   const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
 
@@ -2465,45 +2665,98 @@ const QuestionView = ({
     return () => clearTimeout(timer);
   }, []); // only on mount
 
-  const validAnswers = Object.fromEntries(
-    Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
-  );
+	  const validAnswers = Object.fromEntries(
+	    Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
+	  );
+	  const questionIdsKey = questions.map(q=>q.id).join('|');
+	  const allFlashcards = questions.length > 0 && questions.every(q => q.isFlashcard);
+	  const savedFlashcardAnswersKey = allFlashcards
+	    ? questions.map(q => `${q.id}:${answers?.[q.id] || ''}`).join('|')
+	    : '';
+	  const singleMode = displayMode === 'single' && questions.length > 0;
+	  const [singleIndex, setSingleIndex] = useState(0);
+	  const [showCompletion, setShowCompletion] = useState(false);
+	  const [flashcardQueue, setFlashcardQueue] = useState([]);
+	  const [flashcardCursor, setFlashcardCursor] = useState(0);
+	  const [flashcardMastered, setFlashcardMastered] = useState({});
+	  const [flashcardEntryAnswers, setFlashcardEntryAnswers] = useState({});
+	  const [flashcardAttempts, setFlashcardAttempts] = useState({});
 
-  const isOpenAnswered = (q) => {
-    if (!q.isOpen) return false;
-    const val = validAnswers[q.id];
+	  const isOpenAnswered = (q) => {
+	    if (!q.isOpen) return false;
+	    const val = validAnswers[q.id];
     if (!val || val === 'SKIPPED') return false;
     try { const p = JSON.parse(val); return !!(p?.answer); } catch(e) { return false; }
   };
-  const isOpenCorrect = (q) => {
-    if (!q.isOpen) return false;
-    try { const p = JSON.parse(validAnswers[q.id]); return (p?.score ?? 0) >= 70; } catch(e) { return false; }
-  };
+	  const isOpenCorrect = (q) => {
+	    if (!q.isOpen) return false;
+	    try { const p = JSON.parse(validAnswers[q.id]); return (p?.score ?? 0) >= 70; } catch(e) { return false; }
+	  };
 
-  const wrongIds = questions.filter(q => {
-    if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
-    return validAnswers[q.id] && !isAnswerCorrect(q, validAnswers[q.id]);
-  }).map(q=>q.id);
+	  useEffect(() => {
+	    if (!allFlashcards) return;
+	    const baseQueue = questions.map((q, i) => ({ qid:q.id, attempt:0, origin:i }));
+	    const retryQueue = [];
+	    const initialMastered = {};
+	    const initialEntryAnswers = {};
+	    const initialAttempts = {};
+	    questions.forEach(q => {
+	      const saved = answers?.[q.id];
+	      if (saved === FLASHCARD_CORRECT) initialMastered[q.id] = true;
+	      if (saved === FLASHCARD_CORRECT || saved === FLASHCARD_WRONG) {
+	        initialEntryAnswers[`${q.id}__0`] = saved;
+	      }
+	      if (saved === FLASHCARD_WRONG) {
+	        initialAttempts[q.id] = 1;
+	        retryQueue.push({ qid:q.id, attempt:1, origin:baseQueue.findIndex(entry => entry.qid === q.id) });
+	      }
+	    });
+	    const initialQueue = [...baseQueue, ...retryQueue];
+	    const entryKey = (entry) => `${entry.qid}__${entry.attempt}`;
+	    const firstPending = initialQueue.findIndex(entry => !initialMastered[entry.qid] && !initialEntryAnswers[entryKey(entry)]);
+	    const firstUnmastered = initialQueue.findIndex(entry => !initialMastered[entry.qid]);
+	    const allInitiallyMastered = questions.length > 0 && questions.every(q => initialMastered[q.id]);
+	    setFlashcardQueue(initialQueue);
+	    setFlashcardCursor(firstPending >= 0 ? firstPending : (firstUnmastered >= 0 ? firstUnmastered : 0));
+	    setFlashcardMastered(initialMastered);
+	    setFlashcardEntryAnswers(initialEntryAnswers);
+	    setFlashcardAttempts(initialAttempts);
+	    setShowCompletion(allInitiallyMastered);
+	  }, [allFlashcards, questionIdsKey, savedFlashcardAnswersKey]); // eslint-disable-line
 
-  const correctCount = questions.filter(q =>
-    q.isOpen ? isOpenCorrect(q) : isAnswerCorrect(q, validAnswers[q.id])
-  ).length;
+	  const wrongIds = questions.filter(q => {
+	    if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
+	    if (q.isFlashcard) return validAnswers[q.id] === FLASHCARD_WRONG;
+	    return validAnswers[q.id] && !isAnswerCorrect(q, validAnswers[q.id]);
+	  }).map(q=>q.id);
 
-  const answeredCount = questions.filter(q =>
-    q.isOpen ? isOpenAnswered(q) : !!validAnswers[q.id]
-  ).length;
+	  const isFlashcardMastered = (q) =>
+	    !!flashcardMastered[q.id] || validAnswers[q.id] === FLASHCARD_CORRECT;
 
-  const allDone = questions.length > 0 && answeredCount === questions.length;
-  const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
-  const singleMode = displayMode === 'single' && questions.length > 0;
-  const [singleIndex, setSingleIndex] = useState(0);
-  const [showCompletion, setShowCompletion] = useState(false);
+	  const flashcardMasteredCount = allFlashcards
+	    ? questions.filter(q => isFlashcardMastered(q)).length
+	    : 0;
 
-  useEffect(() => {
-    if (!singleMode) return;
-    const idx = questions.findIndex(q => q.isOpen ? !isOpenAnswered(q) : !validAnswers[q.id]);
-    setSingleIndex(idx >= 0 ? idx : 0);
-  }, [singleMode, questions.map(q=>q.id).join('|')]); // eslint-disable-line
+	  const correctCount = allFlashcards
+	    ? flashcardMasteredCount
+	    : questions.filter(q =>
+	      q.isOpen ? isOpenCorrect(q) : isAnswerCorrect(q, validAnswers[q.id])
+	    ).length;
+
+	  const answeredCount = allFlashcards
+	    ? flashcardMasteredCount
+	    : questions.filter(q =>
+	      q.isOpen ? isOpenAnswered(q) : !!validAnswers[q.id]
+	    ).length;
+
+	  const allDone = questions.length > 0 && (allFlashcards ? questions.every(q => isFlashcardMastered(q)) : answeredCount === questions.length);
+	  const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
+
+	  useEffect(() => {
+	    if (!singleMode || allFlashcards) return;
+	    const idx = questions.findIndex(q => q.isOpen ? !isOpenAnswered(q) : !validAnswers[q.id]);
+	    setSingleIndex(idx >= 0 ? idx : 0);
+	  }, [singleMode, allFlashcards, questionIdsKey]); // eslint-disable-line
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
   const btnNeutral = dm ? `${btnBase} border-gray-600 text-gray-300 hover:bg-gray-700` : `${btnBase} border-gray-200 text-gray-600 hover:bg-gray-50`;
@@ -2515,30 +2768,91 @@ const QuestionView = ({
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
     showBizuario&&onBizuario ? { label:bizuarioCached?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:onBizuario, active:bizuarioCached } : null,
     onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
-    onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
-    onOpenErrorReviewResult && errorReviewResultCount > 0 ? { label:errorReviewResultCount>1?`Abrir revisões geradas (${errorReviewResultCount})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:onOpenErrorReviewResult } : null,
-    onRegenerate ? { label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:onRegenerate } : null,
-    onReset ? { label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:onReset, danger:true } : null,
-  ].filter(Boolean) : [];
-  const currentQuestion = singleMode ? questions[Math.min(singleIndex, questions.length - 1)] : null;
-  const navBtn = (disabled, primary=false) => `inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${disabled
-    ? (dm?'border-gray-800 text-gray-700 bg-gray-900/40 cursor-default':'border-gray-100 text-gray-300 bg-gray-50 cursor-default')
-    : primary
-      ? (dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')
-      : (dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`;
-  const renderQuestion = (q, i) => (
-    <div key={q.id||i} data-question-id={q.id}>
-      <QuestionCard question={q} index={i}
-        selectedLetter={answers[q.id]} onAnswer={l=>onAnswer(q.id,l)}
-        darkMode={dm} isFavorite={favorites.includes(q.id)}
-        onToggleFavorite={()=>onToggleFavorite(q.id)}
-        showErrorNotebook={showErrorNotebook}
-        isInErrorNotebook={listHasId(errorNotebook, q.id)}
-        onToggleErrorNotebook={onToggleErrorNotebook ? ()=>onToggleErrorNotebook(q.id) : undefined}
-        apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
-        onOpenAnswer={onOpenAnswer}/>
-    </div>
-  );
+	    onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
+	    onOpenErrorReviewResult && errorReviewResultCount > 0 ? { label:errorReviewResultCount>1?`Abrir revisões geradas (${errorReviewResultCount})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:onOpenErrorReviewResult } : null,
+	    allFlashcards && onExportAnki ? { label:'Enviar para Anki', icon:<Send className="w-4 h-4"/>, fn:()=>onExportAnki(questions) } : null,
+	    onRegenerate ? { label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:onRegenerate } : null,
+	    onReset ? { label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:onReset, danger:true } : null,
+	  ].filter(Boolean) : [];
+	  const flashcardEntryKey = (entry) => entry ? `${entry.qid}__${entry.attempt}` : '';
+	  const getFlashcardById = (qid) => questions.find(q => q.id === qid);
+	  const activeFlashcardEntry = allFlashcards && singleMode ? flashcardQueue[flashcardCursor] : null;
+	  const currentQuestion = allFlashcards && singleMode
+	    ? (activeFlashcardEntry ? getFlashcardById(activeFlashcardEntry.qid) : null)
+	    : (singleMode ? questions[Math.min(singleIndex, questions.length - 1)] : null);
+	  const navBtn = (disabled, primary=false) => `inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${disabled
+	    ? (dm?'border-gray-800 text-gray-700 bg-gray-900/40 cursor-default':'border-gray-100 text-gray-300 bg-gray-50 cursor-default')
+	    : primary
+	      ? (dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')
+	      : (dm?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`;
+	  const scrollToFlashcardEntry = (entry) => {
+	    if (!entry) return;
+	    setTimeout(() => {
+	      const el = document.querySelector(`[data-flashcard-entry="${flashcardEntryKey(entry)}"]`);
+	      if (el) el.scrollIntoView({ behavior:'smooth', block:'center' });
+	    }, 160);
+	  };
+	  const scrollToCompletion = () => {
+	    setTimeout(() => {
+	      const el = document.querySelector('[data-flashcard-completion="true"]');
+	      if (el) el.scrollIntoView({ behavior:'smooth', block:'center' });
+	    }, 180);
+	  };
+	  const handleFlashcardStudyAnswer = async (q, entry, queueIndex, letter) => {
+	    const key = flashcardEntryKey(entry);
+	    const masteredAfter = { ...flashcardMastered };
+	    if (letter === FLASHCARD_CORRECT) masteredAfter[q.id] = true;
+	    else delete masteredAfter[q.id];
+
+	    const nextAttempt = (flashcardAttempts[q.id] || 0) + 1;
+	    let nextQueue = flashcardQueue.filter((item, idx) => idx <= queueIndex || item.qid !== q.id);
+	    if (letter === FLASHCARD_WRONG) {
+	      nextQueue = [...nextQueue, { qid:q.id, attempt:nextAttempt, origin:entry?.origin ?? queueIndex }];
+	      setFlashcardAttempts(prev => ({ ...prev, [q.id]:nextAttempt }));
+	    }
+
+	    setFlashcardEntryAnswers(prev => ({ ...prev, [key]:letter }));
+	    setFlashcardMastered(masteredAfter);
+	    setFlashcardQueue(nextQueue);
+	    Promise.resolve(onAnswer(q.id, letter)).catch(()=>{});
+
+	    const completedAfter = questions.length > 0 && questions.every(item => masteredAfter[item.id]);
+	    const nextIdx = nextQueue.findIndex((item, idx) => idx > queueIndex && !masteredAfter[item.qid]);
+	    if (singleMode) {
+	      if (nextIdx >= 0) setFlashcardCursor(nextIdx);
+	      else if (completedAfter) setShowCompletion(true);
+	      return;
+	    }
+	    if (nextIdx >= 0) scrollToFlashcardEntry(nextQueue[nextIdx]);
+	    else if (completedAfter) scrollToCompletion();
+	  };
+	  const renderQuestion = (q, i, opts={}) => {
+	    const entry = opts.flashcardEntry || null;
+	    const entryKey = flashcardEntryKey(entry);
+	    const selected = entry
+	      ? (flashcardEntryAnswers[entryKey] || (entry.attempt === 0 ? answers[q.id] : null) || null)
+	      : answers[q.id];
+	    return (
+	    <div
+	      key={entry ? entryKey : (q.id||i)}
+	      data-question-id={q.id}
+	      data-flashcard-entry={entry ? entryKey : undefined}
+	      className={allFlashcards ? 'scroll-mt-8' : undefined}
+	    >
+	      <QuestionCard question={q} index={i}
+	        selectedLetter={selected}
+	        onAnswer={entry ? (l=> selected ? undefined : handleFlashcardStudyAnswer(q, entry, i, l)) : (l=>onAnswer(q.id,l))}
+	        darkMode={dm} isFavorite={favorites.includes(q.id)}
+	        onToggleFavorite={()=>onToggleFavorite(q.id)}
+	        showErrorNotebook={showErrorNotebook}
+	        isInErrorNotebook={listHasId(errorNotebook, q.id)}
+	        onToggleErrorNotebook={onToggleErrorNotebook ? ()=>onToggleErrorNotebook(q.id) : undefined}
+	        apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
+	        onOpenAnswer={onOpenAnswer}
+	        flashcardStudyMode={!!entry}
+	        flashcardLarge={allFlashcards}/>
+	    </div>
+	  );};
   const renderCompletion = () => {
     const wrongCount = questions.length - correctCount;
     const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
@@ -2583,10 +2897,15 @@ const QuestionView = ({
       spacedReviewAction,
       ...notebookActions,
     ].filter(Boolean);
-    const extraActions = [
-      onGenerateExtra ? {
-        label:'Gerar bloco extra',
-        icon:<PlusIcon className="w-4 h-4"/>,
+	    const extraActions = [
+	      allFlashcards && onExportAnki ? {
+	        label:'Enviar para Anki',
+	        icon:<Send className="w-4 h-4"/>,
+	        fn:()=>onExportAnki(questions),
+	      } : null,
+	      onGenerateExtra ? {
+	        label:'Gerar bloco extra',
+	        icon:<PlusIcon className="w-4 h-4"/>,
         fn:onGenerateExtra,
       } : null,
       showBizuario&&onBizuario ? {
@@ -2715,10 +3034,10 @@ const QuestionView = ({
               ? `${correctCount}/${questions.length} corretas (${pct}%)`
               : `${answeredCount}/${questions.length} respondidas`}
           </p>}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {questions.length===0&&!isGenerating&&onGenerate&&(
-            <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
+	        </div>
+	        <div className="flex flex-wrap items-center gap-2">
+	          {questions.length===0&&!isGenerating&&onGenerate&&(
+	            <button onClick={onGenerate} className="bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700">
               {generateIcon||<Sparkles className="w-5 h-5"/>}{generateLabel}
             </button>
           )}
@@ -2742,13 +3061,13 @@ const QuestionView = ({
       )}
 
       {/* ── Seletores de estilo/tipo — aparecem abaixo dos subtópicos, antes de gerar ── */}
-      {!isGenerating&&questions.length===0&&onGenerate&&onTopicStyleChange&&(
-        <div className={`mb-6 p-4 rounded-xl border space-y-4 ${dm?'bg-gray-800/50 border-gray-700':'bg-gray-50 border-gray-200'}`}>
-          {/* Quantidade */}
-          <div>
-            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Configuração das questões</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
+	      {!isGenerating&&questions.length===0&&onGenerate&&onTopicStyleChange&&(
+	        <div className={`mb-6 p-4 rounded-xl border space-y-4 ${dm?'bg-gray-800/50 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+	          {/* Quantidade */}
+	          {(topicType || 'direct') !== 'flashcard' && <div>
+	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Configuração das questões</p>
+	            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+	              <div>
                 <label className={`block text-[11px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Questões/Subtópico</label>
                 <input type="number" min="1" max="10" value={questionCountPerSub || 1}
                   onChange={e=>{
@@ -2769,22 +3088,22 @@ const QuestionView = ({
                     ))}
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-          {/* Estilo do enunciado */}
-          <div>
-            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
-            <div className="flex gap-2">
-              {[{k:'mixed',l:'Misto',d:'Clínico + Direto'},{k:'clinical',l:'Clínico',d:'Casos clínicos'},{k:'direct',l:'Direto',d:'Conceitos'}].map(o=>(
+	              )}
+	            </div>
+	          </div>}
+	          {/* Estilo do enunciado */}
+	          {(topicType || 'direct') !== 'flashcard' && <div>
+	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
+	            <div className="flex gap-2">
+	              {[{k:'mixed',l:'Misto',d:'Clínico + Direto'},{k:'clinical',l:'Clínico',d:'Casos clínicos'},{k:'direct',l:'Direto',d:'Conceitos'}].map(o=>(
                 <button key={o.k} onClick={()=>onTopicStyleChange(o.k,'style')}
                   className={`flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${topicStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
                   {o.l}
                   <p className="font-normal opacity-50 mt-0.5 hidden sm:block">{o.d}</p>
                 </button>
-              ))}
-            </div>
-          </div>
+	              ))}
+	            </div>
+	          </div>}
           {/* Tipo de questão */}
           <div>
             <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Tipo de Questão</p>
@@ -2814,37 +3133,64 @@ const QuestionView = ({
       {/* ── Questões ── */}
       {!isGenerating&&(
         <div>
-          {singleMode && currentQuestion ? (
-            <div>
-              <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
-                <span className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Questão {singleIndex + 1} de {questions.length}</span>
-                <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}>
-                  <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${questions.length ? (answeredCount / questions.length) * 100 : 0}%`}}/>
-                </div>
-                <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
-              </div>
-              {renderQuestion(currentQuestion, singleIndex)}
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <button disabled={singleIndex===0} onClick={()=>setSingleIndex(i=>Math.max(0,i-1))} className={navBtn(singleIndex===0)}>
-                  <ArrowLeft className="w-4 h-4"/>Voltar
-                </button>
-                <button
-                  disabled={singleIndex>=questions.length-1 ? !allDone : false}
-                  onClick={()=>{
-                    if (singleIndex>=questions.length-1) setShowCompletion(true);
-                    else setSingleIndex(i=>Math.min(questions.length-1,i+1));
-                  }}
-                  className={navBtn(singleIndex>=questions.length-1 ? !allDone : false, true)}
-                >
-                  {singleIndex>=questions.length-1 ? <><CheckIcon className="w-4 h-4"/>Concluir</> : <>Avançar<ChevronRight className="w-4 h-4"/></>}
-                </button>
-              </div>
-            </div>
-          ) : questions.map((q,i)=>renderQuestion(q,i))}
-          {/* ── Conclusão ── */}
-          {!singleMode&&allDone&&<div className="py-10">{renderCompletion()}</div>}
-        </div>
-      )}
+	          {singleMode && currentQuestion ? (
+	            <div>
+	              <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
+	                <span className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>
+	                  {allFlashcards ? `Flashcard ${Math.min(flashcardMasteredCount + 1, questions.length)} de ${questions.length}` : `Questão ${singleIndex + 1} de ${questions.length}`}
+	                </span>
+	                <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}>
+	                  <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${questions.length ? (answeredCount / questions.length) * 100 : 0}%`}}/>
+	                </div>
+	                <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
+	              </div>
+	              {renderQuestion(currentQuestion, allFlashcards ? flashcardCursor : singleIndex, allFlashcards ? { flashcardEntry:activeFlashcardEntry } : {})}
+	              <div className="mt-4 flex items-center justify-between gap-3">
+	                {allFlashcards ? (
+	                  <>
+	                  <button disabled={flashcardCursor===0} onClick={()=>setFlashcardCursor(i=>Math.max(0,i-1))} className={navBtn(flashcardCursor===0)}>
+	                    <ArrowLeft className="w-4 h-4"/>Voltar
+	                  </button>
+	                  <button
+	                    disabled={flashcardCursor>=flashcardQueue.length-1 ? !allDone : false}
+	                    onClick={()=>{
+	                      if (flashcardCursor>=flashcardQueue.length-1) setShowCompletion(true);
+	                      else setFlashcardCursor(i=>Math.min(flashcardQueue.length-1,i+1));
+	                    }}
+	                    className={navBtn(flashcardCursor>=flashcardQueue.length-1 ? !allDone : false, true)}
+	                  >
+	                    {flashcardCursor>=flashcardQueue.length-1 ? <><CheckIcon className="w-4 h-4"/>Concluir</> : <>Avançar<ChevronRight className="w-4 h-4"/></>}
+	                  </button>
+	                  </>
+	                ) : (
+	                  <>
+	                  <button disabled={singleIndex===0} onClick={()=>setSingleIndex(i=>Math.max(0,i-1))} className={navBtn(singleIndex===0)}>
+	                    <ArrowLeft className="w-4 h-4"/>Voltar
+	                  </button>
+	                  <button
+	                    disabled={singleIndex>=questions.length-1 ? !allDone : false}
+	                    onClick={()=>{
+	                      if (singleIndex>=questions.length-1) setShowCompletion(true);
+	                      else setSingleIndex(i=>Math.min(questions.length-1,i+1));
+	                    }}
+	                    className={navBtn(singleIndex>=questions.length-1 ? !allDone : false, true)}
+	                  >
+	                    {singleIndex>=questions.length-1 ? <><CheckIcon className="w-4 h-4"/>Concluir</> : <>Avançar<ChevronRight className="w-4 h-4"/></>}
+	                  </button>
+	                  </>
+	                )}
+	              </div>
+	            </div>
+	          ) : allFlashcards
+	            ? flashcardQueue.map((entry, i) => {
+	                const q = getFlashcardById(entry.qid);
+	                return q ? renderQuestion(q, i, { flashcardEntry:entry }) : null;
+	              })
+	            : questions.map((q,i)=>renderQuestion(q,i))}
+	          {/* ── Conclusão ── */}
+	          {!singleMode&&allDone&&<div className="py-10" data-flashcard-completion={allFlashcards ? 'true' : undefined}>{renderCompletion()}</div>}
+	        </div>
+	      )}
     </div>
   );
 };
@@ -3304,53 +3650,60 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
   );
 };
 
-const FlashcardInline = ({ question, darkMode, savedAnswer, onSave }) => {
+const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false }) => {
   const dm = darkMode;
   const [revealed, setRevealed] = useState(!!savedAnswer);
-  useEffect(() => { if (savedAnswer) setRevealed(true); }, [savedAnswer, question?.id]);
+  useEffect(() => { setRevealed(!!savedAnswer); }, [savedAnswer, question?.id]);
   const answered = savedAnswer === FLASHCARD_CORRECT || savedAnswer === FLASHCARD_WRONG;
   const answerTone = savedAnswer === FLASHCARD_CORRECT
-    ? (dm ? 'border-green-700 bg-green-900/20 text-green-100' : 'border-green-200 bg-green-50 text-green-900')
+    ? (dm ? 'border-green-700/80 bg-green-950/30 text-green-100' : 'border-green-200 bg-green-50 text-green-900')
     : savedAnswer === FLASHCARD_WRONG
-      ? (dm ? 'border-red-700 bg-red-900/20 text-red-100' : 'border-red-200 bg-red-50 text-red-900')
-      : (dm ? 'border-gray-700 bg-gray-900/40 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-800');
+      ? (dm ? 'border-red-700/80 bg-red-950/30 text-red-100' : 'border-red-200 bg-red-50 text-red-900')
+      : (dm ? 'border-gray-700 bg-gray-950/60 text-gray-200' : 'border-gray-200 bg-white text-gray-800');
+  const minHeight = large ? 'min-h-[34vh] md:min-h-[42vh]' : 'min-h-[260px]';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {!revealed ? (
-        <button
-          type="button"
-          onClick={()=>setRevealed(true)}
-          className="w-full sm:w-auto px-5 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
-        >
-          <BookOpen className="w-4 h-4"/>Mostrar resposta
-        </button>
+        <div className={`${minHeight} rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center px-5 md:px-8 py-10 ${dm?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-gray-50'}`}>
+          <button
+            type="button"
+            onClick={()=>setRevealed(true)}
+            className="w-full sm:w-auto min-h-[52px] px-7 py-3.5 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.99]"
+          >
+            <BookOpen className="w-4 h-4"/>Mostrar resposta
+          </button>
+        </div>
       ) : (
-        <div className={`rounded-xl border p-4 ${answerTone}`}>
-          <div className="text-xs font-bold uppercase tracking-wider opacity-60 mb-2">Resposta</div>
-          <div className="text-lg font-bold leading-relaxed select-text" style={{userSelect:'text'}}>
-            {parseHtmlTextChat(question.expectedAnswer || '')}
-          </div>
-          {question.explanation && (
-            <div className={`mt-4 pt-4 border-t text-base leading-relaxed select-text ${dm?'border-gray-700':'border-gray-200'}`} style={{userSelect:'text'}}>
-              {parseHtmlTextChat(question.explanation)}
+        <div className={`${minHeight} rounded-2xl border p-5 md:p-7 flex flex-col ${answerTone}`}>
+          <div className="flex-1">
+            <div className="text-xs font-bold uppercase tracking-widest opacity-60 mb-3">Resposta</div>
+            <div className="text-xl md:text-2xl font-serif font-bold leading-snug select-text" style={{userSelect:'text'}}>
+              {parseHtmlTextChat(question.expectedAnswer || '')}
             </div>
-          )}
-          <div className="flex gap-3 mt-5">
-            <button
-              type="button"
-              onClick={()=>onSave(FLASHCARD_WRONG)}
-              className={`flex-1 px-4 py-3 rounded-xl font-bold border transition-colors ${savedAnswer===FLASHCARD_WRONG ? 'bg-red-600 border-red-600 text-white' : (dm?'border-red-800 text-red-300 hover:bg-red-900/30':'border-red-200 text-red-700 hover:bg-red-50')}`}
-            >
-              Errei
-            </button>
-            <button
-              type="button"
-              onClick={()=>onSave(FLASHCARD_CORRECT)}
-              className={`flex-1 px-4 py-3 rounded-xl font-bold border transition-colors ${savedAnswer===FLASHCARD_CORRECT ? 'bg-green-600 border-green-600 text-white' : (dm?'border-green-800 text-green-300 hover:bg-green-900/30':'border-green-200 text-green-700 hover:bg-green-50')}`}
-            >
-              Acertei
-            </button>
+            {question.explanation && (
+              <div className={`mt-6 pt-5 border-t text-base leading-relaxed select-text ${dm?'border-white/10':'border-black/10'}`} style={{userSelect:'text'}}>
+                {parseHtmlTextChat(question.explanation)}
+              </div>
+            )}
+          </div>
+	          <div className="grid grid-cols-2 gap-3 mt-7">
+	            <button
+	              type="button"
+	              disabled={answered}
+	              onClick={()=>onSave(FLASHCARD_WRONG)}
+	              className={`min-h-[54px] px-4 py-3 rounded-xl font-bold border transition-all active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? 'bg-red-600 border-red-600 text-white shadow-sm' : (dm?'border-red-800 text-red-300 hover:bg-red-900/30':'border-red-200 text-red-700 hover:bg-red-50')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
+	            >
+	              Errei
+	            </button>
+	            <button
+	              type="button"
+	              disabled={answered}
+	              onClick={()=>onSave(FLASHCARD_CORRECT)}
+	              className={`min-h-[54px] px-4 py-3 rounded-xl font-bold border transition-all active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? 'bg-green-600 border-green-600 text-white shadow-sm' : (dm?'border-green-800 text-green-300 hover:bg-green-900/30':'border-green-200 text-green-700 hover:bg-green-50')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
+	            >
+	              Acertei
+	            </button>
           </div>
           {answered && <p className="text-xs opacity-50 mt-3">Resposta registrada.</p>}
         </div>
@@ -3518,7 +3871,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   useEffect(() => {
     setOptimisticNotebook(isInErrorNotebook);
@@ -3548,13 +3901,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     return onAnswer(letter);
   };
 
-	  return (
-    <div className={`rounded-xl shadow-sm border p-4 md:p-6 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Questão {index + 1}</span>
-          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
-        </div>
+	  const cardClass = question.isFlashcard && flashcardLarge
+	    ? `rounded-[1.75rem] shadow-md border p-5 md:p-8 mb-8 min-h-[62vh] flex flex-col ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`
+	    : `rounded-xl shadow-sm border p-4 md:p-6 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`;
+
+		  return (
+	    <div className={cardClass}>
+	      <div className="flex items-center justify-between mb-4">
+	        <div className="flex items-center gap-2">
+	          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{question.isFlashcard ? 'Flashcard' : 'Questão'} {index + 1}</span>
+	          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
+	        </div>
         <div className="flex items-center gap-2">
           {showErrorNotebook && (
             <button
@@ -3576,19 +3933,25 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           </button>
         </div>
       </div>
-      <div className={`text-base md:text-lg mb-6 leading-relaxed select-text ${darkMode?'text-gray-200':'text-gray-800'}`} style={{userSelect:'text'}}>{parseHtmlTextChat(question.statement)}</div>
+	      <div
+	        className={`${question.isFlashcard ? 'text-xl md:text-2xl font-serif font-bold text-center leading-snug my-4 md:my-7 max-w-3xl mx-auto' : 'text-base md:text-lg mb-6 leading-relaxed'} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
+	        style={{userSelect:'text'}}
+	      >
+	        {parseHtmlTextChat(question.statement)}
+	      </div>
 
-      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
-      {question.isFlashcard ? (
-        <FlashcardInline
-          question={question}
-          darkMode={darkMode}
-          savedAnswer={selectedLetter && selectedLetter !== 'SKIPPED' ? selectedLetter : null}
-          onSave={l=>{
-            if (showErrorNotebook && l === FLASHCARD_WRONG) setOptimisticNotebook(true);
-            return onAnswer(l);
-          }}
-        />
+	      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
+	      {question.isFlashcard ? (
+	        <FlashcardInline
+	          question={question}
+	          darkMode={darkMode}
+	          savedAnswer={selectedLetter && selectedLetter !== 'SKIPPED' ? selectedLetter : null}
+	          onSave={l=>{
+	            if (showErrorNotebook && l === FLASHCARD_WRONG) setOptimisticNotebook(true);
+	            return onAnswer(l);
+	          }}
+	          large={flashcardLarge || flashcardStudyMode}
+	        />
       ) : question.isOpen ? (
         <OpenAnswerInline
           question={question}
@@ -4955,6 +5318,13 @@ export default function QuestionBankApp() {
   const [bulkGenerateRun, setBulkGenerateRun] = useState({ running:false, current:0, total:0, logs:[] });
   const [bulkActionMenu, setBulkActionMenu] = useState(null);
 
+  // ── Plantão Rápido ────────────────────────────────────────────────────────
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickContext, setQuickContext] = useState('');
+  const [quickQuestionCount, setQuickQuestionCount] = useState(4);
+  const [quickGenerating, setQuickGenerating] = useState(false);
+  const [quickStudyTab, setQuickStudyTab] = useState('lesson');
+
   // ── Paste ─────────────────────────────────────────────────────────────────
   const [pasteText, setPasteText]     = useState('');
   const [pasteSubName, setPasteSubName] = useState('');
@@ -6170,6 +6540,8 @@ export default function QuestionBankApp() {
       e.preventDefault();
       // Navigate back logically
       if (view === 'topic')        { setView('subject'); return; }
+      if (view === 'quick-topic')  { setView('quick'); return; }
+      if (view === 'quick')        { setView('library'); return; }
       if (view === 'academia-topic') { setView('subject'); return; }
       if (view === 'subject')      { setView('sub-library'); return; }
       if (view === 'sub-library')  { setView('library'); return; }
@@ -6366,6 +6738,9 @@ export default function QuestionBankApp() {
   const activeTopic   = activeSubject?.topics?.find(t=>t.id===activeTopicId);
   const librarySubjects = library.filter(s => !isFolderItem(s));
   const libraryFolders = library.filter(isFolderItem);
+  const quickSubject = librarySubjects.find(s => s.source === QUICK_SOURCE && s.id === QUICK_SUBJECT_ID)
+    || librarySubjects.find(s => s.source === QUICK_SOURCE);
+  const quickSessions = [...(quickSubject?.topics || [])].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const sourceSubjects = (source = libFilter) => librarySubjects.filter(s => s.source === source);
   const sourceFolders = (source = libFilter) => libraryFolders.filter(f => f.source === source);
   const activeFolder = activeFolderId ? libraryFolders.find(f => f.id === activeFolderId) : null;
@@ -7176,14 +7551,128 @@ export default function QuestionBankApp() {
     }
     throw lastErr;
   };
-  const addToast = (msg, type='info', duration=5000, onClick=null) => {
-    const id = Date.now() + Math.random();
-    setToasts(p => [...p, { id, msg, type, onClick }]);
-    if (duration > 0) setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
-    return id;
-  };
-  const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
-  const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
+	  const addToast = (msg, type='info', duration=5000, onClick=null) => {
+	    const id = Date.now() + Math.random();
+	    setToasts(p => [...p, { id, msg, type, onClick }]);
+	    if (duration > 0) setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
+	    return id;
+	  };
+	  const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
+	  const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
+
+	  const ankiConnect = async (action, params = {}) => {
+	    const payload = { action, version:6, params };
+	    const urls = ['http://127.0.0.1:8765', 'http://localhost:8765'];
+	    let lastErr = null;
+	    for (const url of urls) {
+	      try {
+	        const res = await fetch(url, {
+	          method:'POST',
+	          // Sem Content-Type customizado para evitar preflight CORS do navegador.
+	          // O AnkiConnect aceita o corpo como JSON mesmo assim.
+	          body:JSON.stringify(payload),
+	        });
+	        const json = await res.json();
+	        if (json.error) throw new Error(json.error);
+	        return json.result;
+	      } catch(e) {
+	        lastErr = e;
+	      }
+	    }
+	    throw lastErr || new Error('Não foi possível conectar ao AnkiConnect.');
+	  };
+
+	  const ensureAgoraAnkiModel = async () => {
+	    const models = await ankiConnect('modelNames');
+	    if (Array.isArray(models) && models.includes(ANKI_AGORA_MODEL)) return;
+	    await ankiConnect('createModel', {
+	      modelName:ANKI_AGORA_MODEL,
+	      inOrderFields:['Front', 'Answer', 'Explanation', 'Source'],
+	      css:ANKI_AGORA_CSS,
+	      isCloze:false,
+	      cardTemplates:[{
+	        Name:'Card 1',
+	        Front:'<main class="agora-card"><div class="agora-label">{{Source}}</div><section class="agora-front">{{Front}}</section></main>',
+	        Back:'<main class="agora-card"><div class="agora-label">{{Source}}</div><section class="agora-back-question">{{Front}}</section><section class="agora-answer">{{Answer}}</section>{{#Explanation}}<section class="agora-explain">{{Explanation}}</section>{{/Explanation}}</main>',
+	      }],
+	    });
+	  };
+
+	  const exportFlashcardsToAnki = async ({ questions = [], title = 'Flashcards', subjectTitle = '', source = 'agora', deckTitle = '' }) => {
+	    const flashcards = (questions || []).filter(q => q.isFlashcard);
+	    if (!flashcards.length) {
+	      addToast('Este bloco não tem flashcards para enviar ao Anki.', 'info', 3500);
+	      return;
+	    }
+	    const sourceTag = ankiSourceLabel(source);
+	    const deckSegment = sanitizeAnkiDeckSegment(deckTitle || subjectTitle || (sourceTag === 'curso' ? 'Curso' : sourceTag === 'rapidinha' ? 'Rapidinhas' : 'Geral'));
+	    const deckName = `Ágora::Flashcards::${deckSegment}`;
+	    const tags = [
+	      'agora',
+	      'flashcards',
+	      ankiHierTag('fonte', sourceTag),
+	      subjectTitle ? ankiHierTag('materia', subjectTitle) : null,
+	    ].filter(Boolean);
+	    const notes = flashcards.map(q => ({
+	      deckName,
+	      modelName:ANKI_AGORA_MODEL,
+	      fields:{
+	        Front:ankiFieldHtml(q.statement || ''),
+	        Answer:ankiFieldHtml(q.expectedAnswer || ''),
+	        Explanation:ankiFieldHtml(q.explanation || ''),
+	        Source:ankiFieldHtml(subjectTitle || source || 'Ágora'),
+	      },
+	      options:{
+	        allowDuplicate:false,
+	        duplicateScope:'collection',
+	      },
+	      tags,
+	    }));
+
+	    const toastId = addToast('Enviando flashcards para o Anki...', 'loading', 0);
+	    try {
+	      await ankiConnect('createDeck', { deck:deckName });
+	      await ensureAgoraAnkiModel();
+	      let addable = notes.map((note, index) => ({ note, index, canAdd:true, error:null }));
+	      try {
+	        const details = await ankiConnect('canAddNotesWithErrorDetail', { notes });
+	        if (Array.isArray(details)) {
+	          addable = details.map((detail, index) => ({
+	            note:notes[index],
+	            index,
+	            canAdd:!!detail?.canAdd,
+	            error:detail?.error || null,
+	          }));
+	        }
+	      } catch(e) {
+	        const flags = await ankiConnect('canAddNotes', { notes });
+	        if (Array.isArray(flags)) {
+	          addable = flags.map((canAdd, index) => ({ note:notes[index], index, canAdd:!!canAdd, error:null }));
+	        }
+	      }
+	      const notesToAdd = addable.filter(item => item.canAdd).map(item => item.note);
+	      const duplicateCount = addable.filter(item => !item.canAdd).length;
+	      if (!notesToAdd.length) {
+	        updateToast(toastId, `Nenhum flashcard novo: ${duplicateCount || flashcards.length} já ${duplicateCount===1?'está':'estão'} no Anki.`, 'info');
+	        setTimeout(()=>removeToast(toastId), 7000);
+	        return;
+	      }
+	      const result = await ankiConnect('addNotes', { notes:notesToAdd });
+	      const added = Array.isArray(result) ? result.filter(Boolean).length : 0;
+	      const skipped = flashcards.length - added;
+	      updateToast(toastId, `${added} flashcard${added!==1?'s':''} enviado${added!==1?'s':''} ao Anki${skipped>0?` · ${skipped} duplicado${skipped!==1?'s':''} ignorado${skipped!==1?'s':''}`:''}.`, 'success');
+	      setTimeout(()=>removeToast(toastId), 7000);
+	    } catch(e) {
+	      updateToast(toastId, 'Não consegui conectar ao Anki.', 'error');
+	      setTimeout(()=>removeToast(toastId), 7000);
+	      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+	      setErrorModal({
+	        title:'Anki não conectado',
+	        message:`Abra o Anki Desktop e confira se o AnkiConnect está ativo. Se ele já estiver ativo, adicione esta origem ao webCorsOriginList do AnkiConnect e reinicie o Anki:\n\n"${origin}"\n\nNo localhost, a porta precisa entrar também:\n"http://localhost:3000"\n"http://127.0.0.1:3000"\n\nNão use barra no final.`,
+	        isAlert:true,
+	      });
+	    }
+	  };
 
   const addCourseCatalogLog = (type, msg) => {
     const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
@@ -8813,6 +9302,138 @@ export default function QuestionBankApp() {
     setPasteText('');setPasteTopic('');setActiveTopicId(nt.id);setView('topic');
   };
 
+  const getQuickSubjectFromLibrary = () => {
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+    return items.find(s => s.source === QUICK_SOURCE && s.id === QUICK_SUBJECT_ID)
+      || items.find(s => s.source === QUICK_SOURCE);
+  };
+
+  const openQuickSession = (topic) => {
+    const subject = getQuickSubjectFromLibrary();
+    if (!subject || !topic) return;
+    setActiveSubjectId(subject.id);
+    setActiveTopicId(topic.id);
+    setQuickStudyTab(topic.quickLesson ? 'lesson' : ((topic.questions || []).some(q => !q.isFlashcard) ? 'questions' : 'flashcards'));
+    setShowOnlyWrong(false);
+    setView('quick-topic');
+  };
+
+  const saveQuickSessionTopic = async (topicPatch) => {
+    const subject = getQuickSubjectFromLibrary();
+    if (!subject) return;
+    await updateSubject({
+      ...subject,
+      topics:(subject.topics || []).map(t => t.id === topicPatch.id ? { ...t, ...topicPatch } : t),
+    });
+  };
+
+  const resetQuickSessionAnswers = async (topic) => {
+    if (!topic) return;
+    await saveQuickSessionTopic({ ...topic, answers:{}, spacedReview:{}, errorNotebook:[] });
+    addToast('Progresso do plantão limpo.', 'success', 3000);
+  };
+
+  const deleteQuickSession = async (topicId) => {
+    const subject = getQuickSubjectFromLibrary();
+    if (!subject) return;
+    const nextTopics = (subject.topics || []).filter(t => t.id !== topicId);
+    if (!nextTopics.length) {
+      await removeSubject(subject.id);
+    } else {
+      await updateSubject({ ...subject, topics:nextTopics });
+    }
+    if (activeTopicId === topicId) {
+      setActiveTopicId(null);
+      setView('quick');
+    }
+    addToast('Plantão removido.', 'success', 3000);
+  };
+
+  const createQuickSession = async () => {
+    if (!isAdmin) return;
+    const title = quickTitle.trim();
+    if (!title) {
+      setErrorModal({ title:'Tema obrigatório', message:'Digite o tema do Plantão Rápido antes de gerar.', isAlert:true });
+      return;
+    }
+    if (!checkKey()) return;
+    setQuickGenerating(true);
+    const toastId = addToast('Gerando Plantão Rápido...', 'loading', 0);
+    const now = Date.now();
+    const qCount = Math.max(1, Math.min(8, parseInt(quickQuestionCount, 10) || 4));
+    const s = {
+      ...settingsRef.current,
+      questionTypes:['direct', 'flashcard'],
+      questionStyle:settingsRef.current.questionStyle || 'mixed',
+      numAlternatives:settingsRef.current.numAlternatives || 5,
+    };
+    const prompt = buildQuickSessionPrompt({ title, context:quickContext.trim(), questionCount:qCount, settings:s });
+    const sys = 'Você é o Plantão Rápido da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.';
+    let raw = '';
+    try {
+      for (const { k } of getOrderedKeys()) {
+        try {
+          raw = await callGemini(prompt, sys, k, [], getGeminiOptions(s));
+          await rotateKey();
+          break;
+        } catch(e) {
+          await rotateKey();
+          throw e;
+        }
+      }
+      const parsed = parseGeneratedQuestionsByTypes(raw, `quick_${now}`, ['direct', 'flashcard']);
+      const questions = parsed.questions;
+      const quickLesson = extractQuickLesson(raw);
+      if (!questions.length && !quickLesson) throw new Error('EMPTY_GENERATION');
+      const topic = {
+        id:`quick-${now}`,
+        title,
+        subtopics:[title],
+        questions,
+        answers:{},
+        summary:parsed.summary || '',
+        favorites:[],
+        errorNotebook:[],
+        spacedReview:{},
+        questionStyle:s.questionStyle,
+        questionTypes:['direct', 'flashcard'],
+        quickLesson,
+        quickContext:quickContext.trim(),
+        createdAt:now,
+        source:'quick',
+      };
+      const currentQuick = getQuickSubjectFromLibrary();
+      if (currentQuick) {
+        await updateSubject({ ...currentQuick, title:QUICK_SUBJECT_TITLE, topics:[topic, ...(currentQuick.topics || [])] });
+        setActiveSubjectId(currentQuick.id);
+      } else {
+        const subject = {
+          id:QUICK_SUBJECT_ID,
+          title:QUICK_SUBJECT_TITLE,
+          source:QUICK_SOURCE,
+          fullSyllabus:'Sessões rápidas criadas pelo Plantão Rápido.',
+          topics:[topic],
+          createdAt:now,
+        };
+        await addSubject(subject);
+        setActiveSubjectId(subject.id);
+      }
+      setActiveTopicId(topic.id);
+      setQuickStudyTab('lesson');
+      setQuickTitle('');
+      setQuickContext('');
+      updateToast(toastId, `Plantão criado: ${questions.filter(q=>!q.isFlashcard).length} questões e ${questions.filter(q=>q.isFlashcard).length} flashcards.`, 'success');
+      setTimeout(()=>removeToast(toastId), 6000);
+      setView('quick-topic');
+    } catch(e) {
+      updateToast(toastId, 'Não consegui gerar o Plantão Rápido.', 'error');
+      setTimeout(()=>removeToast(toastId), 6000);
+      showApiError(e.message || 'CONNECTION_ERROR');
+    } finally {
+      setQuickGenerating(false);
+    }
+  };
+
   // Statistics
   // Open Bizuário — cached in topic.bizuario
   // Bug 7: accepts optional overrideData (e.g. from exam results) skipping topicData
@@ -9493,6 +10114,7 @@ export default function QuestionBankApp() {
     if (subject.source === 'academia') return 'Academia';
     if (subject.source === 'external') return 'Externo';
     if (subject.source === 'curso') return 'Curso';
+    if (subject.source === QUICK_SOURCE) return QUICK_SUBJECT_TITLE;
     return 'Oráculo';
   };
 
@@ -10334,11 +10956,12 @@ export default function QuestionBankApp() {
           <div className="hidden md:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 border rounded-full px-3 py-2 ${darkMode?'border-gray-700 bg-gray-900 text-gray-400':'border-gray-200 bg-white text-gray-500'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
+              isAdmin ? {icon:<Zap className="w-4 h-4"/>,       action:()=>setView('quick'),      title:QUICK_SUBJECT_TITLE} : null,
               {icon:<Heart className="w-4 h-4"/>,         action:()=>setView('favorites'), title:'Favoritos'},
               {icon:<SettingsIcon className="w-4 h-4"/>,  action:()=>setView('settings'),  title:'Configurações'},
               {icon:darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>, action:()=>setDarkMode(!darkMode), title:'Tema'},
               {icon:<LogOut className="w-4 h-4"/>,        action:handleLogout,             title:'Sair', danger:true},
-            ].map((btn,i)=>(
+            ].filter(Boolean).map((btn,i)=>(
               <button key={i} type="button" onClick={btn.action} title={btn.title} aria-label={btn.title} className={`relative h-10 w-10 rounded-xl flex items-center justify-center transition-all ${btn.danger?(darkMode?'border border-gray-700 bg-gray-900 text-red-400 hover:border-red-500/50 hover:bg-red-950/30':'border border-red-200 bg-red-50 text-red-500 hover:bg-red-100'):(darkMode?'border border-gray-700 bg-gray-900 text-yellow-500 hover:bg-gray-800':'border border-gray-200 bg-white text-yellow-700 hover:bg-yellow-50')}`}>
                 {btn.icon}
                 {(btn.badge||0)>0&&<span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{btn.badge>9?'9+':btn.badge}</span>}
@@ -10365,11 +10988,12 @@ export default function QuestionBankApp() {
           <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
             <div className="px-4 py-2 grid grid-cols-2 gap-1">
               {[
+                isAdmin ? {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:QUICK_SUBJECT_TITLE, action:()=>setView('quick')} : null,
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:()=>setView('settings')},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
                 {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
-              ].map((item,i)=>(
+              ].filter(Boolean).map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-900/20':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
                   {item.icon}{item.label}
@@ -10387,6 +11011,7 @@ export default function QuestionBankApp() {
 	        {view==='library'&&(
 	          (()=>{
 			    const homeCards = [
+			              isAdmin ? {key:'quick', icon:<Zap className="w-5 h-5"/>, title:QUICK_SUBJECT_TITLE, desc:'Explique uma lacuna pontual, gere questões e flashcards em poucos minutos.', meta:`${quickSessions.length} plantões`, action:()=>setView('quick')} : null,
 			              canUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aulas autorais com fixação no final.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
 			              canSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões e cronograma.', meta:'Acesso restrito', action:()=>setView('curso')} : null,
 			              {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Acervo do Oráculo', desc:'Assuntos, blocos e simulados gerados por IA.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
@@ -10926,10 +11551,61 @@ export default function QuestionBankApp() {
                   <div className="h-2 w-40 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full" style={{width:`${subjectProgress(activeSubject)}%`}}/></div>
                   <span className="text-sm font-bold text-yellow-600">{subjectProgress(activeSubject)}% concluído</span>
                 </div>
-	              </div>
-	              <div className="flex gap-2 flex-wrap">
-	                {activeSubject.source==='gemini'&&(()=>{
-	                  const pendingCount = getBulkGenerateTargets(activeSubject).length;
+		              </div>
+		              <div className="flex gap-2 flex-wrap">
+		                {(()=>{
+		                  const subjectFlashcards = (activeSubject.topics || []).flatMap(t => (t.questions || []).filter(q => q.isFlashcard));
+		                  const subjectActionItems = [
+		                    activeSubject.source!=='academia' ? {
+		                      label:activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta',
+		                      icon:<BrainIcon className="w-4 h-4"/>,
+		                      fn:()=>openBizuarioSubject(activeSubject),
+		                      active:!!activeSubject.bizuario,
+		                    } : null,
+		                    subjectFlashcards.length > 0 ? {
+		                      label:`Enviar flashcards (${subjectFlashcards.length})`,
+		                      icon:<Send className="w-4 h-4"/>,
+		                      fn:()=>exportFlashcardsToAnki({
+		                        questions:subjectFlashcards,
+		                        title:activeSubject.title,
+		                        subjectTitle:activeSubject.title,
+		                        deckTitle:activeSubject.title,
+		                        source:activeSubject.source || 'oraculo',
+		                      }),
+		                    } : null,
+		                    canUseAdvancedFeatures && getSubjectErrorNotebookQuestions(activeSubject).length > 0 ? {
+		                      label:`Caderno de erros (${getSubjectErrorNotebookQuestions(activeSubject).length})`,
+		                      icon:<BookOpen className="w-4 h-4"/>,
+		                      fn:()=>openSubjectErrorReview(activeSubject),
+		                    } : null,
+		                  ].filter(Boolean);
+		                  return subjectActionItems.length > 0 ? (
+		                    <div className="relative">
+		                      <button
+		                        onClick={()=>setBulkActionMenu(p=>p===`subject-actions-${activeSubject.id}`?null:`subject-actions-${activeSubject.id}`)}
+		                        title="Ações da pasta"
+		                        aria-label="Ações da pasta"
+		                        className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-yellow-700'}`}>
+		                        <MoreIcon className="w-5 h-5"/>
+		                      </button>
+		                      {bulkActionMenu===`subject-actions-${activeSubject.id}`&&(
+		                        <div className={`absolute right-0 top-12 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+		                          {subjectActionItems.map(item=>(
+		                            <button
+		                              key={item.label}
+		                              onClick={()=>{setBulkActionMenu(null);item.fn();}}
+		                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.active?(darkMode?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+		                              {item.icon}
+		                              <span className="flex-1">{item.label}</span>
+		                            </button>
+		                          ))}
+		                        </div>
+		                      )}
+		                    </div>
+		                  ) : null;
+		                })()}
+		                {activeSubject.source==='gemini'&&(()=>{
+		                  const pendingCount = getBulkGenerateTargets(activeSubject).length;
 	                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
 	                  return (
 	                    <button
@@ -10980,15 +11656,6 @@ export default function QuestionBankApp() {
                         )}
                       </div>
 	                  );
-	                })()}
-	                {activeSubject.source!=='academia'&&<button onClick={()=>openBizuarioSubject(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${activeSubject.bizuario?(darkMode?'border-green-600 text-green-400 bg-green-900/20':'border-green-400 text-green-700 bg-green-50'):(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50')}`}><BrainIcon className="w-4 h-4"/>{activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta'}</button>}
-	                {canUseAdvancedFeatures&&(()=>{
-	                  const count = getSubjectErrorNotebookQuestions(activeSubject).length;
-	                  return count > 0 ? (
-	                    <button onClick={()=>openSubjectErrorReview(activeSubject)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
-	                      <BookOpen className="w-4 h-4"/>Caderno de erros ({count})
-	                    </button>
-	                  ) : null;
 	                })()}
                 {activeSubject.source==='external'&&<button onClick={()=>{setPasteSubName(activeSubject.id==='imported-folder'?'':activeSubject.title);setPasteTopic(`Bloco ${activeSubject.topics.length+1}`);setView('paste');}} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm"><Feather className="w-4 h-4"/>Importar</button>}
                 {activeSubject.source==='academia'&&(()=>{
@@ -11097,10 +11764,17 @@ export default function QuestionBankApp() {
               apiKey={getKey()}
               oracleLength={settings.oracleLength||'medium'}
               onCall={callWithRotation}
-              onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
-              displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
-              generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
-              onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
+	              onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
+	              displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
+	              onExportAnki={qs=>exportFlashcardsToAnki({
+	                questions:qs,
+	                title:activeTopic.title,
+	                subjectTitle:activeSubject?.title || '',
+	                deckTitle:activeSubject?.title || '',
+	                source:activeSubject?.source || 'oraculo',
+	              })}
+	              generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
+	              onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
               topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
@@ -11548,6 +12222,203 @@ export default function QuestionBankApp() {
           </div>
         )}
 
+        {/* ── PLANTÃO RÁPIDO ── */}
+        {view==='quick'&&isAdmin&&(()=>{
+          const dm = darkMode;
+          const totalFlashcards = quickSessions.reduce((sum, topic) => sum + (topic.questions || []).filter(q => q.isFlashcard).length, 0);
+          const totalQuestions = quickSessions.reduce((sum, topic) => sum + (topic.questions || []).filter(q => !q.isFlashcard).length, 0);
+          const panel = dm ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200';
+          return (
+            <div className="space-y-6">
+              <section className="app-hero rounded-2xl p-5 md:p-6">
+                <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-4 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                  <ArrowLeft className="w-4 h-4"/>Início
+                </button>
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                  <div>
+                    <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Admin</p>
+                    <h2 className="text-3xl font-serif font-bold text-yellow-600">{QUICK_SUBJECT_TITLE}</h2>
+                    <p className={`text-sm mt-2 max-w-2xl ${dm?'text-gray-400':'text-gray-600'}`}>Para lacunas pontuais: jogue o tema, receba uma explicação curta, questões e flashcards prontos para mandar ao Anki.</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
+                    {[
+                      ['Plantões', quickSessions.length],
+                      ['Questões', totalQuestions],
+                      ['Flashcards', totalFlashcards],
+                    ].map(([label, value])=>(
+                      <div key={label} className={`rounded-xl border px-4 py-3 text-center ${dm?'bg-gray-950/70 border-gray-800':'bg-white/80 border-yellow-100'}`}>
+                        <p className="text-2xl font-serif font-bold text-yellow-600">{value}</p>
+                        <p className={`text-[11px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-5">
+                <section className={`rounded-2xl border p-5 md:p-6 ${panel}`}>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>
+                      <Zap className="w-5 h-5"/>
+                    </div>
+                    <div>
+                      <h3 className="font-serif font-bold text-xl text-yellow-600">Novo plantão</h3>
+                      <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>Feito para resolver um assunto sem montar pasta.</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Tema</label>
+                      <input value={quickTitle} onChange={e=>setQuickTitle(e.target.value)} placeholder="Ex: Manobra de Dix-Hallpike" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                    </div>
+                    <div>
+                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>O que aconteceu / material</label>
+                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Cole a pergunta do professor, sua dúvida, trecho de material ou o contexto clínico." className={`w-full h-36 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Questões</label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[3,4,5,6].map(n=>(
+                            <button key={n} type="button" onClick={()=>setQuickQuestionCount(n)} className={`h-11 rounded-xl border-2 font-bold text-sm ${quickQuestionCount===n?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:border-gray-600':'border-gray-200 text-gray-600 hover:border-gray-300')}`}>
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Gemini</label>
+                        <GeminiThinkingSelector value={!!settings.geminiThinkingEnabled} onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}} darkMode={dm} compact/>
+                      </div>
+                    </div>
+                    <button onClick={createQuickSession} disabled={quickGenerating || !quickTitle.trim()} className="w-full min-h-[52px] bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                      {quickGenerating ? <Spinner className="w-5 h-5 text-white"/> : <Sparkles className="w-5 h-5"/>}
+                      {quickGenerating ? 'Gerando plantão...' : 'Gerar plantão'}
+                    </button>
+                  </div>
+                </section>
+
+                <section className={`rounded-2xl border overflow-hidden ${panel}`}>
+                  <div className={`px-5 py-4 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
+                    <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Histórico</p>
+                    <h3 className="font-serif font-bold text-xl text-yellow-600">Plantões salvos</h3>
+                  </div>
+                  {quickSessions.length===0 ? (
+                    <div className="p-6">
+                      <EmptyState darkMode={dm} icon={<Zap className="w-7 h-7"/>} title="Nenhum plantão ainda" message="Crie o primeiro a partir de uma dúvida específica."/>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {quickSessions.map(topic=>{
+                        const qs = (topic.questions || []).filter(q => !q.isFlashcard);
+                        const fcs = (topic.questions || []).filter(q => q.isFlashcard);
+                        const answered = Object.keys(topic.answers || {}).filter(id => (topic.questions || []).some(q => q.id === id)).length;
+                        const created = topic.createdAt ? new Date(topic.createdAt).toLocaleDateString('pt-BR') : '';
+                        return (
+                          <div key={topic.id} className={`p-4 md:p-5 transition-colors ${dm?'hover:bg-gray-800/60':'hover:bg-gray-50'}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <button onClick={()=>openQuickSession(topic)} className="min-w-0 flex-1 text-left">
+                                <h4 className="font-bold text-base truncate">{topic.title}</h4>
+                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{created} · {qs.length} questões · {fcs.length} flashcards · {answered}/{(topic.questions||[]).length} respondidas</p>
+                                {topic.quickContext&&<p className={`text-sm mt-2 line-clamp-2 ${dm?'text-gray-400':'text-gray-600'}`}>{topic.quickContext}</p>}
+                              </button>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {fcs.length>0&&(
+                                  <button onClick={()=>exportFlashcardsToAnki({questions:fcs,title:topic.title,subjectTitle:topic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} title="Enviar flashcards para Anki" aria-label="Enviar flashcards para Anki" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-yellow-400 hover:bg-gray-800':'border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}>
+                                    <Send className="w-4 h-4"/>
+                                  </button>
+                                )}
+                                <button onClick={()=>setDeleteId({type:'quick-topic', id:topic.id})} title="Excluir plantão" aria-label="Excluir plantão" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`}>
+                                  <Trash2 className="w-4 h-4"/>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
+          );
+        })()}
+
+        {view==='quick-topic'&&isAdmin&&activeSubject?.source===QUICK_SOURCE&&activeTopic&&(()=>{
+          const dm = darkMode;
+          const allQs = activeTopic.questions || [];
+          const directQs = allQs.filter(q => !q.isFlashcard);
+          const flashcards = allQs.filter(q => q.isFlashcard);
+          const answered = allQs.filter(q => activeTopic.answers?.[q.id]).length;
+          const tabBtn = (key, label, count, icon) => (
+            <button key={key} type="button" onClick={()=>setQuickStudyTab(key)} className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${quickStudyTab===key?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+              {icon}{label}<span className={`text-[11px] rounded-full px-2 py-0.5 ${quickStudyTab===key?(dm?'bg-yellow-500 text-gray-950':'bg-yellow-600 text-white'):(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>{count}</span>
+            </button>
+          );
+          return (
+            <div className="space-y-5">
+              <section className="app-hero rounded-2xl p-5 md:p-6">
+                <button onClick={()=>setView('quick')} className={`flex items-center gap-2 mb-4 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                  <ArrowLeft className="w-4 h-4"/>{QUICK_SUBJECT_TITLE}
+                </button>
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Plantão</p>
+                    <h2 className="text-3xl font-serif font-bold text-yellow-600 leading-tight">{activeTopic.title}</h2>
+                    <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-600'}`}>{directQs.length} questões · {flashcards.length} flashcards · {answered}/{allQs.length} respondidas</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {flashcards.length>0&&(
+                      <button onClick={()=>exportFlashcardsToAnki({questions:flashcards,title:activeTopic.title,subjectTitle:activeTopic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                        <Send className="w-4 h-4"/>Anki
+                      </button>
+                    )}
+                    <button onClick={()=>resetQuickSessionAnswers(activeTopic)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                      <Eraser className="w-4 h-4"/>Limpar
+                    </button>
+                    <button onClick={()=>setDeleteId({type:'quick-topic', id:activeTopic.id})} className={`h-10 w-10 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`} title="Excluir plantão" aria-label="Excluir plantão">
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-5">
+                  {tabBtn('lesson', 'Aula', activeTopic.quickLesson ? 1 : 0, <BookOpen className="w-4 h-4"/>)}
+                  {tabBtn('questions', 'Questões', directQs.length, <FileText className="w-4 h-4"/>)}
+                  {tabBtn('flashcards', 'Flashcards', flashcards.length, <BrainIcon className="w-4 h-4"/>)}
+                </div>
+              </section>
+
+              {quickStudyTab==='lesson'&&(
+                <section className={`rounded-2xl border p-5 md:p-7 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                  {activeTopic.quickContext&&(
+                    <div className={`mb-5 rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+                      <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Contexto</p>
+                      <p className={`text-sm leading-relaxed ${dm?'text-gray-300':'text-gray-700'}`}>{activeTopic.quickContext}</p>
+                    </div>
+                  )}
+                  {activeTopic.quickLesson ? (
+                    <div className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(activeTopic.quickLesson)}</div>
+                  ) : (
+                    <EmptyState darkMode={dm} icon={<BookOpen className="w-7 h-7"/>} title="Sem aula rápida salva" message="Este plantão veio sem bloco de explicação, mas as questões continuam disponíveis."/>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-7">
+                    <button disabled={!directQs.length} onClick={()=>setQuickStudyTab('questions')} className="min-h-[48px] rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold disabled:opacity-40 flex items-center justify-center gap-2"><FileText className="w-4 h-4"/>Fazer questões</button>
+                    <button disabled={!flashcards.length} onClick={()=>setQuickStudyTab('flashcards')} className={`min-h-[48px] rounded-xl border font-bold disabled:opacity-40 flex items-center justify-center gap-2 ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BrainIcon className="w-4 h-4"/>Revisar flashcards</button>
+                  </div>
+                </section>
+              )}
+
+              {quickStudyTab==='questions'&&(directQs.length ? (
+                <QuestionView title="Questões do plantão" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={directQs} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} onExport={()=>setExportModal({topic:{...activeTopic, questions:directQs}, subject:activeSubject})} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
+              ) : <EmptyState darkMode={dm} icon={<FileText className="w-7 h-7"/>} title="Sem questões neste plantão" message="Use os flashcards ou gere um novo plantão com mais contexto."/>)}
+
+              {quickStudyTab==='flashcards'&&(flashcards.length ? (
+                <QuestionView title="Flashcards do plantão" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={flashcards} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onExportAnki={qs=>exportFlashcardsToAnki({questions:qs,title:activeTopic.title,subjectTitle:activeTopic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
+              ) : <EmptyState darkMode={dm} icon={<BrainIcon className="w-7 h-7"/>} title="Sem flashcards neste plantão" message="Gere um novo plantão para criar cartões exportáveis."/>)}
+            </div>
+          );
+        })()}
+
         {/* ── FAVORITES ── */}
         {view==='favorites'&&(()=>{
           // Build flat list of all favorited questions with context
@@ -11646,7 +12517,7 @@ export default function QuestionBankApp() {
                     <span className="text-xs opacity-40">{subject.title}</span>
                     <span className="text-xs opacity-20">›</span>
                     <span className="text-sm font-bold">{topic.title}</span>
-                    <button onClick={()=>{setActiveSubjectId(subject.id);setActiveTopicId(topic.id);setView('topic');}} className="ml-auto text-xs text-yellow-600 font-bold hover:underline">Ver tópico →</button>
+                    <button onClick={()=>{setActiveSubjectId(subject.id);setActiveTopicId(topic.id);setQuickStudyTab('lesson');setView(subject.source===QUICK_SOURCE?'quick-topic':'topic');}} className="ml-auto text-xs text-yellow-600 font-bold hover:underline">Ver tópico →</button>
                   </div>
                   {items.map(({question},i)=>(
                     <QuestionCard
@@ -11675,7 +12546,7 @@ export default function QuestionBankApp() {
 	          const SR_LABELS = ['3d','7d','14d','30d','90d'];
 	          const bySource = {};
 	          dueItems.forEach(item => {
-	            const source = item.source === 'academia' ? 'Academia' : item.source === 'curso' ? 'Portal do Curso' : item.source === 'external' ? 'Acervo Externo' : 'Oráculo';
+	            const source = item.source === 'academia' ? 'Academia' : item.source === 'curso' ? 'Portal do Curso' : item.source === 'external' ? 'Acervo Externo' : item.source === QUICK_SOURCE ? QUICK_SUBJECT_TITLE : 'Oráculo';
 	            const groupKey = `${source}__${item.aulaId}`;
 	            if (!bySource[groupKey]) bySource[groupKey] = { source, title:item.aulaTitle || item.item?.aulaTitle || item.aulaId, items:[] };
 	            bySource[groupKey].items.push(item);
@@ -13721,11 +14592,18 @@ export default function QuestionBankApp() {
                     bizuarioCached={!!block.bizuario}
                     darkMode={darkMode}
                     apiKey={getKey()}
-                    oracleLength={settings.oracleLength}
-                    onCall={callWithRotation}
-                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
-	                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
-	                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
+	                    oracleLength={settings.oracleLength}
+	                    onCall={callWithRotation}
+	                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
+		                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
+		                    onExportAnki={qs=>exportFlashcardsToAnki({
+		                      questions:qs,
+		                      title:visibleTitle,
+		                      subjectTitle:vqAula.title,
+		                      deckTitle:'Curso',
+		                      source:'curso',
+		                    })}
+		                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
                     onReviewErrorNotebook={blockNotebook.length ? (()=>openErrorReviewModal({
                       subject:{id:aulaIdNew, title:vqAula.title, source:'curso'},
                       topic:{id:blockId, title:blockTitle},
@@ -14084,7 +14962,8 @@ export default function QuestionBankApp() {
                   {source:'gemini', title:'Oráculo'},
                   {source:'external', title:'Externo'},
                   {source:'academia', title:'Academia'},
-                ].map(root => {
+                  isAdmin ? {source:QUICK_SOURCE, title:QUICK_SUBJECT_TITLE} : null,
+                ].filter(Boolean).map(root => {
                   const subjects = subjectsWithQuestions.filter(s=>s.source===root.source);
                   return {
                     ...root,
@@ -15661,6 +16540,7 @@ export default function QuestionBankApp() {
         }
         setDeleteId(null);
       }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='quick-topic'&&<GModal title="Excluir plantão?" message="A aula rápida, questões, flashcards e respostas deste plantão serão apagados." confirmText="Excluir" onConfirm={async()=>{await deleteQuickSession(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {editingSub&&(()=>{
         const editableItem = library.find(x=>x.id===editingSub);
