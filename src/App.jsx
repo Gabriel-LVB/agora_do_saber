@@ -12581,7 +12581,7 @@ export default function QuestionBankApp() {
                 {/* Tipo e estilo das questões de fixação */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões de fixação — tipo</div>
-                  <QuestionTypeSelector selected={settings.questionTypes||['direct']} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={canCreateFlashcards}/>
+                  <QuestionTypeSelector selected={settings.questionTypes||['direct']} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
                 </div>
                 {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
                   <div>
