@@ -79,6 +79,9 @@ REGRAS CRÍTICAS:
 - Cada flashcard deve ser indivisível, autossuficiente e cobrar apenas uma ideia clínica/conceitual.
 - Use dificuldade desejável: force recuperação ativa. Evite pistas óbvias no enunciado que permitam acertar por familiaridade.
 - Zero ambiguidade: a pergunta precisa ter contexto suficiente para uma única resposta justa. A falha deve ser de memória/raciocínio, nunca de interpretação.
+- Teste de previsibilidade: antes de aceitar um cartão, pergunte "um aluno que sabe o tema conseguiria prever exatamente o tipo de resposta esperada?". Se não, reescreva.
+- Evite perguntas abertas genéricas como "O que é X?", "Defina X" ou "Qual a principal característica de X?" quando a resposta puder ser ampla demais. Prefira cobrar um eixo específico: alvo anatômico, mecanismo, manifestação clássica, anticorpo, conduta, complicação ou diferencial.
+- Respostas genéricas como "doença autoimune crônica", "processo inflamatório" ou "condição multifatorial" são proibidas, salvo se a pergunta pedir exatamente essa classificação e trouxer contexto suficiente.
 - Toda pergunta deve terminar com ponto de interrogação.
 - A resposta curta deve ter no máximo poucas palavras. Se a resposta ficaria longa, divida em cartões menores.
 - Depois da resposta curta, inclua uma explicação didática como "Notas/Lógica": mecanismo, justificativa, exemplo, exceção ou pegadinha em mini-aula curta.
