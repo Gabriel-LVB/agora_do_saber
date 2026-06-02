@@ -1519,7 +1519,53 @@ const extractQuickLesson = (text = '') => {
   return stripLooseMarkdownAsterisks(lesson.replace(/:\*/g, ':')).replace(/\n{3,}/g, '\n\n').trim();
 };
 
-const buildQuickSessionPrompt = ({ title='', context='', settings={} }) => {
+const extractQuickTitle = (text = '', fallback = '') => {
+  const raw = String(text || '').replace(/\r\n/g, '\n');
+  const match = raw.match(/(?:^|\n)##\s*T[íi]tulo\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Foco|Aula\s+r[aá]pida|Explica[çc][aã]o)\b|$)/i);
+  return stripLooseMarkdownAsterisks((match?.[1] || fallback || '').trim().split('\n')[0] || '').replace(/^["'“”]+|["'“”]+$/g, '').trim();
+};
+
+const extractQuickIntent = (text = '', fallback = '') => {
+  const raw = String(text || '').replace(/\r\n/g, '\n');
+  const match = raw.match(/(?:^|\n)##\s*Foco\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Aula\s+r[aá]pida|Explica[çc][aã]o)\b|$)/i);
+  return stripLooseMarkdownAsterisks((match?.[1] || fallback || '').trim()).replace(/\n{3,}/g, '\n\n').trim();
+};
+
+const buildQuickLessonPrompt = ({ context='' }) => {
+  return `
+Você vai criar a primeira parte de uma Centelha do Saber em português brasileiro.
+
+DÚVIDA/MATERIAL DO USUÁRIO:
+${context || 'Sem contexto. Peça mais contexto implicitamente criando uma explicação curta do tema provável.'}
+
+OBJETIVO:
+- Entender exatamente qual lacuna o usuário quer resolver.
+- Definir um título curto e específico.
+- Explicar a lacuna em uma mini-aula objetiva, clínica e high-yield.
+
+REGRAS:
+- Não gere questões e não gere flashcards neste request.
+- Não transforme a dúvida em uma aula genérica.
+- Seja didático, mas resumido: alvo de 250 a 450 palavras.
+- Use parágrafos curtos.
+- Use subtítulos de nível 3 com "###" quando ajudar.
+- Use tópicos com hífen quando necessário.
+- Não use asteriscos, negrito ou itálico.
+- Se a dúvida veio de conversa leiga, inclua uma forma simples de explicar sem perder precisão.
+
+FORMATO OBRIGATÓRIO:
+## Título
+[título curto, sem aspas]
+
+## Foco
+[uma frase dizendo exatamente o que o usuário queria entender]
+
+## Aula rápida
+[mini-aula em markdown]
+`.trim();
+};
+
+const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', settings={} }) => {
   const alts = Number(settings.numAlternatives || 5) === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -1529,27 +1575,24 @@ const buildQuickSessionPrompt = ({ title='', context='', settings={} }) => {
     mixed:'Misture casos clínicos curtos e perguntas diretas.',
   }[settings.questionStyle || 'mixed'];
   return `
-Você vai criar uma Centelha do Saber em português brasileiro para consolidar um tema pontual de medicina em 5-10 minutos.
+Você vai criar a parte ativa de uma Centelha do Saber em português brasileiro.
 
 TEMA:
 ${title}
 
+FOCO IDENTIFICADO:
+${intent || title}
+
 CONTEXTO DO USUÁRIO:
 ${context || 'Sem contexto adicional. Explique o tema do zero, mas sem fugir do foco.'}
 
+AULA JÁ GERADA:
+${lesson || 'Sem aula enviada. Use o contexto e o foco acima.'}
+
 OBJETIVO:
-- Responder exatamente à lacuna do usuário, sem transformar a dúvida em uma aula genérica.
 - Criar uma quantidade compacta de questões de fixação que testem se o usuário realmente entendeu essa lacuna.
 - Criar flashcards obrigatórios, atômicos e exportáveis ao Anki para impedir que a lacuna volte.
-
-REGRAS DA AULA RÁPIDA:
-- Seja direto, clínico e high-yield.
-- Explique o essencial, a lógica por trás, principais indicações/contraindicações, pegadinhas e diferenças com temas próximos somente quando isso ajudar a dúvida do usuário.
-- Se o contexto for uma dúvida leiga ou uma pergunta de outra pessoa, inclua uma forma simples de explicar o mecanismo sem perder precisão.
-- Pode ser didático como uma mini-aula, mas resumido: explique o porquê, o mecanismo e como o aluno poderia explicar para outra pessoa.
-- Tamanho alvo: 250 a 450 palavras, ajustando conforme a complexidade.
-- Organize em parágrafos curtos. Se precisar dividir, use subtítulos de nível 3 com "###" e tópicos com hífen.
-- Não use asteriscos em nenhum ponto da aula. Não use negrito/itálico na aula.
+- Não reescrever a aula. Gere apenas questões e flashcards.
 
 REGRAS DAS QUESTÕES:
 - ${styleInst}
@@ -1562,7 +1605,7 @@ ${alts}
 - Depois de cada questão inclua "Gabarito: X" e "Explicação:".
 
 REGRAS DOS FLASHCARDS:
-- Gere de 4 a 8 flashcards. Nunca gere zero.
+- Gere de 5 a 8 flashcards. Nunca gere menos de 5.
 - Crie somente a quantidade útil para memorizar a lacuna, sem pilha excessiva.
 - Cada flashcard deve ser atômico, autossuficiente e não redundante.
 - Use dificuldade desejável: a pergunta deve exigir recuperação ativa, não reconhecimento passivo.
@@ -1575,9 +1618,6 @@ REGRAS DOS FLASHCARDS:
 - Não faça cartões que cobrem detalhes inúteis; faça cartões que, juntos, permitam revisar a dúvida inteira depois.
 
 FORMATO FINAL OBRIGATÓRIO:
-## Aula rápida
-[aula em markdown]
-
 ## Questões
 ## Questão 1
 [enunciado]
@@ -1592,6 +1632,51 @@ Resposta: [resposta curta, poucas palavras]
 Explicação: [Notas/Lógica em mini-aula curta]
 ---
 `.trim();
+};
+
+const renderQuickLesson = (lesson = '', darkMode = false) => {
+  const lines = stripLooseMarkdownAsterisks(lesson).split('\n');
+  const elements = [];
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i] || '';
+    const line = raw.trim();
+    const heading = line.match(/^#{2,4}\s+(.+)$/);
+    if (heading) {
+      elements.push(
+        <h3 key={`qh-${i}`} className={`text-base font-bold mt-6 mb-2 ${darkMode?'text-yellow-300':'text-yellow-700'}`}>
+          {parseHtmlText(heading[1].trim())}
+        </h3>
+      );
+      i++;
+      continue;
+    }
+    if (/^\s*[-•]\s/.test(raw)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-•]\s/.test(lines[i] || '')) {
+        items.push((lines[i] || '').replace(/^\s*[-•]\s/, '').trim());
+        i++;
+      }
+      elements.push(
+        <ul key={`qul-${i}`} className={`list-disc ml-5 space-y-1.5 my-3 text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`}>
+          {items.map((item, idx) => <li key={idx}>{parseHtmlText(item)}</li>)}
+        </ul>
+      );
+      continue;
+    }
+    if (!line) {
+      elements.push(<div key={`qsp-${i}`} className="h-2"/>);
+      i++;
+      continue;
+    }
+    elements.push(
+      <p key={`qp-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>
+        {parseHtmlText(line)}
+      </p>
+    );
+    i++;
+  }
+  return elements;
 };
 
 const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) => {
@@ -3743,16 +3828,16 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
                 </div>
                 {revealed && (
                   <div className="mx-auto mt-8 max-w-2xl">
-                    <div className="mx-auto mb-7 flex w-full max-w-lg items-center gap-3">
-                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#c7ad74] to-[#c7ad74]"/>
-                      <div className="h-1.5 w-1.5 rounded-full bg-[#b68b38]"/>
-                      <div className="h-px flex-1 bg-gradient-to-l from-transparent via-[#c7ad74] to-[#c7ad74]"/>
-                    </div>
-                    <div className="text-center text-xl md:text-2xl font-bold leading-snug text-[#111827] select-text" style={{userSelect:'text'}}>
+                    <div
+                      className="mx-auto mb-7 mt-1 w-full max-w-xl rounded-full"
+                      style={{height:2, background:'linear-gradient(90deg, transparent, #d19a2d 18%, #d19a2d 82%, transparent)'}}
+                      aria-hidden="true"
+                    />
+                    <div className="text-center text-lg md:text-2xl font-bold leading-snug text-[#111827] select-text" style={{userSelect:'text'}}>
                       {parseHtmlTextChat(question.expectedAnswer || '')}
                     </div>
                     {question.explanation && (
-                      <div className="mx-auto mt-6 text-left text-sm md:text-base leading-relaxed text-[#4b5563] select-text" style={{userSelect:'text'}}>
+                      <div className="mx-auto mt-6 text-left text-base leading-relaxed text-[#4b5563] select-text" style={{userSelect:'text'}}>
                         {parseHtmlTextChat(question.explanation)}
                       </div>
                     )}
@@ -3772,12 +3857,12 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
               <BookOpen className="w-4 h-4"/>Mostrar resposta
             </button>
           ) : (
-            <div className="mx-auto grid w-full max-w-lg grid-cols-2 gap-3">
+            <div className="mx-auto grid w-full max-w-xl grid-cols-2 gap-3">
               <button
                 type="button"
                 disabled={answered}
                 onClick={()=>onSave(FLASHCARD_WRONG)}
-                className={`min-h-[54px] px-4 py-3 rounded-xl font-bold border transition-all active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? 'bg-red-600 border-red-600 text-white shadow-sm' : (dm?'border-red-500/50 bg-gray-950/20 text-red-200 hover:bg-red-900/25':'border-red-200 bg-white text-red-700 hover:bg-red-50')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
+                className={`min-h-[62px] px-5 py-4 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? (dm?'border-red-300 text-red-200 bg-red-950/40':'border-red-500 text-red-700 bg-red-50') : (dm?'border-red-500 text-red-200 hover:border-red-300 hover:text-red-100':'border-red-300 text-red-700 hover:border-red-500 hover:text-red-800')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
               >
                 Errei
               </button>
@@ -3785,7 +3870,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
                 type="button"
                 disabled={answered}
                 onClick={()=>onSave(FLASHCARD_CORRECT)}
-                className={`min-h-[54px] px-4 py-3 rounded-xl font-bold border transition-all active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? 'bg-green-600 border-green-600 text-white shadow-sm' : (dm?'border-green-500/50 bg-gray-950/20 text-green-200 hover:bg-green-900/25':'border-green-200 bg-white text-green-700 hover:bg-green-50')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
+                className={`min-h-[62px] px-5 py-4 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? (dm?'border-green-300 text-green-200 bg-green-950/40':'border-green-500 text-green-700 bg-green-50') : (dm?'border-green-500 text-green-200 hover:border-green-300 hover:text-green-100':'border-green-300 text-green-700 hover:border-green-500 hover:text-green-800')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
               >
                 Acertei
               </button>
@@ -3817,12 +3902,16 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
       ) : (
         <div className={`${minHeight} rounded-2xl border p-5 md:p-7 flex flex-col ${answerTone}`}>
           <div className="flex-1">
-            <div className="text-xs font-bold uppercase tracking-widest opacity-60 mb-3">Resposta</div>
-            <div className="text-lg md:text-xl font-bold leading-snug select-text" style={{userSelect:'text'}}>
+            <div
+              className="mb-5 w-full rounded-full"
+              style={{height:2, background:'linear-gradient(90deg, transparent, #d19a2d 18%, #d19a2d 82%, transparent)'}}
+              aria-hidden="true"
+            />
+            <div className="text-base md:text-xl font-bold leading-snug text-center select-text" style={{userSelect:'text'}}>
               {parseHtmlTextChat(question.expectedAnswer || '')}
             </div>
             {question.explanation && (
-              <div className={`mt-5 pt-4 border-t text-sm md:text-base leading-relaxed select-text ${dm?'border-white/10':'border-black/10'}`} style={{userSelect:'text'}}>
+              <div className={`mt-5 pt-4 border-t text-base leading-relaxed select-text ${dm?'border-white/10':'border-black/10'}`} style={{userSelect:'text'}}>
                 {parseHtmlTextChat(question.explanation)}
               </div>
             )}
@@ -3832,7 +3921,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
 	              type="button"
 	              disabled={answered}
 	              onClick={()=>onSave(FLASHCARD_WRONG)}
-	              className={`min-h-[54px] px-4 py-3 rounded-xl font-bold border transition-all active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? 'bg-red-600 border-red-600 text-white shadow-sm' : (dm?'border-red-800 text-red-300 hover:bg-red-900/30':'border-red-200 text-red-700 hover:bg-red-50')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
+	              className={`min-h-[58px] px-4 py-3 rounded-xl font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? (dm?'border-red-300 text-red-200 bg-red-950/40':'border-red-500 text-red-700 bg-red-50') : (dm?'border-red-500 text-red-200 hover:border-red-300 hover:text-red-100':'border-red-300 text-red-700 hover:border-red-500 hover:text-red-800')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
 	            >
 	              Errei
 	            </button>
@@ -3840,7 +3929,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
 	              type="button"
 	              disabled={answered}
 	              onClick={()=>onSave(FLASHCARD_CORRECT)}
-	              className={`min-h-[54px] px-4 py-3 rounded-xl font-bold border transition-all active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? 'bg-green-600 border-green-600 text-white shadow-sm' : (dm?'border-green-800 text-green-300 hover:bg-green-900/30':'border-green-200 text-green-700 hover:bg-green-50')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
+	              className={`min-h-[58px] px-4 py-3 rounded-xl font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? (dm?'border-green-300 text-green-200 bg-green-950/40':'border-green-500 text-green-700 bg-green-50') : (dm?'border-green-500 text-green-200 hover:border-green-300 hover:text-green-100':'border-green-300 text-green-700 hover:border-green-500 hover:text-green-800')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
 	            >
 	              Acertei
 	            </button>
@@ -9589,9 +9678,9 @@ export default function QuestionBankApp() {
 
   const createQuickSession = async () => {
     if (!canUseAdvancedFeatures) return;
-    const title = quickTitle.trim();
-    if (!title) {
-      setErrorModal({ title:'Tema obrigatório', message:`Digite o tema da ${QUICK_SUBJECT_TITLE} antes de gerar.`, isAlert:true });
+    const userContext = [quickTitle.trim(), quickContext.trim()].filter(Boolean).join('\n\n');
+    if (!userContext.trim()) {
+      setErrorModal({ title:'Dúvida obrigatória', message:`Digite sua dúvida rápida antes de gerar a ${QUICK_SUBJECT_TITLE}.`, isAlert:true });
       return;
     }
     if (!checkKey()) return;
@@ -9604,13 +9693,14 @@ export default function QuestionBankApp() {
       questionStyle:settingsRef.current.questionStyle || 'mixed',
       numAlternatives:settingsRef.current.numAlternatives || 5,
     };
-    const prompt = buildQuickSessionPrompt({ title, context:quickContext.trim(), settings:s });
     const sys = `Você é a ${QUICK_SUBJECT_TITLE} da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.`;
-    let raw = '';
+    let lessonRaw = '';
+    let practiceRaw = '';
     try {
+      updateToast(toastId, 'Gerando explicação da centelha...', 'loading');
       for (const { k } of getOrderedKeys()) {
         try {
-          raw = await callGemini(prompt, sys, k, [], getGeminiOptions(s));
+          lessonRaw = await callGemini(buildQuickLessonPrompt({ context:userContext }), sys, k, [], getGeminiOptions(s));
           await rotateKey();
           break;
         } catch(e) {
@@ -9618,17 +9708,38 @@ export default function QuestionBankApp() {
           throw e;
         }
       }
-      const questionSection = extractQuickSection(raw, 'Questões') || extractQuickSection(raw, 'Questoes');
-      const flashcardSection = extractQuickSection(raw, 'Flashcards');
-      const parsedQuestions = parseData(questionSection || raw, `quick_${now}_q`);
-      const parsedFlashcards = parseFlashcards(flashcardSection || raw, `quick_${now}_fc`);
+      const quickLesson = extractQuickLesson(lessonRaw);
+      const generatedTitle = extractQuickTitle(lessonRaw, userContext.split('\n')[0]);
+      const quickIntent = extractQuickIntent(lessonRaw, generatedTitle);
+      if (!quickLesson) throw new Error('EMPTY_GENERATION');
+
+      updateToast(toastId, 'Gerando questões e flashcards...', 'loading');
+      for (const { k } of getOrderedKeys()) {
+        try {
+          practiceRaw = await callGemini(
+            buildQuickPracticePrompt({ title:generatedTitle, context:userContext, lesson:quickLesson, intent:quickIntent, settings:s }),
+            sys,
+            k,
+            [],
+            { ...getGeminiOptions(s), maxTokens:5000 }
+          );
+          await rotateKey();
+          break;
+        } catch(e) {
+          await rotateKey();
+          throw e;
+        }
+      }
+      const questionSection = extractQuickSection(practiceRaw, 'Questões') || extractQuickSection(practiceRaw, 'Questoes');
+      const flashcardSection = extractQuickSection(practiceRaw, 'Flashcards');
+      const parsedQuestions = parseData(questionSection || practiceRaw, `quick_${now}_q`);
+      const parsedFlashcards = parseFlashcards(flashcardSection || practiceRaw, `quick_${now}_fc`);
       const questions = [...parsedQuestions.questions, ...parsedFlashcards.questions];
-      const quickLesson = extractQuickLesson(raw);
-      if (!questions.length && !quickLesson) throw new Error('EMPTY_GENERATION');
+      if (!questions.length) throw new Error('EMPTY_GENERATION');
       const topic = {
         id:`quick-${now}`,
-        title,
-        subtopics:[title],
+        title:generatedTitle || 'Centelha',
+        subtopics:[generatedTitle || 'Centelha'],
         questions,
         answers:{},
         summary:parsedQuestions.summary || '',
@@ -9638,7 +9749,8 @@ export default function QuestionBankApp() {
         questionStyle:s.questionStyle,
         questionTypes:['direct', 'flashcard'],
         quickLesson,
-        quickContext:quickContext.trim(),
+        quickContext:userContext.trim(),
+        quickIntent,
         createdAt:now,
         source:'quick',
       };
@@ -12585,18 +12697,14 @@ export default function QuestionBankApp() {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Tema</label>
-                      <input value={quickTitle} onChange={e=>setQuickTitle(e.target.value)} placeholder="Ex: Manobra de Dix-Hallpike" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                    </div>
-                    <div>
-                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>O que aconteceu / material</label>
-                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Cole a pergunta do professor, sua dúvida, trecho de material ou o contexto clínico." className={`w-full h-36 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Dúvida rápida</label>
+                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Ex: meu professor perguntou como pesquisar o sinal de Jobert e eu travei. Quero entender o que é, como faz e por que indica pneumoperitônio." className={`w-full h-44 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                     </div>
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Gemini</label>
                       <GeminiThinkingSelector value={!!settings.geminiThinkingEnabled} onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}} darkMode={dm} compact/>
                     </div>
-                    <button onClick={createQuickSession} disabled={quickGenerating || !quickTitle.trim()} className="w-full min-h-[52px] bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                    <button onClick={createQuickSession} disabled={quickGenerating || !quickContext.trim()} className="w-full min-h-[56px] bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
                       {quickGenerating ? <Spinner className="w-5 h-5 text-white"/> : <Sparkles className="w-5 h-5"/>}
                       {quickGenerating ? 'Gerando centelha...' : 'Gerar centelha'}
                     </button>
@@ -12702,13 +12810,13 @@ export default function QuestionBankApp() {
                     </div>
                   )}
                   {activeTopic.quickLesson ? (
-                    <div className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(stripLooseMarkdownAsterisks(activeTopic.quickLesson))}</div>
+                    <div className="space-y-3">{renderQuickLesson(activeTopic.quickLesson, dm)}</div>
                   ) : (
                     <EmptyState darkMode={dm} icon={<BookOpen className="w-7 h-7"/>} title="Sem aula rápida salva" message="Esta centelha veio sem bloco de explicação, mas as questões continuam disponíveis."/>
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-7">
-                    <button disabled={!directQs.length} onClick={()=>setQuickStudyTab('questions')} className="min-h-[48px] rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold disabled:opacity-40 flex items-center justify-center gap-2"><FileText className="w-4 h-4"/>Fazer questões</button>
-                    <button disabled={!flashcards.length} onClick={()=>setQuickStudyTab('flashcards')} className={`min-h-[48px] rounded-xl border font-bold disabled:opacity-40 flex items-center justify-center gap-2 ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BrainIcon className="w-4 h-4"/>Revisar flashcards</button>
+                    <button disabled={!directQs.length} onClick={()=>setQuickStudyTab('questions')} style={{minHeight:64}} className="rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold disabled:opacity-40 flex items-center justify-center gap-2 py-4"><FileText className="w-4 h-4"/>Fazer questões</button>
+                    <button disabled={!flashcards.length} onClick={()=>setQuickStudyTab('flashcards')} style={{minHeight:64}} className={`rounded-xl border font-bold disabled:opacity-40 flex items-center justify-center gap-2 py-4 ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BrainIcon className="w-4 h-4"/>Revisar flashcards</button>
                   </div>
                 </section>
               )}
@@ -12848,6 +12956,8 @@ export default function QuestionBankApp() {
 	        {view==='spaced-review'&&canUseAdvancedFeatures&&(()=>{
 	          const dm = darkMode;
 	          const dueItems = getDueReviews();
+	          const dueFlashcardItems = dueItems.filter(item => item.question?.isFlashcard);
+	          const dueQuestionItems = dueItems.filter(item => !item.question?.isFlashcard);
 	          const SR_LABELS = ['3d','7d','14d','30d','90d'];
 	          const intervalSummary = SR_LABELS
 	            .map((label, interval) => ({ label, count:dueItems.filter(item => item.item?.interval === interval).length }))
@@ -12859,7 +12969,8 @@ export default function QuestionBankApp() {
             const total = sessionItems.length;
             const done = Object.keys(sessionAnswers).length;
             const finished = done === total;
-            const reviewListMode = canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'list';
+            const sessionAllFlashcards = sessionItems.every(item => item.question?.isFlashcard);
+            const reviewListMode = !sessionAllFlashcards && canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'list';
             if (finished && completed) {
               const correct = Object.values(sessionResults).filter(Boolean).length;
 	              const pct = Math.round(correct / total * 100);
@@ -12974,8 +13085,25 @@ export default function QuestionBankApp() {
 	              ) : (
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className={`text-sm font-bold ${dm?'text-gray-400':'text-gray-500'}`}>{dueItems.length} {dueItems.length===1?'questão pendente':'questões pendentes'}</p>
-                    <button onClick={()=>setReviewSession({items:dueItems,index:0,sessionAnswers:{}})} className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm"><RepeatIcon className="w-4 h-4"/>Começar revisão</button>
+                    <p className={`text-sm font-bold ${dm?'text-gray-400':'text-gray-500'}`}>
+                      {dueQuestionItems.length} quest{dueQuestionItems.length===1?'ão':'ões'} · {dueFlashcardItems.length} flashcard{dueFlashcardItems.length!==1?'s':''}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        disabled={!dueQuestionItems.length}
+                        onClick={()=>setReviewSession({items:dueQuestionItems,index:0,sessionAnswers:{}})}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-35"
+                      >
+                        <RepeatIcon className="w-4 h-4"/>Revisar questões
+                      </button>
+                      <button
+                        disabled={!dueFlashcardItems.length}
+                        onClick={()=>setReviewSession({items:dueFlashcardItems,index:0,sessionAnswers:{}})}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-bold text-sm disabled:opacity-35 ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}
+                      >
+                        <BrainIcon className="w-4 h-4"/>Revisar flashcards
+                      </button>
+                    </div>
                   </div>
                   <div className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
                     <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Distribuição da fila</p>
@@ -13259,6 +13387,8 @@ export default function QuestionBankApp() {
                 {/* ── ABA CRONOGRAMA ── */}
                 {cursoTab==='revisoes'&&(()=>{
                   const dueItems = getDueReviews();
+                  const dueFlashcardItems = dueItems.filter(item => item.question?.isFlashcard);
+                  const dueQuestionItems = dueItems.filter(item => !item.question?.isFlashcard);
                   const SR_LABELS = ['3d','7d','14d','30d','90d'];
                   const intervalSummary = SR_LABELS
                     .map((label, interval) => ({ label, count:dueItems.filter(item => item.item?.interval === interval).length }))
@@ -13279,12 +13409,22 @@ export default function QuestionBankApp() {
                           <div className="space-y-3">
                             <div className="flex items-center justify-between mb-2">
 	                              <p className={`text-sm font-bold ${dm?'text-gray-400':'text-gray-500'}`}>
-	                                {dueItems.length} {dueItems.length===1?'questão pendente':'questões pendentes'}
+	                                {dueQuestionItems.length} quest{dueQuestionItems.length===1?'ão':'ões'} · {dueFlashcardItems.length} flashcard{dueFlashcardItems.length!==1?'s':''}
 	                              </p>
-		                              <button onClick={()=>setReviewSession({items: dueItems, index: 0, sessionAnswers: {}})}
-		                                className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm">
-		                                <RepeatIcon className="w-4 h-4"/> Começar revisão
-		                              </button>
+                              <div className="flex flex-wrap gap-2 justify-end">
+                                <button
+                                  disabled={!dueQuestionItems.length}
+                                  onClick={()=>setReviewSession({items: dueQuestionItems, index: 0, sessionAnswers: {}})}
+                                  className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-35">
+                                  <RepeatIcon className="w-4 h-4"/>Questões
+                                </button>
+                                <button
+                                  disabled={!dueFlashcardItems.length}
+                                  onClick={()=>setReviewSession({items: dueFlashcardItems, index: 0, sessionAnswers: {}})}
+                                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-bold text-sm disabled:opacity-35 ${dm?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                                  <BrainIcon className="w-4 h-4"/>Flashcards
+                                </button>
+                              </div>
                             </div>
                             <div className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
                               <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Distribuição da fila</p>
@@ -13309,7 +13449,8 @@ export default function QuestionBankApp() {
                   const total = sessionItems.length;
                   const done = Object.keys(sessionAnswers).length;
                   const finished = done === total;
-                  const reviewListMode = canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'list';
+                  const sessionAllFlashcards = sessionItems.every(item => item.question?.isFlashcard);
+                  const reviewListMode = !sessionAllFlashcards && canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'list';
 
                   if (finished && completed) {
                     const correct = Object.values(sessionResults).filter(Boolean).length;
