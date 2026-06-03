@@ -3265,7 +3265,7 @@ const QuestionView = ({
           <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
             <ArrowLeft className="w-4 h-4"/>{backLabel}
           </button>
-          <h2 className={`${allFlashcards ? 'text-xl md:text-2xl' : 'text-2xl'} font-serif font-bold text-yellow-600`}>{title}</h2>
+          <h2 className={`${allFlashcards ? 'text-xl md:text-2xl' : 'text-2xl'} mobile-wrap font-serif font-bold text-yellow-600 leading-tight`}>{title}</h2>
         </div>
         {renderCompletion()}
       </div>
@@ -3331,7 +3331,7 @@ const QuestionView = ({
               <ArrowLeft className="w-4 h-4"/>{backLabel}
             </button>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="min-w-0 flex-1 text-2xl font-serif font-bold text-yellow-600 truncate">{title}</h2>
+              <h2 className="min-w-0 flex-1 text-2xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 leading-tight sm:truncate">{title}</h2>
             {actionMenuItems.length>0&&(
               <div className="relative flex-shrink-0">
                 <button
@@ -3483,7 +3483,7 @@ const QuestionView = ({
         <div className={allFlashcards && singleMode ? 'flex-1 min-h-0 flex flex-col' : ''}>
 	          {singleMode && currentQuestion ? (
 	            <div className={allFlashcards ? 'flex-1 min-h-0 flex flex-col' : ''}>
-	              <div className={allFlashcards ? `mb-1 h-0.5 rounded-full overflow-hidden ${dm?'bg-gray-800/80':'bg-gray-200'}` : `mb-2 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
+	              <div className={allFlashcards ? `mb-1 h-0.5 rounded-full overflow-hidden ${dm?'bg-gray-800/80':'bg-gray-200'}` : `mobile-progress-row mb-2 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${dm?'bg-gray-900':'bg-gray-50'}`}>
 	                {allFlashcards ? (
 	                  <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${questions.length ? (answeredCount / questions.length) * 100 : 0}%`}}/>
 	                ) : (
@@ -4407,7 +4407,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
                 {opt.letter}
               </div>
-              <div className="pt-1 flex-1 leading-snug text-sm md:text-base select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
+              <div className="pt-1 min-w-0 flex-1 leading-snug text-sm md:text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
             </>
           );
           return canClick ? (
@@ -5451,7 +5451,7 @@ function AcademiaTopicView({
       </button>
       <div className="mb-10">
         <div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{liveSubject.title}</div>
-        <h1 className={`text-3xl font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{liveTopic.title}</h1>
+        <h1 className={`text-3xl mobile-title-lg mobile-wrap font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{liveTopic.title}</h1>
         {hasLesson && (
           <div className="flex items-center gap-3 mt-4 flex-wrap">
 	            <button onClick={()=>setAcademiaExportModal({topic:liveTopic, subject:liveSubject})}
@@ -7396,7 +7396,7 @@ export default function QuestionBankApp() {
       const rows = snap.docs
         .map(d => ({ id:d.id, ...d.data() }))
         .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-        .slice(0, 20);
+        .slice(0, 40);
       setAccessLogs(rows);
       setAccessLogsLoading(false);
     }, (e) => {
@@ -11576,9 +11576,16 @@ export default function QuestionBankApp() {
         .agora-shell section,
         .agora-shell article,
         .agora-shell aside,
+        .agora-shell div,
         .agora-shell .grid,
         .agora-shell .flex {
           min-width: 0;
+        }
+        .agora-shell img,
+        .agora-shell svg,
+        .agora-shell video,
+        .agora-shell canvas {
+          max-width: 100%;
         }
         .agora-shell .bg-white,
         .agora-shell .bg-gray-50 {
@@ -11781,6 +11788,19 @@ export default function QuestionBankApp() {
         .agora-shell [class*="truncate"] {
           min-width: 0;
         }
+        .agora-shell .mobile-wrap,
+        .agora-shell .mobile-safe-text {
+          min-width: 0;
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          word-break: normal;
+        }
+        .agora-shell .mobile-safe-label {
+          min-width: 0;
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          line-height: 1.12;
+        }
         .agora-shell .sr-only {
           position: absolute;
           width: 1px;
@@ -11825,6 +11845,11 @@ export default function QuestionBankApp() {
             padding-left: .9rem;
             padding-right: .9rem;
           }
+          .agora-shell {
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: clip;
+          }
           .agora-shell button {
             min-height: 2.5rem;
           }
@@ -11835,6 +11860,50 @@ export default function QuestionBankApp() {
           .agora-shell h1,
           .agora-shell h2 {
             overflow-wrap: anywhere;
+          }
+          .agora-shell .mobile-wrap {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+          }
+          .agora-shell .mobile-title-lg {
+            font-size: 1.9rem !important;
+            line-height: 1.08 !important;
+          }
+          .agora-shell .mobile-card-pad {
+            padding: 1rem !important;
+          }
+          .agora-shell .mobile-stat-card {
+            padding-left: .5rem !important;
+            padding-right: .5rem !important;
+          }
+          .agora-shell .mobile-stat-label {
+            font-size: .66rem !important;
+            line-height: 1.1 !important;
+            overflow-wrap: anywhere;
+          }
+          .agora-shell .mobile-progress-row {
+            gap: .55rem !important;
+            padding-left: .85rem !important;
+            padding-right: .85rem !important;
+          }
+          .agora-shell .mobile-progress-row > span {
+            white-space: nowrap;
+          }
+          .agora-shell .mobile-progress-row > div {
+            min-width: 2.5rem;
+          }
+        }
+        @media (max-width: 380px) {
+          .agora-shell .mobile-title-lg {
+            font-size: 1.68rem !important;
+          }
+          .agora-shell .mobile-stat-label {
+            font-size: .6rem !important;
+          }
+          .agora-shell main:not(:empty) {
+            padding-left: .7rem;
+            padding-right: .7rem;
           }
         }
         .modal-scroll,
@@ -11981,7 +12050,7 @@ export default function QuestionBankApp() {
                     <button key={card.key} onClick={card.action} className="app-card group text-left rounded-xl p-4 md:p-5 flex items-center gap-4 transition-all min-h-[104px]">
                       <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-serif font-bold text-lg text-yellow-600 truncate">{card.title}</h3>
+                        <h3 className="font-serif font-bold text-lg text-yellow-600 mobile-wrap sm:truncate leading-tight">{card.title}</h3>
                         <p className={`text-sm mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
                       </div>
                       <div className="hidden sm:block text-right flex-shrink-0">
@@ -12454,7 +12523,7 @@ export default function QuestionBankApp() {
                           </React.Fragment>
                         ))}
                       </div>
-                      <h2 className="text-3xl font-serif font-bold text-yellow-600 truncate">{activeFolder?.title || sourceTitle}</h2>
+                      <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 leading-tight sm:truncate">{activeFolder?.title || sourceTitle}</h2>
                       <p className="text-sm opacity-50 mt-1">{treeItemCount} item{treeItemCount!==1?'s':''} nesta pasta</p>
 	                    </div>
 	                    <div className="flex flex-wrap gap-2">
@@ -12533,7 +12602,7 @@ export default function QuestionBankApp() {
             <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h2 className="text-3xl font-serif font-bold text-yellow-600">{activeSubject.title}</h2>
+                  <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 leading-tight">{activeSubject.title}</h2>
                   {activeSubject.id!=='imported-folder'&&<button onClick={()=>{setEditingSub(activeSubject.id);setEditingSubName(activeSubject.title);}} className="p-2 rounded-full text-gray-400 hover:text-yellow-500"><EditIcon className="w-5 h-5"/></button>}
                 </div>
                 <div className="flex items-center gap-3">
@@ -12909,7 +12978,7 @@ export default function QuestionBankApp() {
             <button onClick={()=>{setCreatorStep(1);setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {creatorStep===1?(
               <div className="space-y-6">
-                <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><Sparkles className="w-8 h-8"/>Novo Assunto</h2>
+                <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><Sparkles className="w-8 h-8 flex-shrink-0"/>Novo Assunto</h2>
                 <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="Título (ex: Nefrologia)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
 
                 {/* Focus areas multi-select */}
@@ -13069,7 +13138,7 @@ export default function QuestionBankApp() {
             <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setAcademiaFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {academiaCreatorStep===1?(
               <div className="space-y-6">
-                <h2 className="text-3xl font-serif font-bold text-yellow-600 flex items-center gap-3"><AcademiaIcon className="w-8 h-8"/>Nova Aula</h2>
+                <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><AcademiaIcon className="w-8 h-8 flex-shrink-0"/>Nova Aula</h2>
                 <p className={`text-sm rounded-xl p-4 ${darkMode?'bg-yellow-900/20 text-yellow-300 border border-yellow-800/30':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
                   📖 A Academia gera <strong>aula + questões de fixação</strong> a partir do conteúdo — como um curso profissional. Quanto mais detalhado o material, melhor a aula.
                 </p>
@@ -13239,7 +13308,7 @@ export default function QuestionBankApp() {
         {view==='paste'&&(
           <div className="max-w-3xl mx-auto">
             <button onClick={()=>setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-            <h2 className="text-3xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Feather className="w-8 h-8"/>Importar Questões</h2>
+            <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3 leading-tight"><Feather className="w-8 h-8 flex-shrink-0"/>Importar Questões</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div>
                 <input value={pasteSubName} onChange={e=>{setPasteSubName(e.target.value);setShowSubSugs(true);}} onFocus={()=>setShowSubSugs(true)} onBlur={()=>setTimeout(()=>setShowSubSugs(false),200)} placeholder="Assunto Principal (opcional)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -13269,10 +13338,10 @@ export default function QuestionBankApp() {
                   <ArrowLeft className="w-4 h-4"/>Início
                 </button>
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                  <div>
+                  <div className="min-w-0">
                     <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Estudo rápido</p>
-                    <h2 className="text-3xl font-serif font-bold text-yellow-600">{QUICK_SUBJECT_TITLE}</h2>
-                    <p className={`text-sm mt-2 max-w-2xl ${dm?'text-gray-400':'text-gray-600'}`}>Para lacunas pontuais: jogue o tema, receba uma explicação curta, questões e flashcards para revisar na hora.</p>
+                    <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 leading-tight">{QUICK_SUBJECT_TITLE}</h2>
+                    <p className={`text-sm mt-2 max-w-2xl mobile-safe-text ${dm?'text-gray-400':'text-gray-600'}`}>Para lacunas pontuais: jogue o tema, receba uma explicação curta, questões e flashcards para revisar na hora.</p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
                     {[
@@ -13280,9 +13349,9 @@ export default function QuestionBankApp() {
                       ['Questões', totalQuestions],
                       ['Flashcards', totalFlashcards],
                     ].map(([label, value])=>(
-                      <div key={label} className={`rounded-xl border px-4 py-3 text-center ${dm?'bg-gray-950/70 border-gray-800':'bg-white/80 border-yellow-100'}`}>
+                      <div key={label} className={`mobile-stat-card min-w-0 rounded-xl border px-4 py-3 text-center ${dm?'bg-gray-950/70 border-gray-800':'bg-white/80 border-yellow-100'}`}>
                         <p className="text-2xl font-serif font-bold text-yellow-600">{value}</p>
-                        <p className={`text-[11px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{label}</p>
+                        <p className={`mobile-stat-label text-[11px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{label}</p>
                       </div>
                     ))}
                   </div>
@@ -13290,20 +13359,20 @@ export default function QuestionBankApp() {
               </section>
 
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-5">
-                <section className={`rounded-2xl border p-5 md:p-6 ${panel}`}>
+                <section className={`mobile-card-pad rounded-2xl border p-5 md:p-6 ${panel}`}>
                   <div className="flex items-center gap-3 mb-5">
                     <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>
                       <Zap className="w-5 h-5"/>
                     </div>
-                    <div>
-                      <h3 className="font-serif font-bold text-xl text-yellow-600">Nova centelha</h3>
-                      <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>Feito para resolver um assunto sem montar pasta.</p>
+                    <div className="min-w-0">
+                      <h3 className="mobile-wrap font-serif font-bold text-xl text-yellow-600 leading-tight">Nova centelha</h3>
+                      <p className={`text-xs mobile-safe-text ${dm?'text-gray-500':'text-gray-400'}`}>Feito para resolver um assunto sem montar pasta.</p>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Dúvida rápida</label>
-                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Ex: meu professor perguntou como pesquisar o sinal de Jobert e eu travei. Quero entender o que é, como faz e por que indica pneumoperitônio." className={`w-full h-44 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Ex: meu professor perguntou como pesquisar o sinal de Jobert e eu travei. Quero entender o que é, como faz e por que indica pneumoperitônio." className={`w-full h-44 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 mobile-safe-text ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                     </div>
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Tamanho da explicação</label>
@@ -13394,7 +13463,7 @@ export default function QuestionBankApp() {
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Centelha</p>
-                    <h2 className="text-3xl font-serif font-bold text-yellow-600 leading-tight">{activeTopic.title}</h2>
+                    <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 leading-tight">{activeTopic.title}</h2>
                     <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-600'}`}>{directQs.length} questões · {flashcards.length} flashcards · {answered}/{allQs.length} respondidas</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -13512,7 +13581,7 @@ export default function QuestionBankApp() {
               <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 pb-6 border-b ${darkMode?'border-gray-700':'border-gray-200'}`}>
                 <div>
                   <button onClick={()=>setView('library')} className={`flex items-center gap-2 mb-2 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
-                  <h2 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3"><Heart className="w-7 h-7 text-red-500" filled/>Questões Favoritas</h2>
+                  <h2 className="text-2xl mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><Heart className="w-7 h-7 text-red-500 flex-shrink-0" filled/>Questões Favoritas</h2>
                   {totalAnswered>0&&<p className="text-sm opacity-60 mt-1">{totalCorrect}/{totalAnswered} corretas ({pct}%)</p>}
                 </div>
                 {favItems.length>0&&(
@@ -16502,24 +16571,85 @@ export default function QuestionBankApp() {
               const allowedCount = last24h.filter(log => log.allowed).length;
               const blockedCount = last24h.filter(log => !log.allowed).length;
               const uniqueEmails = new Set(accessLogs.map(log => String(log.email || log.uid || '').toLowerCase()).filter(Boolean)).size;
-              const statusMeta = {
-                admin:{ label:'Admin', className:darkMode?'bg-yellow-900/30 text-yellow-300 border-yellow-800':'bg-yellow-50 text-yellow-700 border-yellow-200' },
-                curso:{ label:'Entrou · curso', className:darkMode?'bg-green-900/25 text-green-300 border-green-800':'bg-green-50 text-green-700 border-green-200' },
-                sem_curso:{ label:'Entrou · sem curso', className:darkMode?'bg-blue-900/25 text-blue-300 border-blue-800':'bg-blue-50 text-blue-700 border-blue-200' },
-                bloqueado:{ label:'Bloqueado', className:darkMode?'bg-red-900/25 text-red-300 border-red-800':'bg-red-50 text-red-700 border-red-200' },
-                anonimo_bloqueado:{ label:'Anônimo bloqueado', className:darkMode?'bg-red-900/25 text-red-300 border-red-800':'bg-red-50 text-red-700 border-red-200' },
-                sem_email_bloqueado:{ label:'Sem email', className:darkMode?'bg-red-900/25 text-red-300 border-red-800':'bg-red-50 text-red-700 border-red-200' },
-              };
               const fmtLogTime = (ts) => ts ? new Date(Number(ts)).toLocaleString('pt-BR', {
                 day:'2-digit',
                 month:'2-digit',
+                year:'2-digit',
                 hour:'2-digit',
                 minute:'2-digit',
+                second:'2-digit',
               }) : 'sem data';
               const shortAgent = (ua = '') => String(ua || '')
                 .replace(/\s+/g, ' ')
                 .replace(/^Mozilla\/5\.0\s*/i, '')
-                .slice(0, 120);
+                .slice(0, 150);
+              const compactPath = (path = '') => {
+                if (!path) return 'rota não registrada';
+                try {
+                  const url = new URL(path);
+                  return `${url.pathname || '/'}${url.search || ''}`;
+                } catch(e) {
+                  return String(path).replace(/^https?:\/\/[^/]+/i, '') || String(path);
+                }
+              };
+              const parseAccessDevice = (log) => {
+                const ua = String(log.userAgent || '');
+                const platform = String(log.platform || '').trim();
+                const screen = String(log.screen || '').trim();
+                const language = String(log.language || '').trim();
+                const timezone = String(log.timezone || '').trim();
+                const pick = (...matches) => matches.find(Boolean)?.[1]?.replace(/_/g, '.') || '';
+                let os = 'SO ?';
+                if (/Android/i.test(ua)) os = `Android ${pick(ua.match(/Android\s+([\d.]+)/i))}`.trim();
+                else if (/(iPhone|iPad|iPod)/i.test(ua)) os = `iOS ${pick(ua.match(/OS\s+([\d_]+)/i))}`.trim();
+                else if (/Windows NT/i.test(ua)) os = 'Windows';
+                else if (/Mac OS X/i.test(ua)) os = `macOS ${pick(ua.match(/Mac OS X\s+([\d_]+)/i))}`.trim();
+                else if (/Linux/i.test(ua) || /Linux/i.test(platform)) os = 'Linux';
+
+                let browser = 'browser ?';
+                if (/SamsungBrowser\/([\d.]+)/i.test(ua)) browser = `Samsung Internet ${pick(ua.match(/SamsungBrowser\/([\d.]+)/i))}`;
+                else if (/EdgA?\/([\d.]+)/i.test(ua)) browser = `Edge ${pick(ua.match(/EdgA?\/([\d.]+)/i))}`;
+                else if (/CriOS\/([\d.]+)/i.test(ua)) browser = `Chrome iOS ${pick(ua.match(/CriOS\/([\d.]+)/i))}`;
+                else if (/Chrome\/([\d.]+)/i.test(ua)) browser = `Chrome ${pick(ua.match(/Chrome\/([\d.]+)/i))}`;
+                else if (/Firefox\/([\d.]+)/i.test(ua)) browser = `Firefox ${pick(ua.match(/Firefox\/([\d.]+)/i))}`;
+                else if (/Version\/([\d.]+).*Safari/i.test(ua)) browser = `Safari ${pick(ua.match(/Version\/([\d.]+)/i))}`;
+
+                const type = /iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))
+                  ? 'tablet'
+                  : (/Mobile|Android|iPhone|iPod/i.test(ua) ? 'celular' : 'desktop');
+                const androidModel = /Android/i.test(ua)
+                  ? (ua.match(/Android[^;)]*;\s*([^;)]+?)(?:\s+Build|\)|;)/i)?.[1] || '').trim()
+                  : '';
+                const model = androidModel && !/wv|Mobile|Chrome|Safari/i.test(androidModel) ? androidModel : '';
+                const short = [os, browser, type].filter(Boolean).join(' · ');
+                const full = [os, browser, type, model, platform && `platform ${platform}`, screen && `tela ${screen}`, language, timezone].filter(Boolean).join(' · ');
+                return { short, full };
+              };
+              const logScope = (log) => {
+                if (log.isAdmin) return 'admin';
+                if (log.status === 'curso' || log.canSeeCourse) return 'curso';
+                if (log.status === 'sem_curso' || log.siteOnly) return 'site';
+                if (!log.allowed) return 'bloq';
+                return log.status || 'ok';
+              };
+              const logResultClass = (log) => log.allowed
+                ? (darkMode ? 'text-green-300' : 'text-green-700')
+                : (darkMode ? 'text-red-300' : 'text-red-700');
+              const logTitle = (log) => [
+                `uid: ${log.uid || '—'}`,
+                `nome: ${log.displayName || '—'}`,
+                `email: ${log.email || '—'}`,
+                `status: ${log.status || '—'}`,
+                `hora: ${fmtLogTime(log.createdAt)}`,
+                `permitido: ${log.allowed ? 'sim' : 'não'}`,
+                `curso: ${log.canSeeCourse ? 'sim' : 'não'}`,
+                `siteOnly: ${log.siteOnly ? 'sim' : 'não'}`,
+                `admin: ${log.isAdmin ? 'sim' : 'não'}`,
+                `página: ${compactPath(log.path)}`,
+                `dispositivo: ${parseAccessDevice(log).full}`,
+                `fuso: ${log.timezone || '—'}`,
+                `user agent: ${shortAgent(log.userAgent) || '—'}`,
+              ].join('\n');
               return (
                 <SettingsSection
                   id="access-logs"
@@ -16528,49 +16658,38 @@ export default function QuestionBankApp() {
                   className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
                   titleClassName="text-yellow-600"
                 >
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
-                      <p className="text-2xl font-serif font-bold text-green-500">{allowedCount}</p>
-                      <p className="text-xs font-bold uppercase opacity-50">entradas 24h</p>
+                  <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-950/30':'border-gray-200 bg-white'}`}>
+                    <div className={`px-2.5 py-1.5 flex items-center justify-between gap-3 border-b ${darkMode?'border-gray-800 bg-gray-900/50':'border-gray-100 bg-gray-50'}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-widest opacity-50">access.log · 40 recentes</p>
+                      <p className={`text-[9px] ${accessLogsLoading?'text-yellow-600':'opacity-50'}`}>
+                        {accessLogsLoading ? 'carregando...' : `${allowedCount} ok · ${blockedCount} negados · ${uniqueEmails} ids`}
+                      </p>
                     </div>
-                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
-                      <p className="text-2xl font-serif font-bold text-red-500">{blockedCount}</p>
-                      <p className="text-xs font-bold uppercase opacity-50">bloqueios 24h</p>
-                    </div>
-                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
-                      <p className="text-2xl font-serif font-bold text-yellow-600">{uniqueEmails}</p>
-                      <p className="text-xs font-bold uppercase opacity-50">identidades</p>
-                    </div>
-                  </div>
-                  <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
-                    <div className={`px-3 py-2 flex items-center justify-between gap-3 border-b ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-100 bg-gray-50'}`}>
-                      <p className="text-xs font-bold uppercase tracking-widest opacity-50">20 eventos mais recentes</p>
-                      <p className={`text-xs font-bold ${accessLogsLoading?'text-yellow-600':'opacity-50'}`}>{accessLogsLoading ? 'carregando...' : 'ao vivo'}</p>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto p-2 space-y-2" style={{overflowAnchor:'none'}}>
+                    <div className="max-h-[28rem] overflow-y-auto p-1.5 space-y-1" style={{overflowAnchor:'none'}}>
                       {!accessLogsLoading && accessLogs.length===0 && (
-                        <p className="text-sm opacity-50 italic p-3">Nenhum log encontrado ainda.</p>
+                        <p className="text-[10px] opacity-50 italic p-3">Nenhum log encontrado ainda.</p>
                       )}
                       {accessLogs.map(log => {
-                        const meta = statusMeta[log.status] || {
-                          label:log.status || 'desconhecido',
-                          className:darkMode?'bg-gray-800 text-gray-300 border-gray-700':'bg-gray-50 text-gray-600 border-gray-200',
-                        };
+                        const identity = log.email || log.uid || 'sem identificação';
+                        const device = parseAccessDevice(log);
+                        const page = compactPath(log.path);
                         return (
-                          <div key={log.id} className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-bold truncate">{log.email || log.uid || 'sem identificação'}</p>
-                                {log.displayName&&<p className={`text-xs truncate mt-0.5 ${darkMode?'text-gray-500':'text-gray-500'}`}>{log.displayName}</p>}
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className={`px-2 py-1 rounded-lg border text-[11px] font-bold uppercase ${meta.className}`}>{meta.label}</span>
-                                <span className={`text-xs font-mono ${darkMode?'text-gray-500':'text-gray-500'}`}>{fmtLogTime(log.createdAt)}</span>
-                              </div>
+                          <div
+                            key={log.id}
+                            title={logTitle(log)}
+                            className={`rounded-lg border px-2.5 py-2 ${darkMode?'bg-gray-900 border-gray-800 hover:border-gray-700':'bg-white border-gray-200 hover:border-gray-300'}`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`h-2 w-2 rounded-full flex-shrink-0 ${log.allowed?'bg-green-500':'bg-red-500'}`}/>
+                              <span className={`text-[10px] font-bold uppercase flex-shrink-0 ${logResultClass(log)}`}>{log.allowed ? 'OK' : 'DENY'}</span>
+                              <span className={`text-[10px] uppercase flex-shrink-0 ${darkMode?'text-gray-500':'text-gray-500'}`}>{logScope(log)}</span>
+                              <span className={`text-[11px] font-bold truncate ${darkMode?'text-gray-200':'text-gray-800'}`}>{identity}</span>
+                              <span className={`text-[10px] tabular-nums flex-shrink-0 ml-auto ${darkMode?'text-gray-500':'text-gray-500'}`}>{fmtLogTime(log.createdAt)}</span>
                             </div>
-                            <div className={`mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>
-                              <span className="truncate">{log.platform || 'plataforma ?'} · {log.screen || 'tela ?'} · {log.timezone || 'fuso ?'}</span>
-                              <span className="truncate sm:text-right">{shortAgent(log.userAgent) || 'navegador ?'}</span>
+                            <div className={`mt-1 flex items-center gap-2 text-[10px] leading-tight ${darkMode?'text-gray-500':'text-gray-500'}`}>
+                              <span className="truncate">{device.short}</span>
+                              <span className="opacity-40 flex-shrink-0">·</span>
+                              <span className="truncate">{page}</span>
                             </div>
                           </div>
                         );
