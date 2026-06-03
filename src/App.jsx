@@ -121,6 +121,18 @@ const ACCESS_DENIED_MESSAGE = 'Você não tem permissão para acessar este site.
 const normalizeEmailList = (emails = []) => Array.from(new Set((Array.isArray(emails) ? emails : [])
   .map(e => String(e || '').trim().toLowerCase())
   .filter(Boolean)));
+const resolveAccessDecision = (authUser, courseEmails = [], siteOnlyEmails = []) => {
+  if (!authUser) return { status:'logout', allowed:false, admin:false, course:false, siteOnly:false };
+  const email = String(authUser.email || '').trim().toLowerCase();
+  const course = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
+  const siteOnly = normalizeEmailList(siteOnlyEmails).filter(e => !course.includes(e));
+  if (authUser.isAnonymous) return { status:'anonimo_bloqueado', allowed:false, admin:false, course:false, siteOnly:false };
+  if (!email) return { status:'sem_email_bloqueado', allowed:false, admin:false, course:false, siteOnly:false };
+  if (email === ADMIN_EMAIL.toLowerCase()) return { status:'admin', allowed:true, admin:true, course:true, siteOnly:false };
+  if (course.includes(email)) return { status:'curso', allowed:true, admin:false, course:true, siteOnly:false };
+  if (siteOnly.includes(email)) return { status:'sem_curso', allowed:true, admin:false, course:false, siteOnly:true };
+  return { status:'bloqueado', allowed:false, admin:false, course:false, siteOnly:false };
+};
 const ERROR_REVIEW_MAX_GENERATED_PER_REQUEST = 30;
 const FLASHCARD_CORRECT = 'CORRECT';
 const FLASHCARD_WRONG = 'WRONG';
@@ -1531,7 +1543,22 @@ const extractQuickIntent = (text = '', fallback = '') => {
   return stripLooseMarkdownAsterisks((match?.[1] || fallback || '').trim()).replace(/\n{3,}/g, '\n\n').trim();
 };
 
-const buildQuickLessonPrompt = ({ context='' }) => {
+const buildQuickLessonPrompt = ({ context='', explanationLength='essential' }) => {
+  const lengthRule = {
+    essential: `PROFUNDIDADE: Nível 1 — resposta curta e ultra-direta.
+- Alvo: 120 a 220 palavras.
+- Foque no mecanismo/ideia que resolve a dúvida e em 2 a 4 pontos essenciais.
+- Use no máximo 1 subtítulo "###" além do texto principal.
+- Corte exemplos longos, contexto histórico e rodeios.`,
+    balanced: `PROFUNDIDADE: Nível 2 — explicação enxuta com raciocínio.
+- Alvo: 220 a 380 palavras.
+- Explique o mecanismo e traga exemplos/pegadinhas apenas quando ajudarem.
+- Use subtítulos "###" quando organizar melhor.`,
+    complete: `PROFUNDIDADE: Nível 3 — mini-aula mais completa.
+- Alvo: 380 a 650 palavras.
+- Inclua contexto, mecanismo, implicações clínicas e exceções importantes.
+- Ainda assim, não transforme a dúvida em aula genérica.`
+  }[explanationLength] || '';
   return `
 Você vai criar a primeira parte de uma Centelha do Saber em português brasileiro.
 
@@ -1546,12 +1573,14 @@ OBJETIVO:
 REGRAS:
 - Não gere questões e não gere flashcards neste request.
 - Não transforme a dúvida em uma aula genérica.
-- Seja didático, mas resumido: alvo de 250 a 450 palavras.
+- Seja didático, mas respeite rigorosamente o nível escolhido.
 - Use parágrafos curtos.
 - Use subtítulos de nível 3 com "###" quando ajudar.
 - Use tópicos com hífen quando necessário.
 - Não use asteriscos, negrito ou itálico.
 - Se a dúvida veio de conversa leiga, inclua uma forma simples de explicar sem perder precisão.
+
+${lengthRule}
 
 FORMATO OBRIGATÓRIO:
 ## Título
@@ -2001,7 +2030,7 @@ const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
 const DEFAULT_COURSE_CATALOG_DELAY_SECONDS = 2;
 const COURSE_CATALOG_KEY_STATS_STORAGE = 'agora_course_catalog_key_stats_v1';
 const COURSE_CATALOG_ADMIN_ENABLED = false;
-const COURSE_ORG_SOURCE_MODE = 'firestore-subject-manual-corrections-v2';
+const COURSE_ORG_SOURCE_MODE = 'firestore-subject-manual-corrections-v3';
 const COURSE_SCHEDULE_DEFAULT_WEEKS = 24;
 const COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE = 2;
 const COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE = 6;
@@ -2160,7 +2189,14 @@ const getCourseOriginalSubjectName = (lesson = {}) =>
   normalizeCourseSubjectName(lesson.subject || lesson.originalSubject || '', 'Sem matéria');
 
 const getManualCourseSubjectOverride = (lesson = {}) => {
-  const haystack = normalizeTextKey([
+  const haystack = getCourseLessonSearchText(lesson);
+  if (!haystack) return '';
+  const hit = COURSE_MANUAL_SUBJECT_OVERRIDES.find(([, pattern]) => pattern.test(haystack));
+  return hit?.[0] || '';
+};
+
+const getCourseLessonSearchText = (lesson = {}) =>
+  normalizeTextKey([
     lesson.title,
     lesson.cleanTitle,
     lesson.originalTitle,
@@ -2172,15 +2208,123 @@ const getManualCourseSubjectOverride = (lesson = {}) => {
     lesson.aula?.ai_catalog?.cleanTitle,
     lesson.aula?.ai_catalog?.originalTitle,
   ].filter(Boolean).join(' '));
-  if (!haystack) return '';
-  const hit = COURSE_MANUAL_SUBJECT_OVERRIDES.find(([, pattern]) => pattern.test(haystack));
-  return hit?.[0] || '';
-};
 
 const getManualCorrectedCourseSubjectName = (lesson = {}) =>
   getManualCourseSubjectOverride(lesson) || getCourseOriginalSubjectName(lesson);
 
 const COURSE_MANUAL_RELOCATED_MODULE_TITLE = 'Aulas realocadas manualmente';
+const COURSE_MANUAL_RELOCATED_MODULE_TITLES = new Set([
+  normalizeTextKey(COURSE_MANUAL_RELOCATED_MODULE_TITLE),
+]);
+
+const COURSE_MANUAL_MODULE_DESTINATIONS = [
+  {
+    subject:'Cardiologia',
+    pattern:/\b(bloqueios? de ramo|eletrocardiograma)\b/,
+    title:'Fundamentos da Eletrocardiografia e Anatomia',
+    aliases:['fundamentos da eletrocardiografia', 'fundamentos da cardiologia', 'eletrocardiograma'],
+  },
+  {
+    subject:'Cardiologia',
+    pattern:/\b(complicacoes pos[- ]infarto agudo do miocardio|infarto|coronariana)\b/,
+    title:'Doença Coronariana',
+    aliases:['doenca coronariana', 'sindromes coronarianas'],
+  },
+  {
+    subject:'Cardiologia',
+    pattern:/\b(cardiomiopatia hipertrofica|cardiomiopatia)\b/,
+    title:'Insuficiência Cardíaca e Cardiomiopatias',
+    aliases:['insuficiencia cardiaca', 'cardiomiopatias'],
+  },
+  {
+    subject:'Endocrinologia',
+    pattern:/\b(complicacoes agudas da diabetes mellitus|diabetes)\b/,
+    title:'Complicações do Diabetes Mellitus',
+    aliases:['complicacoes do diabetes', 'diabetes mellitus', 'complicacoes'],
+  },
+  {
+    subject:'Endocrinologia',
+    pattern:/\b(doencas da adrenal|adrenal)\b/,
+    title:'Doenças da Adrenal',
+    aliases:['doencas da adrenal', 'glandula adrenal', 'adrenal'],
+  },
+  {
+    subject:'Endocrinologia',
+    pattern:/\b(hipoparatireoidismo|raquitismo|osteomalacia|paratireoid|calcio)\b/,
+    title:'Metabolismo do Cálcio e Paratireoides',
+    aliases:['metabolismo do calcio', 'paratireoides', 'disturbios do metabolismo'],
+  },
+  {
+    subject:'Gastroenterologia',
+    pattern:/\b(isquemia intestinal|intestin)\b/,
+    title:'Doenças Intestinais e Cólon',
+    aliases:['doencas intestinais', 'colon', 'obstrucao e isquemia'],
+  },
+  {
+    subject:'Gastroenterologia',
+    pattern:/\b(colangite esclerosante primaria|hepatopatias? autoimunes?|colangite)\b/,
+    title:'Hepatopatias Autoimunes e Colestáticas',
+    aliases:['hepatopatias autoimunes', 'doencas cronicas do figado', 'hepatopatias especificas', 'vias biliares'],
+  },
+  {
+    subject:'Ginecologia',
+    pattern:/\b(dismenorreia|polipos? endometriais|sangramento uterino|polipos? uterinos)\b/,
+    title:'Sangramento Uterino Anormal e Afecções Uterinas',
+    aliases:['sangramento uterino', 'afeccoes uterinas', 'disturbios do ciclo', 'infertilidade'],
+  },
+  {
+    subject:'Cirurgia',
+    pattern:/\b(hernias? inguinal|hernias?: abordagem videolaparoscopica|hernia|hernias)\b/,
+    title:'Hérnias da Parede Abdominal',
+    aliases:['hernias da parede abdominal', 'hernias', 'regiao da virilha'],
+  },
+  {
+    subject:'Cirurgia',
+    pattern:/\b(queimaduras?)\b/,
+    title:'Trauma, Queimaduras e Atendimento Inicial',
+    aliases:['trauma', 'atendimento inicial', 'queimaduras'],
+  },
+  {
+    subject:'Cirurgia',
+    pattern:/\b(ulceras? de pressao|cicatrizacao de feridas|feridas?)\b/,
+    title:'Feridas, Cicatrização e Reconstrução',
+    aliases:['feridas', 'cicatrizacao', 'cirurgia plastica', 'fechamento de feridas'],
+  },
+];
+
+const isManualRelocatedModuleTitle = (title = '') =>
+  COURSE_MANUAL_RELOCATED_MODULE_TITLES.has(normalizeTextKey(title));
+
+const getManualModuleDestination = (lesson = {}, targetSubject = '') => {
+  const subjectKey = normalizeTextKey(targetSubject);
+  const haystack = getCourseLessonSearchText(lesson);
+  return COURSE_MANUAL_MODULE_DESTINATIONS.find(destination =>
+    normalizeTextKey(destination.subject) === subjectKey && destination.pattern.test(haystack)
+  ) || null;
+};
+
+const findOrCreateCourseModule = (subjectProposal, destination, fallbackTitle = '') => {
+  const cleanFallback = cleanCourseOrgLabel(fallbackTitle || 'Complementos Temáticos');
+  const desiredTitle = cleanCourseOrgLabel(destination?.title || cleanFallback);
+  const desiredKey = normalizeTextKey(desiredTitle);
+  const aliasKeys = (destination?.aliases || []).map(normalizeTextKey).filter(Boolean);
+  let module = (subjectProposal.modules || []).find(item => {
+    const moduleKey = normalizeTextKey(item.title || '');
+    if (!moduleKey || isManualRelocatedModuleTitle(moduleKey)) return false;
+    if (moduleKey === desiredKey) return true;
+    return aliasKeys.some(alias => moduleKey.includes(alias) || alias.includes(moduleKey));
+  });
+  if (!module) {
+    module = { title:desiredTitle, lessons:[] };
+    subjectProposal.modules = [...(subjectProposal.modules || []), module];
+  }
+  return module;
+};
+
+const courseOrgProposalHasManualRelocatedModules = (proposal = {}) =>
+  (proposal?.subjects || []).some(subjectProposal =>
+    (subjectProposal?.modules || []).some(module => isManualRelocatedModuleTitle(module?.title || ''))
+  );
 
 const repairCourseOrgProposalWithManualOverrides = (proposal) => {
   const normalized = normalizeCourseOrgProposal(proposal);
@@ -2201,11 +2345,13 @@ const repairCourseOrgProposalWithManualOverrides = (proposal) => {
     };
     nextSubject.modules = nextSubject.modules
       .map(module => {
+        const legacyRelocatedModule = isManualRelocatedModuleTitle(module.title || '');
         const kept = [];
         (module.lessons || []).forEach(lesson => {
           const override = getManualCourseSubjectOverride(lesson);
-          if (override && normalizeTextKey(override) !== subjectKey) {
-            moved.push({ lesson, from:subject, to:override });
+          const targetSubject = override || subject;
+          if (legacyRelocatedModule || (override && normalizeTextKey(override) !== subjectKey)) {
+            moved.push({ lesson, from:subject, to:targetSubject });
             return;
           }
           kept.push(lesson);
@@ -2233,16 +2379,16 @@ const repairCourseOrgProposalWithManualOverrides = (proposal) => {
       subjectMap.set(targetKey, { subject:targetSubject, modules:[], bonus:[], notes:'' });
     }
     const target = subjectMap.get(targetKey);
-    let module = (target.modules || []).find(item => normalizeTextKey(item.title) === normalizeTextKey(COURSE_MANUAL_RELOCATED_MODULE_TITLE));
-    if (!module) {
-      module = { title:COURSE_MANUAL_RELOCATED_MODULE_TITLE, lessons:[] };
-      target.modules = [...(target.modules || []), module];
-    }
+    const destination = getManualModuleDestination(lesson, targetSubject);
+    const module = findOrCreateCourseModule(target, destination, `${targetSubject}: Complementos`);
     if ((module.lessons || []).some(item => String(item.lessonId || '') === String(lesson.lessonId || ''))) return;
+    const maxOrder = (module.lessons || []).reduce((max, item) => Math.max(max, Number(item.order || 0)), 0);
     module.lessons.push({
       ...lesson,
-      reason:`Realocada manualmente de ${from}.`,
-      order:module.lessons.length + 1,
+      reason:normalizeTextKey(from) === normalizeTextKey(targetSubject)
+        ? `Reposicionada em ${module.title}.`
+        : `Realocada de ${from} para ${module.title}.`,
+      order:maxOrder + 1,
     });
   });
   const subjects = subjectOrder
@@ -2253,12 +2399,21 @@ const repairCourseOrgProposalWithManualOverrides = (proposal) => {
     ...normalized,
     subjects,
     sourceMode:COURSE_ORG_SOURCE_MODE,
-    manualCorrections:moved.map(item => ({
+    manualCorrections:moved
+      .filter(item => normalizeTextKey(item.from) !== normalizeTextKey(item.to))
+      .map(item => ({
       lessonId:String(item.lesson.lessonId || ''),
       title:item.lesson.title || '',
       from:item.from,
       to:item.to,
     })),
+    moduleCorrections:moved
+      .filter(item => normalizeTextKey(item.from) === normalizeTextKey(item.to))
+      .map(item => ({
+        lessonId:String(item.lesson.lessonId || ''),
+        title:item.lesson.title || '',
+        subject:item.to,
+      })),
     repairedAt:Date.now(),
   };
 };
@@ -2732,7 +2887,10 @@ const QuestionView = ({
   topicType=null,
   canCreateFlashcards=false,
   questionCountPerSub=1,
+  questionCountAuto=false,
   numAlternatives=5,
+  geminiThinkingEnabled=false,
+  onGeminiThinkingChange=null,
   onAddToReview=null,
   onReviewErrorNotebook=null,
   onOpenErrorReviewResult=null,
@@ -3240,12 +3398,20 @@ const QuestionView = ({
 	            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 	              <div>
                 <label className={`block text-[11px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Questões/Subtópico</label>
-                <input type="number" min="1" max="10" value={questionCountPerSub || 1}
-                  onChange={e=>{
-                    const v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1));
-                    onTopicStyleChange(v, 'qPerSub');
-                  }}
-                  className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <input type="number" min="1" max="10" value={questionCountPerSub || 1}
+                    disabled={questionCountAuto}
+                    onChange={e=>{
+                      const v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1));
+                      onTopicStyleChange(v, 'qPerSub');
+                    }}
+                    className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${dm?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                  <button type="button" onClick={()=>onTopicStyleChange(!questionCountAuto, 'qPerSubAuto')}
+                    className={`px-3 rounded-xl border-2 text-xs font-bold transition-all ${questionCountAuto?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                    IA
+                  </button>
+                </div>
+                <p className={`text-[11px] mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{questionCountAuto?'A IA atomiza cada subtópico e escolhe quantas questões valem a pena.':'Quantidade fixa para cada subtópico.'}</p>
               </div>
               {['direct','vof','cespe'].includes(topicType || 'direct') && (
                 <div>
@@ -3253,7 +3419,8 @@ const QuestionView = ({
                   <div className="grid grid-cols-2 gap-2">
                     {[4,5].map(n=>(
                       <button key={n} type="button" onClick={()=>onTopicStyleChange(n, 'numAlternatives')}
-                        className={`h-[50px] rounded-xl border-2 text-xs font-bold transition-all ${Number(numAlternatives || 5)===n?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                        style={{minHeight:54}}
+                        className={`rounded-xl border-2 text-sm font-bold transition-all py-3 ${Number(numAlternatives || 5)===n?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
                         {n} (A-{'ABCDE'[n-1]})
                       </button>
                     ))}
@@ -3288,6 +3455,16 @@ const QuestionView = ({
               ))}
             </div>
           </div>
+          {onGeminiThinkingChange&&(
+            <div>
+              <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Modo Gemini</p>
+              <GeminiThinkingSelector
+                value={!!geminiThinkingEnabled}
+                onChange={onGeminiThinkingChange}
+                darkMode={dm}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -5078,7 +5255,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',quickExplanationLength:'essential',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -5525,6 +5702,14 @@ export default function QuestionBankApp() {
   const [errorModal, setErrorModal]   = useState(null);
   const [regenModal, setRegenModal]   = useState(false);
   const [regenPrompt, setRegenPrompt] = useState('');
+  const [oracleRegenConfig, setOracleRegenConfig] = useState({
+    questionStyle:'mixed',
+    questionTypes:['direct'],
+    qPerSub:1,
+    qPerSubAuto:false,
+    numAlternatives:5,
+    geminiThinkingEnabled:false,
+  });
   const [editingSub, setEditingSub]   = useState(null);
   const [editingSubName, setEditingSubName] = useState('');
   const [editingTopic, setEditingTopic] = useState(null);
@@ -5605,6 +5790,9 @@ export default function QuestionBankApp() {
   const [newWhitelistEmail, setNewWhitelistEmail] = useState('');
   const [newSiteWhitelistEmail, setNewSiteWhitelistEmail] = useState('');
   const [userDevices, setUserDevices] = useState([]);
+  const [accessLogs, setAccessLogs] = useState([]);
+  const [accessLogsLoading, setAccessLogsLoading] = useState(false);
+  const accessLogSessionRef = useRef(new Set());
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const courseAllowedEmails = normalizeEmailList([ADMIN_EMAIL, ...(allowedEmails || [])]);
   const siteOnlyAccessEmails = normalizeEmailList(siteOnlyAllowedEmails || []).filter(email => !courseAllowedEmails.includes(email));
@@ -6030,7 +6218,9 @@ export default function QuestionBankApp() {
     if (includeSubjects && Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
     if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
     if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
-    if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') setCourseOrgProposal(normalizeCourseOrgProposal(prefs.courseOrgProposal));
+    if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') {
+      setCourseOrgProposal(repairCourseOrgProposalWithManualOverrides(prefs.courseOrgProposal));
+    }
     if (includeSchedule) {
       if (prefs.startDate) setCronStartDate(prefs.startDate);
       if (Number(prefs.courseScheduleWeeks) > 0) setCourseScheduleWeeks(Math.max(1, Math.min(104, Number(prefs.courseScheduleWeeks))));
@@ -6199,10 +6389,11 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     if (!isAdmin || !user || user.isAnonymous || courseGlobalOrgPublishedRef.current) return;
-    const proposal = normalizeCourseOrgProposal(courseOrgProposal);
+    const proposal = repairCourseOrgProposalWithManualOverrides(courseOrgProposal);
     const { subjects, lessonOrder } = getCourseOrgPlanParts(proposal);
     if (!proposal?.subjects?.length || !subjects.length || !lessonOrder.length) return;
     courseGlobalOrgPublishedRef.current = true;
+    setCourseOrgProposal(proposal);
     setDoc(doc(db, 'config', 'curso_organization'), {
       courseOrgProposal:proposal,
       coursePlanSubjects:subjects,
@@ -6253,7 +6444,10 @@ export default function QuestionBankApp() {
     const current = normalizeCourseOrgProposal(courseOrgProposal);
     if (!current?.subjects?.length) return;
     const repaired = repairCourseOrgProposalWithManualOverrides(current);
-    const needsRepair = current.sourceMode !== COURSE_ORG_SOURCE_MODE || (repaired.manualCorrections?.length || 0) > 0;
+    const needsRepair = current.sourceMode !== COURSE_ORG_SOURCE_MODE
+      || courseOrgProposalHasManualRelocatedModules(current)
+      || (repaired.manualCorrections?.length || 0) > 0
+      || (repaired.moduleCorrections?.length || 0) > 0;
     if (!needsRepair) return;
     courseManualRepairAppliedRef.current = true;
     applyCourseOrgProposalToPlan(repaired, { auto:true }).catch(() => {
@@ -6845,27 +7039,153 @@ export default function QuestionBankApp() {
     writeStorageText('qb_font_scale', String(scale));
   }, [settings.fontScale]);
 
-  // Android/browser back button — navigates within the app instead of leaving
+  // Android/iOS/browser back button — follows the app's own "Voltar" logic.
+  const appBackRouteKey = [
+    view,
+    libFilter,
+    activeFolderId || 'root',
+    activeSubjectId || '',
+    activeTopicId || '',
+    quickStudyTab,
+    cursoTab,
+    vqSubject || '',
+    vqTopic || '',
+    vqAula ? getAulaId(vqAula) : '',
+    vqActiveBlockView?.blockId || '',
+    vqActiveBlockView?.fromPlan ? 'from-plan' : '',
+    viewReturnTarget?.view || '',
+    reviewSession ? `review-${reviewSession.index || 0}` : '',
+    menuOpen ? 'menu' : '',
+    libraryActionMenu ? 'library-menu' : '',
+    blockActionMenu ? 'block-menu' : '',
+    bulkActionMenu ? 'bulk-menu' : '',
+    mobileNavOpen ? 'mobile-nav' : '',
+    errorModal ? 'error-modal' : '',
+    deleteId ? 'delete-modal' : '',
+    openAnswerModal ? 'answer-modal' : '',
+    externalPromptModal ? 'external-prompt' : '',
+    regenModal ? 'regen-modal' : '',
+    newFolderModal ? 'new-folder' : '',
+    moveSubjectModal ? 'move-subject' : '',
+    folderReviewModal ? 'folder-review' : '',
+    bulkGenerateModal ? 'bulk-generate' : '',
+    academiaExtraModal ? 'academia-extra' : '',
+    academiaRegenModal ? 'academia-regen' : '',
+    academiaExportModal ? 'academia-export' : '',
+    errorReviewModal ? 'error-review' : '',
+    examSetup !== null ? 'exam-setup' : '',
+    exportModal ? 'export-modal' : '',
+    bizuarioModal ? 'bizuario-modal' : '',
+    vqGenModal ? 'vq-gen' : '',
+    resetCourseModal ? 'reset-course' : '',
+    srModal ? 'sr-modal' : '',
+  ].join('|');
+
   useEffect(() => {
-    const handlePop = (e) => {
-      if (view === 'library') return; // allow leaving the site from home
-      e.preventDefault();
-      // Navigate back logically
-      if (view === 'topic')        { setView('subject'); return; }
-      if (view === 'quick-topic')  { setView('quick'); return; }
-      if (view === 'quick')        { setView('library'); return; }
-      if (view === 'academia-topic') { setView('subject'); return; }
-      if (view === 'subject')      { setView('sub-library'); return; }
-      if (view === 'sub-library')  { setView('library'); return; }
-      if (view === 'creator')      { setCreatorStep(1); setView('library'); return; }
-      if (view === 'academia-creator') { setAcademiaCreatorStep(1); setView('library'); return; }
-      setView('library');
+    const closeTopLayer = () => {
+      if (bulkGenerateRun.running) return false;
+      if (menuOpen) { setMenuOpen(false); return true; }
+      if (libraryActionMenu) { setLibraryActionMenu(null); return true; }
+      if (blockActionMenu) { setBlockActionMenu(null); return true; }
+      if (bulkActionMenu) { setBulkActionMenu(null); return true; }
+      if (mobileNavOpen) { setMobileNavOpen(false); return true; }
+      if (errorModal) { setErrorModal(null); return true; }
+      if (deleteId) { setDeleteId(null); return true; }
+      if (openAnswerModal) { setOpenAnswerModal(null); return true; }
+      if (externalPromptModal) { setExternalPromptModal(false); return true; }
+      if (regenModal) { setRegenModal(false); return true; }
+      if (newFolderModal) { setNewFolderModal(false); return true; }
+      if (moveSubjectModal) { setMoveSubjectModal(null); return true; }
+      if (folderReviewModal) { setFolderReviewModal(null); return true; }
+      if (bulkGenerateModal) { setBulkGenerateModal(null); return true; }
+      if (academiaExtraModal) { setAcademiaExtraModal(null); return true; }
+      if (academiaRegenModal) { setAcademiaRegenModal(null); return true; }
+      if (academiaExportModal) { setAcademiaExportModal(null); return true; }
+      if (errorReviewModal) { setErrorReviewModal(null); return true; }
+      if (examSetup !== null) { setExamSetup(null); setExamTopics([]); return true; }
+      if (exportModal) { setExportModal(null); return true; }
+      if (bizuarioModal) { setBizuarioModal(null); return true; }
+      if (vqGenModal) { setVqGenModal(null); return true; }
+      if (resetCourseModal) { setResetCourseModal(false); return true; }
+      if (srModal) { setSrModal(null); return true; }
+      return false;
     };
-    // Push a state so back button fires popstate instead of leaving
-    if (view !== 'library') window.history.pushState({ view }, '');
+
+    const goBackInApp = () => {
+      if (closeTopLayer()) return true;
+      if (reviewSession) { setReviewSession(null); return true; }
+
+      if (view === 'topic') {
+        if (viewReturnTarget?.view) restoreReturnTarget('subject');
+        else setView('subject');
+        return true;
+      }
+      if (view === 'quick-topic') {
+        if (quickStudyTab !== 'lesson') setQuickStudyTab('lesson');
+        else setView('quick');
+        return true;
+      }
+      if (view === 'quick') { restoreReturnTarget('library'); return true; }
+      if (view === 'academia-topic') { setView('subject'); return true; }
+      if (view === 'subject') { setView('sub-library'); return true; }
+      if (view === 'sub-library') {
+        if (activeFolderId) {
+          const folder = library.find(item => isFolderItem(item) && String(item.id) === String(activeFolderId));
+          setActiveFolderId(folder?.parentFolderId || null);
+        } else {
+          setView('library');
+        }
+        return true;
+      }
+      if (view === 'creator') { setCreatorStep(1); setView('library'); return true; }
+      if (view === 'academia-creator') { setAcademiaCreatorStep(1); setView('library'); return true; }
+      if (view === 'paste') { setView('sub-library'); return true; }
+      if (view === 'favorites') { setView('library'); return true; }
+      if (view === 'settings') { restoreReturnTarget('library'); return true; }
+      if (view === 'spaced-review') { restoreReturnTarget('library'); return true; }
+      if (view === 'curso') { setView('library'); return true; }
+      if (view === 'videoaulas') { setView('library'); return true; }
+      if (view === 'videoquestions') {
+        if (vqActiveBlockView?.fromPlan) {
+          setVqActiveBlockView(null);
+          setCursoTab('plano');
+          setView('curso');
+          return true;
+        }
+        if (vqActiveBlockView || (vqAula && vqSubject && vqTopic)) {
+          setVqActiveBlockView(null);
+          setView('videoaulas');
+          setActiveSubjectVid(vqSubject || null);
+          setActiveSubtopicVid(vqTopic ? `${vqTopic}::main` : null);
+          setActiveAulaAndReset(vqAula || null);
+          return true;
+        }
+        setView('curso');
+        return true;
+      }
+      if (view === 'exam') { setActiveExam(null); setView('library'); return true; }
+      if (view !== 'library') { setView('library'); return true; }
+      return false;
+    };
+
+    const hasBackTarget = view !== 'library'
+      || reviewSession
+      || menuOpen || libraryActionMenu || blockActionMenu || bulkActionMenu || mobileNavOpen
+      || errorModal || deleteId || openAnswerModal || externalPromptModal || regenModal
+      || newFolderModal || moveSubjectModal || folderReviewModal || bulkGenerateModal
+      || academiaExtraModal || academiaRegenModal || academiaExportModal || errorReviewModal
+      || examSetup !== null || exportModal || bizuarioModal || vqGenModal || resetCourseModal || srModal;
+
+    if (hasBackTarget && window.history.state?.__agoraRouteKey !== appBackRouteKey) {
+      window.history.pushState({ __agora:true, __agoraRouteKey:appBackRouteKey }, '', window.location.href);
+    }
+
+    const handlePop = (e) => {
+      if (goBackInApp()) e.preventDefault?.();
+    };
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
-  }, [view]); // eslint-disable-line
+  }, [appBackRouteKey]); // eslint-disable-line
   useEffect(()=>{
     let lastY = window.scrollY;
     const onScroll = () => {
@@ -6892,19 +7212,42 @@ export default function QuestionBankApp() {
     return ()=>clearInterval(t);
   },[activeExam?.id]);
 
-  // Keyboard shortcuts
-  useEffect(()=>{
-    const handleKey = (e) => {
-      if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
-      if (view!=='topic'||!activeTopic) return;
-      const unanswered = displayedQs.find(q=>!q.isOpen && !q.isFlashcard && !activeTopic.answers?.[q.id]);
-      if (!unanswered) return;
-      const map={a:'A',b:'B',c:'C',d:'D',e:'E','1':'A','2':'B','3':'C','4':'D','5':'E'};
-      if (map[e.key?.toLowerCase()]) handleAnswer(unanswered.id, map[e.key.toLowerCase()]);
-    };
-    window.addEventListener('keydown',handleKey);
-    return ()=>window.removeEventListener('keydown',handleKey);
-  });
+  const recordAccessLog = async (authUser, decision) => {
+    if (!authUser) return;
+    const email = String(authUser.email || '').trim().toLowerCase();
+    const uid = authUser.uid || email || 'unknown';
+    const status = decision?.status || 'desconhecido';
+    const sessionKey = `${uid}:${status}`;
+    if (accessLogSessionRef.current.has(sessionKey)) return;
+    accessLogSessionRef.current.add(sessionKey);
+
+    const now = Date.now();
+    const safeUid = String(uid).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'unknown';
+    const screenSize = typeof window !== 'undefined' && window.screen
+      ? `${window.screen.width}x${window.screen.height}`
+      : '';
+    try {
+      await setDoc(doc(db, 'access_logs', `${now}_${safeUid}`), {
+        uid:authUser.uid || '',
+        email,
+        displayName:authUser.displayName || '',
+        status,
+        allowed:!!decision?.allowed,
+        isAdmin:!!decision?.admin,
+        canSeeCourse:!!decision?.course,
+        siteOnly:!!decision?.siteOnly,
+        createdAt:now,
+        path:typeof window !== 'undefined' ? window.location.href : '',
+        userAgent:typeof navigator !== 'undefined' ? String(navigator.userAgent || '').slice(0, 500) : '',
+        platform:typeof navigator !== 'undefined' ? navigator.platform || '' : '',
+        language:typeof navigator !== 'undefined' ? navigator.language || '' : '',
+        timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        screen:screenSize,
+      });
+    } catch(e) {
+      console.warn('Access log write skipped:', e?.code || e?.message || e);
+    }
+  };
 
   // Auth
   useEffect(()=>{
@@ -6968,8 +7311,10 @@ export default function QuestionBankApp() {
       const normalizedCourse = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
       const normalizedSiteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !normalizedCourse.includes(email));
       const normalizedGlobal = normalizeEmailList([ADMIN_EMAIL, ...normalizedCourse, ...normalizedSiteOnly]);
+      const accessDecision = resolveAccessDecision(u, normalizedCourse, normalizedSiteOnly);
       setAllowedEmails(normalizedCourse);
       setSiteOnlyAllowedEmails(normalizedSiteOnly);
+      recordAccessLog(u, accessDecision);
       if (u && (u.isAnonymous || !normalizedGlobal.includes(String(u.email || '').toLowerCase()))) {
         setUser(u);
         setUsername(null);
@@ -7037,6 +7382,28 @@ export default function QuestionBankApp() {
     const unsub = onSnapshot(collection(db, 'user_devices'), (snap) => {
       setUserDevices(snap.docs.map(d => ({ id:d.id, ...d.data() })));
     }, () => setUserDevices([]));
+    return () => unsub();
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAccessLogs([]);
+      setAccessLogsLoading(false);
+      return;
+    }
+    setAccessLogsLoading(true);
+    const unsub = onSnapshot(collection(db, 'access_logs'), (snap) => {
+      const rows = snap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+        .slice(0, 20);
+      setAccessLogs(rows);
+      setAccessLogsLoading(false);
+    }, (e) => {
+      console.warn('Access logs read skipped:', e?.code || e?.message || e);
+      setAccessLogs([]);
+      setAccessLogsLoading(false);
+    });
     return () => unsub();
   }, [isAdmin]);
 
@@ -7721,6 +8088,116 @@ export default function QuestionBankApp() {
       });
     }
     return ids;
+  };
+  const getAcademiaSubjectFixationTargets = (subject) => {
+    if (!subject || isFolderItem(subject) || subject.source !== 'academia') return [];
+    return (subject.topics || []).map(topic => ({ subjectId:subject.id, topicId:topic.id }));
+  };
+  const getAcademiaFolderFixationTargets = (folder) => {
+    if (!folder || folder.source !== 'academia') return [];
+    const folderIds = getFolderTreeIds(folder);
+    return librarySubjects
+      .filter(subject => subject.source === 'academia' && folderIds.has(subject.folderId))
+      .flatMap(subject => getAcademiaSubjectFixationTargets(subject));
+  };
+  const clearAcademiaFixationAnswersForTargets = async (targets = []) => {
+    const uniqueTargets = new Map();
+    targets.forEach(target => {
+      if (target?.subjectId == null || target?.topicId == null) return;
+      uniqueTargets.set(`${target.subjectId}__${target.topicId}`, target);
+    });
+    if (!uniqueTargets.size) {
+      addToast('Nenhum tópico de fixação encontrado para limpar.', 'info', 3500);
+      return;
+    }
+
+    const targetKeys = new Set(uniqueTargets.keys());
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+    const questionIdsByTarget = new Map();
+    const allQuestionIds = new Set();
+    const addQuestionIds = (key, questions = []) => {
+      if (!questionIdsByTarget.has(key)) questionIdsByTarget.set(key, new Set());
+      const targetIds = questionIdsByTarget.get(key);
+      questions.forEach(q => {
+        if (q?.id == null) return;
+        const id = String(q.id);
+        targetIds.add(id);
+        allQuestionIds.add(id);
+      });
+    };
+
+    items.forEach(item => {
+      if (isFolderItem(item) || item.source !== 'academia') return;
+      (item.topics || []).forEach(topic => {
+        const key = `${item.id}__${topic.id}`;
+        if (targetKeys.has(key)) addQuestionIds(key, Object.values(topic.fixationQuestions || {}).flat());
+      });
+    });
+    items.forEach(item => {
+      if (isFolderItem(item) || item.source !== 'gemini') return;
+      (item.topics || []).forEach(topic => {
+        const origin = topic.origin;
+        if (origin?.source !== 'academia' || (origin.kind || 'fixation') !== 'fixation') return;
+        const key = `${origin.subjectId}__${origin.topicId}`;
+        if (targetKeys.has(key)) addQuestionIds(key, topic.questions || []);
+      });
+    });
+
+    if (allQuestionIds.size) {
+      setAcademiaTopicAnswers(prev => Object.fromEntries(
+        Object.entries(prev || {}).filter(([qId]) => !allQuestionIds.has(String(qId)))
+      ));
+    }
+
+    const updates = new Map();
+    let clearedCount = 0;
+    items.forEach(item => {
+      if (isFolderItem(item) || item.source !== 'academia') return;
+      let changed = false;
+      const topics = (item.topics || []).map(topic => {
+        const ids = questionIdsByTarget.get(`${item.id}__${topic.id}`);
+        if (!ids?.size) return topic;
+        const currentAnswers = topic.answers || {};
+        const nextAnswers = Object.fromEntries(
+          Object.entries(currentAnswers).filter(([qId]) => !ids.has(String(qId)))
+        );
+        const removed = Object.keys(currentAnswers).length - Object.keys(nextAnswers).length;
+        if (!removed) return topic;
+        clearedCount += removed;
+        changed = true;
+        return { ...topic, answers:nextAnswers };
+      });
+      if (changed) updates.set(item.id, { ...item, topics });
+    });
+
+    items.forEach(item => {
+      if (isFolderItem(item) || item.source !== 'gemini') return;
+      let changed = false;
+      const topics = (item.topics || []).map(topic => {
+        const origin = topic.origin;
+        if (origin?.source !== 'academia' || (origin.kind || 'fixation') !== 'fixation') return topic;
+        const ids = questionIdsByTarget.get(`${origin.subjectId}__${origin.topicId}`);
+        if (!ids?.size) return topic;
+        const currentAnswers = topic.answers || {};
+        const nextAnswers = Object.fromEntries(
+          Object.entries(currentAnswers).filter(([qId]) => !ids.has(String(qId)))
+        );
+        const removed = Object.keys(currentAnswers).length - Object.keys(nextAnswers).length;
+        if (!removed) return topic;
+        changed = true;
+        return { ...topic, answers:nextAnswers };
+      });
+      if (changed) updates.set(item.id, { ...item, topics });
+    });
+
+    if (updates.size) await updateLibraryItems(Array.from(updates.values()));
+    addToast(
+      clearedCount
+        ? `${clearedCount} resposta${clearedCount!==1?'s':''} de fixação limpa${clearedCount!==1?'s':''}.`
+        : 'Nenhuma resposta de fixação salva para limpar.',
+      clearedCount ? 'success' : 'info',
+      3500
+    );
   };
   const deleteFolderWithContents = async (folder) => {
     if (!folder) return;
@@ -9344,7 +9821,16 @@ export default function QuestionBankApp() {
   };
 
   // Bug 1: also clear cached insights — they're based on old answers and would be stale
-  const resetAnswers = async () => { await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},bizuario:null}:t)}); };
+  const resetAnswers = async () => {
+    if (activeTopic?.origin?.source === 'academia' && (activeTopic.origin.kind || 'fixation') === 'fixation') {
+      await clearAcademiaFixationAnswersForTargets([{
+        subjectId:activeTopic.origin.subjectId,
+        topicId:activeTopic.origin.topicId,
+      }]);
+      return;
+    }
+    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},bizuario:null}:t)});
+  };
   const resetOnlyWrong = async () => {
     const wrong=(activeTopic.questions||[]).filter(q=>{
       const a=activeTopic.answers?.[q.id];
@@ -9355,18 +9841,34 @@ export default function QuestionBankApp() {
     await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:na}:t)});setShowOnlyWrong(false);
   };
 
+  const openOracleRegenModal = (topic = activeTopic) => {
+    setRegenPrompt('');
+    setOracleRegenConfig({
+      questionStyle:topic?.questionStyle || settingsRef.current.questionStyle || 'mixed',
+      questionTypes:topic?.questionTypes || settingsRef.current.questionTypes || ['direct'],
+      qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
+      qPerSubAuto:!!settingsRef.current.qPerSubAuto,
+      numAlternatives:settingsRef.current.numAlternatives || 5,
+      geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
+    });
+    setRegenModal(true);
+  };
+
   const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress, settingsOverride=null } = {}) => {
+    const originalTopic = topic || {};
     const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{} } : t) };
     await updateSubject(cleared);
     const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
 
-    const topicStyle = clearedTopic.questionStyle || settingsRef.current.questionStyle || 'mixed';
+    const generationSettings = { ...settingsRef.current, ...(settingsOverride || {}) };
+    const topicStyle = settingsOverride?.questionStyle || clearedTopic.questionStyle || generationSettings.questionStyle || 'mixed';
     const subtopicsArr = clearedTopic.subtopics?.filter(s => s.length > 0) || [];
-    const oracleAutoMode = settingsRef.current.autoMode || false;
-    const baseQPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
+    const oracleAutoMode = generationSettings.autoMode || false;
+    const qPerSubAuto = !!generationSettings.qPerSubAuto;
+    const baseQPerSub = Math.max(1, parseInt(generationSettings.qPerSub, 10) || 1);
     const rawPromptSubtopicCount = subtopicsArr.length > 0
       ? subtopicsArr.length
-      : Math.max(1, parseInt(settingsRef.current.numSubtopics, 10) || 1);
+      : Math.max(1, parseInt(generationSettings.numSubtopics, 10) || 1);
     const promptSubtopicCount = oracleAutoMode && subtopicsArr.length === 0
       ? Math.max(SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic, rawPromptSubtopicCount)
       : rawPromptSubtopicCount;
@@ -9374,10 +9876,12 @@ export default function QuestionBankApp() {
       ? 2
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
-    const topicTypes = clearedTopic.questionTypes || settingsRef.current.questionTypes || ['direct'];
+    const topicTypes = settingsOverride?.questionTypes || clearedTopic.questionTypes || generationSettings.questionTypes || ['direct'];
     const flashcardOnly = topicTypes.length === 1 && topicTypes[0] === 'flashcard';
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
+      : qPerSubAuto
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use quantidade fixa. Para cada subtópico/eixo, atomize tudo que é relevante, cobrável e ainda não repetido em questões independentes. Referência: 1 a 4 questões por subtópico; use mais só se houver muitos eixos realmente distintos. Não crie questão para encher volume.`
       : subtopicsArr.length > 0
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
         : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
@@ -9385,10 +9889,10 @@ export default function QuestionBankApp() {
       ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
       : '';
     const s = {
-      ...settingsRef.current,
-      ...(settingsOverride || {}),
+      ...generationSettings,
       numSubtopics: promptSubtopicCount,
       qPerSub,
+      qPerSubAuto,
       questionStyle: topicStyle,
       questionTypes: topicTypes,
     };
@@ -9398,11 +9902,15 @@ export default function QuestionBankApp() {
     const hasFlashcardOnly = types.length === 1 && types[0] === 'flashcard';
     const altSuffix = hasFlashcardOnly
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
+      : qPerSubAuto
+      ? `\n\nATENÇÃO FINAL: Gere a quantidade ideal de questões, sem total fixo. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
+    const previousQuestions = summarizeQuestionsForPrompt(originalTopic.questions || []);
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
+      + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
       + (addPrompt ? `\n\nFoco adicional: ${addPrompt}` : '')
       + altSuffix;
 
@@ -9417,7 +9925,7 @@ export default function QuestionBankApp() {
         const updatedSubject = {
           ...cleared,
           topics: cleared.topics.map(t => t.id === clearedTopic.id
-            ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle }
+            ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes }
             : t
           )
         };
@@ -9434,23 +9942,26 @@ export default function QuestionBankApp() {
   };
 
   // Generate questions (streaming)
-  const generateBatch = async (topicId, addPrompt='') => {
+  const generateBatch = async (topicId, addPrompt='', settingsOverride=null) => {
     if(!checkKey())return;setIsBusy(true);setStreamCount(0);
     let mi=0;setLoadingMsg(LOADING_MSGS[0]);
     const mi_int=setInterval(()=>{mi=(mi+1)%LOADING_MSGS.length;setLoadingMsg(LOADING_MSGS[mi]);},8000);
+    const sourceTopic = activeSubject?.topics?.find(t=>t.id===topicId) || {};
     const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{}}:t)};
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
+    const generationSettings = { ...settingsRef.current, ...(settingsOverride || {}) };
 
     // Estilo salvo no tópico tem prioridade sobre settings global
-    const topicStyle = topic.questionStyle || settingsRef.current.questionStyle || 'mixed';
+    const topicStyle = settingsOverride?.questionStyle || topic.questionStyle || generationSettings.questionStyle || 'mixed';
 
     const subtopicsArr = topic.subtopics?.filter(s=>s.length>0) || [];
-    const oracleAutoMode = settingsRef.current.autoMode || false;
-    const baseQPerSub = Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1);
+    const oracleAutoMode = generationSettings.autoMode || false;
+    const qPerSubAuto = !!generationSettings.qPerSubAuto;
+    const baseQPerSub = Math.max(1, parseInt(generationSettings.qPerSub, 10) || 1);
     const rawPromptSubtopicCount = subtopicsArr.length > 0
       ? subtopicsArr.length
-      : Math.max(1, parseInt(settingsRef.current.numSubtopics, 10) || 1);
+      : Math.max(1, parseInt(generationSettings.numSubtopics, 10) || 1);
     const promptSubtopicCount = oracleAutoMode && subtopicsArr.length === 0
       ? Math.max(SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic, rawPromptSubtopicCount)
       : rawPromptSubtopicCount;
@@ -9458,10 +9969,12 @@ export default function QuestionBankApp() {
       ? 2
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
-    const topicTypes = topic.questionTypes || settingsRef.current.questionTypes || ['direct'];
+    const topicTypes = settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'];
     const flashcardOnly = topicTypes.length === 1 && topicTypes[0] === 'flashcard';
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
+      : qPerSubAuto
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use quantidade fixa. Para cada subtópico/eixo, atomize tudo que é relevante, cobrável e ainda não repetido em questões independentes. Referência: 1 a 4 questões por subtópico; use mais só se houver muitos eixos realmente distintos. Não crie questão para encher volume.`
       : subtopicsArr.length > 0
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
         : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
@@ -9472,9 +9985,10 @@ export default function QuestionBankApp() {
       : '';
 
     const s = {
-      ...settingsRef.current,
+      ...generationSettings,
       numSubtopics: promptSubtopicCount,
       qPerSub,
+      qPerSubAuto,
       questionStyle: topicStyle,
       questionTypes: topicTypes,
     };
@@ -9485,12 +9999,16 @@ export default function QuestionBankApp() {
     const hasFlashcardOnly = types.length === 1 && types[0] === 'flashcard';
     const altSuffix = hasFlashcardOnly
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
+      : qPerSubAuto
+      ? `\n\nATENÇÃO FINAL: Gere a quantidade ideal de questões, sem total fixo. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
+    const previousQuestions = summarizeQuestionsForPrompt(sourceTopic.questions || []);
 
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
+      + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
       + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
       + altSuffix;
 
@@ -9502,7 +10020,7 @@ export default function QuestionBankApp() {
         const parsed = parseGeneratedQuestionsByTypes(full, `${activeSubject.id}_${topicId}`, types);
         const allQuestions = parsed.questions;
         const summary = parsed.summary;
-        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle}:t)});
+        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes}:t)});
         await rotateKey();
         ok=true; break;
       } catch(e) {
@@ -9692,6 +10210,7 @@ export default function QuestionBankApp() {
       questionTypes:['direct', 'flashcard'],
       questionStyle:settingsRef.current.questionStyle || 'mixed',
       numAlternatives:settingsRef.current.numAlternatives || 5,
+      quickExplanationLength:settingsRef.current.quickExplanationLength || 'essential',
     };
     const sys = `Você é a ${QUICK_SUBJECT_TITLE} da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.`;
     let lessonRaw = '';
@@ -9700,7 +10219,7 @@ export default function QuestionBankApp() {
       updateToast(toastId, 'Gerando explicação da centelha...', 'loading');
       for (const { k } of getOrderedKeys()) {
         try {
-          lessonRaw = await callGemini(buildQuickLessonPrompt({ context:userContext }), sys, k, [], getGeminiOptions(s));
+          lessonRaw = await callGemini(buildQuickLessonPrompt({ context:userContext, explanationLength:s.quickExplanationLength }), sys, k, [], getGeminiOptions(s));
           await rotateKey();
           break;
         } catch(e) {
@@ -11791,9 +12310,16 @@ export default function QuestionBankApp() {
                 setView('subject');
               };
               const actions = s.id==='imported-folder' ? [] : [
+                s.source==='academia' && countSubjectQuestions(s)>0 ? {
+                  label:'Limpar respostas da fixação',
+                  icon:<Eraser className="w-3.5 h-3.5"/>,
+                  fn:()=>clearAcademiaFixationAnswersForTargets(getAcademiaSubjectFixationTargets(s)),
+                  extra:darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300',
+                  danger:true,
+                } : null,
                 {label:'Renomear', icon:<EditIcon className="w-3.5 h-3.5"/>, fn:()=>{setEditingSub(s.id);setEditingSubName(s.title);}},
                 {label:'Excluir', icon:<Trash2 className="w-3.5 h-3.5"/>, fn:()=>setDeleteId({type:'subject',id:s.id}), extra:darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300', danger:true},
-              ];
+              ].filter(Boolean);
               return (
                 <div key={s.id} data-library-item data-item-id={s.id} data-item-type="subject" data-library-drop data-drop-id={s.folderId || 'root'} className={`group border-b last:border-b-0 transition-colors relative ${rowBorder} ${rowHover} ${(beforeTarget||afterTarget)?(darkMode?'bg-yellow-900/5':'bg-yellow-50/30'):''} ${dragging?'opacity-40':''}`}>
                   {depth>0&&<span className={`absolute left-3 top-0 bottom-0 w-px ${darkMode?'bg-gray-800':'bg-gray-200'}`}/>}
@@ -11849,10 +12375,17 @@ export default function QuestionBankApp() {
                 setActiveFolderId(folder.id);
               };
               const actions = lockedMirrorRoot ? [] : [
+                libFilter==='academia' && totalQs>0 ? {
+                  label:'Limpar respostas da fixação',
+                  icon:<Eraser className="w-3.5 h-3.5"/>,
+                  fn:()=>clearAcademiaFixationAnswersForTargets(getAcademiaFolderFixationTargets(folder)),
+                  extra:darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300',
+                  danger:true,
+                } : null,
                 {label:'Nova filha', icon:<PlusIcon className="w-3.5 h-3.5"/>, fn:()=>{setLibraryOpenFolders(p=>({...p,[folder.id]:true}));setNewFolderParentId(folder.id);setNewFolderName('');setNewFolderModal(true);}},
                 {label:'Renomear', icon:<EditIcon className="w-3.5 h-3.5"/>, fn:()=>{setEditingSub(folder.id);setEditingSubName(folder.title);}},
                 {label:'Excluir', icon:<Trash2 className="w-3.5 h-3.5"/>, fn:()=>setDeleteId({type:'folder',id:folder.id}), extra:darkMode?'hover:text-red-400 hover:border-red-700':'hover:text-red-600 hover:border-red-300', danger:true},
-              ];
+              ].filter(Boolean);
               return (
                 <React.Fragment key={folder.id}>
                   <div data-library-item data-item-id={folder.id} data-item-type="folder" data-library-drop data-drop-id={folder.id} className={`group border-b transition-colors relative ${rowBorder} ${rowHover} ${dropActive?(darkMode?'bg-yellow-900/25 ring-1 ring-inset ring-yellow-700':'bg-yellow-50 ring-1 ring-inset ring-yellow-300'):''} ${(beforeTarget||afterTarget)?(darkMode?'bg-yellow-900/5':'bg-yellow-50/30'):''} ${dragging?'opacity-40':''}`}>
@@ -11925,6 +12458,30 @@ export default function QuestionBankApp() {
                       <p className="text-sm opacity-50 mt-1">{treeItemCount} item{treeItemCount!==1?'s':''} nesta pasta</p>
 	                    </div>
 	                    <div className="flex flex-wrap gap-2">
+	                      {activeFolder&&libFilter==='academia'&&countFolderQuestions(activeFolder)>0&&(()=>{
+	                        const id = `active-folder-actions-${activeFolder.id}`;
+	                        return (
+	                          <div className="relative">
+	                            <button
+	                              onClick={()=>setLibraryActionMenu(p=>p===id?null:id)}
+	                              title="Ações da pasta"
+	                              aria-label="Ações da pasta"
+	                              className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-yellow-700'}`}>
+	                              <MoreIcon className="w-5 h-5"/>
+	                            </button>
+	                            {libraryActionMenu===id&&(
+	                              <div className={`absolute right-0 top-12 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+	                                <button
+	                                  onClick={()=>{setLibraryActionMenu(null);clearAcademiaFixationAnswersForTargets(getAcademiaFolderFixationTargets(activeFolder));}}
+	                                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors ${darkMode?'text-red-300 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'}`}>
+	                                  <Eraser className="w-4 h-4"/>
+	                                  <span className="flex-1">Limpar respostas da fixação</span>
+	                                </button>
+	                              </div>
+	                            )}
+	                          </div>
+	                        );
+	                      })()}
 	                      {activeFolder&&<button onClick={()=>openFolderReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 text-green-700 hover:bg-green-50'}`}><RepeatIcon className="w-4 h-4"/>Revisar pasta</button>}
 	                      {activeFolder&&activeFolderErrorCount>0&&<button onClick={()=>openFolderErrorReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BookOpen className="w-4 h-4"/>Caderno de erros ({activeFolderErrorCount})</button>}
 	                      {libFilter==='external'&&<button onClick={()=>setExternalPromptModal(true)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>{copiedPrompt?<CheckCircle2 className="w-4 h-4 text-yellow-500"/>:<Copy className="w-4 h-4"/>}{copiedPrompt?'Copiado':'Prompt'}</button>}
@@ -11988,6 +12545,12 @@ export default function QuestionBankApp() {
 		                {(()=>{
 		                  const subjectFlashcards = (activeSubject.topics || []).flatMap(t => (t.questions || []).filter(q => q.isFlashcard));
 		                  const subjectActionItems = [
+		                    activeSubject.source==='academia' && (activeSubject.topics || []).some(t => Object.values(t.fixationQuestions || {}).flat().length > 0) ? {
+		                      label:'Limpar respostas da fixação',
+		                      icon:<Eraser className="w-4 h-4"/>,
+		                      fn:()=>clearAcademiaFixationAnswersForTargets(getAcademiaSubjectFixationTargets(activeSubject)),
+		                      danger:true,
+		                    } : null,
 		                    activeSubject.source!=='academia' ? {
 		                      label:activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta',
 		                      icon:<BrainIcon className="w-4 h-4"/>,
@@ -12026,7 +12589,7 @@ export default function QuestionBankApp() {
 		                            <button
 		                              key={item.label}
 		                              onClick={()=>{setBulkActionMenu(null);item.fn();}}
-		                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.active?(darkMode?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+		                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.danger?(darkMode?'text-red-300 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):item.active?(darkMode?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
 		                              {item.icon}
 		                              <span className="flex-1">{item.label}</span>
 		                            </button>
@@ -12143,8 +12706,9 @@ export default function QuestionBankApp() {
                 const pct=isAcademiaTopic
                   ?(topic.lessonGenerated?(fixTotal>0?Math.round(fixAnswered/fixTotal*100):100):0)
                   :(topic.questions?.length?Math.round(countValidAnswers(topic)/topic.questions.length*100):0);
+                const topicActionMenuId = `academia-topic-actions-${topic.id}`;
                 return (
-                  <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
+                  <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} relative p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex items-center gap-3 flex-1 truncate pr-3">
                       <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0">{isAcademiaTopic?<AcademiaIcon className="w-5 h-5"/>:<BlockIcon className="w-5 h-5"/>}</div>
                       <div className="truncate">
@@ -12160,6 +12724,31 @@ export default function QuestionBankApp() {
                       <div className="h-2 w-20 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div className="bg-yellow-500 h-full" style={{width:`${pct}%`}}/>
                       </div>
+                      {isAcademiaTopic && fixTotal > 0 && (
+                        <div className="relative">
+                          <button
+                            onClick={e=>{e.stopPropagation();setBulkActionMenu(p=>p===topicActionMenuId?null:topicActionMenuId);}}
+                            title="Ações do tópico"
+                            aria-label="Ações do tópico"
+                            className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-900 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-yellow-700'}`}>
+                            <MoreIcon className="w-4 h-4"/>
+                          </button>
+                          {bulkActionMenu===topicActionMenuId&&(
+                            <div className={`absolute right-0 top-9 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                              <button
+                                onClick={e=>{
+                                  e.stopPropagation();
+                                  setBulkActionMenu(null);
+                                  clearAcademiaFixationAnswersForTargets([{subjectId:activeSubject.id, topicId:topic.id}]);
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors ${darkMode?'text-red-300 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'}`}>
+                                <Eraser className="w-4 h-4"/>
+                                <span className="flex-1">Limpar respostas da fixação</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -12184,7 +12773,7 @@ export default function QuestionBankApp() {
               showErrorNotebook={canUseAdvancedFeatures}
               onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)}
               onReset={activeTopic.questions?.length>0?()=>setDeleteId({type:'reset',id:activeTopic.id}):null}
-              onRegenerate={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'?()=>setRegenModal(true):null}
+              onRegenerate={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'?()=>openOracleRegenModal(activeTopic):null}
               onExport={activeTopic.questions?.length>0?()=>setExportModal({topic:activeTopic,subject:activeSubject}):null}
               isGenerating={isBusy&&(activeTopic.questions?.length||0)===0}
               streamCount={streamCount}
@@ -12212,9 +12801,16 @@ export default function QuestionBankApp() {
               topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
               canCreateFlashcards={canUseAdvancedFeatures}
               questionCountPerSub={settings.qPerSub||1}
+              questionCountAuto={!!settings.qPerSubAuto}
               numAlternatives={settings.numAlternatives||5}
+              geminiThinkingEnabled={!!settings.geminiThinkingEnabled}
+              onGeminiThinkingChange={enabled=>{
+                const ns = {...settingsRef.current, geminiThinkingEnabled:enabled};
+                setSettings(ns);
+                saveSettings(ns);
+              }}
               onTopicStyleChange={activeSubject?.source==='gemini'?(val,kind)=>{
-                if (kind === 'qPerSub' || kind === 'numAlternatives') {
+                if (kind === 'qPerSub' || kind === 'numAlternatives' || kind === 'qPerSubAuto') {
                   const ns = {...settingsRef.current, [kind]:val};
                   setSettings(ns);
                   saveSettings(ns);
@@ -12378,10 +12974,17 @@ export default function QuestionBankApp() {
                   {!(settings.questionTypes||[]).includes('flashcard')&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
-                      <input type="number" min="1" max="10" value={settings.qPerSub}
-                        onChange={e=>setSettings({...settings,qPerSub:e.target.value})}
-                        onBlur={()=>{let v=parseInt(settings.qPerSub);if(isNaN(v)||v<1)v=1;if(v>10)v=10;const ns={...settings,qPerSub:v};setSettings(ns);saveSettings(ns);}}
-                        className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <input type="number" min="1" max="10" value={settings.qPerSub}
+                          disabled={!!settings.qPerSubAuto}
+                          onChange={e=>setSettings({...settings,qPerSub:e.target.value})}
+                          onBlur={()=>{let v=parseInt(settings.qPerSub);if(isNaN(v)||v<1)v=1;if(v>10)v=10;const ns={...settings,qPerSub:v};setSettings(ns);saveSettings(ns);}}
+                          className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                        <button type="button" onClick={()=>{const ns={...settings,qPerSubAuto:!settings.qPerSubAuto};setSettings(ns);saveSettings(ns);}}
+                          className={`px-3 rounded-lg border-2 text-xs font-bold transition-all ${settings.qPerSubAuto?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                          IA
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
@@ -12394,6 +12997,8 @@ export default function QuestionBankApp() {
                   <p className={`text-xs mt-2 opacity-40`}>
                     {(settings.questionTypes||[]).includes('flashcard')
                       ? 'Flashcards: a IA decide a quantidade ideal, sem meta fixa por subtópico.'
+                      : settings.qPerSubAuto
+                      ? 'Questões/subtópico: a IA atomiza cada subtópico e escolhe a quantidade relevante, sem total fixo.'
                       : settings.autoMode
                       ? `O sumário fica automático; cada subtópico gerado terá ${settings.qPerSub||1} questão(ões).`
                       : `Total estimado: ${(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões`}
@@ -12699,6 +13304,18 @@ export default function QuestionBankApp() {
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Dúvida rápida</label>
                       <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Ex: meu professor perguntou como pesquisar o sinal de Jobert e eu travei. Quero entender o que é, como faz e por que indica pneumoperitônio." className={`w-full h-44 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                    </div>
+                    <div>
+                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Tamanho da explicação</label>
+                      <ExplanationLengthSelector
+                        value={settings.quickExplanationLength || 'essential'}
+                        onChange={value=>{
+                          const ns = {...settingsRef.current, quickExplanationLength:value};
+                          setSettings(ns);
+                          saveSettings(ns);
+                        }}
+                        darkMode={dm}
+                      />
                     </div>
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Gemini</label>
@@ -15881,6 +16498,90 @@ export default function QuestionBankApp() {
             )}
             {isAdmin&&(()=>{
               const now = Date.now();
+              const last24h = accessLogs.filter(log => now - Number(log.createdAt || 0) <= 24 * 60 * 60 * 1000);
+              const allowedCount = last24h.filter(log => log.allowed).length;
+              const blockedCount = last24h.filter(log => !log.allowed).length;
+              const uniqueEmails = new Set(accessLogs.map(log => String(log.email || log.uid || '').toLowerCase()).filter(Boolean)).size;
+              const statusMeta = {
+                admin:{ label:'Admin', className:darkMode?'bg-yellow-900/30 text-yellow-300 border-yellow-800':'bg-yellow-50 text-yellow-700 border-yellow-200' },
+                curso:{ label:'Entrou · curso', className:darkMode?'bg-green-900/25 text-green-300 border-green-800':'bg-green-50 text-green-700 border-green-200' },
+                sem_curso:{ label:'Entrou · sem curso', className:darkMode?'bg-blue-900/25 text-blue-300 border-blue-800':'bg-blue-50 text-blue-700 border-blue-200' },
+                bloqueado:{ label:'Bloqueado', className:darkMode?'bg-red-900/25 text-red-300 border-red-800':'bg-red-50 text-red-700 border-red-200' },
+                anonimo_bloqueado:{ label:'Anônimo bloqueado', className:darkMode?'bg-red-900/25 text-red-300 border-red-800':'bg-red-50 text-red-700 border-red-200' },
+                sem_email_bloqueado:{ label:'Sem email', className:darkMode?'bg-red-900/25 text-red-300 border-red-800':'bg-red-50 text-red-700 border-red-200' },
+              };
+              const fmtLogTime = (ts) => ts ? new Date(Number(ts)).toLocaleString('pt-BR', {
+                day:'2-digit',
+                month:'2-digit',
+                hour:'2-digit',
+                minute:'2-digit',
+              }) : 'sem data';
+              const shortAgent = (ua = '') => String(ua || '')
+                .replace(/\s+/g, ' ')
+                .replace(/^Mozilla\/5\.0\s*/i, '')
+                .slice(0, 120);
+              return (
+                <SettingsSection
+                  id="access-logs"
+                  title="Logs de acesso"
+                  icon={<ShieldAlert className="w-4 h-4"/>}
+                  className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
+                  titleClassName="text-yellow-600"
+                >
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                      <p className="text-2xl font-serif font-bold text-green-500">{allowedCount}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">entradas 24h</p>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                      <p className="text-2xl font-serif font-bold text-red-500">{blockedCount}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">bloqueios 24h</p>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+                      <p className="text-2xl font-serif font-bold text-yellow-600">{uniqueEmails}</p>
+                      <p className="text-xs font-bold uppercase opacity-50">identidades</p>
+                    </div>
+                  </div>
+                  <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                    <div className={`px-3 py-2 flex items-center justify-between gap-3 border-b ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-100 bg-gray-50'}`}>
+                      <p className="text-xs font-bold uppercase tracking-widest opacity-50">20 eventos mais recentes</p>
+                      <p className={`text-xs font-bold ${accessLogsLoading?'text-yellow-600':'opacity-50'}`}>{accessLogsLoading ? 'carregando...' : 'ao vivo'}</p>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto p-2 space-y-2" style={{overflowAnchor:'none'}}>
+                      {!accessLogsLoading && accessLogs.length===0 && (
+                        <p className="text-sm opacity-50 italic p-3">Nenhum log encontrado ainda.</p>
+                      )}
+                      {accessLogs.map(log => {
+                        const meta = statusMeta[log.status] || {
+                          label:log.status || 'desconhecido',
+                          className:darkMode?'bg-gray-800 text-gray-300 border-gray-700':'bg-gray-50 text-gray-600 border-gray-200',
+                        };
+                        return (
+                          <div key={log.id} className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold truncate">{log.email || log.uid || 'sem identificação'}</p>
+                                {log.displayName&&<p className={`text-xs truncate mt-0.5 ${darkMode?'text-gray-500':'text-gray-500'}`}>{log.displayName}</p>}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className={`px-2 py-1 rounded-lg border text-[11px] font-bold uppercase ${meta.className}`}>{meta.label}</span>
+                                <span className={`text-xs font-mono ${darkMode?'text-gray-500':'text-gray-500'}`}>{fmtLogTime(log.createdAt)}</span>
+                              </div>
+                            </div>
+                            <div className={`mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>
+                              <span className="truncate">{log.platform || 'plataforma ?'} · {log.screen || 'tela ?'} · {log.timezone || 'fuso ?'}</span>
+                              <span className="truncate sm:text-right">{shortAgent(log.userAgent) || 'navegador ?'}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </SettingsSection>
+              );
+            })()}
+            {isAdmin&&(()=>{
+              const now = Date.now();
               const activeWindow = 3 * 60 * 1000;
               const recentWindow = 30 * 24 * 60 * 60 * 1000;
               const whitelist = globalAllowedEmails.map(e => e.toLowerCase());
@@ -16639,23 +17340,99 @@ export default function QuestionBankApp() {
       {/* ── REGEN MODAL ── */}
       {regenModal&&(
         <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
-          <div className={`w-full max-w-md rounded-2xl p-8 border-2 border-yellow-600 overflow-y-auto ${darkMode?'bg-gray-900 text-white':'bg-white text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
-            <div className="flex flex-col items-center text-center">
-              <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4"><RotateCcw className="w-8 h-8 text-yellow-600"/></div>
-              <h3 className="text-2xl font-serif font-bold mb-2">Recriar Bloco</h3>
-              <p className="mb-6 opacity-70 text-sm">As questões atuais serão substituídas.</p>
-              <textarea value={regenPrompt} onChange={e=>setRegenPrompt(e.target.value)} placeholder="Foco específico (opcional)..." className={`w-full h-20 p-3 rounded-lg border resize-none outline-none mb-6 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-              <div className="w-full mb-6 text-left">
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
+          <div className={`w-full max-w-2xl rounded-2xl p-6 md:p-8 border-2 border-yellow-600 overflow-y-auto ${darkMode?'bg-gray-900 text-white':'bg-white text-gray-900'}`} style={{maxHeight:'calc(100dvh - 3rem)'}}>
+            <div className="flex items-start gap-4 mb-6">
+              <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl flex-shrink-0"><RotateCcw className="w-6 h-6 text-yellow-600"/></div>
+              <div>
+                <h3 className="text-2xl font-serif font-bold text-yellow-600">Recriar bloco</h3>
+                <p className="opacity-70 text-sm">As questões atuais serão substituídas. Use isso para mudar quantidade, tipo, estilo, alternativas e foco.</p>
+              </div>
+            </div>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Foco específico</label>
+                <textarea value={regenPrompt} onChange={e=>setRegenPrompt(e.target.value)} placeholder="Opcional: deixe mais difícil, foque em tratamento, cobre mais diagnóstico diferencial, evite decoreba..." className={`w-full h-24 p-3 rounded-xl border resize-none outline-none text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</label>
+                <QuestionTypeSelector
+                  selected={oracleRegenConfig.questionTypes || ['direct']}
+                  onChange={questionTypes=>setOracleRegenConfig(p=>({...p, questionTypes}))}
+                  darkMode={darkMode}
+                  single={true}
+                  isAdmin={canUseAdvancedFeatures}
+                />
+              </div>
+
+              {!(oracleRegenConfig.questionTypes || []).includes('flashcard')&&(
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões/Subtópico</label>
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <input type="number" min="1" max="10" value={oracleRegenConfig.qPerSub || 1}
+                        disabled={!!oracleRegenConfig.qPerSubAuto}
+                        onChange={e=>setOracleRegenConfig(p=>({...p,qPerSub:Math.max(1,Math.min(10,parseInt(e.target.value,10)||1))}))}
+                        className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,qPerSubAuto:!p.qPerSubAuto}))}
+                        className={`px-4 rounded-xl border-2 text-xs font-bold transition-all ${oracleRegenConfig.qPerSubAuto?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                        IA
+                      </button>
+                    </div>
+                    <p className="text-[11px] opacity-50 mt-1">{oracleRegenConfig.qPerSubAuto?'A IA atomiza cada subtópico e decide a quantidade relevante.':'Quantidade fixa para cada subtópico.'}</p>
+                  </div>
+
+                  {['direct','vof','cespe'].includes((oracleRegenConfig.questionTypes || ['direct'])[0])&&(
+                    <div>
+                      <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[4,5].map(n=>(
+                          <button key={n} type="button" onClick={()=>setOracleRegenConfig(p=>({...p,numAlternatives:n}))}
+                            className={`min-h-[50px] rounded-xl border-2 text-sm font-bold transition-all ${Number(oracleRegenConfig.numAlternatives || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                            {n} (A-{'ABCDE'[n-1]})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {((oracleRegenConfig.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[{k:'mixed',label:'Misto',desc:'Conceito + clínica'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Conceitos secos'}].map(opt=>(
+                      <button key={opt.k} onClick={()=>setOracleRegenConfig(p=>({...p,questionStyle:opt.k}))}
+                        className={`py-3 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${oracleRegenConfig.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                        {opt.label}<p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</label>
                 <GeminiThinkingSelector
-                  value={!!settings.geminiThinkingEnabled}
-                  onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}}
+                  value={!!oracleRegenConfig.geminiThinkingEnabled}
+                  onChange={geminiThinkingEnabled=>setOracleRegenConfig(p=>({...p,geminiThinkingEnabled}))}
                   darkMode={darkMode}
                 />
               </div>
-              <div className="flex gap-4 w-full">
-                <button onClick={()=>setRegenModal(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800':'bg-gray-100'}`}>Cancelar</button>
-                <button onClick={()=>{setRegenModal(false);generateBatch(activeTopic.id,regenPrompt);setRegenPrompt('');}} className="flex-1 px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"><Sparkles className="w-4 h-4"/>Recriar</button>
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={()=>setRegenModal(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
+                <button onClick={()=>{
+                  const cfg = {
+                    ...oracleRegenConfig,
+                    qPerSub:Math.max(1, Math.min(10, parseInt(oracleRegenConfig.qPerSub, 10) || 1)),
+                    numAlternatives:Number(oracleRegenConfig.numAlternatives || 5),
+                  };
+                  setRegenModal(false);
+                  generateBatch(activeTopic.id, regenPrompt, cfg);
+                  setRegenPrompt('');
+                }} className="flex-1 px-5 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2"><Sparkles className="w-4 h-4"/>Recriar</button>
               </div>
             </div>
           </div>

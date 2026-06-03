@@ -127,6 +127,8 @@ REGRAS DO ENUNCIADO:
 - Nos casos clínicos: inclua idade, sexo, tempo de evolução, sintomas e achados de exame — nunca entregue o diagnóstico ou tratamento que é a resposta
 - Nas questões diretas: enunciado objetivo, sem introduções desnecessárias
 - PROIBIDO no enunciado: qualquer dica semântica que permita eliminar distratores sem conhecimento do tema
+- PROIBIDO cobrar detalhe inútil, trivia solta ou fato sem consequência diagnóstica, terapêutica, fisiopatológica, prognóstica ou de prova
+- Cada questão deve testar uma decisão/conceito que diferencie quem sabe de quem reconhece palavras do tema
 - Tamanho ideal: suficiente para contextualizar sem ser prolixo`;
 
 const REGRAS_ALTERNATIVAS = `
@@ -146,14 +148,19 @@ Cada distrator deve ser uma afirmação que um estudante que estudou superficial
 Use: condições do mesmo grupo nosológico, fármacos da mesma classe, mecanismos parecidos, exceções da regra, valores próximos mas incorretos, inversões de causa/efeito, confusões clássicas do tema.
 PROIBIDO: distratores obviamente absurdos, anatomicamente impossíveis, ou que qualquer pessoa sem conhecimento médico eliminaria por bom senso.
 PROIBIDO: distratores que são apenas a negação direta do enunciado.
+PROIBIDO: misturar categorias semânticas. Se a pergunta pede uma reação oftalmológica, todos os distratores devem ser reações/achados oftalmológicos plausíveis ou diagnósticos diferenciais oculares — nunca pancreatite, nefrolitíase, enjoo etc.
+Se você não conseguir criar distratores plausíveis dentro da mesma categoria, REESCREVA a questão.
 
 REGRA 3 — SEM PISTAS SINTÁTICAS:
 - A alternativa correta não pode ter estrutura gramatical diferente das erradas
+- A alternativa correta não pode ser sistematicamente a maior, mais detalhada, mais específica ou mais "bonita"
+- Todas as alternativas devem responder exatamente à mesma pergunta, no mesmo nível de especificidade e com comprimento visual parecido
 - Não use "todas as anteriores" ou "nenhuma das anteriores"
 - Não tente variar a letra correta: escreva a correta em A, pois o site embaralha antes de exibir
 
 REGRA 4 — DIFICULDADE REAL:
-Um estudante que nunca viu o tema deve errar. Um que estudou superficialmente deve hesitar. Só quem domina o conteúdo deve acertar com segurança.`;
+Um estudante que nunca viu o tema deve errar. Um que estudou superficialmente deve hesitar. Só quem domina o conteúdo deve acertar com segurança.
+Antes de finalizar cada questão, faça este teste mental: "dá para acertar por eliminação grosseira, tamanho da alternativa, categoria absurda ou bom senso leigo?". Se sim, refaça alternativas e/ou enunciado.`;
 
 const REGRAS_EXPLICACAO = `
 REGRAS DA EXPLICAÇÃO:
@@ -240,6 +247,7 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const expectedTotal = expectedSubtopics * expectedQPerSub;
   const types = s.questionTypes || ['direct'];
   const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const autoQuestionCount = !!s.qPerSubAuto && !onlyFlashcards;
 
   const estruturaInst = onlyFlashcards
     ? `
@@ -248,6 +256,17 @@ ESTRUTURA PARA FLASHCARDS:
 - Não use meta numérica fixa. Crie apenas flashcards de alto rendimento, sem redundância.
 - Priorize conceitos cobrados, esquecíveis, diferenciadores e clinicamente úteis.
 - O conjunto final deve permitir revisar o conteúdo essencial sem reler o material. Não omita mecanismo, conduta, diagnóstico, diferencial ou pegadinha central quando forem parte do tópico.`
+    : autoQuestionCount
+    ? `
+ESTRUTURA (quantidade de questões automática):
+Quando uma lista de subtópicos obrigatórios for fornecida, cubra TODOS eles.
+Se NÃO houver lista obrigatória, defina mentalmente ${expectedSubtopics} eixos/subtópicos de cobrança para este tópico.
+NÃO use quantidade fixa por subtópico:
+- Para cada subtópico/eixo, atomize o conteúdo em perguntas independentes de alto rendimento.
+- Gere a quantidade necessária para cobrir tudo que é relevante, cobrável e ainda não repetido.
+- Referência: 1 a 4 questões por subtópico costuma bastar; use mais apenas se houver muitos mecanismos, diagnósticos diferenciais, critérios, condutas ou pegadinhas realmente distintos.
+- Não crie questões para encher volume. Não pergunte trivia inútil.
+- Pare quando os eixos relevantes estiverem cobertos sem redundância.`
     : autoMode
     ? `
 ESTRUTURA (modo automático):
