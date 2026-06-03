@@ -1875,6 +1875,37 @@ const extractAulas = (cats) => {
   return Object.values(cats).filter(Array.isArray).flat();
 };
 
+const parseLessonDurationSeconds = (aula = {}) => {
+  const direct = Number(aula.duration_seconds || aula.durationSeconds || 0);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const raw = String(aula.duration_formatted || aula.duration || '').trim().toLowerCase();
+  if (!raw) return 0;
+  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(raw)) {
+    const parts = raw.split(':').map(n => Number(n) || 0);
+    return parts.length === 3
+      ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+      : parts[0] * 60 + parts[1];
+  }
+  const h = raw.match(/(\d+(?:[.,]\d+)?)\s*h/);
+  const m = raw.match(/(\d+(?:[.,]\d+)?)\s*(?:m|min)/);
+  const s = raw.match(/(\d+(?:[.,]\d+)?)\s*s/);
+  const toNum = (match) => match ? Number(String(match[1]).replace(',', '.')) || 0 : 0;
+  return Math.round(toNum(h) * 3600 + toNum(m) * 60 + toNum(s));
+};
+
+const totalLessonSeconds = (lessons = []) =>
+  lessons.reduce((sum, aula) => sum + parseLessonDurationSeconds(aula), 0);
+
+const formatCourseDuration = (seconds = 0) => {
+  const total = Math.round(Number(seconds) || 0);
+  if (total <= 0) return '';
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.round((total % 3600) / 60);
+  if (hours <= 0) return `${Math.max(1, minutes)}min`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
+};
+
 // Sort subjects by course chronogram order
 const sortSubjects = (subjects) =>
   [...subjects].sort((a, b) => {
@@ -13832,6 +13863,7 @@ export default function QuestionBankApp() {
           const totalAulas   = Object.values(watchedByTopic).reduce((a,b)=>a+b.total,0);
           const globalPct    = totalAulas>0?Math.round(totalWatched/totalAulas*100):0;
           const courseLessons = flattenCourseLessons(appliedVideoaulasData || {});
+          const totalCourseDuration = formatCourseDuration(totalLessonSeconds(courseLessons));
           const courseSubjects = sortCourseSubjectsForDisplay([...new Set(courseLessons.map(lesson => lesson.subject))]);
           const savedPlanSubjects = courseOrgProposalUsesOriginalSubjects
             ? coursePlanSubjects.filter(subject => courseSubjects.includes(subject))
@@ -13870,7 +13902,9 @@ export default function QuestionBankApp() {
                     {/* Progresso global */}
                     <div className={`flex-shrink-0 text-right`}>
                       <div className={`text-3xl font-bold font-serif ${globalPct===100?'text-green-500':'text-yellow-600'}`}>{globalPct}<span className="text-lg">%</span></div>
-                      <div className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{totalWatched}/{totalAulas} aulas</div>
+                      <div className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>
+                        {totalWatched}/{totalAulas} aulas{totalCourseDuration?` · ${totalCourseDuration}`:''}
+                      </div>
                       {isAdmin&&plannedLessons.length>0
                         ? <div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Plano {planPct}%</div>
                         : currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek} de 46</div>}
@@ -13919,6 +13953,7 @@ export default function QuestionBankApp() {
                         const allAulas = Object.values(topics).flatMap(t=>[...t.main,...t.bonus]);
                         const watched  = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
                         const pct = allAulas.length>0?Math.round(watched/allAulas.length*100):0;
+                        const subjectDuration = formatCourseDuration(totalLessonSeconds(allAulas));
                         const isExp = vqExpandedSubj[subj]??false;
                         return (
                           <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
@@ -13934,7 +13969,9 @@ export default function QuestionBankApp() {
                                   <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`} style={{maxWidth:'120px'}}>
                                     <div className={`h-full rounded-full ${pct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${pct}%`}}/>
                                   </div>
-                                  <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{watched}/{allAulas.length}</span>
+                                  <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>
+                                    {watched}/{allAulas.length} aulas{subjectDuration?` · ${subjectDuration}`:''}
+                                  </span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -13952,6 +13989,7 @@ export default function QuestionBankApp() {
                                   const tAll=[...main,...bonus];
                                   const tW=tAll.filter(a=>watchedAulas[getAulaId(a)]).length;
                                   const tPct=tAll.length>0?Math.round(tW/tAll.length*100):0;
+                                  const topicDuration = formatCourseDuration(totalLessonSeconds(tAll));
                                   const shortT=topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
                                   return (
                                     <button key={topic}
@@ -13962,7 +14000,9 @@ export default function QuestionBankApp() {
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p className={`text-sm font-medium truncate ${dm?'text-gray-300':'text-gray-700'}`}>{shortT||topic}</p>
-                                        <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>{tW}/{tAll.length} aulas{bonus.length>0?` · ${bonus.length} bônus`:''}</p>
+                                        <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
+                                          {tW}/{tAll.length} aulas{topicDuration?` · ${topicDuration}`:''}{bonus.length>0?` · ${bonus.length} bônus`:''}
+                                        </p>
                                       </div>
                                       <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
                                     </button>
@@ -15046,6 +15086,7 @@ export default function QuestionBankApp() {
           // allAulas = todas as aulas flat (main + bonus) para contagem de progresso
           const allAulas = Object.values(data).flatMap(s=>Object.values(s).flatMap(t=>[...t.main,...t.bonus]));
           const watchedCount = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+          const allAulasDuration = formatCourseDuration(totalLessonSeconds(allAulas));
 
           // Estado ativo: subject + topic + categoria ('main'|'bonus')
           const effSubject  = activeSubjectVid && data[activeSubjectVid] ? activeSubjectVid : subjects[0] || null;
@@ -15104,7 +15145,9 @@ export default function QuestionBankApp() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`}><div className="h-full bg-yellow-500 transition-all" style={{width:`${allAulas.length?watchedCount/allAulas.length*100:0}%`}}/></div>
-                    <span className={`text-[10px] font-bold ${textMuted}`}>{watchedCount}/{allAulas.length}</span>
+                    <span className={`text-[10px] font-bold ${textMuted}`}>
+                      {watchedCount}/{allAulas.length}{allAulasDuration?` · ${allAulasDuration}`:''}
+                    </span>
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -15112,6 +15155,7 @@ export default function QuestionBankApp() {
                   {subjects.map(subject=>{
                     const sAulas=Object.values(data[subject]).flatMap(t=>[...t.main,...t.bonus]);
                     const sW=sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                    const sDuration=formatCourseDuration(totalLessonSeconds(sAulas));
                     const isExp=expandedSubjectsVid[subject]??(subject===effSubject);
                     return (
                       <div key={subject} className={`border-b ${sideBorder}`}>
@@ -15120,13 +15164,16 @@ export default function QuestionBankApp() {
                           className={`w-full flex items-center justify-between px-3 py-2.5 text-left ${dm?'hover:bg-gray-700/60':'hover:bg-gray-50'}`}>
                           <div className="min-w-0 flex-1">
                             <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject}</p>
-                            <p className={`text-[10px] mt-0.5 ${textMuted}`}>{sW}/{sAulas.length}</p>
+                            <p className={`text-[10px] mt-0.5 ${textMuted}`}>{sW}/{sAulas.length}{sDuration?` · ${sDuration}`:''}</p>
                           </div>
                           {isExp?<ChevronDown className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>}
                         </button>
 	                        {isExp&&Object.entries(data[subject]).map(([topic,{main,bonus}])=>{
 	                          const topicAulas=[...main,...bonus];
 	                          const topicW=topicAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                            const topicDuration=formatCourseDuration(totalLessonSeconds(topicAulas));
+                            const mainDuration=formatCourseDuration(totalLessonSeconds(main));
+                            const bonusDuration=formatCourseDuration(totalLessonSeconds(bonus));
 	                          const isTopicExp=expandedSubjectsVid[`${subject}::${topic}`]??(effSubject===subject&&effTopic===topic);
 	                          return (
 	                            <div key={topic}>
@@ -15135,7 +15182,7 @@ export default function QuestionBankApp() {
 	                                className={`w-full flex items-center justify-between px-3 py-1.5 pl-5 text-left ${dm?'hover:bg-gray-700/40 text-gray-300':'hover:bg-gray-50 text-gray-600'} ${effSubject===subject&&effTopic===topic?(dm?'text-yellow-400':'text-yellow-700'):''}`}>
 	                                <div className="min-w-0 flex-1">
 	                                  <p className="text-[11px] font-semibold truncate">{shortTopicName(topic)}</p>
-	                                  {!useIntegratedCourseNav&&<p className={`text-[9px] ${textMuted}`}>{topicW}/{topicAulas.length}</p>}
+	                                  {!useIntegratedCourseNav&&<p className={`text-[9px] ${textMuted}`}>{topicW}/{topicAulas.length}{topicDuration?` · ${topicDuration}`:''}</p>}
 	                                </div>
 	                                {isTopicExp?<ChevronDown className="w-3 h-3 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 flex-shrink-0"/>}
 	                              </button>
@@ -15162,7 +15209,7 @@ export default function QuestionBankApp() {
 	                                        <div>
 	                                          <button onClick={()=>setTopicCat(subject,topic,'main')}
 	                                            className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='main'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
-	                                            📖 Aulas ({main.length})
+	                                            📖 Aulas ({main.length}{mainDuration?` · ${mainDuration}`:''})
 	                                          </button>
 	                                          {effSubject===subject&&effTopic===topic&&effCat==='main'&&main.map((aula,ai)=>{
 	                                            const isAct=getAulaId(effAula)===getAulaId(aula);
@@ -15186,7 +15233,7 @@ export default function QuestionBankApp() {
                                     <div>
                                       <button onClick={()=>setTopicCat(subject,topic,'bonus')}
                                         className={`w-full text-left px-3 py-1 pl-8 text-[10px] font-bold uppercase tracking-wider transition-colors ${effSubject===subject&&effTopic===topic&&effCat==='bonus'?(dm?'text-yellow-400 bg-yellow-900/30':'text-yellow-700 bg-yellow-50'):(dm?'text-gray-500 hover:bg-gray-700/30':'text-gray-400 hover:bg-gray-50')}`}>
-                                        ⭐ Bônus ({bonus.length})
+                                        ⭐ Bônus ({bonus.length}{bonusDuration?` · ${bonusDuration}`:''})
                                       </button>
                                       {effSubject===subject&&effTopic===topic&&effCat==='bonus'&&bonus.map((aula,ai)=>{
                                         const isAct=getAulaId(effAula)===getAulaId(aula);
@@ -15385,6 +15432,7 @@ export default function QuestionBankApp() {
                               {subjects.map(subj=>{
                                 const sAulas=Object.values(data[subj]).flatMap(t=>[...t.main,...t.bonus]);
                                 const sW=sAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                const sDuration=formatCourseDuration(totalLessonSeconds(sAulas));
                                 const isExpS=expandedSubjectsVid[subj]??(subj===effSubject);
                                 return (
                                   <div key={subj} className={`border-b ${dm?'border-gray-700/60':'border-gray-100'}`}>
@@ -15392,7 +15440,9 @@ export default function QuestionBankApp() {
                                       className={`w-full flex items-center justify-between px-4 py-3 text-left ${dm?'hover:bg-gray-700':'hover:bg-gray-50'}`}>
                                       <div className="flex-1 min-w-0">
                                         <p className={`text-sm font-bold truncate ${subj===effSubject?'text-yellow-500':''}`}>{subj}</p>
-                                        <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>{sW}/{sAulas.length} assistidas</p>
+                                        <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
+                                          {sW}/{sAulas.length} assistidas{sDuration?` · ${sDuration}`:''}
+                                        </p>
                                       </div>
                                       <ChevronDown className={`w-4 h-4 opacity-30 ml-2 transition-transform ${isExpS?'':'rotate-180'}`}/>
                                     </button>
@@ -15400,21 +15450,24 @@ export default function QuestionBankApp() {
                                       const isActT=subj===effSubject&&topic===effTopic;
                                       const topicAulas=[...main,...bonus];
                                       const tW=topicAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
+                                      const topicDuration=formatCourseDuration(totalLessonSeconds(topicAulas));
+                                      const mainDuration=formatCourseDuration(totalLessonSeconds(main));
+                                      const bonusDuration=formatCourseDuration(totalLessonSeconds(bonus));
                                       return (
                                         <div key={topic} className={`border-t ${dm?'border-gray-700/40':'border-gray-50'}`}>
                                           <div className={`px-4 py-2 pl-7 text-xs font-bold ${isActT?(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-400':'text-gray-500')}`}>
-                                            {shortTopicName(topic)} <span className="opacity-40 font-normal">({tW}/{topicAulas.length})</span>
+                                            {shortTopicName(topic)} <span className="opacity-40 font-normal">({tW}/{topicAulas.length}{topicDuration?` · ${topicDuration}`:''})</span>
                                           </div>
                                           {main.length>0&&(
                                             <button onClick={()=>{setTopicCat(subj,topic,'main');setMobileNavOpen(false);}}
                                               className={`w-full flex items-center justify-between px-4 py-2 pl-10 text-left ${isActT&&effCat==='main'?(dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
-                                              <span className="text-xs">📖 Aulas ({main.length})</span>
+                                              <span className="text-xs">📖 Aulas ({main.length}{mainDuration?` · ${mainDuration}`:''})</span>
                                             </button>
                                           )}
                                           {bonus.length>0&&(
                                             <button onClick={()=>{setTopicCat(subj,topic,'bonus');setMobileNavOpen(false);}}
                                               className={`w-full flex items-center justify-between px-4 py-2 pl-10 text-left ${isActT&&effCat==='bonus'?(dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
-                                              <span className="text-xs">⭐ Bônus ({bonus.length})</span>
+                                              <span className="text-xs">⭐ Bônus ({bonus.length}{bonusDuration?` · ${bonusDuration}`:''})</span>
                                             </button>
                                           )}
                                         </div>
