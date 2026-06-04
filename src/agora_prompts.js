@@ -560,6 +560,10 @@ REGRAS:
 export const buildExternalPrompt = (s) => {
   const na   = s.numAlternatives || 5;
   const qPerSub = Math.max(1, Number(s.qPerSub) || 1);
+  const types = s.questionTypes || ['direct'];
+  const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
+  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const typeInst = buildTypeInst(types);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -577,9 +581,13 @@ Responda APENAS o sumário. Aguarde a confirmação antes de gerar questões.`;
 
   const parte2 = s.autoMode
     ? `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere ${qPerSub} questão(ões) por subtópico (total = subtópicos daquele tópico × ${qPerSub}).`
+Para cada tópico gere ${onlyFlashcards ? 'a quantidade ideal de flashcards, sem meta fixa' : `${qPerSub} item(ns) por subtópico (total = subtópicos daquele tópico × ${qPerSub})`}.`
     : `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere ${s.numSubtopics * qPerSub} questões (${s.numSubtopics} subtópicos × ${qPerSub} por subtópico).`;
+Para cada tópico gere ${onlyFlashcards ? 'a quantidade ideal de flashcards, sem meta fixa' : `${s.numSubtopics * qPerSub} item(ns) (${s.numSubtopics} subtópicos × ${qPerSub} por subtópico)`}.`;
+
+  const closedBlock = hasClosed ? `
+FORMATO PARA QUESTÕES COM ALTERNATIVAS:
+${TEMPLATE_QUESTAO(alts)}` : '';
 
   return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]
 
@@ -587,11 +595,23 @@ ${parte1}
 
 ${parte2}
 
+TIPO DE ITEM A GERAR:
+${types.map(t => `- ${QUESTION_TYPE_LABELS[t] || t}`).join('\n')}
+
+${typeInst ? `${typeInst}\n` : ''}
 ESTILO: ${STYLE_INST[s.questionStyle || 'mixed']}
 ${REGRAS_ENUNCIADO}
-${REGRAS_ALTERNATIVAS}
-${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}`;
+${hasClosed ? REGRAS_ALTERNATIVAS : ''}
+${hasClosed ? REGRAS_EXPLICACAO : ''}
+${closedBlock}
+
+REGRAS DE IMPORTAÇÃO NO ÁGORA:
+- Entregue os itens finais em blocos separados por "---".
+- Múltipla escolha, V/F e CESPE devem usar "## Questão N", alternativas A-E ou A-B, "Alternativa correta: A" ou "Gabarito: A", e "Explicação:".
+- Resposta curta deve usar "Resposta esperada:" e "Explicação:", sem alternativas.
+- Dissertativa deve usar "Resposta esperada:" e "Explicação:"; se possível, escreva "Tipo: Dissertativa" no bloco para o Ágora identificar.
+- Flashcards devem usar exatamente "## Flashcard N", "Pergunta:", "Resposta:" e "Explicação:".
+- Não coloque comentários fora dos blocos de itens, porque vou colar a resposta diretamente no importador do Ágora.`;
 };
 
 // ─── PROMPT: SUMÁRIO DAS AULAS (VIDEOAULAS) ──────────────────────────────────

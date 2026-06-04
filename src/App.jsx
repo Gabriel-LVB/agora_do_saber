@@ -1397,6 +1397,7 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
   const norm = text.replace(/\r\n/g,'\n');
   const questions = [];
   let qCount = 0;
+  const autoEssay = isEssay === 'auto';
 
   // Dividir por ## Questão N, ## Questão [1.2.1], N) ou N.
   const blocks = norm.split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im).filter(b=>b.trim());
@@ -1424,8 +1425,11 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
 
       // Extrai explicação
       let exp = cleanQuestionExplanation(extractLabeledSection(block));
+      const questionIsEssay = autoEssay
+        ? /(?:dissertativa|disserte|discuta|explique\s+detalhadamente|relacione|compare\s+criticamente|analise\s+criticamente)/i.test(block)
+        : !!isEssay;
 
-      questions.push({ id, statement: stmt, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay });
+      questions.push({ id, statement: stmt, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay:questionIsEssay });
     } catch(e) {}
   });
 
@@ -1701,12 +1705,11 @@ const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) =>
     allQuestions = [...allQuestions, ...p.questions];
   }
   if (selectedTypes.includes('open')) {
-    const p = parseOpenQuestions(text, namespace, false);
+    const p = parseOpenQuestions(text, namespace, selectedTypes.includes('essay') ? 'auto' : false);
     allQuestions = [...allQuestions, ...p.questions];
-  }
-  if (selectedTypes.includes('essay')) {
+  } else if (selectedTypes.includes('essay')) {
     const p = parseOpenQuestions(text, namespace, true);
-    allQuestions = [...allQuestions, ...p.questions];
+    allQuestions = [...allQuestions, ...p.questions.map(q => ({...q, isEssay:true}))];
   }
   if (selectedTypes.includes('flashcard')) {
     const p = parseFlashcards(text, namespace);
@@ -5215,7 +5218,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 );
 
 // ─── EXTERNAL PROMPT MODAL ────────────────────────────────────────────────────
-const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
+const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCreateFlashcards=false }) => {
   const dm = darkMode;
   const [cfg, setCfg] = useState({
     numTopics:       settings.numTopics      || 10,
@@ -5223,10 +5226,12 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
     qPerSub:         settings.qPerSub        || 1,
     numAlternatives: settings.numAlternatives || 5,
     questionStyle:   settings.questionStyle  || 'mixed',
+    questionTypes:   settings.questionTypes  || ['direct'],
     autoMode:        settings.autoMode !== false,
     customPrompt:    settings.customPrompt   || '',
   });
   const [copied, setCopied] = useState(false);
+  const hasClosedTypes = (cfg.questionTypes || ['direct']).some(t => ['direct','vof','cespe'].includes(t));
 
   const copy = () => {
     const prompt = buildExternalPrompt({...settingsRef.current, ...cfg});
@@ -5274,14 +5279,27 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
           {/* Questões */}
           <div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Questões</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="mb-3">
+              <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Tipos aceitos</label>
+              <QuestionTypeSelector
+                selected={cfg.questionTypes || ['direct']}
+                onChange={questionTypes=>setCfg(p=>({...p,questionTypes}))}
+                darkMode={dm}
+                single={true}
+                isAdmin={canCreateFlashcards}
+              />
+              <p className="text-[11px] opacity-45 mt-2 leading-relaxed">
+                Escolha o tipo do prompt. A importação aceita alternativas, V/F, CESPE, resposta curta, dissertativa e flashcards.
+              </p>
+            </div>
+            <div className={`grid grid-cols-1 ${hasClosedTypes ? 'sm:grid-cols-2' : ''} gap-3`}>
               <div>
-                <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Q./Subtópico</label>
+                <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Itens/Subtópico</label>
                 <input type="number" min={1} max={10} value={cfg.qPerSub}
                   onChange={e=>setCfg(p=>({...p,qPerSub:Math.max(1,Math.min(10,parseInt(e.target.value)||1))}))}
                   className={`w-full p-3 rounded-lg border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
               </div>
-              <div>
+              {hasClosedTypes&&<div>
                 <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(o=>(
@@ -5291,7 +5309,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
             </div>
           </div>
 
@@ -5845,6 +5863,7 @@ export default function QuestionBankApp() {
   const [errorReviewQAlts, setErrorReviewQAlts]       = useState(5);
   const [errorReviewPerQuestion, setErrorReviewPerQuestion] = useState(2);
   const [errorReviewThinking, setErrorReviewThinking] = useState(false);
+  const [errorReviewAudit, setErrorReviewAudit]       = useState(false);
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
@@ -9590,6 +9609,8 @@ export default function QuestionBankApp() {
   };
   const getBulkErrorText = (err) => ERROR_CONFIGS[err?.message]?.title || err?.message || 'Erro desconhecido';
   const isRetryableBulkError = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR'].includes(err?.message);
+  const shouldTryNextGeminiKey = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR', 'QUOTA_EXCEEDED', 'API_KEY_INVALID'].includes(err?.message);
+  const getTwoAttemptGeminiKeys = () => getOrderedKeys().slice(0, 2);
 
   // ── Gerar questões direto (sem modal) ──────────────────────────────────────
   const gerarQuestoesDireto = async (aula, subject, topic) => {
@@ -9653,20 +9674,22 @@ export default function QuestionBankApp() {
       maxSubtopicsPerBlock: cfg.syllabusMaxPerBlock,
       fullCoverage: !!cfg.adminFullCoverage,
     });
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
     let summaryText = null;
+    let lastSummaryErr = null;
     for (const {k} of orderedKeys) {
       try {
         summaryText = await callGemini('Gere o sumário.', summaryPrompt, k, [], getGeminiOptions(cfg));
         await rotateKey(); break;
       } catch(e) {
+        lastSummaryErr = e;
         await rotateKey();
-        if(toastId) updateToast(toastId, `❌ Erro ao gerar sumário: ${e.message}`, 'error');
-        setVqSyllabusLoading(false); return;
+        if (!shouldTryNextGeminiKey(e)) break;
+        if (e.message === 'SERVER_OVERLOADED') await new Promise(resolve => setTimeout(resolve, 1200));
       }
     }
     if (!summaryText) {
-      if(toastId) updateToast(toastId, '❌ Não foi possível gerar o sumário. Tente novamente.', 'error');
+      if(toastId) updateToast(toastId, `❌ Erro ao gerar sumário: ${lastSummaryErr?.message || 'CONNECTION_ERROR'}`, 'error');
       setVqSyllabusLoading(false); return;
     }
 
@@ -9837,7 +9860,7 @@ export default function QuestionBankApp() {
 
     const PROMPT = buildVqBlockPrompt(block, meta, subtopicsArr, transcriptSlice, alts);
 
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false, err = null;
 
     for (const {k} of orderedKeys) {
@@ -10180,7 +10203,7 @@ export default function QuestionBankApp() {
       + (addPrompt ? `\n\nFoco adicional: ${addPrompt}` : '')
       + altSuffix;
 
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
     let lastErr = null;
     for (const { k } of orderedKeys) {
       try {
@@ -10289,7 +10312,7 @@ export default function QuestionBankApp() {
       + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
       + altSuffix;
 
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
     let err=null, ok=false;
     for (const {k} of orderedKeys) {
       try {
@@ -10331,7 +10354,7 @@ export default function QuestionBankApp() {
     if(!checkKey())return;setIsBusy(true);
     const s = settingsRef.current;
     const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
     const chunks = buildAcademiaMaterialChunks(materialText, uploadedFiles);
     if (chunks.length > 1) {
       addToast(`Material grande: vou processar em ${chunks.length} partes. Isso usa ${chunks.length} requests.`, 'info', 7000);
@@ -10355,6 +10378,7 @@ export default function QuestionBankApp() {
 
       setSyllabus(chunks.length > 1 ? `Processando material ${i + 1}/${totalChunks}...` : '');
       let chunkOk = false;
+      let lastErr = null;
       for (const {k} of orderedKeys) {
         try {
           const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : [], getGeminiOptions(s));
@@ -10363,14 +10387,18 @@ export default function QuestionBankApp() {
           chunkOk = true;
           break;
         } catch(e) {
+          lastErr = e;
           await rotateKey();
-          showApiError(e.message);
-          setIsBusy(false);
-          return;
+          if (!shouldTryNextGeminiKey(e)) {
+            showApiError(e.message);
+            setIsBusy(false);
+            return;
+          }
+          if (e.message === 'SERVER_OVERLOADED') await new Promise(resolve => setTimeout(resolve, 1200));
         }
       }
       if (!chunkOk) {
-        showApiError('QUOTA_EXCEEDED');
+        showApiError(lastErr?.message || 'CONNECTION_ERROR');
         setIsBusy(false);
         return;
       }
@@ -10386,17 +10414,22 @@ export default function QuestionBankApp() {
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
     const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, settingsRef.current);
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
+    let ok = false;
+    let lastErr = null;
     for (const {k} of orderedKeys) {
       try {
         const r=await callGemini('Revise.',sys,k, [], getGeminiOptions());
         setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
-        await rotateKey(); break;
+        await rotateKey(); ok = true; break;
       } catch(e) {
+        lastErr = e;
         await rotateKey();
-        showApiError(e.message); break;
+        if (!shouldTryNextGeminiKey(e)) break;
+        if (e.message === 'SERVER_OVERLOADED') await new Promise(resolve => setTimeout(resolve, 1200));
       }
     }
+    if (!ok) showApiError(lastErr?.message || 'CONNECTION_ERROR');
     setIsBusy(false);
   };
   const finalizeSub = async () => {
@@ -10424,9 +10457,11 @@ export default function QuestionBankApp() {
 
   // Paste import
   const handlePasteImport = async () => {
-    const parsed=parseData(pasteText);if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:'Verifique a estrutura.',isAlert:true});return;}
+    const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, ['direct','vof','cespe','open','essay','flashcard']);
+    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:'Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e flashcards, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:" ou alternativas A-E.',isAlert:true});return;}
     const sn=pasteSubName.trim()||'Assunto Importado'; const tn=pasteTopic.trim()||`Bloco (${new Date().toLocaleDateString()})`;
-    const nt={id:`imp-${Date.now()}`,title:tn,questions:parsed.questions,summary:parsed.summary,answers:{},favorites:[],errorNotebook:[],spacedReview:{}};
+    const importedTypes = Array.from(new Set(parsed.questions.map(q => q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
+    const nt={id:`imp-${Date.now()}`,title:tn,questions:parsed.questions,summary:parsed.summary,answers:{},favorites:[],errorNotebook:[],spacedReview:{},questionTypes:importedTypes};
     let ts=library.find(s=>s.title.toLowerCase()===sn.toLowerCase()&&s.source==='external'&&s.id!=='imported-folder');
     if(ts){await updateSubject({...ts,topics:[...ts.topics,nt]});setActiveSubjectId(ts.id);}
     else if(!pasteSubName.trim()){const f=library.find(s=>s.id==='imported-folder');if(f)await updateSubject({...f,topics:[...f.topics,nt]});setActiveSubjectId('imported-folder');}
@@ -10813,7 +10848,8 @@ export default function QuestionBankApp() {
 
       setAcademiaSyllabus(chunks.length > 1 ? `Processando material ${i + 1}/${totalChunks}...` : '');
       let chunkOk = false;
-      const orderedKeys = getOrderedKeys();
+      let lastErr = null;
+      const orderedKeys = getTwoAttemptGeminiKeys();
       for (const { k } of orderedKeys) {
         try {
           const r = await callGemini(userMsg, sys, k, i === 0 ? academiaUploadedImages : [], getGeminiOptions(s));
@@ -10822,14 +10858,18 @@ export default function QuestionBankApp() {
           chunkOk = true;
           break;
         } catch (e) {
+          lastErr = e;
           await rotateKey();
-          showApiError(e.message);
-          setIsBusy(false);
-          return;
+          if (!shouldTryNextGeminiKey(e)) {
+            showApiError(e.message);
+            setIsBusy(false);
+            return;
+          }
+          if (e.message === 'SERVER_OVERLOADED') await new Promise(resolve => setTimeout(resolve, 1200));
         }
       }
       if (!chunkOk) {
-        showApiError('QUOTA_EXCEEDED');
+        showApiError(lastErr?.message || 'CONNECTION_ERROR');
         setIsBusy(false);
         return;
       }
@@ -10847,18 +10887,23 @@ export default function QuestionBankApp() {
     if (!academiaSyllabusFB.trim() || !checkKey()) return;
     setIsBusy(true);
     const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, {...settingsRef.current, source: 'academia'});
-    const orderedKeys = getOrderedKeys();
+    const orderedKeys = getTwoAttemptGeminiKeys();
+    let ok = false;
+    let lastErr = null;
     for (const { k } of orderedKeys) {
       try {
         const r = await callGemini('Revise.', sys, k, [], getGeminiOptions());
         setAcademiaSyllabus(normalizeAcademiaSyllabus(r, settingsRef.current));
         setAcademiaSyllabusFB('');
-        await rotateKey(); break;
+        await rotateKey(); ok = true; break;
       } catch (e) {
+        lastErr = e;
         await rotateKey();
-        showApiError(e.message); break;
+        if (!shouldTryNextGeminiKey(e)) break;
+        if (e.message === 'SERVER_OVERLOADED') await new Promise(resolve => setTimeout(resolve, 1200));
       }
     }
+    if (!ok) showApiError(lastErr?.message || 'CONNECTION_ERROR');
     setIsBusy(false);
   };
 
@@ -11331,6 +11376,7 @@ export default function QuestionBankApp() {
     setErrorReviewQAlts(settingsRef.current.numAlternatives || 5);
     setErrorReviewPerQuestion(2);
     setErrorReviewThinking(!!settingsRef.current.geminiThinkingEnabled);
+    setErrorReviewAudit(!!settingsRef.current.auditQuestions);
     setErrorReviewModal({ subject, topic, questions:selected, notebookIds, sourceLabel, pathTitles });
   };
 
@@ -11439,9 +11485,10 @@ export default function QuestionBankApp() {
         numAlternatives:cfg.numAlternatives,
         errorReviewPerQuestion:cfg.errorReviewPerQuestion,
         geminiThinkingEnabled:!!cfg.geminiThinkingEnabled,
+        auditQuestions:!!cfg.auditQuestions,
       };
-      if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled) {
-        saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled});
+      if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled || settingsRef.current.auditQuestions !== s.auditQuestions) {
+        saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled, auditQuestions:s.auditQuestions});
       }
       const sourceQuestions = errorReviewModal.questions || [];
       const questionType = (s.questionTypes || ['direct'])[0];
@@ -11489,6 +11536,17 @@ export default function QuestionBankApp() {
         addToast('Não consegui ler as questões geradas. Tente de novo.', 'info', 5000);
         return;
       }
+      const audited = await auditGeneratedQuestions({
+        questions:parsedQuestions,
+        namespace:`err_${Date.now()}_audited`,
+        settings:s,
+        subjectTitle:errorReviewModal.subject?.title || sourceLabelForErrorReview(errorReviewModal.subject, errorReviewModal.sourceLabel),
+        topicTitle:errorReviewModal.topic?.title || 'Caderno de erros',
+        subtopics:(sourceQuestions || []).map(q => q.statement || q.expectedAnswer || q.explanation || '').filter(Boolean).slice(0, 20),
+        sourceMaterials:questionsToGenerationText(sourceQuestions).substring(0, 12000),
+      });
+      parsedQuestions = audited.questions;
+      if (audited.summary) mergedSummary = audited.summary;
       const pathTitles = getErrorReviewFolderPath(errorReviewModal);
       const targetFolder = await ensureErrorNotebookFolder(pathTitles);
       const dateLabel = new Date().toLocaleDateString('pt-BR');
@@ -11504,6 +11562,7 @@ export default function QuestionBankApp() {
         spacedReview:{},
         questionStyle:s.questionStyle || 'mixed',
         questionTypes:s.questionTypes || ['direct'],
+        questionAudit:audited.audited ? makeQuestionAuditMeta(parsedQuestions.length, 'errorNotebook') : null,
         origin:{
           source:'errorNotebook',
           sourceSubjectTitle:errorReviewModal.subject?.title || '',
@@ -13458,6 +13517,19 @@ export default function QuestionBankApp() {
                   />
                 </div>
 
+                {isAdmin&&(
+                  <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                )}
+
                 <button onClick={startCreation} disabled={isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura')}
                 </button>
@@ -13626,6 +13698,19 @@ export default function QuestionBankApp() {
                     darkMode={darkMode}
                   />
                 </div>
+
+                {isAdmin&&(
+                  <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                      <p className="text-xs opacity-50 mt-0.5">Segundo request nas questões de fixação para revisar qualidade e utilidade.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                )}
 
                 <button onClick={startAcademiaCreation} disabled={isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
                   {isBusy?<Spinner className="w-5 h-5 text-white"/>:<AcademiaIcon className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura da Aula')}
@@ -17490,6 +17575,7 @@ export default function QuestionBankApp() {
         darkMode={darkMode}
         settings={settings}
         settingsRef={settingsRef}
+        canCreateFlashcards={canUseAdvancedFeatures}
         onClose={()=>setExternalPromptModal(false)}
       />}
 
@@ -17629,12 +17715,24 @@ export default function QuestionBankApp() {
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                 <GeminiThinkingSelector value={errorReviewThinking} onChange={setErrorReviewThinking} darkMode={darkMode}/>
               </div>
+              {isAdmin&&(
+                <button type="button" onClick={()=>setErrorReviewAudit(!errorReviewAudit)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${errorReviewAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                  <div>
+                    <p className={`text-sm font-bold ${errorReviewAudit?'text-yellow-500':''}`}>Auditoria</p>
+                    <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar revisão fraca e melhorar explicações.</p>
+                  </div>
+                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:errorReviewAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:errorReviewAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                  </div>
+                </button>
+              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setErrorReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button
                 disabled={isBusy}
-                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking})}
+                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking, auditQuestions:errorReviewAudit})}
                 className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {isBusy?<Spinner className="w-4 h-4 text-white"/>:<Sparkles className="w-4 h-4"/>}
                 {isBusy?'Gerando...':'Gerar revisão'}
