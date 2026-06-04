@@ -82,9 +82,14 @@ REGRAS CRÍTICAS:
 - Teste de previsibilidade: antes de aceitar um cartão, pergunte "um aluno que sabe o tema conseguiria prever exatamente o tipo de resposta esperada?". Se não, reescreva.
 - Evite perguntas abertas genéricas como "O que é X?", "Defina X" ou "Qual a principal característica de X?" quando a resposta puder ser ampla demais. Prefira cobrar um eixo específico: alvo anatômico, mecanismo, manifestação clássica, anticorpo, conduta, complicação ou diferencial.
 - Respostas genéricas como "doença autoimune crônica", "processo inflamatório" ou "condição multifatorial" são proibidas, salvo se a pergunta pedir exatamente essa classificação e trouxer contexto suficiente.
+- PROIBIDO cartão de bom senso genérico que qualquer pessoa acertaria sem estudar, como "reavaliar necessidade", "monitorar paciente", "tratar a causa", "orientar adesão", "psicoeducação", "simplificar o regime", "revisar medicamentos", "desprescrever fármacos desnecessários" ou "encaminhar se grave", salvo se exigir uma decisão médica específica, critério objetivo, mecanismo, efeito adverso concreto ou diferencial real.
+- PROIBIDO cartão cujo enunciado pergunte "qual princípio", "qual estratégia geral", "como otimizar", "qual medida inicial para reduzir riscos" ou variações, quando a resposta for conselho universal aplicável a quase qualquer paciente.
+- Teste de serventia: se acertar o cartão não melhora desempenho em prova, decisão prática real ou compreensão causal de outro conceito, exclua ou reescreva. "Parece útil" não basta.
+- Quando o material do usuário pedir um foco específico, obedeça esse foco de forma literal. Não substitua uma solicitação específica por princípios amplos, conselhos gerais ou tópicos administrativos.
 - Toda pergunta deve terminar com ponto de interrogação.
 - A resposta curta deve ter no máximo poucas palavras. Se a resposta ficaria longa, divida em cartões menores.
 - Depois da resposta curta, inclua uma explicação didática como "Notas/Lógica": mecanismo, justificativa, exemplo, exceção ou pegadinha em mini-aula curta.
+- A explicação NÃO pode apenas repetir a resposta com mais palavras. Ela deve explicar por que aquilo é verdade, como acontece, quando muda a conduta, qual armadilha evita ou qual contraste próximo confunde o aluno.
 - Não repita cartões sobre a mesma cobrança, mesmo que o conteúdo reapareça.
 - Evite perguntas "sim/não" e decorebas inúteis. Priorize mecanismo, diagnóstico, conduta, diferenciais, complicações graves/cobradas e armadilhas de prova.
 - Para listas: crie primeiro um cartão macro com categorias; depois atomize. Não peça listas longas. Se pedir uma lista, indique a quantidade entre parênteses e limite a no máximo 4 itens.
@@ -128,6 +133,10 @@ REGRAS DO ENUNCIADO:
 - Nas questões diretas: enunciado objetivo, sem introduções desnecessárias
 - PROIBIDO no enunciado: qualquer dica semântica que permita eliminar distratores sem conhecimento do tema
 - PROIBIDO cobrar detalhe inútil, trivia solta ou fato sem consequência diagnóstica, terapêutica, fisiopatológica, prognóstica ou de prova
+- PROIBIDO criar questão cuja resposta seja apenas bom senso geral, conduta vaga ou conselho universal: "avaliar necessidade", "suspender medicamentos desnecessários", "acompanhar", "orientar", "monitorar", "tratar causa", "encaminhar se piorar", "psicoeducação", "simplificar o regime", "revisar medicações", "desprescrever fármacos desnecessários", "avaliar risco-benefício". Só aceite se houver uma decisão específica e cobrável.
+- PROIBIDO criar enunciados genéricos como "qual princípio fundamental", "qual estratégia terapêutica frequentemente empregada", "como otimizar o tratamento", "qual medida inicial para reduzir riscos" quando a resposta for uma recomendação ampla que qualquer pessoa acertaria.
+- PROIBIDO fugir da intenção do material base. Se o usuário pediu um foco específico, não transforme isso em perguntas genéricas sobre princípios amplos, adesão, polifarmácia, acompanhamento ou medidas administrativas.
+- Toda questão precisa passar no teste de utilidade: ela deve testar algo TESTÁVEL EM PROVA ou ÚTIL NA VIDA REAL. Precisa ensinar decisão, mecanismo, diferenciação entre alternativas próximas, exceção, critério objetivo, consequência prática ou memorização durável.
 - Cada questão deve testar uma decisão/conceito que diferencie quem sabe de quem reconhece palavras do tema
 - Tamanho ideal: suficiente para contextualizar sem ser prolixo`;
 
@@ -168,6 +177,8 @@ REGRAS DA EXPLICAÇÃO:
 - Explique por que a alternativa correta está certa usando raciocínio fisiopatológico ou clínico
 - Para cada distrator: explique por que está errado pelo conteúdo (nunca pela letra)
 - A explicação deve ensinar o assunto, não apenas confirmar o gabarito
+- PROIBIDO explicar repetindo a pergunta/resposta com palavras diferentes. A explicação deve responder pelo menos uma destas perguntas: por que isso acontece? como o mecanismo leva ao achado/conduta? quando essa regra muda? qual confusão próxima isso evita? qual consequência prática ou de prova decorre disso?
+- Se não existe uma explicação causal, mecanística, clínica ou comparativa além de uma paráfrase, a questão provavelmente é fraca e deve ser substituída.
 - Tamanho: 3 a 5 parágrafos objetivos
 
 PROIBIDO ABSOLUTO — LETRAS DAS ALTERNATIVAS:
@@ -233,6 +244,108 @@ Depois crie os distratores (B, C, D e E se houver) baseando-se na alternativa A:
 - O site embaralha as alternativas automaticamente antes de exibir — você não precisa se preocupar com isso
 Resultado esperado: 5 alternativas com comprimento quase idêntico, onde só quem domina o conteúdo consegue identificar a correta.`;
 
+export const QUESTION_AUDIT_CHECKLIST = [
+  'Aderência ao material base e à intenção explícita do usuário',
+  'Alta utilidade: cada item precisa ser testável em prova ou útil na vida real, não apenas correto',
+  'Exclusão de questões de bom senso, vagas, genéricas ou sem consequência médica específica',
+  'Exclusão de itens sobre adesão, polifarmácia, risco-benefício, otimização ou revisão terapêutica quando a resposta for conselho universal',
+  'Cobertura suficiente dos tópicos/subtópicos sem lacunas importantes',
+  'Sem redundância conceitual entre questões ou flashcards',
+  'Enunciado sem pistas semânticas, gramaticais, de tamanho ou de categoria',
+  'Enunciado com contexto suficiente para uma resposta justa e única',
+  'Dificuldade desejável: não acertável por eliminação grosseira ou conhecimento leigo',
+  'Alternativa correta tecnicamente verdadeira, atual e sem ambiguidade',
+  'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',
+  'Alternativa correta não maior, mais detalhada, mais específica ou mais bem escrita que as erradas',
+  'Todas as alternativas com comprimento visual parecido e mesma estrutura gramatical',
+  'Sem "todas", "nenhuma", negações óbvias ou distratores absurdos',
+  'Explicação ensina o porquê e o como do conceito, sem parafrasear a resposta',
+  'Explicação sem referência fixa a letras, pois o site embaralha alternativas',
+  'Respeito literal ao foco solicitado pelo usuário, sem trocar foco específico por princípios amplos',
+  'Flashcards atômicos, autossuficientes, com resposta curta e explicação útil',
+  'Flashcards sem perguntas abertas genéricas, sem sim/não e sem listas longas',
+  'Questões abertas com resposta esperada objetiva, avaliável e não ambígua',
+  'Coerência do formato obrigatório para o parser do site',
+];
+
+export const buildQuestionAuditPrompt = ({
+  subjectTitle = '',
+  topicTitle = '',
+  subtopics = [],
+  sourceMaterials = '',
+  generatedText = '',
+  settings = {},
+}) => {
+  const types = settings.questionTypes || ['direct'];
+  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyOpen = types.every(t => ['open', 'essay'].includes(t));
+  const na = settings.numAlternatives || 5;
+  const alts = na === 4
+    ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
+    : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
+  const typeInst = buildTypeInst(types);
+  const outputFormat = onlyFlashcards ? `
+FORMATO DE SAÍDA OBRIGATÓRIO:
+## Flashcard N
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta, poucas palavras]
+Explicação: [Notas/Lógica: explicação útil e específica]
+---` : onlyOpen ? `
+FORMATO DE SAÍDA OBRIGATÓRIO:
+## Questão N
+[Enunciado]
+Resposta esperada: [resposta objetiva]
+Explicação: [explicação didática]
+---` : `
+FORMATO DE SAÍDA OBRIGATÓRIO:
+## Questão N
+[Enunciado]
+${alts}
+Alternativa correta: A
+Explicação:
+[Explicação didática sem referir letras]
+---`;
+
+  return `Você é o auditor sênior de questões médicas da Ágora do Saber. Sua tarefa é fazer um SEGUNDO PASSE rigoroso sobre uma bateria recém-criada e devolver apenas a versão final corrigida.
+
+CONTEXTO:
+- Assunto: ${subjectTitle || 'Não informado'}
+- Tópico/bloco: ${topicTitle || 'Não informado'}
+${subtopics?.length ? `- Subtópicos obrigatórios:\n${subtopics.map((s, i) => `${i + 1}. ${s}`).join('\n')}` : ''}
+
+MATERIAL BASE / INTENÇÃO DO USUÁRIO:
+${sourceMaterials ? sourceMaterials.substring(0, 14000) : 'Não informado. Use apenas o contexto das questões e subtópicos.'}
+
+CHECKLIST DE AUDITORIA OBRIGATÓRIO:
+${QUESTION_AUDIT_CHECKLIST.map(item => `- ${item}`).join('\n')}
+
+REGRAS DE CORREÇÃO:
+- Não comente a auditoria. Não entregue relatório. Entregue somente as questões/flashcards finais.
+- Faça primeiro uma triagem de descarte: todo item que falhe no teste de prova/vida real deve ser excluído ou substituído, mesmo que esteja factualmente correto.
+- Corrija erros factuais, ambiguidade, pistas e explicações fracas.
+- Exclua sem dó itens inúteis, óbvios, genéricos, redundantes ou desalinhados com o material base.
+- Exclua sem dó itens cujo gabarito seja "psicoeducação", "simplificação do regime", "revisão de medicamentos", "desprescrição de fármacos desnecessários", "avaliar risco-benefício", "monitorar", "orientar adesão" ou condutas equivalentes, salvo quando houver um critério técnico concreto que torne a pergunta não óbvia.
+- Exclua questões do tipo "qual princípio fundamental", "qual estratégia geral", "qual medida inicial para reduzir riscos" quando o aluno conseguir responder por bom senso sem dominar o conteúdo.
+- Substitua itens excluídos por cobranças realmente úteis quando houver lacuna importante.
+- Adicione itens somente se a cobertura do tópico/subtópicos estiver insuficiente. Não adicione para inflar volume.
+- Se o usuário pediu foco específico, toda a bateria deve respeitar esse foco. Não troque o pedido por princípios amplos, adesão, polifarmácia, revisão de medicação ou recomendações administrativas.
+- Para questões fechadas, coloque SEMPRE a correta como A porque o site embaralha depois. Faça B/C/D/E plausíveis, parecidas em tamanho e categoria.
+- Para flashcards, mantenha perguntas específicas, respostas curtas e explicações que ensinem o porquê.
+- Reescreva explicações que apenas repitam o gabarito. A explicação deve trazer mecanismo, cadeia causal, contraste com uma alternativa próxima, exceção, critério ou consequência prática.
+- Preserve o idioma em português do Brasil.
+
+${typeInst ? `${typeInst}\n` : ''}
+${REGRAS_ENUNCIADO}
+${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
+${onlyFlashcards ? '' : REGRAS_EXPLICACAO}
+${outputFormat}
+
+BATERIA A AUDITAR:
+${generatedText}
+
+Agora devolva APENAS a bateria final auditada, no formato obrigatório.`;
+};
+
 // ─── PROMPT: GERAÇÃO DE QUESTÕES DO ORÁCULO ──────────────────────────────────
 
 export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) => {
@@ -254,7 +367,8 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
 ESTRUTURA PARA FLASHCARDS:
 - Cubra os subtópicos/conceitos obrigatórios quando eles forem fornecidos.
 - Não use meta numérica fixa. Crie apenas flashcards de alto rendimento, sem redundância.
-- Priorize conceitos cobrados, esquecíveis, diferenciadores e clinicamente úteis.
+- Priorize conceitos cobrados, esquecíveis, diferenciadores, testáveis em prova ou úteis na vida real.
+- Corte cartões de conselho geral, adesão, polifarmácia, risco-benefício, "otimização" e "revisão terapêutica" quando a resposta não exigir conhecimento técnico específico.
 - O conjunto final deve permitir revisar o conteúdo essencial sem reler o material. Não omita mecanismo, conduta, diagnóstico, diferencial ou pegadinha central quando forem parte do tópico.`
     : autoQuestionCount
     ? `
@@ -268,6 +382,7 @@ NÃO use quantidade fixa por subtópico:
 - Referência: 2 a 4 questões por subtópico costuma bastar; use 5 ou 6 quando houver muitos mecanismos, diagnósticos diferenciais, critérios, condutas, complicações ou pegadinhas realmente distintos.
 - Checklist obrigatório antes de finalizar cada subtópico: ideia central/definição; mecanismo ou fisiopatologia; achados/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável.
 - Não crie questões para encher volume. Não pergunte trivia inútil.
+- Não crie questões de bom senso para completar quantidade. Se a cobrança seria "psicoeducação", "simplificar regime", "revisar medicações", "avaliar risco-benefício" ou equivalente genérico, substitua por um eixo técnico realmente cobrável.
 - Só pare depois de auditar que os eixos importantes foram cobrados sem lacunas e sem redundância.`
     : autoMode
     ? `
@@ -283,6 +398,7 @@ Critérios:
 - Use subtópicos suficientes para cobrir os blocos reais de estudo
 - Quantidade ideal: a necessária para cobrir o essencial sem repetição
 - Cada subtópico deve ser um conceito distinto e testável — não uma variação do anterior
+- Cada subtópico deve render uma cobrança testável em prova ou uma decisão útil na vida real. Subtópicos que só geram conselhos genéricos devem ser fundidos, removidos ou reescritos.
 - Organize do conceito mais fundamental ao mais específico dentro de cada tópico`
     : `
 ESTRUTURA OBRIGATÓRIA:
@@ -305,7 +421,8 @@ Explicação: [Notas/Lógica: explicação/aula breve]
 REGRA DE QUANTIDADE:
 - Ignore qualquer quantidade fixa citada em outras seções.
 - Gere a quantidade ideal de flashcards para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.
-- Faça perguntas específicas, de recuperação ativa, com resposta curta e explicação em "Notas/Lógica".` : onlyOpen ? `
+- Faça perguntas específicas, de recuperação ativa, com resposta curta e explicação em "Notas/Lógica".
+- Não aceite flashcard que só ensine conduta óbvia, conselho geral ou princípio administrativo.` : onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ## Questão 1.1.1
 [Enunciado]
@@ -341,6 +458,7 @@ FAIXA DE REFERÊNCIA:
 - Use mais subtópicos quando o material realmente exigir cobertura própria
 - Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
 - Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros
+- Cada subtópico precisa ser testável em prova ou útil na vida real. Se só render pergunta de bom senso, não crie o subtópico.
 - PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.
 Crie subtópicos como UNIDADES DE COBRANÇA: cada um deve permitir uma questão/flashcard próprio, com resposta ou explicação diferente dos vizinhos.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
@@ -359,6 +477,7 @@ Não extrapole para fora do que foi pedido. Não junte tópicos vizinhos apenas 
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para revisão e criação de questões de alto rendimento, não para uma apostila enciclopédica.
 Evite tópicos ou subtópicos de "introdução", "epidemiologia", "histórico", "conceitos gerais" ou "aspectos gerais" quando eles não forem diretamente úteis para prova, diagnóstico, conduta, mecanismo, classificação, fator de risco, complicação ou pegadinha.
+Evite também subtópicos de "adesão", "polifarmácia", "risco-benefício", "otimização do tratamento" ou "medidas gerais" quando eles só gerariam respostas como orientar, revisar, simplificar, monitorar ou desprescrever.
 Se uma informação contextual puder ser explicada em 1 ou 2 frases dentro de outro subtópico, NÃO crie um subtópico próprio para ela.
 Prefira menos subtópicos, porém mais fortes e cobradores, a muitos subtópicos pequenos.
 Só mantenha epidemiologia, definição ampla ou introdução quando isso gerar cobrança real de prova ou mudar conduta/raciocínio.
@@ -366,6 +485,7 @@ Só mantenha epidemiologia, definição ampla ou introdução quando isso gerar 
 REGRA DE FRONTEIRA DE COBRANÇA:
 Antes de finalizar o sumário, pergunte para cada subtópico: "que tipo de questão ou flashcard diferente este subtópico permite gerar?".
 Mantenha o subtópico apenas se a resposta for clara e diferente dos subtópicos vizinhos.
+Se a pergunta provável tiver resposta óbvia para quem não estudou, elimine ou reescreva o subtópico.
 Se dois subtópicos gerariam praticamente a mesma pergunta, funda-os ou reescreva-os para separar eixos diferentes de cobrança.
 Evite repetir a mesma entidade em vários tópicos. Se a repetição for inevitável, o título deve explicitar um eixo novo, como anatomia, mecanismo, clínica, morfologia, fator de risco, diagnóstico, tratamento, complicação ou prognóstico.
 Não separe artificialmente "patogenia", "fatores", "mecanismos" e "consequências" quando isso só produziria variações da mesma questão.
@@ -429,6 +549,7 @@ REGRAS:
 - Mantenha a estrutura de Tópicos e Subtópicos
 - Preserve a ordem didática (geral → específico, mecanismo → aplicação)
 - Cada subtópico deve ser um conceito testável independente
+- Cada subtópico deve render cobrança de prova ou utilidade real; não mantenha subtópico que só gere conselho genérico.
 - Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
 - Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
@@ -498,12 +619,14 @@ ${structureBlock}
 
 REGRAS DOS SUBTÓPICOS:
 - Cada subtópico = 1 conceito médico específico e testável
+- Cada subtópico deve ser testável em prova ou útil na vida real, com cobrança técnica real. Não crie subtópico que só gere conselho geral.
 - RUIM: "Introdução", "Generalidades", "Aspectos gerais do tratamento"
 - BOM: "Critérios diagnósticos da Síndrome Nefrótica", "Mecanismo de ação dos IECA na DRC"
 - Não repita conceitos entre subtópicos
 - Não coloque exceções ou complicações antes de cobrir o conceito principal
 - Priorize o que é cobrado em provas de residência médica
 - Separe detalhes com potencial de cobrança própria; evite apenas repetir frases da aula sem transformar em conceito testável
+- Evite subtópicos de adesão, medidas gerais, otimização, polifarmácia ou risco-benefício quando eles não exigirem critério técnico específico.
 
 ${extraPrompt ? `FOCO SOLICITADO PELO USUÁRIO: ${extraPrompt}\n` : ''}
 
@@ -538,7 +661,7 @@ ${typeInst ? `${typeInst}\n` : ''}
 SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-${onlyFlashcards ? 'QUANTIDADE: a IA deve decidir a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com perguntas específicas e explicação em Notas/Lógica.' : `TOTAL: EXATAMENTE ${total} questões.`}
+${onlyFlashcards ? 'QUANTIDADE: a IA deve decidir a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com perguntas específicas e explicação em Notas/Lógica. Corte cartões de conselho geral e mantenha só itens testáveis em prova ou úteis na vida real.' : `TOTAL: EXATAMENTE ${total} questões.`}
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
 ## Flashcard 1
@@ -572,6 +695,7 @@ FAIXA DE REFERÊNCIA:
 - Use mais subtópicos quando o material trouxer blocos independentes
 - PROIBIDO: tópico com dezenas de subtópicos. Se um tópico passaria de 30 subtópicos, divida esse bloco em tópicos menores.
 Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render cerca de 1 a 2 parágrafos fortes de explicação.
+Cada subtópico deve ser testável em prova ou útil na vida real. Se só render conselho genérico, orientação vaga ou princípio administrativo, não crie o subtópico.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
 Não crie subtópicos guarda-chuva que misturem definição, diagnóstico, classificação, complicações, exames e tratamento quando esses blocos renderem cobranças próprias.
 Se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
@@ -587,6 +711,7 @@ Não reordene, não generalize, não extrapole. Não junte tópicos vizinhos ape
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para estudo eficiente, não para uma apostila enciclopédica.
 Evite tópicos ou subtópicos de "introdução", "epidemiologia", "histórico", "conceitos gerais" ou "aspectos gerais" quando eles não forem diretamente úteis para prova, diagnóstico, conduta, mecanismo, classificação, fator de risco, complicação ou pegadinha.
+Evite também subtópicos de "adesão", "polifarmácia", "risco-benefício", "otimização do tratamento" ou "medidas gerais" se eles não trouxerem conhecimento técnico específico.
 Se uma informação contextual puder ser explicada em 1 ou 2 frases dentro de outro subtópico, NÃO crie um subtópico próprio para ela.
 Prefira menos subtópicos, porém mais fortes e cobradores, a muitos subtópicos pequenos.
 Só mantenha epidemiologia, definição ampla ou introdução quando isso gerar cobrança real de prova ou mudar conduta/raciocínio.
@@ -754,6 +879,7 @@ REGRA DE FIXAÇÃO (CRÍTICA):
 - ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'Subtópicos maiores, mais importantes, mais densos ou com mais contrastes recebem 3 ou 4 questões.'}
 - Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
+- Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para completar quantidade.
 - É proibido criar duas questões que testem praticamente a mesma ideia, mesmo com enunciados, casos ou alternativas diferentes.
 - Se subtópicos vizinhos falarem do mesmo fenômeno, una mentalmente a cobrança e varie o eixo; não repita a pergunta.
 - Não crie questão sobre conteúdo que não apareceu na aula/material.
@@ -764,6 +890,7 @@ ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
 REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
 - 1 a 2 parágrafos curtos
 - ${onlyFlashcards ? 'Explique o conceito da resposta curta como Notas/Lógica: mecanismo, justificativa, exceção ou pegadinha de prova.' : 'Por que a correta está certa e por que cada distrator está errado — pelo conteúdo'}
+- Não repita o gabarito com mais palavras. Explique o porquê, o mecanismo, a cadeia causal, a exceção, o contraste com uma confusão comum ou a consequência prática.
 - Não aprofunde teoria além do necessário
 - PROIBIDO: referir-se a letras A, B, C, D, E
 ${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
@@ -818,6 +945,7 @@ REGRA DA BATERIA EXTRA:
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes recebem 3 ou 4 questões, conforme indicado acima.'}
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
+- Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para preencher volume.
 - Não pule subtópicos e não crie questões fora do plano.
 
 ${REGRAS_ENUNCIADO}

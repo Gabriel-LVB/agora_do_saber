@@ -15,6 +15,7 @@ import {
   buildAcademiaLessonPrompt,
   buildAcademiaFixationPrompt,
   buildAcademiaExtraBatteryPrompt,
+  buildQuestionAuditPrompt,
 } from './agora_prompts.js';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
@@ -1060,7 +1061,7 @@ const ankiFieldHtml = (value = '') => escapeXml(String(value || ''))
   .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
   .replace(/&lt;(\/?)(b|strong)&gt;/gi, '<$1b>')
   .replace(/&lt;(\/?)(i|em)&gt;/gi, '<$1i>');
-const ANKI_AGORA_MODEL = 'Ágora Flashcard v2';
+const ANKI_AGORA_MODEL = 'Ágora Flashcard v4';
 const ANKI_AGORA_CSS = `
 .card {
   margin: 0;
@@ -1068,65 +1069,54 @@ const ANKI_AGORA_CSS = `
   background: #f5f6f8;
   color: #111827;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Arial, sans-serif;
-  font-size: 19px;
-  line-height: 1.58;
+  font-size: 15px;
+  line-height: 1.48;
   text-align: left;
 }
 .agora-card {
   box-sizing: border-box;
-  width: min(720px, calc(100vw - 28px));
-  margin: clamp(10px, 3vw, 28px) auto;
-  padding: clamp(22px, 5vw, 44px);
+  width: min(600px, calc(100vw - 28px));
+  margin: clamp(7px, 2vw, 18px) auto;
+  padding: clamp(16px, 3.4vw, 28px);
   border: 1px solid #e6e0d2;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fffaf1;
-  box-shadow: 0 14px 34px rgba(21, 27, 38, 0.14);
+  box-shadow: 0 10px 24px rgba(21, 27, 38, 0.12);
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
-.agora-label {
-  align-self: flex-start;
-  color: #7c5a16;
-  background: rgba(234, 179, 8, 0.14);
-  border: 1px solid rgba(161, 98, 7, 0.18);
-  border-radius: 999px;
-  padding: 5px 10px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  margin-bottom: 22px;
-}
 .agora-front {
-  font-size: clamp(24px, 4.2vw, 34px);
-  font-weight: 760;
-  line-height: 1.22;
+  font-size: clamp(16px, 2.7vw, 21px);
+  font-weight: 680;
+  line-height: 1.35;
   text-align: center;
   letter-spacing: 0;
 }
 .agora-back-question {
-  color: #6b7280;
-  font-size: clamp(16px, 2.5vw, 19px);
-  line-height: 1.4;
-  margin-bottom: 22px;
+  color: #4b5563;
+  font-size: clamp(13px, 1.8vw, 15px);
+  line-height: 1.42;
+  margin-bottom: 12px;
 }
 .agora-answer {
   color: #172033;
-  font-size: clamp(23px, 4vw, 31px);
-  font-weight: 780;
-  line-height: 1.23;
-  padding: 18px 20px;
-  margin: 0 0 22px;
-  border-radius: 14px;
+  font-size: clamp(16px, 2.6vw, 21px);
+  font-weight: 700;
+  line-height: 1.32;
+  padding: 12px 14px;
+  margin: 0 0 16px;
+  border-radius: 10px;
   background: #fff3cf;
   border: 1px solid #ead69a;
 }
 .agora-explain {
   border-top: 1px solid #e5ddca;
-  padding-top: 20px;
-  color: #344054;
-  font-size: clamp(16px, 2.5vw, 20px);
+  padding-top: 14px;
+  color: #1f2937;
+  font-size: clamp(15px, 2.1vw, 18px);
+  line-height: 1.55;
+  font-weight: 500;
 }
 .nightMode.card {
   background: #0a0f1a;
@@ -1135,30 +1125,25 @@ const ANKI_AGORA_CSS = `
 .nightMode .agora-card {
   background: #111827;
   border-color: #273142;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
-}
-.nightMode .agora-label {
-  color: #facc15;
-  background: rgba(250, 204, 21, 0.10);
-  border-color: rgba(250, 204, 21, 0.18);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
 }
 .nightMode .agora-front,
 .nightMode .agora-answer { color: #f9fafb; }
-.nightMode .agora-back-question { color: #9ca3af; }
+.nightMode .agora-back-question { color: #cbd5e1; }
 .nightMode .agora-answer {
   background: #1f2937;
   border-color: #374151;
 }
 .nightMode .agora-explain {
-  color: #d1d5db;
+  color: #f3f4f6;
   border-top-color: #303a4c;
 }
 @media (max-width: 520px) {
   .agora-card {
     width: calc(100vw - 14px);
     margin: 7px auto;
-    border-radius: 16px;
-    padding: 24px 20px;
+    border-radius: 14px;
+    padding: 18px 14px;
   }
 }
 `;
@@ -1729,6 +1714,34 @@ const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) =>
   }
   return { questions:allQuestions, summary:parseData(text).summary || '' };
 };
+
+const questionsToGenerationText = (questions = []) => questions.map((q, index) => {
+  if (q.isFlashcard) {
+    return `## Flashcard ${index + 1}
+Pergunta: ${q.statement || ''}
+Resposta: ${q.expectedAnswer || ''}
+Explicação: ${q.explanation || ''}
+---`;
+  }
+  if (q.isOpen) {
+    return `## Questão ${index + 1}
+${q.statement || ''}
+Resposta esperada: ${q.expectedAnswer || ''}
+Explicação: ${q.explanation || ''}
+---`;
+  }
+  const correct = (q.options || []).find(o => o.isCorrect);
+  const distractors = (q.options || []).filter(o => !o.isCorrect);
+  const ordered = [correct, ...distractors].filter(Boolean).slice(0, 5);
+  const options = ordered.map((opt, i) => `${'ABCDE'[i]}) ${opt.text || ''}`).join('\n');
+  return `## Questão ${index + 1}
+${q.statement || ''}
+${options}
+Alternativa correta: A
+Explicação:
+${q.explanation || ''}
+---`;
+}).join('\n\n');
 
 // Carrega KaTeX uma vez para renderização de LaTeX
 let _katexLoaded = false;
@@ -2670,6 +2683,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [questionTypes, setQuestionTypes] = useState(savedSettings.questionTypes || ['direct']);
   const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false);
   const [geminiThinkingEnabled, setGeminiThinkingEnabled] = useState(!!savedSettings.geminiThinkingEnabled);
+  const [auditQuestions, setAuditQuestions] = useState(!!savedSettings.auditQuestions);
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -2725,7 +2739,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     : `${fullBlocks > 0 ? `${fullBlocks} bloco(s) de ${effectivePerBlock} + ` : ''}1 bloco de ${lastBlock} = ${totalQ} no total`;
 
   // Salva preferências atuais e fecha — chamado em qualquer forma de fechar
-  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode, geminiThinkingEnabled });
+  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode, geminiThinkingEnabled, auditQuestions });
 
   return (
     <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={handleClose}>
@@ -2859,6 +2873,19 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
             <GeminiThinkingSelector value={geminiThinkingEnabled} onChange={setGeminiThinkingEnabled} darkMode={dm}/>
           </div>
 
+          {isAdmin&&(
+            <button onClick={()=>setAuditQuestions(!auditQuestions)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${auditQuestions?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+              <div>
+                <p className={`text-sm font-bold ${auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar questão inútil, corrigir pistas e cobrir lacunas.</p>
+              </div>
+              <div style={{width:40,height:24,borderRadius:12,padding:2,background:auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+              </div>
+            </button>
+          )}
+
           {isReset&&(
             <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-red-900/20 border border-red-800/40 text-red-400':'bg-red-50 border border-red-200 text-red-700'}`}>
               <RotateCcw className="w-4 h-4 flex-shrink-0"/>
@@ -2873,7 +2900,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, geminiThinkingEnabled, syllabusMaxPerBlock:isAdmin?ADMIN_COURSE_TOPIC_QUESTION_MAX:undefined, adminMinuteRule:isAdmin, adminFullCoverage:isAdmin})}
+            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, geminiThinkingEnabled, auditQuestions, syllabusMaxPerBlock:isAdmin?ADMIN_COURSE_TOPIC_QUESTION_MAX:undefined, adminMinuteRule:isAdmin, adminFullCoverage:isAdmin})}
             className="flex-[2] px-5 py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
@@ -2908,7 +2935,7 @@ const QuestionView = ({
   questions=[], answers={}, favorites=[],
   onAnswer, onToggleFavorite,
   errorNotebook=[], onToggleErrorNotebook=null, showErrorNotebook=false,
-  onReset, onRegenerate, onExport,
+  onReset, onRegenerate, onAudit, onExport,
   isGenerating=false, streamCount=0, loadingMsg='',
   showBizuario=false, onBizuario, bizuarioCached=false,
   darkMode, apiKey, oracleLength='medium', onCall, onOpenAnswer,
@@ -2922,6 +2949,8 @@ const QuestionView = ({
   numAlternatives=5,
   geminiThinkingEnabled=false,
   onGeminiThinkingChange=null,
+  auditQuestionsEnabled=false,
+  onAuditQuestionsChange=null,
   onAddToReview=null,
   onReviewErrorNotebook=null,
   onOpenErrorReviewResult=null,
@@ -3069,6 +3098,7 @@ const QuestionView = ({
   const actionMenuItems = questions.length>0 ? [
     onGoToAula ? { label:goToAulaLabel, icon:goToAulaIcon, fn:onGoToAula } : null,
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
+    onAudit ? { label:'Auditar', icon:<ShieldAlert className="w-4 h-4"/>, fn:onAudit } : null,
     showBizuario&&onBizuario ? { label:bizuarioCached?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:onBizuario, active:bizuarioCached } : null,
     onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
 	    onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
@@ -3495,6 +3525,18 @@ const QuestionView = ({
                 darkMode={dm}
               />
             </div>
+          )}
+          {onAuditQuestionsChange&&(
+            <button type="button" onClick={()=>onAuditQuestionsChange(!auditQuestionsEnabled)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${auditQuestionsEnabled?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-900':'border-gray-200 bg-white')}`}>
+              <div>
+                <p className={`text-sm font-bold ${auditQuestionsEnabled?'text-yellow-500':''}`}>Auditoria</p>
+                <p className="text-xs opacity-50 mt-0.5">Segundo request para revisar qualidade, utilidade, pistas e lacunas antes de salvar.</p>
+              </div>
+              <div style={{width:40,height:24,borderRadius:12,padding:2,background:auditQuestionsEnabled?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auditQuestionsEnabled?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+              </div>
+            </button>
           )}
         </div>
       )}
@@ -5286,7 +5328,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',quickExplanationLength:'essential',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -5740,6 +5782,7 @@ export default function QuestionBankApp() {
     qPerSubAuto:false,
     numAlternatives:5,
     geminiThinkingEnabled:false,
+    auditQuestions:false,
   });
   const [editingSub, setEditingSub]   = useState(null);
   const [editingSubName, setEditingSubName] = useState('');
@@ -5806,11 +5849,13 @@ export default function QuestionBankApp() {
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
   const [academiaExtraThinking, setAcademiaExtraThinking] = useState(false);
+  const [academiaExtraAudit, setAcademiaExtraAudit] = useState(false);
   const [academiaRegenLength, setAcademiaRegenLength] = useState('complete');
   const [academiaRegenQStyle, setAcademiaRegenQStyle] = useState('mixed');
   const [academiaRegenQTypes, setAcademiaRegenQTypes] = useState(['direct']);
   const [academiaRegenQAlts, setAcademiaRegenQAlts]   = useState(5);
   const [academiaRegenThinking, setAcademiaRegenThinking] = useState(false);
+  const [academiaRegenAudit, setAcademiaRegenAudit] = useState(false);
 
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
@@ -5979,7 +6024,14 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!academiaExtraModal) return;
     setAcademiaExtraThinking(!!settingsRef.current.geminiThinkingEnabled);
+    setAcademiaExtraAudit(!!settingsRef.current.auditQuestions);
   }, [academiaExtraModal?.topic?.id]); // eslint-disable-line
+
+  useEffect(() => {
+    if (!academiaRegenModal) return;
+    setAcademiaRegenThinking(!!settingsRef.current.geminiThinkingEnabled);
+    setAcademiaRegenAudit(!!settingsRef.current.auditQuestions);
+  }, [academiaRegenModal?.topic?.id]); // eslint-disable-line
 
   useEffect(() => {
     reviewQueueRef.current = reviewQueue;
@@ -8420,6 +8472,74 @@ export default function QuestionBankApp() {
 	  const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
 	  const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
 
+  const shouldAuditQuestions = (sourceSettings = settingsRef.current) =>
+    !!isAdmin && !!sourceSettings?.auditQuestions;
+
+  const QUESTION_AUDIT_VERSION = 2;
+
+  const makeQuestionAuditMeta = (questionCount = 0, source = 'auto') => ({
+    version:QUESTION_AUDIT_VERSION,
+    auditedAt:Date.now(),
+    questionCount,
+    source,
+  });
+
+  const isTopicQuestionAuditCurrent = (topic = {}) => {
+    const questionCount = (topic.questions || []).length;
+    if (!questionCount || !topic.questionAudit?.auditedAt) return false;
+    if (Number(topic.questionAudit.version || 0) !== QUESTION_AUDIT_VERSION) return false;
+    return Number(topic.questionAudit.questionCount || 0) === questionCount;
+  };
+
+  const auditGeneratedQuestions = async ({
+    questions = [],
+    namespace = `audit_${Date.now()}`,
+    settings: auditSettings = settingsRef.current,
+    subjectTitle = '',
+    topicTitle = '',
+    subtopics = [],
+    sourceMaterials = '',
+    toastId = null,
+    onProgress = null,
+    force = false,
+  } = {}) => {
+    if (!questions.length || (!force && !shouldAuditQuestions(auditSettings))) return { questions, audited:false };
+    if (!isAdmin) return { questions, audited:false };
+    const generatedText = questionsToGenerationText(questions);
+    const prompt = buildQuestionAuditPrompt({
+      subjectTitle,
+      topicTitle,
+      subtopics,
+      sourceMaterials,
+      generatedText,
+      settings:auditSettings,
+    });
+    onProgress?.('Auditando qualidade...');
+    if (toastId) updateToast(toastId, 'Auditando e corrigindo questões...', 'loading');
+    let lastErr = null;
+    for (const { k } of getOrderedKeys()) {
+      try {
+        const text = await callGemini(
+          prompt,
+          'Você é auditor sênior de questões médicas. Seja rigoroso, técnico e alinhado à intenção do usuário. Responda apenas no formato pedido.',
+          k,
+          [],
+          { ...getGeminiOptions(auditSettings), maxTokens:12000 }
+        );
+        await rotateKey();
+        const parsed = parseGeneratedQuestionsByTypes(text, namespace, auditSettings.questionTypes || ['direct']);
+        if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
+        return { questions:parsed.questions, summary:parsed.summary || '', audited:true };
+      } catch(e) {
+        lastErr = e;
+        await rotateKey();
+        continue;
+      }
+    }
+    addToast(`Auditoria falhou (${getBulkErrorText(lastErr)}). Mantive a geração original.`, 'info', 6000);
+    return { questions, audited:false, error:lastErr };
+  };
+
 	  const ankiConnect = async (action, params = {}) => {
 	    const payload = { action, version:6, params };
 	    const urls = ['http://127.0.0.1:8765', 'http://localhost:8765'];
@@ -8452,8 +8572,8 @@ export default function QuestionBankApp() {
 	      isCloze:false,
 	      cardTemplates:[{
 	        Name:'Card 1',
-	        Front:'<main class="agora-card"><div class="agora-label">{{Source}}</div><section class="agora-front">{{Front}}</section></main>',
-	        Back:'<main class="agora-card"><div class="agora-label">{{Source}}</div><section class="agora-back-question">{{Front}}</section><section class="agora-answer">{{Answer}}</section>{{#Explanation}}<section class="agora-explain">{{Explanation}}</section>{{/Explanation}}</main>',
+	        Front:'<main class="agora-card"><section class="agora-front">{{Front}}</section></main>',
+	        Back:'<main class="agora-card"><section class="agora-back-question">{{Front}}</section><section class="agora-answer">{{Answer}}</section>{{#Explanation}}<section class="agora-explain">{{Explanation}}</section>{{/Explanation}}</main>',
 	      }],
 	    });
 	  };
@@ -9409,15 +9529,21 @@ export default function QuestionBankApp() {
   ]);
 
   const getBulkOperationMeta = (mode = 'generate', source = 'academia') => {
-    const map = {
+    const academiaMap = {
       generate:{title:'Gerar tudo', verb:'Gerar', toast:'Gerar tudo', empty:'Nada pendente: todos os blocos desta pasta já foram gerados.', desc:'gera aula + questões de fixação para blocos ainda pendentes'},
       extra:{title:'Gerar bateria extra de tudo', verb:'Gerar extras', toast:'Bateria extra em massa', empty:'Nenhuma aula gerada disponível para bateria extra.', desc:'cria uma bateria extra para cada aula já gerada'},
       regenAll:{title:'Regenerar tudo', verb:'Regenerar tudo', toast:'Regenerar tudo', empty:'Nenhum bloco encontrado para regenerar.', desc:'substitui aula + questões de fixação de todos os blocos'},
       regenLesson:{title:'Regenerar aula', verb:'Regenerar aulas', toast:'Regenerar aulas', empty:'Nenhum bloco encontrado para regenerar.', desc:'substitui apenas as explicações, mantendo questões e extras'},
       regenQuestions:{title:'Regenerar questões', verb:'Regenerar questões', toast:'Regenerar questões', empty:'Nenhuma aula gerada disponível para regenerar questões.', desc:'substitui apenas as questões de fixação das aulas já geradas'},
     };
-    if (source !== 'academia') return map.generate;
-    return map[mode] || map.generate;
+    const oracleMap = {
+      generate:{title:'Gerar faltantes', verb:'Gerar', toast:'Gerar faltantes', empty:'Nada pendente: todos os blocos já têm questões.', desc:'gera questões apenas nos blocos ainda vazios'},
+      regenQuestions:{title:'Regerar tudo', verb:'Regerar', toast:'Regerar tudo', empty:'Nenhum bloco encontrado para regerar.', desc:'substitui as questões de todos os blocos deste assunto'},
+      audit:{title:'Auditar tudo', verb:'Auditar', toast:'Auditoria em massa', empty:'Nenhum bloco com questões para auditar.', desc:'faz um segundo request para revisar, cortar e corrigir questões já geradas'},
+      auditMissing:{title:'Auditar faltantes', verb:'Auditar', toast:'Auditoria dos faltantes', empty:'Nenhum bloco pendente de auditoria.', desc:'audita apenas blocos com questões que ainda não foram auditadas'},
+    };
+    if (source !== 'academia') return oracleMap[mode] || oracleMap.generate;
+    return academiaMap[mode] || academiaMap.generate;
   };
 
   const getDefaultBulkConfig = (mode = 'generate') => ({
@@ -9426,6 +9552,7 @@ export default function QuestionBankApp() {
     questionTypes:settingsRef.current.questionTypes || ['direct'],
     numAlternatives:settingsRef.current.numAlternatives || 5,
     geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
+    auditQuestions:!!settingsRef.current.auditQuestions,
     regenReason:'',
     mode,
   });
@@ -9446,7 +9573,12 @@ export default function QuestionBankApp() {
       if (mode === 'regenQuestions') return topics.filter(t => t.lessonGenerated);
       return topics.filter(t => !t.lessonGenerated);
     }
-    if (subject?.source === 'gemini') return topics.filter(t => !(t.questions || []).length);
+    if (subject?.source === 'gemini') {
+      if (mode === 'auditMissing') return topics.filter(t => (t.questions || []).length && !isTopicQuestionAuditCurrent(t));
+      if (mode === 'audit') return topics.filter(t => (t.questions || []).length);
+      if (mode === 'regenQuestions') return topics;
+      return topics.filter(t => !(t.questions || []).length);
+    }
     return [];
   };
   const createBulkLog = (type, msg) => {
@@ -9476,6 +9608,7 @@ export default function QuestionBankApp() {
       questionStyle: s.questionStyle || 'mixed',
       questionTypes: s.questionTypes || ['direct'],
       geminiThinkingEnabled: !!s.geminiThinkingEnabled,
+      auditQuestions: !!s.auditQuestions,
       autoMode: s.autoMode !== false,
       syllabusMaxPerBlock: isAdmin ? ADMIN_COURSE_TOPIC_QUESTION_MAX : undefined,
       adminMinuteRule: isAdmin,
@@ -9584,7 +9717,7 @@ export default function QuestionBankApp() {
         qPerBlock,
         numAlternatives, aulaTitle: aula.title,
         subject: cfg.subject||'', topic: cfg.topic||'',
-        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, fullCoverage:isAdmin && !!cfg.adminFullCoverage, createdAt: Date.now(),
+        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions, fullCoverage:isAdmin && !!cfg.adminFullCoverage, createdAt: Date.now(),
       },
       blocks: blocksForFirestore,
     };
@@ -9618,12 +9751,22 @@ export default function QuestionBankApp() {
             PROMPT, k, ()=>{}, [], getGeminiOptions(cfg)
           );
           const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, questionTypes);
+          const audited = await auditGeneratedQuestions({
+            questions:parsed.questions,
+            namespace:`${aulaId}_${blockId}_audited`,
+            settings:{...aulaData.meta, ...cfg, questionTypes},
+            subjectTitle:cfg.subject || '',
+            topicTitle:`${aula.title} — ${block.title}`,
+            subtopics:block.subtopics || [],
+            sourceMaterials:[cfg.extraPrompt, block.transcriptSlice].filter(Boolean).join('\n\n'),
+            toastId,
+          });
           const { transcriptSlice: _ts, ...blockToSave } = block;
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {
               ...(cur.blocks||{}),
-              [blockId]: {...blockToSave, generating:false, questions:parsed.questions, answers:{}}
+              [blockId]: {...blockToSave, generating:false, questions:audited.questions, answers:{}}
             };
             const updated = {...cur, blocks:updBlocks};
             if(user&&!user.isAnonymous) setDoc(doc(db,'users',user.uid,'vq_blocks',aulaId), updated).catch(()=>{});
@@ -9707,9 +9850,18 @@ export default function QuestionBankApp() {
           getGeminiOptions(meta)
         );
         const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, meta.questionTypes || ['direct']);
+        const audited = await auditGeneratedQuestions({
+          questions:parsed.questions,
+          namespace:`${aulaId}_${blockId}_audited`,
+          settings:meta,
+          subjectTitle:meta.subject || '',
+          topicTitle:`${meta.aulaTitle || ''} — ${block.title || blockId}`,
+          subtopics:subtopicsArr,
+          sourceMaterials:transcriptSlice,
+        });
         const finalBlocks = {
           ...aulaData.blocks,
-          [blockId]: { ...block, generating:false, questions:parsed.questions, answers:{} }
+          [blockId]: { ...block, generating:false, questions:audited.questions, answers:{} }
         };
         await saveVqBlock(aulaId, {...aulaData, blocks:finalBlocks});
         await rotateKey();
@@ -9910,13 +10062,67 @@ export default function QuestionBankApp() {
       qPerSubAuto:!!settingsRef.current.qPerSubAuto,
       numAlternatives:settingsRef.current.numAlternatives || 5,
       geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
+      auditQuestions:!!settingsRef.current.auditQuestions,
     });
     setRegenModal(true);
   };
 
+  const auditOracleTopicForSubject = async (subject, topic, { onProgress, auditSource = 'manual' } = {}) => {
+    if (!subject || !topic || !(topic.questions || []).length) throw new Error('NO_QUESTIONS_GENERATED');
+    const auditSettings = {
+      ...settingsRef.current,
+      questionStyle:topic.questionStyle || settingsRef.current.questionStyle || 'mixed',
+      questionTypes:topic.questionTypes || settingsRef.current.questionTypes || ['direct'],
+      auditQuestions:true,
+    };
+    const audited = await auditGeneratedQuestions({
+      questions:topic.questions || [],
+      namespace:`${subject.id}_${topic.id}_audit_manual`,
+      settings:auditSettings,
+      subjectTitle:subject.title,
+      topicTitle:topic.title,
+      subtopics:topic.subtopics || [],
+      sourceMaterials:subject.sourceMaterials || '',
+      force:true,
+      onProgress,
+    });
+    if (!audited.audited) throw audited.error || new Error('CONNECTION_ERROR');
+    const updatedTopic = {
+      ...topic,
+      questions:audited.questions,
+      summary:audited.summary || topic.summary || '',
+      answers:{},
+      questionStyle:auditSettings.questionStyle,
+      questionTypes:auditSettings.questionTypes,
+      questionAudit:makeQuestionAuditMeta(audited.questions.length, auditSource),
+    };
+    const updatedSubject = {
+      ...subject,
+      topics:(subject.topics || []).map(t => t.id === topic.id ? updatedTopic : t),
+    };
+    await updateSubject(updatedSubject);
+    return { subject:updatedSubject, topic:updatedTopic, questionCount:audited.questions.length };
+  };
+
+  const auditActiveTopic = async () => {
+    if (!activeSubject || !activeTopic || !checkKey()) return;
+    setIsBusy(true);
+    const toastId = addToast('Auditando bloco...', 'loading', 0);
+    try {
+      const result = await auditOracleTopicForSubject(activeSubject, activeTopic);
+      updateToast(toastId, `Auditoria concluída: ${result.questionCount} item${result.questionCount!==1?'s':''} no bloco.`, 'success');
+      setTimeout(()=>removeToast(toastId), 7000);
+    } catch(e) {
+      updateToast(toastId, `Auditoria falhou: ${getBulkErrorText(e)}.`, 'error');
+      setTimeout(()=>removeToast(toastId), 7000);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress, settingsOverride=null } = {}) => {
     const originalTopic = topic || {};
-    const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{} } : t) };
+    const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{}, questionAudit:null } : t) };
     await updateSubject(cleared);
     const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
 
@@ -9980,12 +10186,23 @@ export default function QuestionBankApp() {
       try {
         const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, PROMPT, k, (acc,qc)=>onProgress?.(qc), [], getGeminiOptions(s));
         const parsed = parseGeneratedQuestionsByTypes(full, `${subject.id}_${clearedTopic.id}`, types);
-        const allQuestions = parsed.questions;
-        const summary = parsed.summary;
+        const audited = await auditGeneratedQuestions({
+          questions:parsed.questions,
+          namespace:`${subject.id}_${clearedTopic.id}_audited`,
+          settings:s,
+          subjectTitle:subject.title,
+          topicTitle:clearedTopic.title,
+          subtopics:subtopicsArr,
+          sourceMaterials:cleared.sourceMaterials || '',
+          onProgress:msg=>onProgress?.(msg),
+        });
+        const allQuestions = audited.questions;
+        const summary = audited.summary || parsed.summary;
+        const questionAudit = audited.audited ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
         const updatedSubject = {
           ...cleared,
           topics: cleared.topics.map(t => t.id === clearedTopic.id
-            ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes }
+            ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes, questionAudit }
             : t
           )
         };
@@ -10007,7 +10224,7 @@ export default function QuestionBankApp() {
     let mi=0;setLoadingMsg(LOADING_MSGS[0]);
     const mi_int=setInterval(()=>{mi=(mi+1)%LOADING_MSGS.length;setLoadingMsg(LOADING_MSGS[mi]);},8000);
     const sourceTopic = activeSubject?.topics?.find(t=>t.id===topicId) || {};
-    const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{}}:t)};
+    const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{},questionAudit:null}:t)};
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
     const generationSettings = { ...settingsRef.current, ...(settingsOverride || {}) };
@@ -10078,9 +10295,19 @@ export default function QuestionBankApp() {
       try {
         const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc), [], getGeminiOptions(s));
         const parsed = parseGeneratedQuestionsByTypes(full, `${activeSubject.id}_${topicId}`, types);
-        const allQuestions = parsed.questions;
-        const summary = parsed.summary;
-        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes}:t)});
+        const audited = await auditGeneratedQuestions({
+          questions:parsed.questions,
+          namespace:`${activeSubject.id}_${topicId}_audited`,
+          settings:s,
+          subjectTitle:activeSubject.title,
+          topicTitle:topic.title,
+          subtopics:subtopicsArr,
+          sourceMaterials:cleared.sourceMaterials || '',
+        });
+        const allQuestions = audited.questions;
+        const summary = audited.summary || parsed.summary;
+        const questionAudit = audited.audited ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
+        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)});
         await rotateKey();
         ok=true; break;
       } catch(e) {
@@ -10769,6 +10996,17 @@ export default function QuestionBankApp() {
       if (fixText) {
         try {
           fixQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}`, s.questionTypes || ['direct']).questions;
+          const audited = await auditGeneratedQuestions({
+            questions:fixQuestions,
+            namespace:`acfix_${topic.id}_${Date.now()}_audited`,
+            settings:s,
+            subjectTitle:subject.title,
+            topicTitle:topic.title,
+            subtopics,
+            sourceMaterials:[material, lessonText].filter(Boolean).join('\n\n'),
+            onProgress,
+          });
+          fixQuestions = audited.questions;
         } catch(e) {
           if (generationMode === 'questions') throw e;
           onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
@@ -10885,6 +11123,7 @@ export default function QuestionBankApp() {
       questionTypes:bulkConfig.questionTypes,
       numAlternatives:bulkConfig.numAlternatives,
       geminiThinkingEnabled:!!bulkConfig.geminiThinkingEnabled,
+      auditQuestions:['audit','auditMissing'].includes(mode) ? true : !!bulkConfig.auditQuestions,
       regenReason:bulkConfig.regenReason || '',
     };
 
@@ -10935,12 +11174,19 @@ export default function QuestionBankApp() {
                 });
               }
             } else {
-              result = await generateOracleTopicForSubject(workingSubject, topic, '', {
-                onProgress: count => {
-                  if (count > 0) setStreamCount(count);
-                },
-                settingsOverride: operationSettings,
-              });
+              if (mode === 'audit' || mode === 'auditMissing') {
+                result = await auditOracleTopicForSubject(workingSubject, topic, {
+                  onProgress: msg => addBulkLog('info', `"${topic.title}": ${msg}`),
+                  auditSource:mode,
+                });
+              } else {
+                result = await generateOracleTopicForSubject(workingSubject, topic, '', {
+                  onProgress: count => {
+                    if (count > 0) setStreamCount(count);
+                  },
+                  settingsOverride: operationSettings,
+                });
+              }
             }
             break;
           } catch(e) {
@@ -10999,7 +11245,18 @@ export default function QuestionBankApp() {
     }
 
     const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}`, s.questionTypes || ['direct']);
-    if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
+    let extraQuestions = parsed.questions;
+    if (!extraQuestions.length) throw new Error('NO_QUESTIONS_GENERATED');
+    const audited = await auditGeneratedQuestions({
+      questions:extraQuestions,
+      namespace:`extra_${topic.id}_${Date.now()}_audited`,
+      settings:s,
+      subjectTitle:subject.title,
+      topicTitle:`${topic.title} — bateria extra`,
+      subtopics,
+      sourceMaterials:lessonText,
+    });
+    extraQuestions = audited.questions;
 
     const extraId = `eb_${Date.now()}`;
     const extraTitle = `Bateria ${(topic.extraBattery||[]).length + 1}`;
@@ -11012,7 +11269,7 @@ export default function QuestionBankApp() {
         title: extraTitle,
         generatedAt: Date.now(),
         oracleTopicId: `academia_extra_${topic.id}_${extraId}`,
-        questions: parsed.questions,
+        questions: extraQuestions,
       }],
     };
     const updatedSubject = {
@@ -11025,12 +11282,12 @@ export default function QuestionBankApp() {
       subject:updatedSubject,
       topic:updatedTopic,
       kind:'extra',
-      questions:parsed.questions,
+      questions:extraQuestions,
       title:extraTitle,
       extraId,
       questionStyle:s.questionStyle || 'mixed',
     });
-    return { subject:updatedSubject, topic:updatedTopic, oracle, questionCount:parsed.questions.length };
+    return { subject:updatedSubject, topic:updatedTopic, oracle, questionCount:extraQuestions.length };
   };
 
   const generateAcademiaExtraBattery = async (topic, subject, extraSettings = null) => {
@@ -12729,17 +12986,40 @@ export default function QuestionBankApp() {
 		                  ) : null;
 		                })()}
 		                {activeSubject.source==='gemini'&&(()=>{
-		                  const pendingCount = getBulkGenerateTargets(activeSubject).length;
-	                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
+		                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
+                    const hasAuditedBlocks = (activeSubject.topics || []).some(isTopicQuestionAuditCurrent);
+                    const auditMissingCount = getBulkGenerateTargets(activeSubject,'auditMissing').length;
+                    const actions = [
+                      {mode:'generate', label:'Gerar faltantes', icon:<Zap className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'generate').length},
+                      {mode:'regenQuestions', label:'Regerar tudo', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenQuestions').length, danger:true},
+                      hasAuditedBlocks && auditMissingCount ? {mode:'auditMissing', label:'Auditar faltantes', icon:<ShieldAlert className="w-4 h-4"/>, count:auditMissingCount} : null,
+                      {mode:'audit', label:'Auditar tudo', icon:<ShieldAlert className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'audit').length},
+                    ].filter(Boolean);
 	                  return (
-	                    <button
-	                      onClick={()=>openBulkGenerateModal(activeSubject, 'generate')}
-	                      disabled={runningHere || pendingCount===0}
-	                      title={pendingCount ? `Gerar ${pendingCount} bloco${pendingCount!==1?'s':''} pendente${pendingCount!==1?'s':''}` : 'Todos os blocos já foram gerados'}
-	                      className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all ${pendingCount&&!runningHere?(darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'):'opacity-40 cursor-not-allowed '+(darkMode?'border-gray-700 text-gray-500':'border-gray-200 text-gray-400')}`}>
-	                      {runningHere ? <Spinner className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
-	                      {runningHere ? 'Gerando...' : pendingCount ? `Gerar tudo (${pendingCount})` : 'Tudo gerado'}
-	                    </button>
+                      <div className="relative">
+                        <button
+                          onClick={()=>setBulkActionMenu(p=>p===activeSubject.id?null:activeSubject.id)}
+                          disabled={runningHere}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all disabled:opacity-50 ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
+                          {runningHere ? <Spinner className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
+                          {runningHere ? 'Rodando...' : 'Lote'}
+                          <ChevronDown className="w-4 h-4 opacity-60"/>
+                        </button>
+                        {bulkActionMenu===activeSubject.id&&(
+                          <div className={`absolute right-0 top-11 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                            {actions.map(item=>(
+                              <button key={item.mode}
+                                onClick={()=>openBulkGenerateModal(activeSubject, item.mode)}
+                                disabled={!item.count}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${item.danger?(darkMode?'text-orange-300 hover:bg-orange-900/20':'text-orange-700 hover:bg-orange-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                                {item.icon}
+                                <span className="flex-1">{item.label}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] ${darkMode?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500'}`}>{item.count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 	                  );
 	                })()}
 	                {activeSubject.source==='academia'&&(()=>{
@@ -12903,6 +13183,7 @@ export default function QuestionBankApp() {
               onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)}
               onReset={activeTopic.questions?.length>0?()=>setDeleteId({type:'reset',id:activeTopic.id}):null}
               onRegenerate={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'?()=>openOracleRegenModal(activeTopic):null}
+              onAudit={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&isAdmin?auditActiveTopic:null}
               onExport={activeTopic.questions?.length>0?()=>setExportModal({topic:activeTopic,subject:activeSubject}):null}
               isGenerating={isBusy&&(activeTopic.questions?.length||0)===0}
               streamCount={streamCount}
@@ -12938,6 +13219,12 @@ export default function QuestionBankApp() {
                 setSettings(ns);
                 saveSettings(ns);
               }}
+              auditQuestionsEnabled={!!settings.auditQuestions}
+              onAuditQuestionsChange={isAdmin ? (enabled=>{
+                const ns = {...settingsRef.current, auditQuestions:enabled};
+                setSettings(ns);
+                saveSettings(ns);
+              }) : null}
               onTopicStyleChange={activeSubject?.source==='gemini'?(val,kind)=>{
                 if (kind === 'qPerSub' || kind === 'numAlternatives' || kind === 'qPerSubAuto') {
                   const ns = {...settingsRef.current, [kind]:val};
@@ -16476,6 +16763,20 @@ export default function QuestionBankApp() {
                 Rápido usa `thinkingBudget: 0`. Thinking usa `thinkingBudget: -1`, deixando o Gemini decidir quando raciocinar mais.
               </p>
             </SettingsSection>
+            {isAdmin&&(
+              <SettingsSection id="question-audit" title="Auditoria" icon={<ShieldAlert className="w-4 h-4"/>}>
+                <button type="button" onClick={()=>saveSettings({...settingsRef.current, auditQuestions:!settings.auditQuestions})}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white')}`}>
+                  <div>
+                    <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditar gerações automaticamente</p>
+                    <p className="text-xs opacity-50 mt-0.5">Faz um segundo request para cortar questões inúteis, corrigir pistas, revisar fatos e cobrir lacunas.</p>
+                  </div>
+                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                  </div>
+                </button>
+              </SettingsSection>
+            )}
             {/* Oracle Length */}
             <SettingsSection id="chat" title="Resposta do Chat" icon={<MessageCircle className="w-4 h-4"/>}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -17206,7 +17507,7 @@ export default function QuestionBankApp() {
         canCreateFlashcards={canUseAdvancedFeatures}
         onClose={(prefs={})=>{
           // Salvar preferências mesmo ao fechar sem confirmar
-          if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined) {
+          if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined || prefs.auditQuestions !== undefined) {
             const ns = {...settings, ...prefs};
             saveSettings(ns);
           }
@@ -17214,7 +17515,7 @@ export default function QuestionBankApp() {
         }}
         onConfirm={(cfg)=>{
           // Salvar preferências para próximas aulas
-          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:cfg.questionTypes||settings.questionTypes, autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled};
+          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:cfg.questionTypes||settings.questionTypes, autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions};
           saveSettings(ns);
           setVqGenModal(null);
           const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
@@ -17455,6 +17756,18 @@ export default function QuestionBankApp() {
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                 <GeminiThinkingSelector value={academiaRegenThinking} onChange={setAcademiaRegenThinking} darkMode={darkMode}/>
               </div>
+              {isAdmin&&(
+                <button type="button" onClick={()=>setAcademiaRegenAudit(!academiaRegenAudit)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaRegenAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                  <div>
+                    <p className={`text-sm font-bold ${academiaRegenAudit?'text-yellow-500':''}`}>Auditoria</p>
+                    <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
+                  </div>
+                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaRegenAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaRegenAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                  </div>
+                </button>
+              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaRegenModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
@@ -17466,6 +17779,7 @@ export default function QuestionBankApp() {
                   questionTypes: academiaRegenQTypes,
                   numAlternatives: academiaRegenQAlts,
                   geminiThinkingEnabled: academiaRegenThinking,
+                  auditQuestions: academiaRegenAudit,
                 };
                 const { regenReason, ...persistedSettings } = regenSettings;
                 const ns = { ...settings, ...persistedSettings };
@@ -17521,12 +17835,24 @@ export default function QuestionBankApp() {
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                 <GeminiThinkingSelector value={academiaExtraThinking} onChange={setAcademiaExtraThinking} darkMode={darkMode}/>
               </div>
+              {isAdmin&&(
+                <button type="button" onClick={()=>setAcademiaExtraAudit(!academiaExtraAudit)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaExtraAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                  <div>
+                    <p className={`text-sm font-bold ${academiaExtraAudit?'text-yellow-500':''}`}>Auditoria</p>
+                    <p className="text-xs opacity-50 mt-0.5">Segundo request para revisar utilidade, pistas e cobertura.</p>
+                  </div>
+                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaExtraAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaExtraAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                  </div>
+                </button>
+              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaExtraModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button onClick={()=>{
-                const extraSettings = {...settings, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts, geminiThinkingEnabled:academiaExtraThinking};
-                saveSettings({...settingsRef.current, geminiThinkingEnabled:academiaExtraThinking});
+                const extraSettings = {...settings, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit};
+                saveSettings({...settingsRef.current, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit});
                 const {topic,subject} = academiaExtraModal;
                 setAcademiaExtraModal(null);
                 generateAcademiaExtraBattery(topic, subject, extraSettings);
@@ -17622,6 +17948,19 @@ export default function QuestionBankApp() {
                 />
               </div>
 
+              {isAdmin&&(
+                <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,auditQuestions:!p.auditQuestions}))}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${oracleRegenConfig.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                  <div>
+                    <p className={`text-sm font-bold ${oracleRegenConfig.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                    <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
+                  </div>
+                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:oracleRegenConfig.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:oracleRegenConfig.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                  </div>
+                </button>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button onClick={()=>setRegenModal(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
                 <button onClick={()=>{
@@ -17630,6 +17969,7 @@ export default function QuestionBankApp() {
                     qPerSub:Math.max(1, Math.min(10, parseInt(oracleRegenConfig.qPerSub, 10) || 1)),
                     numAlternatives:Number(oracleRegenConfig.numAlternatives || 5),
                   };
+                  saveSettings({...settingsRef.current, auditQuestions:!!cfg.auditQuestions, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled});
                   setRegenModal(false);
                   generateBatch(activeTopic.id, regenPrompt, cfg);
                   setRegenPrompt('');
@@ -17796,14 +18136,15 @@ export default function QuestionBankApp() {
           const updateBulkConfig = (patch) => setBulkGenerateModal(p=>({...p, config:{...(p?.config||{}), ...patch}}));
           const showsLessonConfig = isAcademiaBulk && ['generate','regenAll','regenLesson'].includes(mode);
           const showsQuestionConfig = isAcademiaBulk && ['generate','extra','regenAll','regenQuestions'].includes(mode);
-          const isDestructiveBulk = ['regenAll','regenLesson','regenQuestions'].includes(mode);
+          const isAuditBulk = ['audit','auditMissing'].includes(mode);
+          const isDestructiveBulk = ['regenAll','regenLesson','regenQuestions','audit','auditMissing'].includes(mode);
 	        return (
 	          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{if(!bulkGenerateRun.running)setBulkGenerateModal(null);}}>
 	            <div className={`w-full max-w-2xl rounded-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
 	              <div className="flex items-start justify-between gap-4 mb-5">
 	                <div>
 	                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Geração em massa</p>
-	                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3">{isDestructiveBulk?<RotateCcw className="w-6 h-6"/>:<Zap className="w-6 h-6"/>}{operation.title}</h3>
+	                  <h3 className="text-2xl font-serif font-bold text-yellow-600 flex items-center gap-3">{isAuditBulk?<ShieldAlert className="w-6 h-6"/>:isDestructiveBulk?<RotateCcw className="w-6 h-6"/>:<Zap className="w-6 h-6"/>}{operation.title}</h3>
 	                </div>
 	                <button type="button" aria-label="Fechar" disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`p-2 rounded-lg disabled:opacity-30 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
 	              </div>
@@ -17864,12 +18205,41 @@ export default function QuestionBankApp() {
                       <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                       <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
                     </div>
+                    {isAdmin && !isAuditBulk && (
+                      <button type="button" onClick={()=>updateBulkConfig({auditQuestions:!cfg.auditQuestions})}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                        <div>
+                          <p className={`text-sm font-bold ${cfg.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                          <p className="text-xs opacity-50 mt-0.5">Segundo request após cada bloco para revisar qualidade e utilidade.</p>
+                        </div>
+                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                        </div>
+                      </button>
+                    )}
                   </div>
                 )}
                 {!isAcademiaBulk && !bulkGenerateRun.running && (
-                  <div className={`rounded-xl border p-4 mb-5 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                  <div className={`rounded-xl border p-4 mb-5 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                     <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
+                    {isAdmin && !isAuditBulk && (
+                      <button type="button" onClick={()=>updateBulkConfig({auditQuestions:!cfg.auditQuestions})}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                        <div>
+                          <p className={`text-sm font-bold ${cfg.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                          <p className="text-xs opacity-50 mt-0.5">Segundo request após cada bloco para revisar qualidade e utilidade.</p>
+                        </div>
+                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                        </div>
+                      </button>
+                    )}
+                    {isAuditBulk && (
+                      <div className={`rounded-xl border p-3 text-xs leading-relaxed ${darkMode?'border-yellow-800/50 bg-yellow-900/10 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+                        Este modo não gera do zero: ele audita as questões já existentes, remove itens fracos e reescreve o bloco.
+                      </div>
+                    )}
                   </div>
                 )}
 	              <div className={`rounded-xl border overflow-hidden mb-5 ${darkMode?'border-gray-700':'border-gray-200'}`}>
@@ -17908,11 +18278,12 @@ export default function QuestionBankApp() {
                         persist.numAlternatives = cfg.numAlternatives;
                       }
                       persist.geminiThinkingEnabled = !!cfg.geminiThinkingEnabled;
+                      persist.auditQuestions = !!cfg.auditQuestions;
                       if (Object.keys(persist).length) saveSettings({...settingsRef.current, ...persist});
                     }
                     closeOrStartBulk();
                   }} disabled={bulkGenerateRun.running || !subject} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
-	                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : isDestructiveBulk ? <RotateCcw className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
+	                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : isAuditBulk ? <ShieldAlert className="w-4 h-4"/> : isDestructiveBulk ? <RotateCcw className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
 	                  {bulkGenerateRun.running ? 'Rodando...' : pending.length ? operation.verb : 'Nada para fazer'}
 	                </button>
 	              </div>
