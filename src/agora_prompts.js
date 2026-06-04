@@ -264,9 +264,11 @@ Se NÃO houver lista obrigatória, defina mentalmente ${expectedSubtopics} eixos
 NÃO use quantidade fixa por subtópico:
 - Para cada subtópico/eixo, atomize o conteúdo em perguntas independentes de alto rendimento.
 - Gere a quantidade necessária para cobrir tudo que é relevante, cobrável e ainda não repetido.
-- Referência: 1 a 4 questões por subtópico costuma bastar; use mais apenas se houver muitos mecanismos, diagnósticos diferenciais, critérios, condutas ou pegadinhas realmente distintos.
+- Piso prático: gere pelo menos 2 questões por subtópico/eixo. Não encerre um subtópico com uma única cobrança óbvia.
+- Referência: 2 a 4 questões por subtópico costuma bastar; use 5 ou 6 quando houver muitos mecanismos, diagnósticos diferenciais, critérios, condutas, complicações ou pegadinhas realmente distintos.
+- Checklist obrigatório antes de finalizar cada subtópico: ideia central/definição; mecanismo ou fisiopatologia; achados/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável.
 - Não crie questões para encher volume. Não pergunte trivia inútil.
-- Pare quando os eixos relevantes estiverem cobertos sem redundância.`
+- Só pare depois de auditar que os eixos importantes foram cobrados sem lacunas e sem redundância.`
     : autoMode
     ? `
 ESTRUTURA (modo automático):

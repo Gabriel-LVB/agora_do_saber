@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -3442,7 +3442,7 @@ const QuestionView = ({
                     IA
                   </button>
                 </div>
-                <p className={`text-[11px] mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{questionCountAuto?'A IA atomiza cada subtópico e escolhe quantas questões valem a pena.':'Quantidade fixa para cada subtópico.'}</p>
+                <p className={`text-[11px] mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{questionCountAuto?'A IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.':'Quantidade fixa para cada subtópico.'}</p>
               </div>
               {['direct','vof','cespe'].includes(topicType || 'direct') && (
                 <div>
@@ -5936,6 +5936,35 @@ export default function QuestionBankApp() {
   const courseGlobalOrgPublishedRef = useRef(false);
   const courseCatalogControlRef = useRef({ paused:false, stop:false });
   const courseCatalogLogRef = useRef(null);
+  const videoMainScrollRef = useRef(null);
+
+  const scrollPageToTop = useCallback((behavior = 'smooth') => {
+    const scroll = () => {
+      window.scrollTo({ top:0, behavior });
+      if (videoMainScrollRef.current) {
+        videoMainScrollRef.current.scrollTo({ top:0, behavior });
+      }
+    };
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 80);
+  }, []);
+
+  const activeAulaScrollId = getAulaId(activeAula);
+  const vqAulaScrollId = getAulaId(vqAula);
+  useEffect(() => {
+    scrollPageToTop();
+  }, [
+    scrollPageToTop,
+    view,
+    activeSubjectId,
+    activeTopicId,
+    activeAulaScrollId,
+    vqAulaScrollId,
+    vqActiveBlockView?.blockId,
+    vqActiveBlockView?.cycleStage,
+    cursoTab,
+    quickStudyTab,
+  ]);
 
   useEffect(() => {
     const el = courseCatalogLogRef.current;
@@ -9912,7 +9941,7 @@ export default function QuestionBankApp() {
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
       : qPerSubAuto
-        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use quantidade fixa. Para cada subtópico/eixo, atomize tudo que é relevante, cobrável e ainda não repetido em questões independentes. Referência: 1 a 4 questões por subtópico; use mais só se houver muitos eixos realmente distintos. Não crie questão para encher volume.`
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use total fixo, mas também NÃO seja econômico. Para cada subtópico/eixo, gere pelo menos 2 questões independentes e atomize tudo que é relevante, cobrável e ainda não repetido. Referência: 2 a 4 questões por subtópico; use 5 ou 6 quando houver muitos mecanismos, critérios, diferenciais, condutas, complicações ou pegadinhas distintos. Checklist antes de finalizar: definição/ideia central; mecanismo ou fisiopatologia; manifestação/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável. Não crie questão para encher volume, mas não deixe subtópico importante com uma única cobrança.`
       : subtopicsArr.length > 0
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
         : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
@@ -9934,7 +9963,7 @@ export default function QuestionBankApp() {
     const altSuffix = hasFlashcardOnly
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
       : qPerSubAuto
-      ? `\n\nATENÇÃO FINAL: Gere a quantidade ideal de questões, sem total fixo. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
+      ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
@@ -10005,7 +10034,7 @@ export default function QuestionBankApp() {
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
       : qPerSubAuto
-        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use quantidade fixa. Para cada subtópico/eixo, atomize tudo que é relevante, cobrável e ainda não repetido em questões independentes. Referência: 1 a 4 questões por subtópico; use mais só se houver muitos eixos realmente distintos. Não crie questão para encher volume.`
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use total fixo, mas também NÃO seja econômico. Para cada subtópico/eixo, gere pelo menos 2 questões independentes e atomize tudo que é relevante, cobrável e ainda não repetido. Referência: 2 a 4 questões por subtópico; use 5 ou 6 quando houver muitos mecanismos, critérios, diferenciais, condutas, complicações ou pegadinhas distintos. Checklist antes de finalizar: definição/ideia central; mecanismo ou fisiopatologia; manifestação/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável. Não crie questão para encher volume, mas não deixe subtópico importante com uma única cobrança.`
       : subtopicsArr.length > 0
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
         : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
@@ -10031,7 +10060,7 @@ export default function QuestionBankApp() {
     const altSuffix = hasFlashcardOnly
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
       : qPerSubAuto
-      ? `\n\nATENÇÃO FINAL: Gere a quantidade ideal de questões, sem total fixo. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
+      ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
@@ -13029,14 +13058,14 @@ export default function QuestionBankApp() {
                     })}
                   </div>
                 </div>
-                <div className="relative">
+                <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base</div>
                   {uploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button type="button" aria-label={`Remover ${f.name}`} onClick={()=>setUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
                   {uploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button type="button" aria-label={`Remover imagem ${i + 1}`} onClick={()=>setUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-100 sm:opacity-0 sm:group-hover:opacity-100">×</button></div>)}</div>}
                   <textarea value={materialText} onChange={e=>setMaterialText(e.target.value)} placeholder="Insira textos base, anotações, transcrições..." className={`w-full h-48 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                  <div className="absolute bottom-4 right-4 flex gap-2">
-                    <button type="button" aria-label="Adicionar imagem" onClick={()=>imageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
-                    <button type="button" aria-label="Adicionar arquivo" onClick={()=>fileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button type="button" aria-label="Adicionar imagem" title="Adicionar imagem" onClick={()=>imageInputRef.current.click()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700"><ImageIcon className="w-4 h-4"/>Imagem</button>
+                    <button type="button" aria-label="Adicionar arquivo" title="Adicionar arquivo" onClick={()=>fileInputRef.current.click()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-600 text-white rounded-lg text-xs font-bold hover:bg-yellow-700"><FileUp className="w-4 h-4"/>Arquivo</button>
                   </div>
                   <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple className="hidden" accept=".txt,.md,.pdf,.doc,.docx"/>
                   <input type="file" ref={imageInputRef} onChange={handleImageUpload} multiple className="hidden" accept="image/*"/>
@@ -13098,7 +13127,7 @@ export default function QuestionBankApp() {
                     {(settings.questionTypes||[]).includes('flashcard')
                       ? 'Flashcards: a IA decide a quantidade ideal, sem meta fixa por subtópico.'
                       : settings.qPerSubAuto
-                      ? 'Questões/subtópico: a IA atomiza cada subtópico e escolhe a quantidade relevante, sem total fixo.'
+                      ? 'Questões/subtópico: a IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.'
                       : settings.autoMode
                       ? `O sumário fica automático; cada subtópico gerado terá ${settings.qPerSub||1} questão(ões).`
                       : `Total estimado: ${(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões`}
@@ -13195,16 +13224,16 @@ export default function QuestionBankApp() {
                 </div>
 
                 {/* Material */}
-                <div className="relative">
+                <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base <span className="opacity-60 normal-case font-normal">(quanto mais completo, melhor a aula)</span></div>
                   {academiaUploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button type="button" aria-label={`Remover ${f.name}`} onClick={()=>setAcademiaUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
                   {academiaUploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{academiaUploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button type="button" aria-label={`Remover imagem ${i + 1}`} onClick={()=>setAcademiaUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-100 sm:opacity-0 sm:group-hover:opacity-100">×</button></div>)}</div>}
                   <textarea value={academiaMaterialText} onChange={e=>setAcademiaMaterialText(e.target.value)} placeholder="Cole slides, transcrições, resumos, anotações..." className={`w-full h-48 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                  <div className="absolute bottom-4 right-4 flex gap-2">
-                    <button type="button" aria-label="Adicionar imagem" onClick={()=>academiaImageInputRef.current.click()} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><ImageIcon className="w-5 h-5"/></button>
-                    <button type="button" aria-label="Adicionar arquivo" onClick={()=>academiaFileInputRef.current.click()} className="p-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><FileUp className="w-5 h-5"/></button>
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button type="button" aria-label="Adicionar imagem" title="Adicionar imagem" onClick={()=>academiaImageInputRef.current.click()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700"><ImageIcon className="w-4 h-4"/>Imagem</button>
+                    <button type="button" aria-label="Adicionar arquivo" title="Adicionar arquivo" onClick={()=>academiaFileInputRef.current.click()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-600 text-white rounded-lg text-xs font-bold hover:bg-yellow-700"><FileUp className="w-4 h-4"/>Arquivo</button>
                   </div>
-	                  <input type="file" ref={academiaFileInputRef} onChange={async(e)=>{
+		                  <input type="file" ref={academiaFileInputRef} onChange={async(e)=>{
 	                    const files=Array.from(e.target.files||[]);
 	                    setIsUploading(true);
                     const loaded=[];
@@ -15262,7 +15291,7 @@ export default function QuestionBankApp() {
               </div>
 
               {/* ══ MAIN ══ */}
-              <div className="flex-1 overflow-y-auto" style={{height:'calc(100vh - 62px)'}}>
+              <div ref={videoMainScrollRef} className="flex-1 overflow-y-auto" style={{height:'calc(100vh - 62px)'}}>
                 {/* Mobile back bar */}
                 <div className={`flex items-center gap-2 px-3 py-2.5 md:hidden border-b flex-shrink-0 ${sideBorder} ${dm?'bg-gray-800':'bg-white'}`}>
                   <button onClick={()=>setView('library')} className={`p-1.5 rounded-lg ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
@@ -17551,7 +17580,7 @@ export default function QuestionBankApp() {
                         IA
                       </button>
                     </div>
-                    <p className="text-[11px] opacity-50 mt-1">{oracleRegenConfig.qPerSubAuto?'A IA atomiza cada subtópico e decide a quantidade relevante.':'Quantidade fixa para cada subtópico.'}</p>
+                    <p className="text-[11px] opacity-50 mt-1">{oracleRegenConfig.qPerSubAuto?'A IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.':'Quantidade fixa para cada subtópico.'}</p>
                   </div>
 
                   {['direct','vof','cespe'].includes((oracleRegenConfig.questionTypes || ['direct'])[0])&&(
