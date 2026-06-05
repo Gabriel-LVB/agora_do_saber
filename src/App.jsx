@@ -323,11 +323,48 @@ const cleanQuestionExplanation = (explanation = '') => {
   return exp;
 };
 
+const cleanStructuredExplanationPart = (text = '') => String(text || '')
+  .replace(/\r\n/g, '\n')
+  .replace(/^\s*(?:Aula|Alternativas)\s*:\s*/i, '')
+  .replace(/\n---.*$/s, '')
+  .trim();
+
+const parseQuestionExplanationParts = (explanation = '') => {
+  const raw = String(explanation || '').replace(/\r\n/g, '\n').trim();
+  if (!raw || !/\[\[ALT\s*:[A-E]\]\]/i.test(raw)) {
+    return { hasStructured:false, lesson:'', alternatives:{} };
+  }
+
+  const firstAlt = raw.search(/\[\[ALT\s*:[A-E]\]\]/i);
+  const beforeAlt = firstAlt >= 0 ? raw.substring(0, firstAlt) : raw;
+  const lessonMatch = beforeAlt.match(/(?:^|\n)\s*Aula\s*:\s*([\s\S]*?)(?:\n\s*Alternativas\s*:?\s*$|$)/i);
+  const lesson = cleanStructuredExplanationPart(lessonMatch?.[1] || beforeAlt);
+  const alternatives = {};
+  const altRe = /\[\[ALT\s*:([A-E])\]\]\s*([\s\S]*?)(?=\n\s*\[\[ALT\s*:[A-E]\]\]|$)/gi;
+  let m;
+  while ((m = altRe.exec(raw)) !== null) {
+    const letter = m[1].toUpperCase();
+    const body = cleanStructuredExplanationPart(m[2]);
+    if (body) alternatives[letter] = body;
+  }
+
+  return {
+    hasStructured:Object.keys(alternatives).length > 0,
+    lesson,
+    alternatives,
+  };
+};
+
 const getCorrectLetter = (question) => question?.options?.find(o => o.isCorrect)?.letter;
+const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze);
+const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
+const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
+const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
+const hasRegenerationInstruction = (text = '') => String(text || '').trim().length > 0;
 
 const isAnswerCorrect = (question, answer) => {
   if (!question || !answer || answer === 'SKIPPED') return false;
-  if (question.isFlashcard) return answer === FLASHCARD_CORRECT;
+  if (isMemoryCard(question)) return answer === FLASHCARD_CORRECT;
   if (question.isOpen) {
     try { return (JSON.parse(answer)?.score ?? 0) >= 70; } catch(e) { return false; }
   }
@@ -387,7 +424,8 @@ const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questi
   const total = Math.max(1, questions.length * perError);
   const type = (settings.questionTypes || ['direct'])[0] || 'direct';
   const typeInst = buildTypeInst([type]);
-  const isFlashcard = type === 'flashcard';
+  const isFlashcard = isMemoryCardType(type);
+  const isCloze = type === 'cloze';
   const styleInst = {
     clinical: 'Use enunciados clínicos quando isso ajudar a testar aplicação, com idade/sexo/contexto e achados relevantes.',
     direct: 'Use questões diretas, objetivas, sobre definição, mecanismo, classificação, diagnóstico, conduta ou complicação.',
@@ -416,11 +454,11 @@ Contexto do bloco original:
 
 Objetivo:
 ${isFlashcard
-  ? `Gerar uma bateria de flashcards de alto rendimento a partir das questões erradas listadas abaixo. Não use multiplicador fixo: crie apenas a quantidade necessária para cobrir os conceitos que explicam os erros, sem redundância.`
+  ? `Gerar uma bateria de ${isCloze ? 'clozes' : 'flashcards'} de alto rendimento a partir das questões erradas listadas abaixo. Não use multiplicador fixo: crie apenas a quantidade necessária para cobrir os conceitos que explicam os erros, sem redundância.`
   : `Gerar EXATAMENTE ${total} questões novas, sendo ${perError} questão(ões) para cada questão errada listada abaixo.`}
 ${isFlashcard ? `Para cada erro:
 1. Identifique o conceito que provavelmente causou o erro.
-2. Crie flashcards atômicos e autossuficientes sobre esse conceito, suas pegadinhas e diferenciações próximas.
+2. Crie ${isCloze ? 'clozes' : 'flashcards'} atômicos e autossuficientes sobre esse conceito, suas pegadinhas e diferenciações próximas.
 3. Não repita cartões sobre a mesma cobrança.` : `Para cada questão errada:
 1. A primeira questão deve cobrar o conceito central que provavelmente causou o erro.
 2. Se houver mais questões por erro, as seguintes devem cobrar variações, pegadinhas, aplicações clínicas ou diferenciações próximas.`}
@@ -434,12 +472,16 @@ REGRAS CRÍTICAS:
 
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
-${isFlashcard ? `FORMATO OBRIGATÓRIO:
+${isFlashcard ? (isCloze ? `FORMATO OBRIGATÓRIO:
+## Cloze N
+Texto: [frase curta com {{c1::termo oculto}}]
+Extra: [explicação curta do porquê/como do termo oculto]
+---` : `FORMATO OBRIGATÓRIO:
 ## Flashcard N
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [explicação didática completa o suficiente para revisar o tema]
----` : openMode ? `FORMATO OBRIGATÓRIO:
+Explicação: [explicação curta do porquê/como da resposta]
+---`) : openMode ? `FORMATO OBRIGATÓRIO:
 ## Questão N
 [Enunciado]
 Resposta esperada: [resposta]
@@ -454,7 +496,7 @@ Explicação: [por que a correta está certa e por que os distratores estão err
 QUESTÕES ERRADAS DO CADERNO:
 ${sourceQuestions}
 
-${isFlashcard ? 'Gere os flashcards sem interromper.' : `Gere TODAS as ${total} questões sem interromper.`}`;
+${isFlashcard ? `Gere os ${isCloze ? 'clozes' : 'flashcards'} sem interromper.` : `Gere TODAS as ${total} questões sem interromper.`}`;
 };
 
 const isLikelySyllabusGroupTitle = (subtopic = '') => {
@@ -1062,6 +1104,7 @@ const ankiFieldHtml = (value = '') => escapeXml(String(value || ''))
   .replace(/&lt;(\/?)(b|strong)&gt;/gi, '<$1b>')
   .replace(/&lt;(\/?)(i|em)&gt;/gi, '<$1i>');
 const ANKI_AGORA_MODEL = 'Ágora Flashcard v4';
+const ANKI_AGORA_CLOZE_MODEL = 'Ágora Cloze v1';
 const ANKI_AGORA_CSS = `
 .card {
   margin: 0;
@@ -1137,6 +1180,13 @@ const ANKI_AGORA_CSS = `
 .nightMode .agora-explain {
   color: #f3f4f6;
   border-top-color: #303a4c;
+}
+.cloze {
+  color: #a16207;
+  font-weight: 800;
+}
+.nightMode .cloze {
+  color: #fde68a;
 }
 @media (max-width: 520px) {
   .agora-card {
@@ -1356,11 +1406,12 @@ const parseData = (text, namespace = '') => {
         const after = block.substring(ansM.index + ansM[0].length).replace(/^\s*\n/,'').trim();
         if (after.length > 5) exp = after;
       }
-      exp = cleanQuestionExplanation(exp);
+      const structuredExp = parseQuestionExplanationParts(exp);
+      exp = cleanQuestionExplanation(structuredExp.hasStructured ? (structuredExp.lesson || exp) : exp);
 
       if (correct) {
-        const ctTxt = options.find(o => o.letter === correct)?.txt;
-        if (!ctTxt) return;
+        const correctOption = options.find(o => o.letter === correct);
+        if (!correctOption) return;
         // Seed usa o id completo (com namespace) para garantir embaralhamento consistente
         const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
         const seededShuffle = (arr) => {
@@ -1373,17 +1424,35 @@ const parseData = (text, namespace = '') => {
           return a;
         };
         // Shuffle distratores only, then insert correct at seed-determined position
-        const distractors = options.filter(o => o.txt !== ctTxt).map(o => o.txt);
+        const optionPayloads = options.map(o => ({
+          originalLetter:o.letter,
+          text:o.txt,
+          explanation:structuredExp.alternatives?.[o.letter] || '',
+          isCorrect:o.letter === correct,
+        }));
+        const distractors = optionPayloads.filter(o => !o.isCorrect);
         const shuffledDistractors = seededShuffle(distractors);
         // Position of correct answer: spread across all positions using seed
         const nOpts = options.length;
         const correctPos = Math.abs(seed * 2654435761) % nOpts; // well-distributed hash
         const withCorrect = [...shuffledDistractors];
-        withCorrect.splice(correctPos, 0, ctTxt);
-        const final = withCorrect.slice(0, nOpts).map((t, i) => ({ letter: 'ABCDE'[i], text: t, isCorrect: t === ctTxt }));
-        questions.push({ id, statement: stmt, options: final, explanation: exp });
+        withCorrect.splice(correctPos, 0, optionPayloads.find(o => o.isCorrect));
+        const final = withCorrect.slice(0, nOpts).map((o, i) => ({ ...o, letter: 'ABCDE'[i] }));
+        questions.push({
+          id,
+          statement: stmt,
+          options: final,
+          explanation: exp,
+          explanationParts: structuredExp.hasStructured ? { lesson:exp, alternatives:structuredExp.alternatives } : null,
+        });
       } else {
-        const final = options.map((o, i) => ({ letter: 'ABCDE'[i], text: o.txt, isCorrect: false }));
+        const final = options.map((o, i) => ({
+          letter: 'ABCDE'[i],
+          originalLetter:o.letter,
+          text: o.txt,
+          isCorrect: false,
+          explanation:structuredExp.alternatives?.[o.letter] || '',
+        }));
         questions.push({ id, statement: stmt, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)' });
       }
     } catch(e) {}
@@ -1501,6 +1570,55 @@ const parseFlashcards = (text, namespace='') => {
   return { questions, summary:'' };
 };
 
+const CLOZE_RE = /\{\{c\d+::([\s\S]*?)(?:::([^{}]*))?\}\}/g;
+const hasClozeMarkup = (text = '') => /\{\{c\d+::[\s\S]+?\}\}/i.test(String(text || ''));
+const clozeTextToPrompt = (text = '') => String(text || '').replace(CLOZE_RE, (_, answer, hint) => `[${hint?.trim() || '...'}]`).trim();
+const extractClozeAnswers = (text = '') => {
+  const answers = [];
+  String(text || '').replace(CLOZE_RE, (_, answer) => {
+    const clean = htmlishToText(answer).trim();
+    if (clean && !answers.includes(clean)) answers.push(clean);
+    return '';
+  });
+  return answers.join(' / ');
+};
+
+const parseClozeCards = (text, namespace='') => {
+  const norm = String(text || '').replace(/\r\n/g, '\n');
+  const questions = [];
+  let qCount = 0;
+  const blocks = norm
+    .split(/(?=(?:^|\n)[ \t]*(?:(?:\*\*|##)[ \t]*)?Cloze(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*Cloze\s+\d+)/im)
+    .filter(b => b.trim());
+
+  const sourceBlocks = blocks.length ? blocks : hasClozeMarkup(norm) ? norm.split(/\n---+\n?/).filter(Boolean) : [];
+  sourceBlocks.forEach(block => {
+    try {
+      const idM = block.match(/Cloze(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i);
+      const rawId = idM ? idM[1] : `${++qCount}`;
+      const id = namespace ? `${namespace}_${rawId}` : rawId;
+      const textM = block.match(/(?:Texto|Text|Frase):\s*([\s\S]*?)(?:\n(?:Extra|Explica[çc][aã]o|Notas(?:\/L[óo]gica)?):|\n---|$)/i);
+      const extraM = block.match(/(?:Extra|Explica[çc][aã]o|Notas(?:\/L[óo]gica)?):\s*([\s\S]*?)(?:\n---|$)/i);
+      const clozeText = (textM?.[1] || block.match(/(\{\{c\d+::[\s\S]+?\}\}[\s\S]*?)(?:\n---|$)/i)?.[1] || '').trim();
+      if (!hasClozeMarkup(clozeText)) return;
+      const expectedAnswer = extractClozeAnswers(clozeText);
+      if (!expectedAnswer) return;
+      questions.push({
+        id,
+        statement:clozeTextToPrompt(clozeText),
+        clozeText,
+        expectedAnswer,
+        explanation:cleanQuestionExplanation(extraM?.[1] || ''),
+        options:[],
+        isFlashcard:true,
+        isCloze:true,
+      });
+    } catch(e) {}
+  });
+
+  return { questions, summary:'' };
+};
+
 const stripLooseMarkdownAsterisks = (text = '') => {
   return String(text || '').replace(/\*/g, '');
 };
@@ -1592,6 +1710,13 @@ const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', 
     direct:'Prefira perguntas diretas sobre conceito, conduta, mecanismo ou critério.',
     mixed:'Misture casos clínicos curtos e perguntas diretas.',
   }[settings.questionStyle || 'mixed'];
+  const adminExplanationFormat = settings.adminQuestionExplanations ? `
+FORMATO ADMIN PARA EXPLICAÇÕES DAS QUESTÕES:
+- Separe a explicação em "Aula:" e "Alternativas:".
+- Aula: explique o conceito de modo suficiente para o aluno entender e acertar a questão.
+- Alternativas: use [[ALT:A]], [[ALT:B]], [[ALT:C]], [[ALT:D]] e [[ALT:E]] quando houver E.
+- Em [[ALT:A]], explique por que a correta está certa. Nas demais, explique o erro específico em poucas palavras.
+- A explicação da alternativa precisa ficar presa ao conteúdo dela, pois o site embaralha alternativa + explicação juntas.` : '';
   return `
 Você vai criar a parte ativa de uma Centelha do Saber em português brasileiro.
 
@@ -1621,18 +1746,25 @@ REGRAS DAS QUESTÕES:
 - Questões com alternativas devem ter exatamente ${Number(settings.numAlternatives || 5)} alternativas no formato:
 ${alts}
 - Depois de cada questão inclua "Gabarito: X" e "Explicação:".
+${adminExplanationFormat}
 
 REGRAS DOS FLASHCARDS:
 - Gere de 5 a 8 flashcards. Nunca gere menos de 5.
 - Crie somente a quantidade útil para memorizar a lacuna, sem pilha excessiva.
-- Cada flashcard deve ser atômico, autossuficiente e não redundante.
+- Cada flashcard deve ter um alvo claro de recuperação, ser autossuficiente e não redundante.
+- "Atômico" não significa separar tudo: agrupe 2 a 4 itens quando eles formam uma unidade natural, como principais efeitos adversos, monitorização obrigatória, tríade ou fármacos que compartilham uma interação.
+- Separe em cards diferentes quando os itens têm mecanismos, decisões ou explicações diferentes.
+- Se a pergunta disser "dois", "três", "(2)" ou "(3)", a resposta deve ter exatamente essa quantidade.
+- Não use "cite um" com resposta contendo várias opções. Se quer conjunto, pergunte o conjunto; se quer um exemplo, responda um exemplo.
 - Use dificuldade desejável: a pergunta deve exigir recuperação ativa, não reconhecimento passivo.
 - Zero ambiguidade: a pergunta deve ter contexto suficiente para uma única resposta justa.
 - Teste de previsibilidade: se uma pessoa que entendeu o tema não conseguir adivinhar o tipo exato de resposta esperada, reescreva a pergunta. Proibido fazer perguntas abertas genéricas como "O que é X?" quando a resposta seria "doença autoimune", "condição crônica" ou outra definição ampla.
-- Perguntas de definição só são permitidas se especificarem o eixo cobrado, por exemplo: "Na Síndrome de Sjögren, quais glândulas são classicamente atacadas?" em vez de "O que é Síndrome de Sjögren?".
+- Evite perguntas de sim/não; transforme em uma pergunta que peça a informação substantiva.
 - Toda pergunta deve terminar com ponto de interrogação.
-- Resposta curta, com no máximo poucas palavras.
-- Depois da resposta curta, a explicação deve funcionar como "Notas/Lógica": uma mini-aula curta com mecanismo, exemplo, exceção ou pegadinha.
+- Resposta curta: 1 a 6 palavras ou, em conjuntos naturais, 2 a 4 itens curtos.
+- Depois da resposta curta, a explicação deve ensinar por que aquela resposta é correta ou como ela acontece. Ela não pode repetir a resposta com mais palavras nem virar curso.
+- Se o card perguntar efeitos colaterais, a resposta lista os efeitos e a explicação diz por que eles ocorrem ou por que importam. Se perguntar uma escolha/conduta, a explicação diz qual propriedade do fármaco ou do quadro clínico justifica aquela opção.
+- Explicação ruim: "é usado porque é eficaz/primeira linha/indicado". Explicação boa: conecta fármaco/quadro clínico → propriedade relevante → motivo da resposta.
 - Não faça cartões que cobrem detalhes inúteis; faça cartões que, juntos, permitam revisar a dúvida inteira depois.
 
 FORMATO FINAL OBRIGATÓRIO:
@@ -1641,13 +1773,31 @@ FORMATO FINAL OBRIGATÓRIO:
 [enunciado]
 ${alts}
 Gabarito: A
-Explicação: [explicação]
+Explicação:${settings.adminQuestionExplanations ? `
+Aula:
+[aula curta e completa sobre o tema]
+
+Alternativas:
+[[ALT:A]]
+[por que a alternativa A está correta]
+
+[[ALT:B]]
+[por que a alternativa B está errada]
+
+[[ALT:C]]
+[por que a alternativa C está errada]
+
+[[ALT:D]]
+[por que a alternativa D está errada]
+
+[[ALT:E]]
+[por que a alternativa E está errada, se existir]` : ' [explicação]'}
 
 ## Flashcards
 ## Flashcard 1
 Pergunta: [pergunta objetiva e específica?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [Notas/Lógica em mini-aula curta]
+Explicação: [explicação curta do porquê/como da resposta]
 ---
 `.trim();
 };
@@ -1715,10 +1865,20 @@ const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) =>
     const p = parseFlashcards(text, namespace);
     allQuestions = [...allQuestions, ...p.questions];
   }
+  if (selectedTypes.includes('cloze')) {
+    const p = parseClozeCards(text, namespace);
+    allQuestions = [...allQuestions, ...p.questions];
+  }
   return { questions:allQuestions, summary:parseData(text).summary || '' };
 };
 
 const questionsToGenerationText = (questions = []) => questions.map((q, index) => {
+  if (q.isCloze) {
+    return `## Cloze ${index + 1}
+Texto: ${q.clozeText || q.statement || ''}
+Extra: ${q.explanation || ''}
+---`;
+  }
   if (q.isFlashcard) {
     return `## Flashcard ${index + 1}
 Pergunta: ${q.statement || ''}
@@ -1737,12 +1897,20 @@ Explicação: ${q.explanation || ''}
   const distractors = (q.options || []).filter(o => !o.isCorrect);
   const ordered = [correct, ...distractors].filter(Boolean).slice(0, 5);
   const options = ordered.map((opt, i) => `${'ABCDE'[i]}) ${opt.text || ''}`).join('\n');
+  const structuredExplanation = ordered.some(opt => opt?.explanation)
+    ? `Aula:
+${q.explanationParts?.lesson || q.explanation || ''}
+
+Alternativas:
+${ordered.map((opt, i) => `[[ALT:${'ABCDE'[i]}]]
+${opt.explanation || ''}`).join('\n\n')}`
+    : (q.explanation || '');
   return `## Questão ${index + 1}
 ${q.statement || ''}
 ${options}
 Alternativa correta: A
 Explicação:
-${q.explanation || ''}
+${structuredExplanation}
 ---`;
 }).join('\n\n');
 
@@ -2849,7 +3017,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           )}
 
           {/* Alternativas */}
-          {!questionTypes.includes('flashcard')&&<div>
+          {!questionTypes.some(isMemoryCardType)&&<div>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas por questão</label>
             <div className="flex gap-3">
               {[4,5].map(n=>(
@@ -2947,6 +3115,7 @@ const QuestionView = ({
   topicStyle=null, onTopicStyleChange=null,
   topicType=null,
   canCreateFlashcards=false,
+  adminQuestionExplanations=false,
   questionCountPerSub=1,
   questionCountAuto=false,
   numAlternatives=5,
@@ -3004,7 +3173,7 @@ const QuestionView = ({
 	    Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
 	  );
 	  const questionIdsKey = questions.map(q=>q.id).join('|');
-	  const allFlashcards = questions.length > 0 && questions.every(q => q.isFlashcard);
+	  const allFlashcards = questions.length > 0 && questions.every(q => isMemoryCard(q));
 	  const savedFlashcardAnswersKey = allFlashcards
 	    ? questions.map(q => `${q.id}:${answers?.[q.id] || ''}`).join('|')
 	    : '';
@@ -3061,7 +3230,7 @@ const QuestionView = ({
 
 	  const wrongIds = questions.filter(q => {
 	    if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
-	    if (q.isFlashcard) return validAnswers[q.id] === FLASHCARD_WRONG;
+	    if (isMemoryCard(q)) return validAnswers[q.id] === FLASHCARD_WRONG;
 	    return validAnswers[q.id] && !isAnswerCorrect(q, validAnswers[q.id]);
 	  }).map(q=>q.id);
 
@@ -3190,6 +3359,7 @@ const QuestionView = ({
 	        onToggleErrorNotebook={onToggleErrorNotebook ? ()=>onToggleErrorNotebook(q.id) : undefined}
 	        apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
 	        onOpenAnswer={onOpenAnswer}
+	        adminQuestionExplanations={adminQuestionExplanations}
 	        flashcardStudyMode={!!entry}
 	        flashcardLarge={allFlashcards}/>
 	    </div>
@@ -3457,7 +3627,7 @@ const QuestionView = ({
 	      {!isGenerating&&questions.length===0&&onGenerate&&onTopicStyleChange&&(
 	        <div className={`mb-6 p-4 rounded-xl border space-y-4 ${dm?'bg-gray-800/50 border-gray-700':'bg-gray-50 border-gray-200'}`}>
 	          {/* Quantidade */}
-	          {(topicType || 'direct') !== 'flashcard' && <div>
+	          {!isMemoryCardType(topicType || 'direct') && <div>
 	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Configuração das questões</p>
 	            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 	              <div>
@@ -3494,7 +3664,7 @@ const QuestionView = ({
 	            </div>
 	          </div>}
 	          {/* Estilo do enunciado */}
-	          {(topicType || 'direct') !== 'flashcard' && <div>
+	          {!isMemoryCardType(topicType || 'direct') && <div>
 	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
 	            <div className="flex gap-2">
 	              {[{k:'mixed',l:'Misto',d:'Clínico + Direto'},{k:'clinical',l:'Clínico',d:'Casos clínicos'},{k:'direct',l:'Direto',d:'Conceitos'}].map(o=>(
@@ -4202,6 +4372,7 @@ const QUESTION_TYPES = [
   { k: 'open',     label: '✏️ Aberta',        desc: 'Resposta curta corrigida pela IA' },
   { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
   { k: 'flashcard', label:'🃏 Flashcards',    desc: 'Pergunta, resposta e explicação', adminOnly:true },
+  { k: 'cloze',    label:'🧩 Cloze',           desc: 'Lacunas estilo AnKing/Anki', adminOnly:true },
 ];
 
 const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false }) => {
@@ -4353,7 +4524,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   useEffect(() => {
     setOptimisticNotebook(isInErrorNotebook);
@@ -4370,6 +4541,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
   const explanation = cleanQuestionExplanation(question.explanation);
+  const hasStructuredExplanations = !!(adminQuestionExplanations && question.explanationParts && (question.options || []).some(o => o.explanation));
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
     if (!onToggleErrorNotebook) return;
@@ -4391,7 +4563,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	    <div className={cardClass}>
 	      {!flashcardLarge&&<div className="flex items-center justify-between mb-4">
 	        <div className="flex items-center gap-2">
-	          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{question.isFlashcard ? 'Flashcard' : 'Questão'} {index + 1}</span>
+	          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{question.isCloze ? 'Cloze' : question.isFlashcard ? 'Flashcard' : 'Questão'} {index + 1}</span>
 	          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
 	        </div>
         <div className="flex items-center gap-2">
@@ -4455,7 +4627,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
           const isSelected = effectiveLetter===opt.letter;
-          let cls = "w-full text-left flex items-start p-3 md:p-4 rounded-lg border transition-colors focus:outline-none ";
+          let cls = "w-full text-left flex flex-col items-stretch p-3 md:p-4 rounded-lg border transition-colors focus:outline-none ";
           if (!isAnswered && !isSkipped || revealMode==='selected') {
             if (isSelected && revealMode==='selected') cls += darkMode?'border-blue-500 bg-blue-900/20 text-blue-100':'border-blue-400 bg-blue-50 text-blue-900';
             else cls += darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-yellow-500':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400';
@@ -4478,12 +4650,23 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           else if (showResults && !isSkipped && isSelected) letterBadge = 'bg-red-500 text-white';
           else if (showResults && isSkipped && opt.isCorrect) letterBadge = darkMode?'bg-green-800 text-green-300':'bg-green-100 text-green-700';
           else if (isSelected && revealMode==='selected') letterBadge = 'bg-blue-500 text-white';
+          const showOptionExplanation = !!(hasStructuredExplanations && showResults && !isSkipped && (opt.isCorrect || isSelected) && opt.explanation);
+          const optionExplanationTone = opt.isCorrect
+            ? (darkMode ? 'text-green-100' : 'text-green-900')
+            : (darkMode ? 'text-red-100' : 'text-red-900');
           const content = (
             <>
-              <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
-                {opt.letter}
+              <div className="flex items-start w-full">
+                <div className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
+                  {opt.letter}
+                </div>
+                <div className="pt-1 min-w-0 flex-1 leading-snug text-sm md:text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
               </div>
-              <div className="pt-1 min-w-0 flex-1 leading-snug text-sm md:text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
+              {showOptionExplanation && (
+                <div className={`mt-3 w-full text-sm md:text-base leading-relaxed select-text ${optionExplanationTone}`} style={{userSelect:'text'}}>
+                  {parseHtmlTextChat(opt.explanation)}
+                </div>
+              )}
             </>
           );
           return canClick ? (
@@ -4501,7 +4684,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       {showResults && (
         <div className={`mt-4 p-4 md:p-5 rounded-xl border ${darkMode?'bg-yellow-900/20 border-yellow-800/50 text-gray-200':'bg-yellow-50 border-yellow-200 text-gray-800'}`}>
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-bold text-yellow-600 flex items-center gap-2 uppercase text-sm"><BookOpen className="w-4 h-4"/>Sabedoria:</h4>
+            <h4 className="font-bold text-yellow-600 flex items-center gap-2 uppercase text-sm"><BookOpen className="w-4 h-4"/>{hasStructuredExplanations ? 'Aula sobre o tema:' : 'Sabedoria:'}</h4>
             {isCorrect
               ? <span className="text-xs text-green-600 font-bold">✓ Correto</span>
               : isSkipped
@@ -4509,7 +4692,27 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
                 : <span className="text-xs text-red-500 font-bold">✗ Incorreto</span>
             }
           </div>
-          <div className="text-base leading-relaxed select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(explanation)}</div>
+          <div className="text-base leading-relaxed select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(hasStructuredExplanations ? (question.explanationParts?.lesson || explanation) : explanation)}</div>
+          {hasStructuredExplanations && (
+            <div className={`mt-5 pt-4 border-t ${darkMode?'border-yellow-800/40':'border-yellow-200'}`}>
+              <h5 className={`text-xs font-bold uppercase tracking-wide mb-3 ${darkMode?'text-yellow-300/80':'text-yellow-700'}`}>Alternativas</h5>
+              <div className="space-y-4">
+                {(question.options || []).filter(opt => opt.explanation).map(opt => (
+                  <div key={`alt-exp-${opt.letter}`} className="select-text" style={{userSelect:'text'}}>
+                    <div className="flex items-start gap-2 text-sm md:text-base font-bold leading-snug">
+                      <span className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-xs ${opt.isCorrect ? 'bg-green-500 text-white' : effectiveLetter === opt.letter ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-white text-gray-600 border border-gray-200'}`}>
+                        {opt.letter}
+                      </span>
+                      <span className={`${darkMode?'text-gray-100':'text-gray-900'}`}>{parseHtmlTextChat(opt.text)}</span>
+                    </div>
+                    <div className={`mt-1 pl-8 text-sm md:text-base leading-relaxed ${opt.isCorrect ? (darkMode ? 'text-green-100' : 'text-green-900') : effectiveLetter === opt.letter ? (darkMode ? 'text-red-100' : 'text-red-900') : (darkMode ? 'text-gray-300' : 'text-gray-700')}`}>
+                      {parseHtmlTextChat(opt.explanation)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
         </div>
       )}
@@ -5232,9 +5435,10 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCrea
   });
   const [copied, setCopied] = useState(false);
   const hasClosedTypes = (cfg.questionTypes || ['direct']).some(t => ['direct','vof','cespe'].includes(t));
+  const isMemoryPrompt = (cfg.questionTypes || ['direct']).some(isMemoryCardType);
 
   const copy = () => {
-    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg});
+    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg, adminQuestionExplanations:!!canCreateFlashcards});
     navigator.clipboard.writeText(prompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -5289,10 +5493,14 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCrea
                 isAdmin={canCreateFlashcards}
               />
               <p className="text-[11px] opacity-45 mt-2 leading-relaxed">
-                Escolha o tipo do prompt. A importação aceita alternativas, V/F, CESPE, resposta curta, dissertativa e flashcards.
+                Escolha o tipo do prompt. A importação aceita alternativas, V/F, CESPE, resposta curta, dissertativa, flashcards e clozes.
               </p>
             </div>
-            <div className={`grid grid-cols-1 ${hasClosedTypes ? 'sm:grid-cols-2' : ''} gap-3`}>
+            {isMemoryPrompt ? (
+              <p className={`text-xs rounded-xl border px-3 py-2 ${dm?'border-yellow-800/50 bg-yellow-900/15 text-yellow-300':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+                {memoryCardTypeName(cfg.questionTypes)}: a IA decide a quantidade ideal, sem meta fixa por subtópico.
+              </p>
+            ) : <div className={`grid grid-cols-1 ${hasClosedTypes ? 'sm:grid-cols-2' : ''} gap-3`}>
               <div>
                 <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Itens/Subtópico</label>
                 <input type="number" min={1} max={10} value={cfg.qPerSub}
@@ -5310,7 +5518,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCrea
                   ))}
                 </div>
               </div>}
-            </div>
+            </div>}
           </div>
 
           {/* Estilo */}
@@ -5523,6 +5731,7 @@ function AcademiaTopicView({
         oracleLength={settings.oracleLength||'medium'}
         onCall={callWithRotation}
         onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
+        adminQuestionExplanations={isAdmin}
       />
     </div>
   );
@@ -8441,14 +8650,18 @@ export default function QuestionBankApp() {
     const insts = areas.map(id => FOCUS_AREAS.find(f=>f.id===id)?.inst).filter(Boolean);
     return insts.length ? `ÊNFASES OBRIGATÓRIAS:\n${insts.map(i=>`- ${i}`).join('\n')}` : '';
   };
+  const withAdminQuestionPromptSettings = (s = {}) => ({
+    ...s,
+    adminQuestionExplanations:!!isAdmin,
+  });
 
   const getPrompt = (forAPI=false, areas=[]) => {
-    const s = settingsRef.current;
+    const s = withAdminQuestionPromptSettings(settingsRef.current);
     const focusBlock = getFocusInst(areas);
     return buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
   };
 
-  const getExternalPrompt = () => buildExternalPrompt(settingsRef.current);
+  const getExternalPrompt = () => buildExternalPrompt(withAdminQuestionPromptSettings(settingsRef.current));
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleFileUpload = async (e) => {
@@ -8524,6 +8737,7 @@ export default function QuestionBankApp() {
   } = {}) => {
     if (!questions.length || (!force && !shouldAuditQuestions(auditSettings))) return { questions, audited:false };
     if (!isAdmin) return { questions, audited:false };
+    const effectiveAuditSettings = withAdminQuestionPromptSettings(auditSettings);
     const generatedText = questionsToGenerationText(questions);
     const prompt = buildQuestionAuditPrompt({
       subjectTitle,
@@ -8531,7 +8745,7 @@ export default function QuestionBankApp() {
       subtopics,
       sourceMaterials,
       generatedText,
-      settings:auditSettings,
+      settings:effectiveAuditSettings,
     });
     onProgress?.('Auditando qualidade...');
     if (toastId) updateToast(toastId, 'Auditando e corrigindo questões...', 'loading');
@@ -8543,10 +8757,10 @@ export default function QuestionBankApp() {
           'Você é auditor sênior de questões médicas. Seja rigoroso, técnico e alinhado à intenção do usuário. Responda apenas no formato pedido.',
           k,
           [],
-          { ...getGeminiOptions(auditSettings), maxTokens:12000 }
+          { ...getGeminiOptions(effectiveAuditSettings), maxTokens:12000 }
         );
         await rotateKey();
-        const parsed = parseGeneratedQuestionsByTypes(text, namespace, auditSettings.questionTypes || ['direct']);
+        const parsed = parseGeneratedQuestionsByTypes(text, namespace, effectiveAuditSettings.questionTypes || ['direct']);
         if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
         return { questions:parsed.questions, summary:parsed.summary || '', audited:true };
       } catch(e) {
@@ -8597,12 +8811,28 @@ export default function QuestionBankApp() {
 	    });
 	  };
 
+	  const ensureAgoraAnkiClozeModel = async () => {
+	    const models = await ankiConnect('modelNames');
+	    if (Array.isArray(models) && models.includes(ANKI_AGORA_CLOZE_MODEL)) return;
+	    await ankiConnect('createModel', {
+	      modelName:ANKI_AGORA_CLOZE_MODEL,
+	      inOrderFields:['Text', 'Extra', 'Source'],
+	      css:ANKI_AGORA_CSS,
+	      isCloze:true,
+	      cardTemplates:[{
+	        Name:'Cloze',
+	        Front:'<main class="agora-card"><section class="agora-front">{{cloze:Text}}</section></main>',
+	        Back:'<main class="agora-card"><section class="agora-front">{{cloze:Text}}</section>{{#Extra}}<section class="agora-explain">{{Extra}}</section>{{/Extra}}</main>',
+	      }],
+	    });
+	  };
+
 	  const exportFlashcardsToAnki = async ({ questions = [], title = 'Flashcards', subjectTitle = '', source = 'agora', deckTitle = '' }) => {
 	    if (!isAdmin) {
 	      addToast('Exportar para Anki é exclusivo do admin.', 'info', 3500);
 	      return;
 	    }
-	    const flashcards = (questions || []).filter(q => q.isFlashcard);
+	    const flashcards = (questions || []).filter(q => isMemoryCard(q));
 	    if (!flashcards.length) {
 	      addToast('Este bloco não tem flashcards para enviar ao Anki.', 'info', 3500);
 	      return;
@@ -8616,7 +8846,20 @@ export default function QuestionBankApp() {
 	      ankiHierTag('fonte', sourceTag),
 	      subjectTitle ? ankiHierTag('materia', subjectTitle) : null,
 	    ].filter(Boolean);
-	    const notes = flashcards.map(q => ({
+	    const notes = flashcards.map(q => q.isCloze ? ({
+	      deckName,
+	      modelName:ANKI_AGORA_CLOZE_MODEL,
+	      fields:{
+	        Text:ankiFieldHtml(q.clozeText || q.statement || ''),
+	        Extra:ankiFieldHtml(q.explanation || ''),
+	        Source:ankiFieldHtml(subjectTitle || source || 'Ágora'),
+	      },
+	      options:{
+	        allowDuplicate:false,
+	        duplicateScope:'collection',
+	      },
+	      tags:[...tags, 'cloze'],
+	    }) : ({
 	      deckName,
 	      modelName:ANKI_AGORA_MODEL,
 	      fields:{
@@ -8636,6 +8879,7 @@ export default function QuestionBankApp() {
 	    try {
 	      await ankiConnect('createDeck', { deck:deckName });
 	      await ensureAgoraAnkiModel();
+	      if (flashcards.some(q => q.isCloze)) await ensureAgoraAnkiClozeModel();
 	      let addable = notes.map((note, index) => ({ note, index, canAdd:true, error:null }));
 	      try {
 	        const details = await ankiConnect('canAddNotesWithErrorDetail', { notes });
@@ -9569,7 +9813,10 @@ export default function QuestionBankApp() {
     explanationLength:settingsRef.current.explanationLength || 'complete',
     questionStyle:settingsRef.current.questionStyle || 'mixed',
     questionTypes:settingsRef.current.questionTypes || ['direct'],
+    qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
+    qPerSubAuto:!!settingsRef.current.qPerSubAuto,
     numAlternatives:settingsRef.current.numAlternatives || 5,
+    adminQuestionExplanations:!!isAdmin,
     geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
     auditQuestions:!!settingsRef.current.auditQuestions,
     regenReason:'',
@@ -9762,7 +10009,7 @@ export default function QuestionBankApp() {
 
     const generateBlock = async (blockId, keySlot) => {
       const block = parsedBlocks[blockId];
-      const PROMPT = buildVqBlockPrompt(block, aulaData.meta, block.subtopics||[], block.transcriptSlice||'', alts);
+      const PROMPT = buildVqBlockPrompt(block, withAdminQuestionPromptSettings(aulaData.meta || {}), block.subtopics||[], block.transcriptSlice||'', alts);
       // Usa a chave designada; se falhar, rotaciona para a próxima tentativa manual.
       const keys = getOrderedKeys();
       const startIdx = keySlot % keys.length;
@@ -9858,7 +10105,7 @@ export default function QuestionBankApp() {
       mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos.',
     }[meta.questionStyle||'mixed'];
 
-    const PROMPT = buildVqBlockPrompt(block, meta, subtopicsArr, transcriptSlice, alts);
+    const PROMPT = buildVqBlockPrompt(block, withAdminQuestionPromptSettings(meta || {}), subtopicsArr, transcriptSlice, alts);
 
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false, err = null;
@@ -10145,11 +10392,12 @@ export default function QuestionBankApp() {
 
   const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress, settingsOverride=null } = {}) => {
     const originalTopic = topic || {};
+    const regenInstruction = String(addPrompt || '').trim();
     const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{}, questionAudit:null } : t) };
     await updateSubject(cleared);
     const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
 
-    const generationSettings = { ...settingsRef.current, ...(settingsOverride || {}) };
+    const generationSettings = withAdminQuestionPromptSettings({ ...settingsRef.current, ...(settingsOverride || {}) });
     const topicStyle = settingsOverride?.questionStyle || clearedTopic.questionStyle || generationSettings.questionStyle || 'mixed';
     const subtopicsArr = clearedTopic.subtopics?.filter(s => s.length > 0) || [];
     const oracleAutoMode = generationSettings.autoMode || false;
@@ -10166,9 +10414,9 @@ export default function QuestionBankApp() {
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
     const topicTypes = settingsOverride?.questionTypes || clearedTopic.questionTypes || generationSettings.questionTypes || ['direct'];
-    const flashcardOnly = topicTypes.length === 1 && topicTypes[0] === 'flashcard';
+    const flashcardOnly = isOnlyMemoryCardType(topicTypes);
     const subtopicsBlock = flashcardOnly
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
       : qPerSubAuto
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use total fixo, mas também NÃO seja econômico. Para cada subtópico/eixo, gere pelo menos 2 questões independentes e atomize tudo que é relevante, cobrável e ainda não repetido. Referência: 2 a 4 questões por subtópico; use 5 ou 6 quando houver muitos mecanismos, critérios, diferenciais, condutas, complicações ou pegadinhas distintos. Checklist antes de finalizar: definição/ideia central; mecanismo ou fisiopatologia; manifestação/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável. Não crie questão para encher volume, mas não deixe subtópico importante com uma única cobrança.`
       : subtopicsArr.length > 0
@@ -10188,19 +10436,21 @@ export default function QuestionBankApp() {
     const na = s.numAlternatives || 5;
     const types = s.questionTypes || ['direct'];
     const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
-    const hasFlashcardOnly = types.length === 1 && types[0] === 'flashcard';
+    const hasFlashcardOnly = isOnlyMemoryCardType(types);
     const altSuffix = hasFlashcardOnly
-      ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
+      ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas ${memoryCardTypeName(types)} no formato pedido, sem alternativas A/B/C/D.`
       : qPerSubAuto
       ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
-    const previousQuestions = summarizeQuestionsForPrompt(originalTopic.questions || []);
+    const previousQuestions = hasRegenerationInstruction(regenInstruction)
+      ? summarizeQuestionsForPrompt(originalTopic.questions || [])
+      : '';
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
       + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
-      + (addPrompt ? `\n\nFoco adicional: ${addPrompt}` : '')
+      + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
       + altSuffix;
 
     const orderedKeys = getTwoAttemptGeminiKeys();
@@ -10247,10 +10497,11 @@ export default function QuestionBankApp() {
     let mi=0;setLoadingMsg(LOADING_MSGS[0]);
     const mi_int=setInterval(()=>{mi=(mi+1)%LOADING_MSGS.length;setLoadingMsg(LOADING_MSGS[mi]);},8000);
     const sourceTopic = activeSubject?.topics?.find(t=>t.id===topicId) || {};
+    const regenInstruction = String(addPrompt || '').trim();
     const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{},questionAudit:null}:t)};
     await updateSubject(cleared);
     const topic=cleared.topics.find(t=>t.id===topicId);
-    const generationSettings = { ...settingsRef.current, ...(settingsOverride || {}) };
+    const generationSettings = withAdminQuestionPromptSettings({ ...settingsRef.current, ...(settingsOverride || {}) });
 
     // Estilo salvo no tópico tem prioridade sobre settings global
     const topicStyle = settingsOverride?.questionStyle || topic.questionStyle || generationSettings.questionStyle || 'mixed';
@@ -10270,9 +10521,9 @@ export default function QuestionBankApp() {
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
     const topicTypes = settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'];
-    const flashcardOnly = topicTypes.length === 1 && topicTypes[0] === 'flashcard';
+    const flashcardOnly = isOnlyMemoryCardType(topicTypes);
     const subtopicsBlock = flashcardOnly
-      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de flashcards, sem repetir a mesma ideia.`
+      ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
       : qPerSubAuto
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use total fixo, mas também NÃO seja econômico. Para cada subtópico/eixo, gere pelo menos 2 questões independentes e atomize tudo que é relevante, cobrável e ainda não repetido. Referência: 2 a 4 questões por subtópico; use 5 ou 6 quando houver muitos mecanismos, critérios, diferenciais, condutas, complicações ou pegadinhas distintos. Checklist antes de finalizar: definição/ideia central; mecanismo ou fisiopatologia; manifestação/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável. Não crie questão para encher volume, mas não deixe subtópico importante com uma única cobrança.`
       : subtopicsArr.length > 0
@@ -10296,20 +10547,22 @@ export default function QuestionBankApp() {
     const types = s.questionTypes || ['direct'];
     const hasClosed = types.some(t=>['direct','vof','cespe'].includes(t));
 
-    const hasFlashcardOnly = types.length === 1 && types[0] === 'flashcard';
+    const hasFlashcardOnly = isOnlyMemoryCardType(types);
     const altSuffix = hasFlashcardOnly
-      ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas flashcards no formato pedido, sem alternativas A/B/C/D.`
+      ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas ${memoryCardTypeName(types)} no formato pedido, sem alternativas A/B/C/D.`
       : qPerSubAuto
       ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
-    const previousQuestions = summarizeQuestionsForPrompt(sourceTopic.questions || []);
+    const previousQuestions = hasRegenerationInstruction(regenInstruction)
+      ? summarizeQuestionsForPrompt(sourceTopic.questions || [])
+      : '';
 
     const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
       + matInst + subtopicsBlock
       + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
-      + (addPrompt?`\n\nFoco adicional: ${addPrompt}`:'')
+      + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
       + altSuffix;
 
     const orderedKeys = getTwoAttemptGeminiKeys();
@@ -10457,10 +10710,10 @@ export default function QuestionBankApp() {
 
   // Paste import
   const handlePasteImport = async () => {
-    const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, ['direct','vof','cespe','open','essay','flashcard']);
-    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:'Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e flashcards, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:" ou alternativas A-E.',isAlert:true});return;}
+    const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, ['direct','vof','cespe','open','essay','flashcard','cloze']);
+    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:'Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas, flashcards e clozes, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:", "Texto:" com {{c1::...}} ou alternativas A-E.',isAlert:true});return;}
     const sn=pasteSubName.trim()||'Assunto Importado'; const tn=pasteTopic.trim()||`Bloco (${new Date().toLocaleDateString()})`;
-    const importedTypes = Array.from(new Set(parsed.questions.map(q => q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
+    const importedTypes = Array.from(new Set(parsed.questions.map(q => q.isCloze ? 'cloze' : q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
     const nt={id:`imp-${Date.now()}`,title:tn,questions:parsed.questions,summary:parsed.summary,answers:{},favorites:[],errorNotebook:[],spacedReview:{},questionTypes:importedTypes};
     let ts=library.find(s=>s.title.toLowerCase()===sn.toLowerCase()&&s.source==='external'&&s.id!=='imported-folder');
     if(ts){await updateSubject({...ts,topics:[...ts.topics,nt]});setActiveSubjectId(ts.id);}
@@ -10527,13 +10780,13 @@ export default function QuestionBankApp() {
     setQuickGenerating(true);
     const toastId = addToast(`Gerando ${QUICK_SUBJECT_TITLE}...`, 'loading', 0);
     const now = Date.now();
-    const s = {
+    const s = withAdminQuestionPromptSettings({
       ...settingsRef.current,
       questionTypes:['direct', 'flashcard'],
       questionStyle:settingsRef.current.questionStyle || 'mixed',
       numAlternatives:settingsRef.current.numAlternatives || 5,
       quickExplanationLength:settingsRef.current.quickExplanationLength || 'essential',
-    };
+    });
     const sys = `Você é a ${QUICK_SUBJECT_TITLE} da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.`;
     let lessonRaw = '';
     let practiceRaw = '';
@@ -10707,11 +10960,24 @@ export default function QuestionBankApp() {
       seen.add(key);
       return true;
     });
-    const all=unique.flatMap(({subject,topic})=>(topic.questions||[]).map(q=>({...q,_subjectId:subject.id,_topicId:topic.id,_subjectTitle:subject.title,_topicTitle:topic.title})));
-    const shuffled=all.sort(()=>Math.random()-.5).slice(0,Math.min(qCount,all.length));
-    setActiveExam({id:Date.now(),questions:shuffled,answers:{},timeLeft:time*60,finished:false,blindMode:examBlind});
+    const all=unique.flatMap(({subject,topic})=>(topic.questions||[]).map(q=>{
+      const correctText = (q.options || []).find(o=>o.isCorrect)?.text;
+      const options = correctText
+        ? shuffleList(q.options || []).map((opt,i)=>({...opt,letter:'ABCDE'[i],isCorrect:opt.text===correctText}))
+        : (q.options || []);
+      return {...q,options,_subjectId:subject.id,_topicId:topic.id,_subjectTitle:subject.title,_topicTitle:topic.title};
+    }));
+    const shuffled=shuffleList(all).slice(0,Math.min(qCount,all.length));
+    setActiveExam({id:Date.now(),questions:shuffled,answers:{},timeLeft:time*60,finished:false,blindMode:examBlind,currentIndex:0});
     setView('exam');
   };
+
+  const finishActiveExam = () => setActiveExam(p=>{
+    if (!p) return p;
+    const skipped = {};
+    p.questions.forEach(q=>{ if(!p.answers[q.id]) skipped[q.id]='SKIPPED'; });
+    return {...p, finished:true, answers:{...p.answers,...skipped}};
+  });
 
   const saveAccessWhitelists = async (courseEmails = allowedEmails, siteOnlyEmails = siteOnlyAllowedEmails) => {
     if (!isAdmin) return;
@@ -10959,7 +11225,7 @@ export default function QuestionBankApp() {
   // ── ACADEMIA: geração da aula ─────────────────────────────────────────────
 
   const generateAcademiaLessonForSubject = async (topic, subject, lessonSettings = {}, { onProgress } = {}) => {
-    const s = { ...settingsRef.current, ...lessonSettings };
+    const s = withAdminQuestionPromptSettings({ ...settingsRef.current, ...lessonSettings });
     const material = subject.sourceMaterials || '';
     const subtopics = topic.subtopics || [];
     const generationMode = s.generationMode || 'full';
@@ -11010,6 +11276,10 @@ export default function QuestionBankApp() {
     let fixQuestions = Object.values(fixationBySubtopic || {}).flat();
     if (shouldGenerateQuestions) {
       const fixationPlan = buildAcademiaFixationPlan(subtopics, lessonSections);
+      const regenInstruction = String(s.regenReason || '').trim();
+      const previousFixationQuestions = hasRegenerationInstruction(regenInstruction)
+        ? summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic))
+        : '';
 
       // Requisição B: questões de fixação da aula como um todo
       onProgress?.('Gerando questões de fixação...');
@@ -11019,7 +11289,7 @@ export default function QuestionBankApp() {
 	        s,
 	        lessonText,
 	        fixationPlan,
-	        summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic))
+	        previousFixationQuestions
 	      );
       let fixText = '';
       const orderedKeys2 = getOrderedKeys();
@@ -11166,6 +11436,8 @@ export default function QuestionBankApp() {
       explanationLength:bulkConfig.explanationLength,
       questionStyle:bulkConfig.questionStyle,
       questionTypes:bulkConfig.questionTypes,
+      qPerSub:bulkConfig.qPerSub,
+      qPerSubAuto:!!bulkConfig.qPerSubAuto,
       numAlternatives:bulkConfig.numAlternatives,
       geminiThinkingEnabled:!!bulkConfig.geminiThinkingEnabled,
       auditQuestions:['audit','auditMissing'].includes(mode) ? true : !!bulkConfig.auditQuestions,
@@ -11225,7 +11497,7 @@ export default function QuestionBankApp() {
                   auditSource:mode,
                 });
               } else {
-                result = await generateOracleTopicForSubject(workingSubject, topic, '', {
+                result = await generateOracleTopicForSubject(workingSubject, topic, operationSettings.regenReason || '', {
                   onProgress: count => {
                     if (count > 0) setStreamCount(count);
                   },
@@ -11478,7 +11750,7 @@ export default function QuestionBankApp() {
     if (!errorReviewModal || !checkKey()) return;
     setIsBusy(true);
     try {
-      const s = {
+      const s = withAdminQuestionPromptSettings({
         ...settingsRef.current,
         questionStyle:cfg.questionStyle,
         questionTypes:cfg.questionTypes,
@@ -11486,13 +11758,13 @@ export default function QuestionBankApp() {
         errorReviewPerQuestion:cfg.errorReviewPerQuestion,
         geminiThinkingEnabled:!!cfg.geminiThinkingEnabled,
         auditQuestions:!!cfg.auditQuestions,
-      };
+      });
       if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled || settingsRef.current.auditQuestions !== s.auditQuestions) {
         saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled, auditQuestions:s.auditQuestions});
       }
       const sourceQuestions = errorReviewModal.questions || [];
       const questionType = (s.questionTypes || ['direct'])[0];
-      const isFlashcardReview = questionType === 'flashcard';
+      const isFlashcardReview = isMemoryCardType(questionType);
       const perError = Math.max(1, Math.min(10, Number(s.errorReviewPerQuestion) || 2));
       const maxSourcePerRequest = isFlashcardReview
         ? 12
@@ -13269,6 +13541,7 @@ export default function QuestionBankApp() {
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
               topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
               canCreateFlashcards={canUseAdvancedFeatures}
+              adminQuestionExplanations={isAdmin}
               questionCountPerSub={settings.qPerSub||1}
               questionCountAuto={!!settings.qPerSubAuto}
               numAlternatives={settings.numAlternatives||5}
@@ -13446,7 +13719,7 @@ export default function QuestionBankApp() {
                       </div>
                     ))}
                   </div>
-                  {!(settings.questionTypes||[]).includes('flashcard')&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {!(settings.questionTypes||[]).some(isMemoryCardType)&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
                       <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -13470,8 +13743,8 @@ export default function QuestionBankApp() {
                     </div>
                   </div>}
                   <p className={`text-xs mt-2 opacity-40`}>
-                    {(settings.questionTypes||[]).includes('flashcard')
-                      ? 'Flashcards: a IA decide a quantidade ideal, sem meta fixa por subtópico.'
+                    {(settings.questionTypes||[]).some(isMemoryCardType)
+                      ? `${memoryCardTypeName(settings.questionTypes||[])}: a IA decide a quantidade ideal, sem meta fixa por subtópico.`
                       : settings.qPerSubAuto
                       ? 'Questões/subtópico: a IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.'
                       : settings.autoMode
@@ -13657,7 +13930,7 @@ export default function QuestionBankApp() {
                       darkMode={darkMode}
                     />
                   </div>
-                  {!(settings.questionTypes||[]).includes('flashcard')&&<div className="mt-3">
+                  {!(settings.questionTypes||[]).some(isMemoryCardType)&&<div className="mt-3">
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
                     <div className="flex gap-2">
                       {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(opt=>(
@@ -13940,7 +14213,7 @@ export default function QuestionBankApp() {
               )}
 
               {quickStudyTab==='questions'&&(directQs.length ? (
-                <QuestionView title="Questões da centelha" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={directQs} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} onExport={()=>setExportModal({topic:{...activeTopic, questions:directQs}, subject:activeSubject})} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
+                <QuestionView title="Questões da centelha" onBack={()=>setQuickStudyTab('lesson')} backLabel="Aula rápida" questions={directQs} answers={activeTopic.answers||{}} favorites={activeTopic.favorites||[]} onAnswer={(qId,l)=>handleAnswer(qId,l)} onToggleFavorite={(qId)=>handleFavorite(qId)} errorNotebook={activeTopic.errorNotebook||[]} showErrorNotebook={canUseAdvancedFeatures} onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)} onReset={()=>resetQuickSessionAnswers(activeTopic)} onExport={()=>setExportModal({topic:{...activeTopic, questions:directQs}, subject:activeSubject})} darkMode={dm} apiKey={getKey()} oracleLength={settings.oracleLength||'medium'} onCall={callWithRotation} onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})} displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'} adminQuestionExplanations={isAdmin} onAddToReview={canUseAdvancedFeatures ? ((qs, ans)=>setSrModal({aulaId:`lib_${activeSubject.id}`,blockId:`topic_${activeTopic.id}`,blockTitle:activeTopic.title,questions:qs,answers:ans,notebookIds:activeTopic.errorNotebook||[],meta:{source:QUICK_SOURCE,subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:QUICK_SUBJECT_TITLE,blockTitle:activeTopic.title}})) : null} inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}/>
               ) : <EmptyState darkMode={dm} icon={<FileText className="w-7 h-7"/>} title="Sem questões nesta centelha" message="Use os flashcards ou gere uma nova centelha com mais contexto."/>)}
 
               {quickStudyTab==='flashcards'&&(flashcards.length ? (
@@ -14062,6 +14335,7 @@ export default function QuestionBankApp() {
 	                      isInErrorNotebook={listHasId(topic.errorNotebook || [], question.id)}
 	                      onToggleErrorNotebook={()=>handleFavNotebook(subject,topic,question.id)}
 	                      apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
+	                      adminQuestionExplanations={isAdmin}
                     />
                   ))}
                 </div>
@@ -14155,6 +14429,7 @@ export default function QuestionBankApp() {
 	                  isFavorite={isReviewItemFavorite(item)}
 	                  onToggleFavorite={()=>toggleReviewFavorite(item)}
                   showErrorNotebook={false}
+                  adminQuestionExplanations={isAdmin}
 	                  apiKey={getKey()}
 	                  oracleLength={settings.oracleLength}
 	                  onCall={callWithRotation}
@@ -14635,6 +14910,7 @@ export default function QuestionBankApp() {
                             onToggleFavorite={()=>toggleReviewFavorite(item)}
                             showErrorNotebook={false}
                             apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
+                            adminQuestionExplanations={isAdmin}
                           />
                         ))}
                         {finished&&(
@@ -14690,6 +14966,7 @@ export default function QuestionBankApp() {
 	                        onToggleFavorite={()=>toggleReviewFavorite(item)}
 		                        showErrorNotebook={false}
 	                        apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
+	                        adminQuestionExplanations={isAdmin}
 	                      />
 	                      <div className="flex items-center justify-between gap-3 mt-4">
 	                        <button onClick={()=>setReviewSession(p=>({...p,index:Math.max(0,index-1)}))} disabled={index===0}
@@ -16151,6 +16428,7 @@ export default function QuestionBankApp() {
 	                    onCall={callWithRotation}
 	                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 		                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
+		                    adminQuestionExplanations={isAdmin}
 		                    onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 		                      questions:qs,
 		                      title:visibleTitle,
@@ -16668,21 +16946,22 @@ export default function QuestionBankApp() {
 
         {/* ── EXAM ── */}
         {view==='exam'&&activeExam&&(
+          (()=>{
+            const examSingleMode = canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'single';
+            const examIndex = Math.max(0, Math.min(activeExam.currentIndex || 0, activeExam.questions.length - 1));
+            const examQuestion = activeExam.questions[examIndex];
+            const answeredExamCount = Object.keys(activeExam.answers).length;
+            return (
           <div>
             <div className={`sticky top-16 z-10 mb-6 p-4 rounded-xl border flex items-center justify-between ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} shadow-md`}>
               <div>
                 <h2 className="font-serif font-bold text-yellow-600">Modo Prova{activeExam.blindMode?' (Cego)':''}</h2>
-                <p className="text-xs opacity-50">{Object.keys(activeExam.answers).length}/{activeExam.questions.length} respondidas</p>
+                <p className="text-xs opacity-50">{answeredExamCount}/{activeExam.questions.length} respondidas{examSingleMode&&!activeExam.finished?` · Questão ${examIndex + 1}/${activeExam.questions.length}`:''}</p>
               </div>
               <div className="flex items-center gap-3">
-                <div className="hidden sm:block w-28 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full" style={{width:`${Object.keys(activeExam.answers).length/activeExam.questions.length*100}%`}}/></div>
+                <div className="hidden sm:block w-28 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="bg-yellow-500 h-full" style={{width:`${answeredExamCount/activeExam.questions.length*100}%`}}/></div>
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-mono font-bold ${activeExam.timeLeft<300?(darkMode?'bg-red-900/30 text-red-400':'bg-red-50 text-red-600'):(darkMode?'bg-gray-700 text-gray-200':'bg-gray-100')}`}><Clock className="w-4 h-4"/>{formatTime(activeExam.timeLeft)}</div>
-                <button onClick={()=>setActiveExam(p=>{
-                  // Bug 5: mark unanswered questions as SKIPPED so they count as wrong
-                  const skipped = {};
-                  p.questions.forEach(q=>{ if(!p.answers[q.id]) skipped[q.id]='SKIPPED'; });
-                  return {...p, finished:true, answers:{...p.answers,...skipped}};
-                })} className="text-xs font-bold text-red-500 hover:text-red-600">Encerrar</button>
+                <button onClick={finishActiveExam} className="text-xs font-bold text-red-500 hover:text-red-600">Encerrar</button>
               </div>
             </div>
             {(activeExam.finished||activeExam.timeLeft<=0)?(
@@ -16734,7 +17013,8 @@ export default function QuestionBankApp() {
 	                              showErrorNotebook={canUseAdvancedFeatures}
 	                              isInErrorNotebook={isExamQuestionInNotebook(q)}
 	                              onToggleErrorNotebook={()=>handleExamNotebook(q)}
-	                              apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation} revealMode="revealed"/>
+	                              apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation} revealMode="revealed"
+	                              adminQuestionExplanations={isAdmin}/>
                           ))}
                         </div>
                       )}
@@ -16746,23 +17026,66 @@ export default function QuestionBankApp() {
             ):(
               <div>
                 {/* Bug 6: real favorite toggle using handleExamFavorite */}
-                {activeExam.questions.map((q,i)=>(
-                  <QuestionCard key={i} question={q} index={i}
-                    selectedLetter={activeExam.answers[q.id]==='SKIPPED'?undefined:activeExam.answers[q.id]}
-                    onAnswer={l=>{trackQuestionAnswered(`exam:${activeExam.id}:${q.id}`);setActiveExam(p=>({...p,answers:{...p.answers,[q.id]:l}}));}}
-                    darkMode={darkMode}
-	                    isFavorite={isExamQuestionFav(q)}
-	                    onToggleFavorite={()=>handleExamFavorite(q)}
-	                    showErrorNotebook={canUseAdvancedFeatures}
-	                    isInErrorNotebook={isExamQuestionInNotebook(q)}
-	                    onToggleErrorNotebook={()=>handleExamNotebook(q)}
-	                    apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
-                    revealMode={activeExam.blindMode?'selected':'normal'}
-                  />
-                ))}
+                {examSingleMode&&examQuestion ? (
+                  <div>
+                    <div className={`mobile-progress-row mb-4 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ${darkMode?'bg-gray-900':'bg-gray-50'}`}>
+                      <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Questão {examIndex + 1} de {activeExam.questions.length}</span>
+                      <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${darkMode?'bg-gray-800':'bg-gray-200'}`}>
+                        <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${activeExam.questions.length ? (answeredExamCount / activeExam.questions.length) * 100 : 0}%`}}/>
+                      </div>
+                      <span className={`text-xs font-bold tabular-nums ${darkMode?'text-gray-500':'text-gray-400'}`}>{answeredExamCount}/{activeExam.questions.length}</span>
+                    </div>
+                    <QuestionCard key={examQuestion.id} question={examQuestion} index={examIndex}
+                      selectedLetter={activeExam.answers[examQuestion.id]==='SKIPPED'?undefined:activeExam.answers[examQuestion.id]}
+                      onAnswer={l=>{trackQuestionAnswered(`exam:${activeExam.id}:${examQuestion.id}`);setActiveExam(p=>({...p,answers:{...p.answers,[examQuestion.id]:l}}));}}
+                      darkMode={darkMode}
+                      isFavorite={isExamQuestionFav(examQuestion)}
+                      onToggleFavorite={()=>handleExamFavorite(examQuestion)}
+                      showErrorNotebook={canUseAdvancedFeatures}
+                      isInErrorNotebook={isExamQuestionInNotebook(examQuestion)}
+                      onToggleErrorNotebook={()=>handleExamNotebook(examQuestion)}
+                      apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
+                      revealMode={activeExam.blindMode?'selected':'normal'}
+                      adminQuestionExplanations={isAdmin}
+                    />
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <button disabled={examIndex===0} onClick={()=>setActiveExam(p=>({...p,currentIndex:Math.max(0,(p.currentIndex||0)-1)}))}
+                        className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${examIndex===0?(darkMode?'border-gray-800 text-gray-700 bg-gray-900/40':'border-gray-100 text-gray-300 bg-gray-50'):(darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                        <ArrowLeft className="w-4 h-4"/>Voltar
+                      </button>
+                      {examIndex>=activeExam.questions.length-1 ? (
+                        <button onClick={finishActiveExam}
+                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}>
+                          <CheckIcon className="w-4 h-4"/>Concluir
+                        </button>
+                      ) : (
+                        <button onClick={()=>setActiveExam(p=>({...p,currentIndex:Math.min(p.questions.length-1,(p.currentIndex||0)+1)}))}
+                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}>
+                          Avançar<ChevronRight className="w-4 h-4"/>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : activeExam.questions.map((q,i)=>(
+                    <QuestionCard key={q.id || i} question={q} index={i}
+                      selectedLetter={activeExam.answers[q.id]==='SKIPPED'?undefined:activeExam.answers[q.id]}
+                      onAnswer={l=>{trackQuestionAnswered(`exam:${activeExam.id}:${q.id}`);setActiveExam(p=>({...p,answers:{...p.answers,[q.id]:l}}));}}
+                      darkMode={darkMode}
+                      isFavorite={isExamQuestionFav(q)}
+                      onToggleFavorite={()=>handleExamFavorite(q)}
+                      showErrorNotebook={canUseAdvancedFeatures}
+                      isInErrorNotebook={isExamQuestionInNotebook(q)}
+                      onToggleErrorNotebook={()=>handleExamNotebook(q)}
+                      apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
+                      revealMode={activeExam.blindMode?'selected':'normal'}
+                      adminQuestionExplanations={isAdmin}
+                    />
+                  ))}
               </div>
             )}
           </div>
+            );
+          })()
         )}
 
         {/* ── SETTINGS ── */}
@@ -17643,7 +17966,7 @@ export default function QuestionBankApp() {
         <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setErrorReviewModal(null)}>
           <div className={`w-full max-w-md rounded-2xl p-8 border overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
             {(()=>{
-              const isFlashcardReview = errorReviewQTypes.includes('flashcard');
+              const isFlashcardReview = errorReviewQTypes.some(isMemoryCardType);
               const estimatedTotal = errorReviewModal.questions.length * errorReviewPerQuestion;
               const batchSize = isFlashcardReview ? 12 : Math.max(1, Math.floor(ERROR_REVIEW_MAX_GENERATED_PER_REQUEST / Math.max(1, errorReviewPerQuestion)));
               const requestCount = Math.max(1, Math.ceil(errorReviewModal.questions.length / batchSize));
@@ -17657,7 +17980,7 @@ export default function QuestionBankApp() {
                 <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Caderno de erros</p>
                 <h3 className="text-xl font-serif font-bold text-yellow-600">Revisar caderno de erros</h3>
                 <p className="text-sm opacity-60 mt-1">
-                  {errorReviewModal.questions.length} {errorReviewModal.questions.length===1?'questão':'questões'} no caderno → {isFlashcardReview ? 'quantidade ideal de flashcards' : `${estimatedTotal} novas questões`}.
+                  {errorReviewModal.questions.length} {errorReviewModal.questions.length===1?'questão':'questões'} no caderno → {isFlashcardReview ? `quantidade ideal de ${memoryCardTypeName(errorReviewQTypes)}` : `${estimatedTotal} novas questões`}.
                 </p>
               </div>
             </div>
@@ -17684,7 +18007,7 @@ export default function QuestionBankApp() {
               )}
               {isFlashcardReview&&(
                 <div className={`p-3 rounded-xl text-xs leading-relaxed ${darkMode?'bg-yellow-900/20 text-yellow-200 border border-yellow-800/40':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-                  Flashcards não usam quantidade fixa. O Oráculo decide o menor conjunto útil; se houver muito erro, roda em {requestCount} lote{requestCount!==1?'s':''}.
+                  {memoryCardTypeName(errorReviewQTypes)} não usam quantidade fixa. O Oráculo decide o menor conjunto útil; se houver muito erro, roda em {requestCount} lote{requestCount!==1?'s':''}.
                 </div>
               )}
               {errorReviewQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
@@ -17839,7 +18162,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
               )}
-              {!academiaRegenQTypes.includes('flashcard')&&<div>
+              {!academiaRegenQTypes.some(isMemoryCardType)&&<div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                 <div className="flex gap-2">
                   {[4,5].map(n=>(
@@ -17918,7 +18241,7 @@ export default function QuestionBankApp() {
                   </div>
                 </div>
               )}
-              {!academiaExtraQTypes.includes('flashcard')&&<div>
+              {!academiaExtraQTypes.some(isMemoryCardType)&&<div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                 <div className="flex gap-2">
                   {[4,5].map(n=>(
@@ -17990,7 +18313,7 @@ export default function QuestionBankApp() {
                 />
               </div>
 
-              {!(oracleRegenConfig.questionTypes || []).includes('flashcard')&&(
+              {!(oracleRegenConfig.questionTypes || []).some(isMemoryCardType)&&(
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões/Subtópico</label>
@@ -18228,12 +18551,14 @@ export default function QuestionBankApp() {
           const operation = getBulkOperationMeta(mode, subject?.source);
 	        const pending = getBulkGenerateTargets(subject, mode);
 	        const isAcademiaBulk = subject?.source === 'academia';
+	        const isOracleBulk = subject?.source === 'gemini';
 	        const keyCount = getConfiguredGeminiKeys(settingsRef.current).length;
 	        const closeOrStartBulk = pending.length ? startBulkGenerate : (() => setBulkGenerateModal(null));
           const cfg = bulkGenerateModal.config || getDefaultBulkConfig(mode);
           const updateBulkConfig = (patch) => setBulkGenerateModal(p=>({...p, config:{...(p?.config||{}), ...patch}}));
           const showsLessonConfig = isAcademiaBulk && ['generate','regenAll','regenLesson'].includes(mode);
           const showsQuestionConfig = isAcademiaBulk && ['generate','extra','regenAll','regenQuestions'].includes(mode);
+          const showsOracleQuestionConfig = isOracleBulk && ['generate','regenQuestions'].includes(mode);
           const isAuditBulk = ['audit','auditMissing'].includes(mode);
           const isDestructiveBulk = ['regenAll','regenLesson','regenQuestions','audit','auditMissing'].includes(mode);
 	        return (
@@ -18286,7 +18611,7 @@ export default function QuestionBankApp() {
                         </div>
                       </div>
                     )}
-                    {showsQuestionConfig && !(cfg.questionTypes || []).includes('flashcard') && (
+                    {showsQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
                         <div className="flex gap-2">
@@ -18319,6 +18644,67 @@ export default function QuestionBankApp() {
                 )}
                 {!isAcademiaBulk && !bulkGenerateRun.running && (
                   <div className={`rounded-xl border p-4 mb-5 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                    {showsOracleQuestionConfig && isDestructiveBulk && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Instrução extra <span className="normal-case font-normal opacity-70">(opcional)</span></div>
+                        <textarea value={cfg.regenReason || ''} onChange={e=>updateBulkConfig({regenReason:e.target.value})}
+                          placeholder="Opcional: deixe mais difícil, mude o foco, evite um tipo de questão..."
+                          className={`w-full h-20 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}/>
+                      </div>
+                    )}
+                    {showsOracleQuestionConfig && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
+                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+                      </div>
+                    )}
+                    {showsOracleQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões/Subtópico</div>
+                        <div className="grid grid-cols-[1fr_auto] gap-2">
+                          <input type="number" min="1" max="10" value={cfg.qPerSub || 1}
+                            disabled={!!cfg.qPerSubAuto}
+                            onChange={e=>updateBulkConfig({qPerSub:Math.max(1,Math.min(10,parseInt(e.target.value,10)||1))})}
+                            className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                          <button type="button" onClick={()=>updateBulkConfig({qPerSubAuto:!cfg.qPerSubAuto})}
+                            className={`px-4 rounded-xl border-2 text-xs font-bold transition-all ${cfg.qPerSubAuto?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                            IA
+                          </button>
+                        </div>
+                        <p className="text-[11px] opacity-50 mt-1">{cfg.qPerSubAuto?'A IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.':'Quantidade fixa para cada subtópico.'}</p>
+                      </div>
+                    )}
+                    {showsOracleQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
+                            <button key={opt.k} onClick={()=>updateBulkConfig({questionStyle:opt.k})}
+                              className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {showsOracleQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
+                      <div>
+                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                        <div className="flex gap-2">
+                          {[4,5].map(n=>(
+                            <button key={n} onClick={()=>updateBulkConfig({numAlternatives:n})}
+                              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.numAlternatives)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                              {n} (A-{n===4?'D':'E'})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {showsOracleQuestionConfig && (cfg.questionTypes || []).some(isMemoryCardType) && (
+                      <div className={`rounded-xl border p-3 text-xs leading-relaxed ${darkMode?'border-yellow-800/50 bg-yellow-900/10 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+                        {memoryCardTypeName(cfg.questionTypes || [])}: a IA decide a quantidade ideal, sem meta fixa por subtópico.
+                      </div>
+                    )}
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                     <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
                     {isAdmin && !isAuditBulk && (
@@ -18373,6 +18759,13 @@ export default function QuestionBankApp() {
                       if (isAcademiaBulk && showsQuestionConfig) {
                         persist.questionStyle = cfg.questionStyle;
                         persist.questionTypes = cfg.questionTypes;
+                        persist.numAlternatives = cfg.numAlternatives;
+                      }
+                      if (showsOracleQuestionConfig) {
+                        persist.questionStyle = cfg.questionStyle;
+                        persist.questionTypes = cfg.questionTypes;
+                        persist.qPerSub = cfg.qPerSub;
+                        persist.qPerSubAuto = !!cfg.qPerSubAuto;
                         persist.numAlternatives = cfg.numAlternatives;
                       }
                       persist.geminiThinkingEnabled = !!cfg.geminiThinkingEnabled;

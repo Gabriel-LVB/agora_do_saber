@@ -73,32 +73,90 @@ NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa corr
   flashcard: `
 TIPO: FLASHCARD
 Crie flashcards em português do Brasil como especialista em educação médica, residência e neurociência da aprendizagem.
-OBJETIVO: os cartões devem servir como revisão ativa de longo prazo no estilo AnKing: se o aluno fizer os flashcards, deve conseguir reconstruir os conceitos centrais do conteúdo sem reler a aula.
+OBJETIVO: os cartões devem ensinar por recuperação ativa. O aluno deve tentar responder, errar se não souber, ler a explicação e pensar "agora entendi"; na próxima revisão, deve conseguir responder.
 QUANTIDADE: não use quantidade fixa. Gere o menor conjunto útil que preserve cobertura de alto rendimento. Para caderno de erros, lacunas declaradas pelo usuário ou conteúdo explicitamente marcado como crítico, trate tudo como lacuna importante e não omita pontos acionáveis.
-REGRAS CRÍTICAS:
-- Cada flashcard deve ser indivisível, autossuficiente e cobrar apenas uma ideia clínica/conceitual.
-- Use dificuldade desejável: force recuperação ativa. Evite pistas óbvias no enunciado que permitam acertar por familiaridade.
-- Zero ambiguidade: a pergunta precisa ter contexto suficiente para uma única resposta justa. A falha deve ser de memória/raciocínio, nunca de interpretação.
-- Teste de previsibilidade: antes de aceitar um cartão, pergunte "um aluno que sabe o tema conseguiria prever exatamente o tipo de resposta esperada?". Se não, reescreva.
-- Evite perguntas abertas genéricas como "O que é X?", "Defina X" ou "Qual a principal característica de X?" quando a resposta puder ser ampla demais. Prefira cobrar um eixo específico: alvo anatômico, mecanismo, manifestação clássica, anticorpo, conduta, complicação ou diferencial.
-- Respostas genéricas como "doença autoimune crônica", "processo inflamatório" ou "condição multifatorial" são proibidas, salvo se a pergunta pedir exatamente essa classificação e trouxer contexto suficiente.
-- PROIBIDO cartão de bom senso genérico que qualquer pessoa acertaria sem estudar, como "reavaliar necessidade", "monitorar paciente", "tratar a causa", "orientar adesão", "psicoeducação", "simplificar o regime", "revisar medicamentos", "desprescrever fármacos desnecessários" ou "encaminhar se grave", salvo se exigir uma decisão médica específica, critério objetivo, mecanismo, efeito adverso concreto ou diferencial real.
-- PROIBIDO cartão cujo enunciado pergunte "qual princípio", "qual estratégia geral", "como otimizar", "qual medida inicial para reduzir riscos" ou variações, quando a resposta for conselho universal aplicável a quase qualquer paciente.
-- Teste de serventia: se acertar o cartão não melhora desempenho em prova, decisão prática real ou compreensão causal de outro conceito, exclua ou reescreva. "Parece útil" não basta.
-- Quando o material do usuário pedir um foco específico, obedeça esse foco de forma literal. Não substitua uma solicitação específica por princípios amplos, conselhos gerais ou tópicos administrativos.
+PRINCÍPIO DE GRANULARIDADE:
+- "Atômico" não significa separar tudo em cards minúsculos. Significa que o aluno sabe exatamente o que precisa recuperar.
+- Agrupe itens quando eles formam uma unidade natural de prova ou prática, como "3 efeitos adversos que mais limitam o uso", "monitorização obrigatória", "tríade clássica" ou "fármacos que aumentam lítio". Nesses casos, o conjunto curto é uma única memória.
+- Separe em cards diferentes quando os itens têm usos, mecanismos, decisões ou explicações diferentes e seriam estudados melhor isoladamente.
+- Não crie três cards fracos para três efeitos adversos se um card bom perguntando "quais 3 principais efeitos adversos?" resolve melhor. Crie cards separados apenas para efeitos que exigem mecanismo, conduta ou pegadinha própria.
+- Listas são permitidas se forem curtas, fechadas e úteis. Limite normal: 2 a 4 itens. Nunca peça lista aberta.
+
+REGRAS DA PERGUNTA:
+- Frente curta, direta e previsível. Prefira 6 a 18 palavras, mas inclua contexto suficiente para uma única resposta justa.
 - Toda pergunta deve terminar com ponto de interrogação.
-- A resposta curta deve ter no máximo poucas palavras. Se a resposta ficaria longa, divida em cartões menores.
-- Depois da resposta curta, inclua uma explicação didática como "Notas/Lógica": mecanismo, justificativa, exemplo, exceção ou pegadinha em mini-aula curta.
-- A explicação NÃO pode apenas repetir a resposta com mais palavras. Ela deve explicar por que aquilo é verdade, como acontece, quando muda a conduta, qual armadilha evita ou qual contraste próximo confunde o aluno.
-- Não repita cartões sobre a mesma cobrança, mesmo que o conteúdo reapareça.
-- Evite perguntas "sim/não" e decorebas inúteis. Priorize mecanismo, diagnóstico, conduta, diferenciais, complicações graves/cobradas e armadilhas de prova.
-- Para listas: crie primeiro um cartão macro com categorias; depois atomize. Não peça listas longas. Se pedir uma lista, indique a quantidade entre parênteses e limite a no máximo 4 itens.
-- Antes de finalizar, faça uma auditoria mental: há redundância? faltou algum conceito essencial? algum cartão cobra detalhe baixo rendimento? corrija.
+- Evite começar muitos cartões com "Qual a principal indicação/característica/conduta". Varie a formulação e deixe claro o alvo da memória.
+- Evite perguntas abertas genéricas como "O que é X?", "Defina X" ou "Qual a principal característica de X?" quando a resposta puder ser ampla demais.
+- Evite perguntas de sim/não. Em vez de "Lamotrigina trata mania aguda?", prefira "Lamotrigina: em qual fase bipolar ela é fraca/ineficaz?".
+- PROIBIDO "cite um efeito adverso" com resposta contendo várias opções. Se quer um exemplo, a resposta deve ter um exemplo; se quer o conjunto, pergunte o conjunto.
+- Se a pergunta disser "dois", "três", "(2)" ou "(3)", a resposta deve ter exatamente essa quantidade. Nunca peça 2 e responda 3.
+- Não use "ou" na resposta salvo quando a pergunta pedir explicitamente alternativas equivalentes. Preferencialmente escolha um conjunto fixo ou divida o card.
+- Use dificuldade desejável: force recuperação ativa sem entregar a resposta por familiaridade, gramática, tamanho ou pista semântica.
+- Zero ambiguidade: a falha deve ser de memória/raciocínio, nunca de interpretação.
+
+REGRAS DA RESPOSTA:
+- A resposta deve ser o alvo de memória, não uma explicação.
+- Ideal: 1 a 6 palavras. Para conjuntos naturais, use 2 a 4 itens curtos separados por vírgula.
+- Respostas genéricas como "conduta adequada", "monitorar", "avaliar risco-benefício", "doença crônica" ou "processo multifatorial" são proibidas, salvo se a pergunta pedir exatamente essa classificação com contexto técnico.
+- PROIBIDO cartão de bom senso genérico que qualquer pessoa acertaria sem estudar, como "reavaliar necessidade", "monitorar paciente", "tratar a causa", "orientar adesão", "psicoeducação", "simplificar o regime", "revisar medicamentos", "desprescrever fármacos desnecessários" ou "encaminhar se grave", salvo se exigir conhecimento técnico específico.
+- PROIBIDO cartão cujo enunciado pergunte "qual princípio", "qual estratégia geral", "como otimizar", "qual medida inicial para reduzir riscos" ou variações, quando a resposta for conselho universal aplicável a quase qualquer paciente.
+
+REGRAS DA EXPLICAÇÃO:
+- O campo Explicação existe para quando o aluno não sabe a resposta. Ele deve explicar por que a resposta é aquela ou como ela acontece, sem virar aula completa.
+- A Explicação NÃO pode repetir a resposta com mais palavras. Ela deve acrescentar entendimento causal, funcional ou discriminativo diretamente ligado à pergunta.
+- Se o card pergunta efeitos colaterais, a resposta lista os efeitos e a explicação diz por que eles ocorrem ou por que importam.
+- Se o card pergunta uma conduta, indicação ou escolha de fármaco, a explicação diz qual propriedade do fármaco ou do quadro clínico justifica a escolha. Não basta dizer que é "primeira linha", "eficaz", "preferido" ou "indicado".
+- Se o card pergunta uma interação, contraindicação ou risco, a explicação mostra a cadeia causal do problema.
+- Se o card pergunta uma definição/classificação, a explicação mostra o critério que diferencia isso de algo parecido.
+- Não use a explicação para despejar teoria, histórico, listas, "curso" ou informações que não ajudem a entender a resposta daquele card.
+- Tamanho da explicação: normalmente 2 a 4 frases curtas. Pode ser 1 frase se ela realmente explicar; pode passar disso apenas se for necessário para entender a resposta.
+- Teste de reprovação: se a explicação só trocar a resposta por sinônimos, listar a resposta de novo, ou disser apenas "é usado porque é eficaz/primeira linha", ela está ruim.
+- Exemplo ruim:
+Pergunta: Quais indicações do valproato no bipolar I?
+Resposta: Mania aguda, episódios mistos, ciclagem rápida.
+Explicação: O valproato é primeira linha para mania e episódios mistos, sendo útil na ciclagem rápida.
+- Exemplo bom:
+Pergunta: Valproato no bipolar I: em quais quadros ele é especialmente útil?
+Resposta: Mania, episódios mistos, ciclagem rápida.
+Explicação: O valproato tem efeito antimaníaco robusto e costuma funcionar melhor que opções mais "limpas" quando há quadro misto ou instabilidade frequente. A utilidade vem do perfil amplo de estabilização, não apenas de ser um anticonvulsivante.
+
+REGRAS DE COBERTURA E QUALIDADE:
+- Teste de serventia: se acertar o cartão não melhora desempenho em prova, decisão prática real ou compreensão causal de outro conceito, exclua ou reescreva.
+- Quando o material do usuário pedir um foco específico, obedeça esse foco de forma literal. Não substitua uma solicitação específica por princípios amplos, conselhos gerais ou tópicos administrativos.
+- Não repita a mesma memória com outra frase. Exemplo ruim: um card "lítio reduz suicídio" e outro "benefício único do lítio: redução do suicídio".
+- Cubra o essencial antes de detalhes. Não faça card sobre detalhe periférico enquanto faltam escolhas, riscos, mecanismos, apresentações ou comparações centrais do tópico.
+- Antes de finalizar, audite: há pergunta pedindo N e resposta com quantidade diferente? há resposta com "ou" vago? há duplicação? há atomização burra? há card genérico? corrija.
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Flashcard N
 Pergunta: [pergunta curta e objetiva?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [Notas/Lógica: aula breve sobre o conceito, com mecanismo, exemplos, exceções ou pegadinhas relevantes]
+Explicação: [explicação curta do porquê/como da resposta, sem virar aula]
+---`,
+
+  cloze: `
+TIPO: FLASHCARD CLOZE DELETION
+Crie flashcards cloze deletion em português do Brasil, no estilo AnKing.
+OBJETIVO: transformar fatos de alto rendimento em frases curtas com uma lacuna testável, usando o formato nativo do Anki. O aluno deve recuperar o termo oculto e, no Extra, entender por que ele é a resposta.
+REGRAS CRÍTICAS:
+- Use sintaxe Anki real: {{c1::resposta}} ou, quando ajudar, {{c1::resposta::dica curta}}.
+- Cada bloco deve ter um alvo claro de recuperação. Se houver duas lacunas independentes com raciocínios diferentes, crie dois Clozes separados.
+- Se o fato é uma lista curta que funciona como unidade natural, use uma lacuna única com o conjunto completo: {{c1::item A, item B e item C}}.
+- Preferência forte: use sempre c1 em cada nota, para manter um cartão por nota e evitar cartões irmãos desnecessários.
+- A frase deve ser curta, natural e autossuficiente. O aluno deve entender o contexto sem ler uma explicação antes.
+- Cloze bom não é frase copiada do material: reescreva como afirmação testável, curta e com contexto suficiente.
+- A parte ocultada deve ser pequena: 1 a 6 palavras. Não oculte parágrafos, listas longas ou frases inteiras.
+- Para conjuntos naturais, a parte ocultada pode ter 2 a 4 itens curtos. Não crie c1, c2 e c3 para uma lista que deve ser lembrada como bloco.
+- Evite lacunas óbvias por gramática. A frase não pode entregar a resposta por concordância, tamanho, oposição simplória ou pistas semânticas.
+- Proibido cartão de bom senso genérico: adesão, psicoeducação, revisar medicação, desprescrever, monitorar, avaliar risco-benefício, otimizar tratamento ou condutas universais, salvo se houver critério/fármaco/mecanismo específico.
+- Cada cloze deve ser testável em prova ou útil na vida real. Se não muda desempenho em prova, decisão clínica ou compreensão causal, exclua.
+- O campo Extra é explicação, não curso: explique por que o termo oculto pertence ali ou como ele produz o efeito perguntado.
+- O Extra NÃO pode apenas repetir a frase cloze com mais palavras. Se o cloze cobra efeito colateral, explique o motivo do efeito; se cobra escolha/conduta, explique a propriedade que justifica a escolha; se cobra risco/interação, explique a cadeia causal.
+- Tamanho do Extra: normalmente 2 a 4 frases curtas, só o necessário para a resposta fazer sentido.
+- Antes de finalizar, audite: lacuna previsível? quantidade exata? lista curta agrupada quando deveria? lista longa dividida quando deveria? duplicação? card óbvio? corrija.
+FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
+## Cloze N
+Texto: [frase curta com {{c1::termo oculto}}]
+Extra: [explicação curta do porquê/como do termo oculto, sem virar aula]
 ---`,
 };
 
@@ -115,7 +173,25 @@ const QUESTION_TYPE_LABELS = {
   open: 'Resposta Curta (aberta)',
   essay: 'Dissertativa',
   flashcard: 'Flashcards',
+  cloze: 'Flashcards Cloze',
 };
+
+const isFlashcardType = (type) => type === 'flashcard' || type === 'cloze';
+const onlyMemoryCards = (types = []) => types.length === 1 && isFlashcardType(types[0]);
+const onlyClozeCards = (types = []) => types.length === 1 && types[0] === 'cloze';
+const memoryCardName = (types = []) => onlyClozeCards(types) ? 'clozes' : 'flashcards';
+const memoryCardFormat = (types = []) => onlyClozeCards(types) ? `
+FORMATO OBRIGATÓRIO:
+## Cloze 1
+Texto: [frase curta com {{c1::termo oculto}}]
+Extra: [explicação curta do porquê/como do termo oculto]
+---` : `
+FORMATO OBRIGATÓRIO:
+## Flashcard 1
+Pergunta: [pergunta objetiva?]
+Resposta: [resposta curta]
+Explicação: [explicação curta do porquê/como da resposta]
+---`;
 
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE casos clínicos reais: paciente com idade/sexo/contexto apresenta sinais e sintomas específicos. Nunca mencione exames ou diagnóstico no enunciado se a questão pede justamente isso.',
@@ -186,6 +262,42 @@ As alternativas serão EMBARALHADAS antes de serem exibidas ao aluno — as letr
 JAMAIS escreva "a alternativa A", "a opção B", "a letra C" na explicação.
 Refira-se SEMPRE pelo conteúdo: "a opção que menciona X", "confundir Y com Z é um erro comum pois..."`;
 
+const REGRAS_EXPLICACAO_ADMIN = `
+REGRAS DA EXPLICAÇÃO — FORMATO ADMIN EXPERIMENTAL:
+- Separe a explicação em duas partes obrigatórias: "Aula:" e "Alternativas:".
+- "Aula:" deve ensinar o assunto da questão antes de falar do gabarito. Se o aluno lesse essa aula antes da questão, deveria entender o conceito e conseguir acertar.
+- A aula deve explicar mecanismo, raciocínio clínico, critério, exceção ou comparação central. Não repita o enunciado nem diga apenas que a alternativa correta está certa.
+- "Alternativas:" deve explicar cada alternativa em poucas palavras, uma por bloco, usando a marcação exata [[ALT:A]], [[ALT:B]], [[ALT:C]], [[ALT:D]] e [[ALT:E]] quando houver E.
+- Em [[ALT:A]], explique por que a alternativa correta está certa.
+- Em cada alternativa errada, explique o erro conceitual específico: por que aquilo parece plausível e por que não responde à questão.
+- A explicação de cada alternativa deve ficar presa ao conteúdo daquela alternativa, porque o site vai embaralhar alternativa + explicação juntas.
+- Como a alternativa A é sempre a correta no texto bruto, [[ALT:A]] deve ser a explicação da correta antes do embaralhamento.
+- Não use parágrafos genéricos como "está errada porque não é a conduta correta". Diga o erro de conteúdo.
+- Tamanho: Aula com 2 a 5 parágrafos objetivos; cada [[ALT:X]] com 1 a 3 frases curtas.
+
+FORMATO OBRIGATÓRIO DA EXPLICAÇÃO:
+Explicação:
+Aula:
+[aula curta e completa sobre o tema da questão]
+
+Alternativas:
+[[ALT:A]]
+[por que a alternativa A está correta]
+
+[[ALT:B]]
+[por que a alternativa B está errada]
+
+[[ALT:C]]
+[por que a alternativa C está errada]
+
+[[ALT:D]]
+[por que a alternativa D está errada]
+
+[[ALT:E]]
+[por que a alternativa E está errada, se existir]`;
+
+const questionExplanationRules = (settings = {}) => settings.adminQuestionExplanations ? REGRAS_EXPLICACAO_ADMIN : REGRAS_EXPLICACAO;
+
 const ACADEMIA_LESSON_LENGTH_RULES = {
   essential: `
 PROFUNDIDADE DA AULA: Nível 1
@@ -225,14 +337,31 @@ Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isola
 Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`
 };
 
-const TEMPLATE_QUESTAO = (alts) => `
+const TEMPLATE_QUESTAO = (alts, adminQuestionExplanations = false) => `
 FORMATO OBRIGATÓRIO (uma questão por bloco ---):
 ## Questão 1.1.1
 [Enunciado]
 ${alts}
 Alternativa correta: [Letra]
 Explicação:
-[Explicação]
+${adminQuestionExplanations ? `Aula:
+[aula curta e completa sobre o tema]
+
+Alternativas:
+[[ALT:A]]
+[por que a alternativa A está correta]
+
+[[ALT:B]]
+[por que a alternativa B está errada]
+
+[[ALT:C]]
+[por que a alternativa C está errada]
+
+[[ALT:D]]
+[por que a alternativa D está errada]
+
+[[ALT:E]]
+[por que a alternativa E está errada, se existir]` : '[Explicação]'}
 ---
 
 INSTRUÇÃO CRÍTICA SOBRE AS ALTERNATIVAS:
@@ -277,20 +406,17 @@ export const buildQuestionAuditPrompt = ({
   settings = {},
 }) => {
   const types = settings.questionTypes || ['direct'];
-  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyFlashcards = onlyMemoryCards(types);
   const onlyOpen = types.every(t => ['open', 'essay'].includes(t));
   const na = settings.numAlternatives || 5;
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
   const typeInst = buildTypeInst(types);
+  const adminExplanations = !!settings.adminQuestionExplanations;
   const outputFormat = onlyFlashcards ? `
 FORMATO DE SAÍDA OBRIGATÓRIO:
-## Flashcard N
-Pergunta: [pergunta objetiva?]
-Resposta: [resposta curta, poucas palavras]
-Explicação: [Notas/Lógica: explicação útil e específica]
----` : onlyOpen ? `
+${memoryCardFormat(types).trim().replace('## Flashcard 1', '## Flashcard N').replace('## Cloze 1', '## Cloze N')}` : onlyOpen ? `
 FORMATO DE SAÍDA OBRIGATÓRIO:
 ## Questão N
 [Enunciado]
@@ -303,7 +429,24 @@ FORMATO DE SAÍDA OBRIGATÓRIO:
 ${alts}
 Alternativa correta: A
 Explicação:
-[Explicação didática sem referir letras]
+${adminExplanations ? `Aula:
+[aula curta e completa sobre o tema]
+
+Alternativas:
+[[ALT:A]]
+[por que a alternativa A está correta]
+
+[[ALT:B]]
+[por que a alternativa B está errada]
+
+[[ALT:C]]
+[por que a alternativa C está errada]
+
+[[ALT:D]]
+[por que a alternativa D está errada]
+
+[[ALT:E]]
+[por que a alternativa E está errada, se existir]` : '[Explicação didática sem referir letras]'}
 ---`;
 
   return `Você é o auditor sênior de questões médicas da Ágora do Saber. Sua tarefa é fazer um SEGUNDO PASSE rigoroso sobre uma bateria recém-criada e devolver apenas a versão final corrigida.
@@ -330,14 +473,22 @@ REGRAS DE CORREÇÃO:
 - Adicione itens somente se a cobertura do tópico/subtópicos estiver insuficiente. Não adicione para inflar volume.
 - Se o usuário pediu foco específico, toda a bateria deve respeitar esse foco. Não troque o pedido por princípios amplos, adesão, polifarmácia, revisão de medicação ou recomendações administrativas.
 - Para questões fechadas, coloque SEMPRE a correta como A porque o site embaralha depois. Faça B/C/D/E plausíveis, parecidas em tamanho e categoria.
-- Para flashcards, mantenha perguntas específicas, respostas curtas e explicações que ensinem o porquê.
-- Reescreva explicações que apenas repitam o gabarito. A explicação deve trazer mecanismo, cadeia causal, contraste com uma alternativa próxima, exceção, critério ou consequência prática.
+- Para flashcards/clozes, mantenha cobranças específicas, atômicas, respostas/lacunas curtas e explicações que ensinem o porquê/como daquela resposta.
+- Reescreva explicações que apenas repitam o gabarito. A explicação deve fazer a resposta ficar compreensível para quem errou, sem virar aula.
+- Reprove explicações que digam apenas "é primeira linha", "é eficaz", "é preferido" ou "é indicado" sem explicar a propriedade, mecanismo, perfil clínico ou razão prática que justifica isso.
+- Em cards de indicação/conduta farmacológica, a explicação deve conectar fármaco/quadro clínico → propriedade relevante → por que isso responde à pergunta.
+- Corrija qualquer flashcard que peça "dois/três/(2)/(3)" e entregue quantidade diferente na resposta.
+- Corrija respostas com "X, Y ou Z" quando a pergunta não pedir explicitamente opções equivalentes; escolha um conjunto fechado ou divida o card.
+- Corrija atomização burra: efeitos adversos, sintomas, monitorização ou interações que formam um conjunto curto e natural devem virar um card de lista curta, não vários cards fracos.
+- Corrija listas abertas: "cite um" não pode ter várias respostas; "quais" deve indicar uma lista curta, fechada e realmente útil.
+- Remova duplicações semânticas, mesmo quando a redação muda. Se dois cards cobram o mesmo fato, preserve o melhor e exclua o outro.
+- Reescreva perguntas de sim/não como perguntas de recuperação ativa com resposta substantiva.
 - Preserve o idioma em português do Brasil.
 
 ${typeInst ? `${typeInst}\n` : ''}
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
-${onlyFlashcards ? '' : REGRAS_EXPLICACAO}
+${onlyFlashcards ? '' : questionExplanationRules(settings)}
 ${outputFormat}
 
 BATERIA A AUDITAR:
@@ -359,14 +510,14 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const expectedQPerSub = Math.max(1, Number(s.qPerSub) || 1);
   const expectedTotal = expectedSubtopics * expectedQPerSub;
   const types = s.questionTypes || ['direct'];
-  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyFlashcards = onlyMemoryCards(types);
   const autoQuestionCount = !!s.qPerSubAuto && !onlyFlashcards;
 
   const estruturaInst = onlyFlashcards
     ? `
-ESTRUTURA PARA FLASHCARDS:
+ESTRUTURA PARA ${onlyClozeCards(types) ? 'CLOZES' : 'FLASHCARDS'}:
 - Cubra os subtópicos/conceitos obrigatórios quando eles forem fornecidos.
-- Não use meta numérica fixa. Crie apenas flashcards de alto rendimento, sem redundância.
+- Não use meta numérica fixa. Crie apenas ${memoryCardName(types)} de alto rendimento, sem redundância.
 - Priorize conceitos cobrados, esquecíveis, diferenciadores, testáveis em prova ou úteis na vida real.
 - Corte cartões de conselho geral, adesão, polifarmácia, risco-benefício, "otimização" e "revisão terapêutica" quando a resposta não exigir conhecimento técnico específico.
 - O conjunto final deve permitir revisar o conteúdo essencial sem reler o material. Não omita mecanismo, conduta, diagnóstico, diferencial ou pegadinha central quando forem parte do tópico.`
@@ -409,26 +560,23 @@ ESTRUTURA OBRIGATÓRIA:
 
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const onlyOpen = types.every(t => ['open','essay'].includes(t));
+  const explanationInst = questionExplanationRules(s);
 
   const templateBlock = onlyFlashcards ? `
-FORMATO OBRIGATÓRIO para cada flashcard (separe com ---):
-## Flashcard 1
-Pergunta: [pergunta objetiva?]
-Resposta: [resposta curta]
-Explicação: [Notas/Lógica: explicação/aula breve]
----
+FORMATO OBRIGATÓRIO para cada ${onlyClozeCards(types) ? 'cloze' : 'flashcard'} (separe com ---):
+${memoryCardFormat(types).trim()}
 
 REGRA DE QUANTIDADE:
 - Ignore qualquer quantidade fixa citada em outras seções.
-- Gere a quantidade ideal de flashcards para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.
-- Faça perguntas específicas, de recuperação ativa, com resposta curta e explicação em "Notas/Lógica".
-- Não aceite flashcard que só ensine conduta óbvia, conselho geral ou princípio administrativo.` : onlyOpen ? `
+- Gere a quantidade ideal de ${memoryCardName(types)} para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.
+- Faça cobranças específicas, de recuperação ativa, com resposta/lacuna curta e explicação real do porquê/como da resposta.
+- Não aceite cartão que só ensine conduta óbvia, conselho geral ou princípio administrativo.` : onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ## Questão 1.1.1
 [Enunciado]
 Resposta esperada: [resposta objetiva]
 Explicação: [explicação didática]
----` : `${REGRAS_ALTERNATIVAS}\n${REGRAS_EXPLICACAO}\n${TEMPLATE_QUESTAO(alts)}`;
+---` : `${REGRAS_ALTERNATIVAS}\n${explanationInst}\n${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}`;
 
   return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
 
@@ -438,9 +586,9 @@ ${typeInst ? typeInst + '\n' : ''}${estruturaInst}
 ${REGRAS_ENUNCIADO}
 ${templateBlock}
 
-${onlyFlashcards ? 'Use o ID no formato sequencial simples (ex: ## Flashcard 1, ## Flashcard 2).' : 'Use o ID no formato TOPICO.SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 3.2.1).'}
+${onlyFlashcards ? `Use o ID no formato sequencial simples (ex: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2).` : 'Use o ID no formato TOPICO.SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 3.2.1).'}
 ${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` : ''}
-${onlyFlashcards ? 'Gere os flashcards sem interromper. Não resuma, não pergunte, não comente — apenas flashcards.' : 'Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.'}`;
+${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper. Não resuma, não pergunte, não comente — apenas ${memoryCardName(types)}.` : 'Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.'}`;
 };
 
 // ─── PROMPT: SUMÁRIO DO ORÁCULO ───────────────────────────────────────────────
@@ -562,8 +710,9 @@ export const buildExternalPrompt = (s) => {
   const qPerSub = Math.max(1, Number(s.qPerSub) || 1);
   const types = s.questionTypes || ['direct'];
   const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
-  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyFlashcards = onlyMemoryCards(types);
   const typeInst = buildTypeInst(types);
+  const explanationInst = questionExplanationRules(s);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -581,13 +730,13 @@ Responda APENAS o sumário. Aguarde a confirmação antes de gerar questões.`;
 
   const parte2 = s.autoMode
     ? `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere ${onlyFlashcards ? 'a quantidade ideal de flashcards, sem meta fixa' : `${qPerSub} item(ns) por subtópico (total = subtópicos daquele tópico × ${qPerSub})`}.`
+Para cada tópico gere ${onlyFlashcards ? `a quantidade ideal de ${memoryCardName(types)}, sem meta fixa` : `${qPerSub} item(ns) por subtópico (total = subtópicos daquele tópico × ${qPerSub})`}.`
     : `*** PARTE 2: GERAÇÃO (um tópico por vez) ***
-Para cada tópico gere ${onlyFlashcards ? 'a quantidade ideal de flashcards, sem meta fixa' : `${s.numSubtopics * qPerSub} item(ns) (${s.numSubtopics} subtópicos × ${qPerSub} por subtópico)`}.`;
+Para cada tópico gere ${onlyFlashcards ? `a quantidade ideal de ${memoryCardName(types)}, sem meta fixa` : `${s.numSubtopics * qPerSub} item(ns) (${s.numSubtopics} subtópicos × ${qPerSub} por subtópico)`}.`;
 
   const closedBlock = hasClosed ? `
 FORMATO PARA QUESTÕES COM ALTERNATIVAS:
-${TEMPLATE_QUESTAO(alts)}` : '';
+${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}` : '';
 
   return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]
 
@@ -602,7 +751,7 @@ ${typeInst ? `${typeInst}\n` : ''}
 ESTILO: ${STYLE_INST[s.questionStyle || 'mixed']}
 ${REGRAS_ENUNCIADO}
 ${hasClosed ? REGRAS_ALTERNATIVAS : ''}
-${hasClosed ? REGRAS_EXPLICACAO : ''}
+${hasClosed ? explanationInst : ''}
 ${closedBlock}
 
 REGRAS DE IMPORTAÇÃO NO ÁGORA:
@@ -611,6 +760,7 @@ REGRAS DE IMPORTAÇÃO NO ÁGORA:
 - Resposta curta deve usar "Resposta esperada:" e "Explicação:", sem alternativas.
 - Dissertativa deve usar "Resposta esperada:" e "Explicação:"; se possível, escreva "Tipo: Dissertativa" no bloco para o Ágora identificar.
 - Flashcards devem usar exatamente "## Flashcard N", "Pergunta:", "Resposta:" e "Explicação:".
+- Clozes devem usar exatamente "## Cloze N", "Texto:" com {{c1::...}} e "Extra:".
 - Não coloque comentários fora dos blocos de itens, porque vou colar a resposta diretamente no importador do Ágora.`;
 };
 
@@ -670,8 +820,9 @@ export const buildVqBlockPrompt = (block, meta, subtopicsArr, transcriptSlice, a
   const styleInst = STYLE_INST[meta.questionStyle || 'mixed'];
   const total = subtopicsArr.length || meta.qPerBlock || 5;
   const types = meta.questionTypes || ['direct'];
-  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyFlashcards = onlyMemoryCards(types);
   const typeInst = buildTypeInst(types);
+  const explanationInst = questionExplanationRules(meta);
 
   return `Você é um examinador de residência médica criando questões sobre "${block.title}" (aula: ${meta.aulaTitle}).
 
@@ -681,24 +832,19 @@ ${typeInst ? `${typeInst}\n` : ''}
 SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-${onlyFlashcards ? 'QUANTIDADE: a IA deve decidir a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com perguntas específicas e explicação em Notas/Lógica. Corte cartões de conselho geral e mantenha só itens testáveis em prova ou úteis na vida real.' : `TOTAL: EXATAMENTE ${total} questões.`}
+${onlyFlashcards ? `QUANTIDADE: a IA deve decidir a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com cobranças específicas e explicações que ensinem o porquê/como da resposta. Corte cartões de conselho geral e mantenha só itens testáveis em prova ou úteis na vida real.` : `TOTAL: EXATAMENTE ${total} questões.`}
 ${REGRAS_ENUNCIADO}
-${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
-## Flashcard 1
-Pergunta: [pergunta objetiva?]
-Resposta: [resposta curta]
-Explicação: [Notas/Lógica: explicação/aula breve]
----` : `${REGRAS_ALTERNATIVAS}
-${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}`}
+${onlyFlashcards ? memoryCardFormat(types) : `${REGRAS_ALTERNATIVAS}
+${explanationInst}
+${TEMPLATE_QUESTAO(alts, !!meta.adminQuestionExplanations)}`}
 
-Use o ID como número sequencial simples (${onlyFlashcards ? 'Flashcard 1, Flashcard 2...' : '1, 2, 3...'}).
+Use o ID como número sequencial simples (${onlyFlashcards ? `${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : '1, 2, 3...'}).
 
 ${transcriptSlice
   ? `REFERÊNCIA DO CONTEÚDO (trecho da aula):\n${transcriptSlice.substring(0, 40000)}`
   : '[Sem transcrição — baseie-se nos subtópicos e no título da aula]'}
 
-${onlyFlashcards ? 'Gere os flashcards sem interromper ou comentar.' : `Gere TODAS as ${total} questões sem interromper ou comentar.`}`;
+${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper ou comentar.` : `Gere TODAS as ${total} questões sem interromper ou comentar.`}`;
 };
 
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
@@ -876,7 +1022,8 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const types = s.questionTypes || ['direct'];
-  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyFlashcards = onlyMemoryCards(types);
+  const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
     ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
@@ -890,7 +1037,7 @@ ${typeInst ? typeInst + '\n' : ''}
 SUBTÓPICOS DA AULA${onlyFlashcards ? ' (cubra alto rendimento, sem quantidade fixa)' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
 
-${onlyFlashcards ? 'QUANTIDADE: gere a quantidade ideal de flashcards para revisar o essencial da aula, sem redundância. O conjunto deve permitir reconstruir a aula ativa e clinicamente, como uma revisão AnKing-like.' : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
+${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(types)} para revisar o essencial da aula, sem redundância. O conjunto deve permitir reconstruir a aula ativa e clinicamente, como uma revisão AnKing-like.` : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
 - ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Gere no mínimo 2 questões por subtópico, seguindo exatamente a quantidade indicada acima.'}
@@ -907,20 +1054,12 @@ REGRA DE FIXAÇÃO (CRÍTICA):
 
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
-REGRAS DA EXPLICAÇÃO (fixação — a aula completa está acima):
-- 1 a 2 parágrafos curtos
-- ${onlyFlashcards ? 'Explique o conceito da resposta curta como Notas/Lógica: mecanismo, justificativa, exceção ou pegadinha de prova.' : 'Por que a correta está certa e por que cada distrator está errado — pelo conteúdo'}
-- Não repita o gabarito com mais palavras. Explique o porquê, o mecanismo, a cadeia causal, a exceção, o contraste com uma confusão comum ou a consequência prática.
-- Não aprofunde teoria além do necessário
-- PROIBIDO: referir-se a letras A, B, C, D, E
-${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
-## Flashcard 1
-Pergunta: [pergunta objetiva?]
-Resposta: [resposta curta]
-Explicação: [Notas/Lógica: explicação/aula breve]
----` : TEMPLATE_QUESTAO(alts)}
+${onlyFlashcards ? `REGRAS DA EXPLICAÇÃO:
+- Explique o porquê/como da resposta ou lacuna. A explicação deve ajudar quem errou a entender a resposta, sem virar aula.
+- Não repita o gabarito com mais palavras.` : explanationInst}
+${onlyFlashcards ? memoryCardFormat(types) : TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}
 
-${onlyFlashcards ? 'Use IDs sequenciais simples: ## Flashcard 1, ## Flashcard 2...' : `Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
+${onlyFlashcards ? `Use IDs sequenciais simples: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : `Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
 ## Questão 1.1
 ## Questão 1.2
 ## Questão 1.3
@@ -931,7 +1070,7 @@ ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
 ${previousQuestions ? `QUESTÕES JÁ EXISTENTES SOBRE ESTA AULA (não copie; varie foco, cenário e distratores):\n${previousQuestions.substring(0, 8000)}` : ''}
 
-${onlyFlashcards ? 'Gere a bateria de flashcards sem interromper.' : 'Gere a bateria de fixação completa sem interromper.'}`;
+${onlyFlashcards ? `Gere a bateria de ${memoryCardName(types)} sem interromper.` : 'Gere a bateria de fixação completa sem interromper.'}`;
 };
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
@@ -945,7 +1084,8 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
   const styleInst = STYLE_INST[s.questionStyle || 'mixed'];
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const types = s.questionTypes || ['direct'];
-  const onlyFlashcards = types.length === 1 && types[0] === 'flashcard';
+  const onlyFlashcards = onlyMemoryCards(types);
+  const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
     ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
@@ -958,7 +1098,7 @@ ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}
 ESTRUTURA${onlyFlashcards ? '' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"` : `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
-${onlyFlashcards ? 'Quantidade: gere a quantidade ideal de flashcards, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.' : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
+${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.` : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
 
 REGRA DA BATERIA EXTRA:
 - ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.'}
@@ -970,17 +1110,12 @@ REGRA DA BATERIA EXTRA:
 
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : `${REGRAS_ALTERNATIVAS}
-${REGRAS_EXPLICACAO}
-${TEMPLATE_QUESTAO(alts)}`}
-${onlyFlashcards ? `FORMATO OBRIGATÓRIO:
-## Flashcard 1
-Pergunta: [pergunta objetiva?]
-Resposta: [resposta curta]
-Explicação: [Notas/Lógica: explicação/aula breve]
----` : ''}
+${explanationInst}
+${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}`}
+${onlyFlashcards ? memoryCardFormat(types) : ''}
 
-${onlyFlashcards ? 'Use IDs sequenciais simples: ## Flashcard 1, ## Flashcard 2...' : 'Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).'}
+${onlyFlashcards ? `Use IDs sequenciais simples: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : 'Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).'}
 ${lessonText ? `\nCONTEXTO DA AULA/EXPLICAÇÕES (base obrigatória das questões):\n${lessonText.substring(0, 12000)}` : ''}
 ${previousQuestions ? `\nQUESTÕES ANTERIORES (faça algo ligeiramente diferente, sem repetir a mesma ideia):\n${previousQuestions.substring(0, 8000)}` : ''}
-${onlyFlashcards ? 'Gere os flashcards sem interromper.' : 'Gere TODAS as questões sem interromper.'}`;
+${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper.` : 'Gere TODAS as questões sem interromper.'}`;
 };
