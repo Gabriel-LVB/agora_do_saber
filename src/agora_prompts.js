@@ -194,7 +194,7 @@ Explicação: [explicação curta do porquê/como da resposta]
 ---`;
 
 export const STYLE_INST = {
-  clinical: 'Use EXCLUSIVAMENTE casos clínicos reais: paciente com idade/sexo/contexto apresenta sinais e sintomas específicos. Nunca mencione exames ou diagnóstico no enunciado se a questão pede justamente isso.',
+  clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas reais e bem construídas: paciente + contexto + evolução + achados relevantes + ponto de decisão. O caso deve exigir raciocínio clínico, não ser uma pergunta direta fantasiada de caso.',
   direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos: mecanismo, critério diagnóstico, classificação, dose, indicação, contraindicação. O enunciado deve ser objetivo e sem caso clínico.',
   mixed:    'Siga esta ordem ao longo das questões: as primeiras questões (mais fundamentais, conceituais) devem ser DIRETAS — perguntando sobre definição, mecanismo, classificação ou critério. As últimas questões (mais avançadas, de aplicação) devem ser CLÍNICAS — casos com paciente, contexto, decisão terapêutica ou diagnóstica. A transição deve ser gradual e natural, como uma aula que vai do conceito à prática.',
 };
@@ -205,7 +205,15 @@ const REGRAS_ENUNCIADO = `
 REGRAS DO ENUNCIADO:
 - Jamais mencione a aula, o professor, o assunto ou qualquer referência ao contexto didático
 - O enunciado NUNCA deve conter palavras que sejam sinônimos diretos da resposta correta. Se a resposta é "inibição da bomba de prótons", o enunciado não pode dizer "supressão ácida" ou "bomba de prótons"
-- Nos casos clínicos: inclua idade, sexo, tempo de evolução, sintomas e achados de exame — nunca entregue o diagnóstico ou tratamento que é a resposta
+- Nos casos clínicos: inclua idade, sexo, contexto relevante, tempo de evolução, sintomas e achados de exame — nunca entregue o diagnóstico ou tratamento que é a resposta
+- Vinheta clínica boa precisa ter um "dado discriminativo": algo que diferencie a correta dos distratores. Sem esse dado, a questão vira decoreba ou chute.
+- Use 2 a 4 achados positivos relevantes e, quando ajudar, 1 a 2 achados negativos úteis para afastar uma alternativa plausível. Não encha o caso com dados decorativos.
+- Só inclua exame, dose, medicamento em uso, comorbidade, gestação, função renal/hepática, idade ou antecedente se isso mudar a resposta ou diferenciar alternativas.
+- O final do caso deve pedir uma decisão clara: diagnóstico mais provável, próxima conduta, fármaco mais adequado, efeito adverso provável, mecanismo do quadro, exame confirmatório ou contraindicação relevante.
+- PROIBIDO usar pistas no enunciado como "destacando-se por", "frequentemente escolhido por", "com perfil típico de", "clássico de", "característico de" quando isso entrega a resposta.
+- PROIBIDO criar caso clínico que só diz "paciente tem X; qual é X?". O caso deve obrigar o aluno a inferir X a partir dos dados.
+- Em farmacologia clínica, o caso deve trazer o motivo da escolha entre alternativas próximas: fase da doença, comorbidade, efeito adverso prévio, interação, gestação, risco metabólico, função renal/hepática ou contraindicação específica. Não pergunte apenas "qual fármaco é primeira linha?" em forma de caso.
+- Em questões de conduta, não pergunte conduta genérica. Traga gravidade, estabilidade, contraindicações e objetivo terapêutico quando forem necessários para decidir.
 - Nas questões diretas: enunciado objetivo, sem introduções desnecessárias
 - PROIBIDO no enunciado: qualquer dica semântica que permita eliminar distratores sem conhecimento do tema
 - PROIBIDO cobrar detalhe inútil, trivia solta ou fato sem consequência diagnóstica, terapêutica, fisiopatológica, prognóstica ou de prova
@@ -382,6 +390,8 @@ export const QUESTION_AUDIT_CHECKLIST = [
   'Sem redundância conceitual entre questões ou flashcards',
   'Enunciado sem pistas semânticas, gramaticais, de tamanho ou de categoria',
   'Enunciado com contexto suficiente para uma resposta justa e única',
+  'Vinheta clínica com dado discriminativo real, sem pistas óbvias e sem dados decorativos',
+  'Casos clínicos testam decisão/inferência clínica, não pergunta direta fantasiada de história',
   'Dificuldade desejável: não acertável por eliminação grosseira ou conhecimento leigo',
   'Alternativa correta tecnicamente verdadeira, atual e sem ambiguidade',
   'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',

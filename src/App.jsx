@@ -427,7 +427,7 @@ const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questi
   const isFlashcard = isMemoryCardType(type);
   const isCloze = type === 'cloze';
   const styleInst = {
-    clinical: 'Use enunciados clínicos quando isso ajudar a testar aplicação, com idade/sexo/contexto e achados relevantes.',
+    clinical: 'Use vinhetas clínicas quando isso ajudar a testar aplicação: idade/sexo/contexto, evolução, achados relevantes e um dado discriminativo que obrigue raciocínio clínico.',
     direct: 'Use questões diretas, objetivas, sobre definição, mecanismo, classificação, diagnóstico, conduta ou complicação.',
     mixed: 'Misture questões diretas para conceito central e questões clínicas para aplicação/pegadinhas.',
   }[settings.questionStyle || 'mixed'];
@@ -469,6 +469,8 @@ REGRAS CRÍTICAS:
 - Não mencione "caderno de erros", "questão original", "aluno" ou "revisão" no enunciado.
 - Mantenha alto rendimento: foco no que mais cai e no que diferencia alternativas parecidas.
 - Se houver lacuna de contexto, use apenas inferências seguras a partir da questão errada.
+- Em casos clínicos, não faça história decorativa. O caso precisa ter dado discriminativo que explique por que a correta vence distratores plausíveis.
+- Proibido usar pistas como "clássico", "característico", "destacando-se por", "frequentemente escolhido por" ou sinônimos da resposta no enunciado.
 
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
@@ -1706,7 +1708,7 @@ const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', 
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
   const styleInst = {
-    clinical:'Prefira casos clínicos curtos e cobraveis.',
+    clinical:'Prefira vinhetas clínicas curtas e cobráveis, com dado discriminativo real e sem entregar diagnóstico/conduta no enunciado.',
     direct:'Prefira perguntas diretas sobre conceito, conduta, mecanismo ou critério.',
     mixed:'Misture casos clínicos curtos e perguntas diretas.',
   }[settings.questionStyle || 'mixed'];
@@ -1743,6 +1745,8 @@ REGRAS DAS QUESTÕES:
 - Cada questão deve voltar ao problema central do usuário. Não cobre curiosidades periféricas só porque apareceram na explicação.
 - Priorize mecanismos causais, decisões práticas, pegadinhas diretamente relacionadas e reconstrução ativa do raciocínio.
 - Evite perguntas óbvias, decorebas inúteis e alternativas absurdas.
+- Em casos clínicos, inclua apenas dados que mudam o raciocínio: contexto, tempo de evolução, achados positivos e negativos úteis. Não use "clássico", "característico", "destacando-se por" ou frases que entreguem a resposta.
+- O caso deve terminar em uma decisão clara: diagnóstico, próxima conduta, fármaco, efeito adverso, mecanismo, exame ou contraindicação.
 - Questões com alternativas devem ter exatamente ${Number(settings.numAlternatives || 5)} alternativas no formato:
 ${alts}
 - Depois de cada questão inclua "Gabarito: X" e "Explicação:".
@@ -10100,7 +10104,7 @@ export default function QuestionBankApp() {
     const total = subtopicsArr.length||meta.qPerBlock||5;
 
     const qStyleInst = {
-      clinical: 'Use EXCLUSIVAMENTE enunciados com casos clínicos (paciente com X apresenta Y, qual a conduta/diagnóstico?).',
+      clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas com contexto, evolução, achados relevantes e dado discriminativo. O caso deve exigir inferência clínica, não só reconhecer palavras-chave.',
       direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos (sem caso clínico — pergunte diretamente sobre mecanismos, critérios, classificações, doses).',
       mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos.',
     }[meta.questionStyle||'mixed'];
