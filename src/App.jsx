@@ -361,6 +361,15 @@ const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
 const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
 const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
 const hasRegenerationInstruction = (text = '') => String(text || '').trim().length > 0;
+const canUseQuestionType = (type, access = {}) => {
+  if (type === 'cloze') return !!access.isAdmin;
+  if (type === 'flashcard') return !!access.canCreateFlashcards;
+  return true;
+};
+const filterQuestionTypesForAccess = (types = ['direct'], access = {}) => {
+  const clean = (types || ['direct']).filter(type => canUseQuestionType(type, access));
+  return clean.length ? clean : ['direct'];
+};
 
 const isAnswerCorrect = (question, answer) => {
   if (!question || !answer || answer === 'SKIPPED') return false;
@@ -2859,7 +2868,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [numAlts,       setNumAlts]     = useState(savedSettings.numAlternatives || 5);
   const [extraPrompt,   setExtraPrompt] = useState('');
   const [questionStyle, setQuestionStyle] = useState(savedSettings.questionStyle || 'mixed');
-  const [questionTypes, setQuestionTypes] = useState(savedSettings.questionTypes || ['direct']);
+  const [questionTypes, setQuestionTypes] = useState(filterQuestionTypesForAccess(savedSettings.questionTypes || ['direct'], { isAdmin, canCreateFlashcards }));
   const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false);
   const [geminiThinkingEnabled, setGeminiThinkingEnabled] = useState(!!savedSettings.geminiThinkingEnabled);
   const [auditQuestions, setAuditQuestions] = useState(!!savedSettings.auditQuestions);
@@ -3005,7 +3014,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           {/* Tipo de questão */}
           <div>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
-            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true} isAdmin={canCreateFlashcards}/>
+            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true} isAdmin={isAdmin} canCreateFlashcards={canCreateFlashcards}/>
           </div>
 
           {/* Estilo clínico/direto — só aparece se "direta" está selecionada */}
@@ -3122,6 +3131,7 @@ const QuestionView = ({
   subtopics=[],
   topicStyle=null, onTopicStyleChange=null,
   topicType=null,
+  isAdmin=false,
   canCreateFlashcards=false,
   adminQuestionExplanations=false,
   questionCountPerSub=1,
@@ -3688,7 +3698,7 @@ const QuestionView = ({
           <div>
             <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Tipo de Questão</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {QUESTION_TYPES.filter(t => !t.adminOnly || canCreateFlashcards).map(t=>(
+              {QUESTION_TYPES.filter(t => !t.adminOnly || isAdmin).filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin).map(t=>(
                 <button key={t.k} onClick={()=>onTopicStyleChange(t.k,'type')}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${topicType===t.k?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
                   <span className={`text-sm font-bold ${topicType===t.k?(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-300':'text-gray-600')}`}>{t.label}</span>
@@ -4379,11 +4389,11 @@ const QUESTION_TYPES = [
   { k: 'cespe',    label: '⚖️ Certo/Errado',  desc: 'Estilo CESPE — 1 afirmação' },
   { k: 'open',     label: '✏️ Aberta',        desc: 'Resposta curta corrigida pela IA' },
   { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
-  { k: 'flashcard', label:'🃏 Flashcards',    desc: 'Pergunta, resposta e explicação', adminOnly:true },
+  { k: 'flashcard', label:'🃏 Flashcards',    desc: 'Pergunta, resposta e explicação', advancedOnly:true },
   { k: 'cloze',    label:'🧩 Cloze',           desc: 'Lacunas estilo AnKing/Anki', adminOnly:true },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false }) => {
   const dm = darkMode;
   const toggle = (k) => {
     if (single) { onChange([k]); return; }
@@ -4393,7 +4403,7 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, i
   };
   return (
     <div className="space-y-2">
-      {QUESTION_TYPES.filter(t => !t.adminOnly || isAdmin).map(t => {
+      {QUESTION_TYPES.filter(t => !t.adminOnly || isAdmin).filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin).map(t => {
         const on = selected.includes(t.k);
         return (
           <button key={t.k} onClick={()=>toggle(t.k)}
@@ -4549,7 +4559,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
   const explanation = cleanQuestionExplanation(question.explanation);
-  const hasStructuredExplanations = !!(adminQuestionExplanations && question.explanationParts && (question.options || []).some(o => o.explanation));
+  const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
     if (!onToggleErrorNotebook) return;
@@ -5434,7 +5444,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 );
 
 // ─── EXTERNAL PROMPT MODAL ────────────────────────────────────────────────────
-const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCreateFlashcards=false }) => {
+const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin=false, canCreateFlashcards=false }) => {
   const dm = darkMode;
   const [cfg, setCfg] = useState({
     numTopics:       settings.numTopics      || 10,
@@ -5442,7 +5452,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCrea
     qPerSub:         settings.qPerSub        || 1,
     numAlternatives: settings.numAlternatives || 5,
     questionStyle:   settings.questionStyle  || 'mixed',
-    questionTypes:   settings.questionTypes  || ['direct'],
+    questionTypes:   filterQuestionTypesForAccess(settings.questionTypes || ['direct'], { isAdmin, canCreateFlashcards }),
     autoMode:        settings.autoMode !== false,
     customPrompt:    settings.customPrompt   || '',
   });
@@ -5451,7 +5461,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCrea
   const isMemoryPrompt = (cfg.questionTypes || ['direct']).some(isMemoryCardType);
 
   const copy = () => {
-    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg, adminQuestionExplanations:!!canCreateFlashcards});
+    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg, adminQuestionExplanations:true});
     navigator.clipboard.writeText(prompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -5503,10 +5513,11 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, canCrea
                 onChange={questionTypes=>setCfg(p=>({...p,questionTypes}))}
                 darkMode={dm}
                 single={true}
-                isAdmin={canCreateFlashcards}
+                isAdmin={isAdmin}
+                canCreateFlashcards={canCreateFlashcards}
               />
               <p className="text-[11px] opacity-45 mt-2 leading-relaxed">
-                Escolha o tipo do prompt. A importação aceita alternativas, V/F, CESPE, resposta curta, dissertativa, flashcards e clozes.
+                Escolha o tipo do prompt. A importação aceita alternativas, V/F, CESPE, resposta curta, dissertativa{canCreateFlashcards ? ', flashcards' : ''}{isAdmin ? ' e clozes' : ''}.
               </p>
             </div>
             {isMemoryPrompt ? (
@@ -6119,6 +6130,8 @@ export default function QuestionBankApp() {
   const canSeeVideoaulas = !!user?.email && courseAllowedEmails.includes(user.email.toLowerCase());
   const canUseAcademia = isAdmin || isWhitelistedUser;
   const canUseAdvancedFeatures = canUseAcademia;
+  const questionTypeAccess = { isAdmin, canCreateFlashcards:canUseAdvancedFeatures };
+  const visibleQuestionTypes = filterQuestionTypesForAccess(settings.questionTypes || ['direct'], questionTypeAccess);
   const adminHomeMode = isAdmin ? (settings.adminHomeMode || 'admin') : 'actual';
   const homeShowsAdminTools = isAdmin && adminHomeMode === 'admin';
   const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
@@ -8666,7 +8679,8 @@ export default function QuestionBankApp() {
   };
   const withAdminQuestionPromptSettings = (s = {}) => ({
     ...s,
-    adminQuestionExplanations:!!isAdmin,
+    questionTypes:filterQuestionTypesForAccess(s.questionTypes || ['direct'], { isAdmin, canCreateFlashcards:canUseAdvancedFeatures }),
+    adminQuestionExplanations:true,
   });
 
   const getPrompt = (forAPI=false, areas=[]) => {
@@ -9840,11 +9854,11 @@ export default function QuestionBankApp() {
   const getDefaultBulkConfig = (mode = 'generate') => ({
     explanationLength:settingsRef.current.explanationLength || 'complete',
     questionStyle:settingsRef.current.questionStyle || 'mixed',
-    questionTypes:settingsRef.current.questionTypes || ['direct'],
+    questionTypes:filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], { isAdmin, canCreateFlashcards:canUseAdvancedFeatures }),
     qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
     qPerSubAuto:!!settingsRef.current.qPerSubAuto,
     numAlternatives:settingsRef.current.numAlternatives || 5,
-    adminQuestionExplanations:!!isAdmin,
+    adminQuestionExplanations:true,
     geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
     auditQuestions:!!settingsRef.current.auditQuestions,
     regenReason:'',
@@ -9902,7 +9916,7 @@ export default function QuestionBankApp() {
       aula, aulaId, totalQ, numBlocks, qPerBlock,
       numAlternatives: s.numAlternatives || 5,
       questionStyle: s.questionStyle || 'mixed',
-      questionTypes: s.questionTypes || ['direct'],
+	      questionTypes: filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
       geminiThinkingEnabled: !!s.geminiThinkingEnabled,
       auditQuestions: !!s.auditQuestions,
       autoMode: s.autoMode !== false,
@@ -10445,7 +10459,7 @@ export default function QuestionBankApp() {
     setRegenPrompt('');
     setOracleRegenConfig({
       questionStyle:topic?.questionStyle || settingsRef.current.questionStyle || 'mixed',
-      questionTypes:topic?.questionTypes || settingsRef.current.questionTypes || ['direct'],
+      questionTypes:filterQuestionTypesForAccess(topic?.questionTypes || settingsRef.current.questionTypes || ['direct'], questionTypeAccess),
       qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
       qPerSubAuto:!!settingsRef.current.qPerSubAuto,
       numAlternatives:settingsRef.current.numAlternatives || 5,
@@ -10460,7 +10474,7 @@ export default function QuestionBankApp() {
     const auditSettings = {
       ...settingsRef.current,
       questionStyle:topic.questionStyle || settingsRef.current.questionStyle || 'mixed',
-      questionTypes:topic.questionTypes || settingsRef.current.questionTypes || ['direct'],
+      questionTypes:filterQuestionTypesForAccess(topic.questionTypes || settingsRef.current.questionTypes || ['direct'], questionTypeAccess),
       auditQuestions:true,
     };
     const audited = await auditGeneratedQuestions({
@@ -10638,7 +10652,7 @@ export default function QuestionBankApp() {
       ? 2
       : baseQPerSub;
     const total = promptSubtopicCount * qPerSub;
-    const topicTypes = settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'];
+    const topicTypes = filterQuestionTypesForAccess(settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'], questionTypeAccess);
     const flashcardOnly = isOnlyMemoryCardType(topicTypes);
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
@@ -10828,8 +10842,10 @@ export default function QuestionBankApp() {
 
   // Paste import
   const handlePasteImport = async () => {
-    const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, ['direct','vof','cespe','open','essay','flashcard','cloze']);
-    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:'Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas, flashcards e clozes, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:", "Texto:" com {{c1::...}} ou alternativas A-E.',isAlert:true});return;}
+    const allowedImportTypes = ['direct','vof','cespe','open','essay','flashcard', ...(isAdmin ? ['cloze'] : [])];
+    const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, allowedImportTypes);
+    const importTypeLabel = isAdmin ? 'flashcards e clozes' : 'flashcards';
+    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:`Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e ${importTypeLabel}, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:", "Texto:"${isAdmin ? ' com {{c1::...}}' : ''} ou alternativas A-E.`,isAlert:true});return;}
     const sn=pasteSubName.trim()||'Assunto Importado'; const tn=pasteTopic.trim()||`Bloco (${new Date().toLocaleDateString()})`;
     const importedTypes = Array.from(new Set(parsed.questions.map(q => q.isCloze ? 'cloze' : q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
     const nt={id:`imp-${Date.now()}`,title:tn,questions:parsed.questions,summary:parsed.summary,answers:{},favorites:[],errorNotebook:[],spacedReview:{},questionTypes:importedTypes};
@@ -11762,7 +11778,7 @@ export default function QuestionBankApp() {
       return;
     }
     setErrorReviewQStyle(settingsRef.current.questionStyle || 'mixed');
-    setErrorReviewQTypes(settingsRef.current.questionTypes || ['direct']);
+    setErrorReviewQTypes(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], questionTypeAccess));
     setErrorReviewQAlts(settingsRef.current.numAlternatives || 5);
     setErrorReviewPerQuestion(2);
     setErrorReviewThinking(!!settingsRef.current.geminiThinkingEnabled);
@@ -11951,7 +11967,7 @@ export default function QuestionBankApp() {
         errorNotebook:[],
         spacedReview:{},
         questionStyle:s.questionStyle || 'mixed',
-        questionTypes:s.questionTypes || ['direct'],
+        questionTypes:filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
         questionAudit:audited.audited ? makeQuestionAuditMeta(parsedQuestions.length, 'errorNotebook') : null,
         origin:{
           source:'errorNotebook',
@@ -13804,9 +13820,10 @@ export default function QuestionBankApp() {
 	              onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
-              topicType={(activeTopic.questionTypes||settings.questionTypes||['direct'])[0]}
+              topicType={filterQuestionTypesForAccess(activeTopic.questionTypes || visibleQuestionTypes, questionTypeAccess)[0]}
+              isAdmin={isAdmin}
               canCreateFlashcards={canUseAdvancedFeatures}
-              adminQuestionExplanations={isAdmin}
+              adminQuestionExplanations={true}
               questionCountPerSub={settings.qPerSub||1}
               questionCountAuto={!!settings.qPerSubAuto}
               numAlternatives={settings.numAlternatives||5}
@@ -13893,7 +13910,7 @@ export default function QuestionBankApp() {
             setAcademiaRegenModal={(payload)=>{
               setAcademiaRegenLength(settings.explanationLength || 'complete');
               setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
-              setAcademiaRegenQTypes(settings.questionTypes || ['direct']);
+              setAcademiaRegenQTypes(visibleQuestionTypes);
               setAcademiaRegenQAlts(settings.numAlternatives || 5);
               setAcademiaRegenThinking(!!settings.geminiThinkingEnabled);
               setAcademiaRegenReason('');
@@ -13984,7 +14001,7 @@ export default function QuestionBankApp() {
                       </div>
                     ))}
                   </div>
-                  {!(settings.questionTypes||[]).some(isMemoryCardType)&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {!visibleQuestionTypes.some(isMemoryCardType)&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
                       <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -14008,8 +14025,8 @@ export default function QuestionBankApp() {
                     </div>
                   </div>}
                   <p className={`text-xs mt-2 opacity-40`}>
-                    {(settings.questionTypes||[]).some(isMemoryCardType)
-                      ? `${memoryCardTypeName(settings.questionTypes||[])}: a IA decide a quantidade ideal, sem meta fixa por subtópico.`
+                    {visibleQuestionTypes.some(isMemoryCardType)
+                      ? `${memoryCardTypeName(visibleQuestionTypes)}: a IA decide a quantidade ideal, sem meta fixa por subtópico.`
                       : settings.qPerSubAuto
                       ? 'Questões/subtópico: a IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.'
                       : settings.autoMode
@@ -14022,16 +14039,17 @@ export default function QuestionBankApp() {
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um)</span></div>
                   <QuestionTypeSelector
-                    selected={settings.questionTypes || ['direct']}
+                    selected={visibleQuestionTypes}
                     onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
                     darkMode={darkMode}
                     single={true}
-                    isAdmin={canUseAdvancedFeatures}
+                    isAdmin={isAdmin}
+                    canCreateFlashcards={canUseAdvancedFeatures}
                   />
                 </div>
 
                 {/* Estilo clínico/direto */}
-                {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t))) && (
+	                {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t))) && (
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -14195,7 +14213,7 @@ export default function QuestionBankApp() {
                       darkMode={darkMode}
                     />
                   </div>
-                  {!(settings.questionTypes||[]).some(isMemoryCardType)&&<div className="mt-3">
+                  {!visibleQuestionTypes.some(isMemoryCardType)&&<div className="mt-3">
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
                     <div className="flex gap-2">
                       {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(opt=>(
@@ -14212,9 +14230,9 @@ export default function QuestionBankApp() {
                 {/* Tipo e estilo das questões de fixação */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões de fixação — tipo</div>
-                  <QuestionTypeSelector selected={settings.questionTypes||['direct']} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+	                  <QuestionTypeSelector selected={visibleQuestionTypes} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
                 </div>
-                {((settings.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
+                {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t)))&&(
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -18163,6 +18181,7 @@ export default function QuestionBankApp() {
         darkMode={darkMode}
         settings={settings}
         settingsRef={settingsRef}
+        isAdmin={isAdmin}
         canCreateFlashcards={canUseAdvancedFeatures}
         onClose={()=>setExternalPromptModal(false)}
       />}
@@ -18189,7 +18208,7 @@ export default function QuestionBankApp() {
         }}
         onConfirm={(cfg)=>{
           // Salvar preferências para próximas aulas
-          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:cfg.questionTypes||settings.questionTypes, autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions};
+          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:filterQuestionTypesForAccess(cfg.questionTypes||visibleQuestionTypes, questionTypeAccess), autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions};
           saveSettings(ns);
           setVqGenModal(null);
           const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
@@ -18252,7 +18271,7 @@ export default function QuestionBankApp() {
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
               </div>
               {!isFlashcardReview&&(
                 <div>
@@ -18412,7 +18431,7 @@ export default function QuestionBankApp() {
               </div>
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo das questões de fixação</div>
-                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
               </div>
               {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
@@ -18491,7 +18510,7 @@ export default function QuestionBankApp() {
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
               </div>
               {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
@@ -18572,10 +18591,11 @@ export default function QuestionBankApp() {
                 <QuestionTypeSelector
                   selected={oracleRegenConfig.questionTypes || ['direct']}
                   onChange={questionTypes=>setOracleRegenConfig(p=>({...p, questionTypes}))}
-                  darkMode={darkMode}
-                  single={true}
-                  isAdmin={canUseAdvancedFeatures}
-                />
+	                  darkMode={darkMode}
+	                  single={true}
+	                  isAdmin={isAdmin}
+	                  canCreateFlashcards={canUseAdvancedFeatures}
+	                />
               </div>
 
               {!(oracleRegenConfig.questionTypes || []).some(isMemoryCardType)&&(
@@ -18983,7 +19003,7 @@ export default function QuestionBankApp() {
                     {showsQuestionConfig && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+	                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
                       </div>
                     )}
                     {showsQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
@@ -19043,7 +19063,7 @@ export default function QuestionBankApp() {
                     {showsOracleQuestionConfig && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={canUseAdvancedFeatures}/>
+	                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
                       </div>
                     )}
                     {showsOracleQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
