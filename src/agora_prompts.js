@@ -195,7 +195,7 @@ Explicação: [explicação curta do porquê/como da resposta]
 
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas reais e bem construídas: paciente + contexto + evolução + achados relevantes + ponto de decisão. O caso deve exigir raciocínio clínico, não ser uma pergunta direta fantasiada de caso.',
-  direct:   'Use EXCLUSIVAMENTE questões diretas sobre conceitos: mecanismo, critério diagnóstico, classificação, dose, indicação, contraindicação. O enunciado deve ser objetivo e sem caso clínico.',
+  direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo de cobrança estreito, resposta previsível e distratores próximos. A pergunta deve testar mecanismo, critério, classificação, conduta, exceção, comparação ou consequência prática — nunca curiosidade solta.',
   mixed:    'Siga esta ordem ao longo das questões: as primeiras questões (mais fundamentais, conceituais) devem ser DIRETAS — perguntando sobre definição, mecanismo, classificação ou critério. As últimas questões (mais avançadas, de aplicação) devem ser CLÍNICAS — casos com paciente, contexto, decisão terapêutica ou diagnóstica. A transição deve ser gradual e natural, como uma aula que vai do conceito à prática.',
 };
 
@@ -214,7 +214,13 @@ REGRAS DO ENUNCIADO:
 - PROIBIDO criar caso clínico que só diz "paciente tem X; qual é X?". O caso deve obrigar o aluno a inferir X a partir dos dados.
 - Em farmacologia clínica, o caso deve trazer o motivo da escolha entre alternativas próximas: fase da doença, comorbidade, efeito adverso prévio, interação, gestação, risco metabólico, função renal/hepática ou contraindicação específica. Não pergunte apenas "qual fármaco é primeira linha?" em forma de caso.
 - Em questões de conduta, não pergunte conduta genérica. Traga gravidade, estabilidade, contraindicações e objetivo terapêutico quando forem necessários para decidir.
-- Nas questões diretas: enunciado objetivo, sem introduções desnecessárias
+- Nas questões diretas: enunciado objetivo, sem introduções desnecessárias, com escopo claro e tipo de resposta previsível.
+- Questão direta boa não é "fácil": ela deve cobrar um ponto que diferencie conceitos próximos, como mecanismo versus efeito, critério versus achado inespecífico, exceção versus regra, primeira escolha versus contraindicação, ou causa versus consequência.
+- PROIBIDO pergunta direta ampla demais como "O que é X?", "Qual a principal característica de X?", "Qual o tratamento de X?" ou "Qual a conduta em X?" quando a resposta poderia ter várias camadas. Reescreva para um alvo específico.
+- PROIBIDO pergunta direta de trivia sem consequência prática/de prova, como ano, epônimo isolado, detalhe raro sem utilidade, ou informação que não muda diagnóstico, conduta, mecanismo ou diferenciação.
+- Em farmacologia direta, pergunte o que diferencia fármacos próximos: mecanismo que explica uso/risco, interação relevante, contraindicação, efeito adverso que muda escolha, fase da doença, ajuste em órgão-alvo ou comparação dentro da classe.
+- Em perguntas diretas sobre diagnóstico/critério, especifique o nível de cobrança: achado mais discriminativo, critério obrigatório, exame confirmatório, diagnóstico diferencial que muda conduta ou pegadinha comum.
+- Antes de aceitar uma questão direta, confira: "um aluno que sabe o tema entende exatamente que tipo de resposta está sendo pedido?". Se não, reescreva.
 - PROIBIDO no enunciado: qualquer dica semântica que permita eliminar distratores sem conhecimento do tema
 - PROIBIDO cobrar detalhe inútil, trivia solta ou fato sem consequência diagnóstica, terapêutica, fisiopatológica, prognóstica ou de prova
 - PROIBIDO criar questão cuja resposta seja apenas bom senso geral, conduta vaga ou conselho universal: "avaliar necessidade", "suspender medicamentos desnecessários", "acompanhar", "orientar", "monitorar", "tratar causa", "encaminhar se piorar", "psicoeducação", "simplificar o regime", "revisar medicações", "desprescrever fármacos desnecessários", "avaliar risco-benefício". Só aceite se houver uma decisão específica e cobrável.
@@ -392,6 +398,8 @@ export const QUESTION_AUDIT_CHECKLIST = [
   'Enunciado com contexto suficiente para uma resposta justa e única',
   'Vinheta clínica com dado discriminativo real, sem pistas óbvias e sem dados decorativos',
   'Casos clínicos testam decisão/inferência clínica, não pergunta direta fantasiada de história',
+  'Questões diretas com alvo estreito, resposta previsível e valor real de prova/vida prática',
+  'Questões diretas não amplas, não triviais e não baseadas em curiosidade solta',
   'Dificuldade desejável: não acertável por eliminação grosseira ou conhecimento leigo',
   'Alternativa correta tecnicamente verdadeira, atual e sem ambiguidade',
   'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',
