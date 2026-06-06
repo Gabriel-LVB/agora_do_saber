@@ -5984,6 +5984,8 @@ export default function QuestionBankApp() {
   const [library, setLibrary] = useState([]);
   const libraryRef = useRef([]);
   const academiaMirrorSyncRef = useRef(false);
+  const academiaMirrorSyncTimerRef = useRef(null);
+  const academiaMirrorSyncPendingRef = useRef(false);
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const [settings, setSettingsS]  = useState(defaultSettings);
@@ -6054,7 +6056,9 @@ export default function QuestionBankApp() {
   const [moveNewFolderName, setMoveNewFolderName] = useState('');
   const [moveSubjectModal, setMoveSubjectModal] = useState(null);
   const [folderReviewModal, setFolderReviewModal] = useState(null);
-  const [folderReviewConfig, setFolderReviewConfig] = useState({ repetitions:1, syncMode:'notebook', selected:{}, answeredMode:null, answeredPrompt:false });
+  const [folderReviewConfig, setFolderReviewConfig] = useState({ repetitions:1, syncMode:'notebook', selected:{}, blockMode:'single', blockValue:1 });
+  const [folderReviewCreating, setFolderReviewCreating] = useState(false);
+  const [folderReviewError, setFolderReviewError] = useState('');
   const [bulkGenerateModal, setBulkGenerateModal] = useState(null); // { subjectId, mode, config }
   const [bulkGenerateRun, setBulkGenerateRun] = useState({ running:false, current:0, total:0, logs:[] });
   const [bulkActionMenu, setBulkActionMenu] = useState(null);
@@ -6864,17 +6868,18 @@ export default function QuestionBankApp() {
       if (Object.keys(nextBlocks).length) compacted[aulaId] = nextBlocks;
     });
     const removedAulaIds = Object.keys(previous).filter(aulaId => !Object.prototype.hasOwnProperty.call(compacted, aulaId));
+    const changedAulaEntries = Object.entries(compacted).filter(([aulaId, data]) =>
+      JSON.stringify(previous[aulaId] || null) !== JSON.stringify(data)
+    );
     reviewQueueRef.current = compacted;
     setReviewQueue(compacted);
     if (!user || user.isAnonymous) return;
-    await Promise.all([
-      ...Object.entries(compacted).map(([aulaId, data]) =>
-        setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data).catch(console.error)
-      ),
-      ...removedAulaIds.map(aulaId =>
-        deleteDoc(doc(db, 'users', user.uid, 'vq_review', aulaId)).catch(console.error)
-      ),
-    ]);
+    for (const [aulaId, data] of changedAulaEntries) {
+      await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data).catch(console.error);
+    }
+    for (const aulaId of removedAulaIds) {
+      await deleteDoc(doc(db, 'users', user.uid, 'vq_review', aulaId)).catch(console.error);
+    }
   };
 
   const directQuestionIds = (topic = {}) => new Set((topic.questions || []).map(q => String(q.id)));
@@ -7792,7 +7797,39 @@ export default function QuestionBankApp() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeSubject = library.find(s=>s.id===activeSubjectId);
-  const activeTopic   = activeSubject?.topics?.find(t=>t.id===activeTopicId);
+  const storedActiveTopic = activeSubject?.topics?.find(t=>t.id===activeTopicId);
+  const resolveCustomStudyQuestions = (topic, items = libraryRef.current?.length ? libraryRef.current : library) => {
+    if (topic?.origin?.source !== 'customStudy' || !Array.isArray(topic.questionRefs)) return topic?.questions || [];
+    return topic.questionRefs.map(ref => {
+      const sourceSubject = items.find(item => !isFolderItem(item) && String(item.id) === String(ref.subjectId));
+      const sourceTopic = sourceSubject?.topics?.find(candidate => String(candidate.id) === String(ref.topicId));
+      const sourceQuestion = sourceSubject?.source === 'academia'
+        ? Object.values(sourceTopic?.fixationQuestions || {}).flat()
+          .concat((sourceTopic?.extraBattery || []).flatMap(block => block.questions || block))
+          .find(q => String(q.id) === String(ref.questionId))
+        : (sourceTopic?.questions || []).find(q => String(q.id) === String(ref.questionId));
+      if (!sourceQuestion) return null;
+      const originalOptions = sourceQuestion.options || [];
+      const optionOrder = Array.isArray(ref.optionOrder) && ref.optionOrder.length === originalOptions.length
+        ? ref.optionOrder
+        : originalOptions.map((_, index) => index);
+      return {
+        ...sourceQuestion,
+        id:ref.id,
+        options:optionOrder.map((optionIndex, index) => ({...originalOptions[optionIndex], letter:'ABCDE'[index]})),
+        _originSubjectId:ref.subjectId,
+        _originTopicId:ref.topicId,
+        _originQId:ref.questionId,
+        _subjectTitle:sourceSubject.title,
+        _topicTitle:sourceTopic.title,
+        _repeatIndex:ref.repeatIndex,
+        _repeatTotal:ref.repeatTotal,
+      };
+    }).filter(Boolean);
+  };
+  const activeTopic = storedActiveTopic?.origin?.source === 'customStudy'
+    ? {...storedActiveTopic, questions:resolveCustomStudyQuestions(storedActiveTopic)}
+    : storedActiveTopic;
   const librarySubjects = library.filter(s => !isFolderItem(s));
   const libraryFolders = library.filter(isFolderItem);
   const quickSubject = librarySubjects.find(s => s.source === QUICK_SOURCE && s.id === QUICK_SUBJECT_ID)
@@ -7880,7 +7917,11 @@ export default function QuestionBankApp() {
     const nextLibrary = sortLibraryItems(currentLibrary.map(item=>changed.get(item.id)||item));
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
-    if(user&&!user.isAnonymous) await Promise.all(cleanItems.map(item=>setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)));
+    if(user&&!user.isAnonymous) {
+      for (const item of cleanItems) {
+        await setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error);
+      }
+    }
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(previousItems, cleanItems);
     if (cleanItems.some(item => item.source === 'academia' || hasAcademiaOriginTopic(item))) scheduleAcademiaOracleMirrorSync(nextLibrary);
@@ -7953,8 +7994,15 @@ export default function QuestionBankApp() {
   };
 
   function scheduleAcademiaOracleMirrorSync(baseItems = libraryRef.current) {
-    if (academiaMirrorSyncRef.current) return;
-    setTimeout(() => syncAcademiaOracleMirror(baseItems).catch(console.error), 0);
+    if (academiaMirrorSyncRef.current) {
+      academiaMirrorSyncPendingRef.current = true;
+      return;
+    }
+    if (academiaMirrorSyncTimerRef.current) return;
+    academiaMirrorSyncTimerRef.current = setTimeout(() => {
+      academiaMirrorSyncTimerRef.current = null;
+      syncAcademiaOracleMirror(libraryRef.current?.length ? libraryRef.current : baseItems).catch(console.error);
+    }, 100);
   }
 
   async function syncAcademiaOracleMirror(baseItems = libraryRef.current) {
@@ -8286,15 +8334,21 @@ export default function QuestionBankApp() {
       libraryRef.current = nextLibrary;
       setLibrary(nextLibrary);
       if(user&&!user.isAnonymous) {
-        await Promise.all([
-          ...Array.from(changed.values()).map(item => setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error)),
-          ...Array.from(deletedIds).map(id => deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error)),
-        ]);
+        for (const item of changed.values()) {
+          await setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error);
+        }
+        for (const id of deletedIds) {
+          await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
+        }
       } else if(user?.isAnonymous) {
         localStorage.setItem(`qb_lib_${username}`, JSON.stringify(nextLibrary));
       }
     } finally {
       academiaMirrorSyncRef.current = false;
+      if (academiaMirrorSyncPendingRef.current) {
+        academiaMirrorSyncPendingRef.current = false;
+        scheduleAcademiaOracleMirrorSync(libraryRef.current);
+      }
     }
   }
 
@@ -8579,7 +8633,9 @@ export default function QuestionBankApp() {
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
     if(user&&!user.isAnonymous) {
-      await Promise.all(Array.from(idsToDelete).map(id => deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error)));
+      for (const id of idsToDelete) {
+        await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
+      }
     } else if(user?.isAnonymous) {
       localStorage.setItem(`qb_lib_${username}`, JSON.stringify(nextLibrary));
     }
@@ -10252,6 +10308,8 @@ export default function QuestionBankApp() {
     if (!origin) return null;
     const { sourceSubject, sourceTopic, sourceQuestion, originQId } = origin;
     const now = Date.now();
+    const selectedText = (question.options || []).find(option => option.letter === letter)?.text;
+    const originLetter = (sourceQuestion?.options || []).find(option => option.text === selectedText)?.letter || letter;
     const sourceSr = { ...(sourceTopic.spacedReview || {}) };
     if (mode === 'all') {
       if (!isRight) sourceSr[originQId] = { dueDate:now + 86400000, interval:1, wrongCount:(sourceSr[originQId]?.wrongCount || 0) + 1 };
@@ -10265,7 +10323,7 @@ export default function QuestionBankApp() {
       : (sourceTopic.errorNotebook || []);
     const updatedTopic = {
       ...sourceTopic,
-      ...(mode === 'all' ? { answers:{...(sourceTopic.answers || {}), [originQId]:letter}, spacedReview:sourceSr } : {}),
+      ...(mode === 'all' ? { answers:{...(sourceTopic.answers || {}), [originQId]:originLetter}, spacedReview:sourceSr } : {}),
       errorNotebook,
     };
     return {
@@ -10304,7 +10362,7 @@ export default function QuestionBankApp() {
     const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
     const freshTopic = freshSubject?.topics?.find(t => t.id === activeTopicId) || activeTopic;
     if (!freshSubject || !freshTopic) return;
-    const q = (freshTopic.questions || []).find(x=>x.id===qId);
+    const q = resolveCustomStudyQuestions(freshTopic).find(x=>x.id===qId);
     const now = Date.now();
     const sr = { ...(freshTopic.spacedReview || {}) };
     let isRight = false;
@@ -10355,7 +10413,7 @@ export default function QuestionBankApp() {
     if(!activeTopic)return;
     const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
     const freshTopic = freshSubject?.topics?.find(t => t.id === activeTopicId) || activeTopic;
-    const q = (freshTopic.questions || []).find(x=>x.id===qId);
+    const q = resolveCustomStudyQuestions(freshTopic).find(x=>x.id===qId);
     const favs=freshTopic.favorites||[]; const nf=toggleInList(favs,qId);
     const nextActiveSubject = {...freshSubject,topics:freshSubject.topics.map(t=>t.id===activeTopicId?{...t,favorites:nf}:t)};
     const nextSourceSubject = freshTopic.origin?.source === 'customStudy'
@@ -10375,7 +10433,7 @@ export default function QuestionBankApp() {
     const shouldInclude = listHasId(nextNotebook, qId);
     const nextActiveSubject = {...freshSubject,topics:freshSubject.topics.map(t=>t.id===activeTopicId?{...t,errorNotebook:nextNotebook}:t)};
     if (freshTopic.origin?.source === 'customStudy') {
-      const q = (freshTopic.questions || []).find(x=>x.id===qId);
+      const q = resolveCustomStudyQuestions(freshTopic).find(x=>x.id===qId);
       const nextSourceSubject = await syncCustomStudyOriginNotebook(q, shouldInclude, getCustomStudySyncMode(freshTopic));
       if (nextSourceSubject) {
         await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
@@ -11163,7 +11221,9 @@ export default function QuestionBankApp() {
 
   // Helpers
   const countValidAnswers = (topic) => {
-    const qs = topic.questions || [];
+    const qs = topic.origin?.source === 'customStudy'
+      ? (topic.questionRefs || []).map(ref => ({id:ref.id}))
+      : (topic.questions || []);
     const ans = topic.answers || {};
     return qs.filter(q => {
       const v = ans[q.id];
@@ -11205,7 +11265,7 @@ export default function QuestionBankApp() {
       const answered = allFixqs.filter(({q, topic}) => isCompleteAnswerValue(getAcademiaQuestionAnswer(s, topic, q.id))).length;
       return Math.round(answered / allFixqs.length * 100);
     }
-    const all = s.topics.flatMap(t=>t.questions||[]);
+    const all = s.topics.flatMap(t=>t.origin?.source === 'customStudy' ? (t.questionRefs || []) : (t.questions || []));
     const ans = s.topics.reduce((acc,t) => acc + countValidAnswers(t), 0);
     return all.length>0 ? Math.round(ans/all.length*100) : 0;
   };
@@ -12080,7 +12140,9 @@ export default function QuestionBankApp() {
   const openFolderReview = (folder) => {
     const sources = getFolderReviewSources(folder);
     const selected = Object.fromEntries(sources.map(({subject, topic}) => [`${subject.id}__${topic.id}`, true]));
-    setFolderReviewConfig({ repetitions:1, syncMode:'notebook', selected, answeredMode:null, answeredPrompt:false });
+    setFolderReviewConfig({ repetitions:1, syncMode:'notebook', selected, blockMode:'single', blockValue:1 });
+    setFolderReviewCreating(false);
+    setFolderReviewError('');
     setFolderReviewModal(folder);
   };
   const customStudyQuestionKey = ({ subject, topic, q }) => `${subject.id}__${topic.id}__${q.id}`;
@@ -12103,57 +12165,59 @@ export default function QuestionBankApp() {
     }
     return out;
   };
-  const createFolderReview = async (configOverride = null) => {
-    const cfg = configOverride || folderReviewConfig;
+  const createFolderReview = async () => {
+    if (folderReviewCreating) return;
+    const cfg = folderReviewConfig;
     const folder = folderReviewModal;
     if (!folder) return;
     const selected = cfg.selected || {};
     const sources = getFolderReviewSources(folder).filter(({subject, topic}) => selected[`${subject.id}__${topic.id}`]);
-    const repetitions = Math.max(1, Math.min(3, parseInt(cfg.repetitions, 10) || 1));
-    const rawEntries = sources.flatMap(({subject, topic, questions}) => questions.map(q => ({ subject, topic, q, answered:isSourceQuestionAnswered(subject, topic, q) })));
-    const answeredEntries = rawEntries.filter(entry => entry.answered);
-    if (answeredEntries.length && !cfg.answeredMode) {
-      setFolderReviewConfig(p=>({...p, answeredPrompt:true}));
+    if (!sources.length) {
+      addToast('Selecione ao menos um tópico com questões para criar o estudo.', 'info', 4500);
       return;
     }
-    const entries = cfg.answeredMode === 'exclude'
-      ? rawEntries.filter(entry => !entry.answered)
-      : rawEntries;
-    const final = buildCustomStudyQueue(entries, repetitions);
-    if (!final.length) return;
+    const repetitions = Math.max(1, Math.min(3, parseInt(cfg.repetitions, 10) || 1));
+    const rawEntries = sources.flatMap(({subject, topic, questions}) => questions.map(q => ({ subject, topic, q, answered:isSourceQuestionAnswered(subject, topic, q) })));
+    setFolderReviewCreating(true);
+    setFolderReviewError('');
+    try {
+    const final = buildCustomStudyQueue(rawEntries, repetitions);
+    if (!final.length) {
+      const message = 'Nenhuma questão disponível após excluir as já respondidas.';
+      setFolderReviewError(message);
+      addToast(message, 'info', 4500);
+      return;
+    }
 
-    const updates = new Map();
-    final.forEach(({subject, topic, q}) => {
-      if (!updates.has(subject.id)) updates.set(subject.id, { subject, topicIds:new Map() });
-      const subjectUpdate = updates.get(subject.id);
-      if (!subjectUpdate.topicIds.has(topic.id)) subjectUpdate.topicIds.set(topic.id, { topic, ids:[], clearIds:[] });
-      subjectUpdate.topicIds.get(topic.id).ids.push(q.id);
-    });
-    if (cfg.answeredMode === 'clear') {
-      answeredEntries.forEach(({subject, topic, q}) => {
-        if (!updates.has(subject.id)) updates.set(subject.id, { subject, topicIds:new Map() });
-        const subjectUpdate = updates.get(subject.id);
-        if (!subjectUpdate.topicIds.has(topic.id)) subjectUpdate.topicIds.set(topic.id, { topic, ids:[], clearIds:[] });
-        subjectUpdate.topicIds.get(topic.id).clearIds.push(q.id);
+    {
+      const clearsBySubject = new Map();
+      rawEntries.forEach(({subject, topic, q}) => {
+        if (!clearsBySubject.has(subject.id)) clearsBySubject.set(subject.id, { subject, topicIds:new Map() });
+        const subjectUpdate = clearsBySubject.get(subject.id);
+        if (!subjectUpdate.topicIds.has(topic.id)) subjectUpdate.topicIds.set(topic.id, []);
+        subjectUpdate.topicIds.get(topic.id).push(q.id);
       });
+      const clearUpdates = [];
+      for (const {subject, topicIds} of clearsBySubject.values()) {
+        clearUpdates.push({
+          ...subject,
+          topics:(subject.topics || []).map(t => {
+          const ids = topicIds.get(t.id);
+          if (!ids?.length) return t;
+          const clearSet = new Set(ids.map(String));
+          return {
+            ...t,
+            answers:Object.fromEntries(Object.entries(t.answers || {}).filter(([id]) => !clearSet.has(String(id)))),
+            spacedReview:Object.fromEntries(Object.entries(t.spacedReview || {}).filter(([id]) => !clearSet.has(String(id)))),
+          };
+          }),
+        });
+      }
+      if (clearUpdates.length) await updateLibraryItems(clearUpdates);
     }
-    for (const {subject, topicIds} of updates.values()) {
-      const updatedTopics = (subject.topics || []).map(t => {
-        const hit = topicIds.get(t.id);
-        if (!hit) return t;
-        const reviewStats = { ...(t.reviewStats || {}) };
-        hit.ids.forEach(id => { reviewStats[id] = (reviewStats[id] || 0) + 1; });
-        if (!hit.clearIds.length) return { ...t, reviewStats };
-        const clearSet = new Set(hit.clearIds.map(String));
-        const answers = Object.fromEntries(Object.entries(t.answers || {}).filter(([id]) => !clearSet.has(String(id))));
-        const spacedReview = Object.fromEntries(Object.entries(t.spacedReview || {}).filter(([id]) => !clearSet.has(String(id))));
-        return { ...t, reviewStats, answers, spacedReview };
-      });
-      await updateSubject({ ...subject, topics:updatedTopics });
-    }
-    if (cfg.answeredMode === 'clear') {
+    {
       const mirrorClears = new Map();
-      answeredEntries
+      rawEntries
         .filter(({subject}) => subject.source === 'academia')
         .forEach(({subject, topic, q}) => {
           librarySubjects
@@ -12173,8 +12237,9 @@ export default function QuestionBankApp() {
               });
             });
         });
+      const mirrorUpdates = [];
       for (const {subject, topicIds} of mirrorClears.values()) {
-        await updateSubject({
+        mirrorUpdates.push({
           ...subject,
           topics:(subject.topics || []).map(t => {
             const ids = topicIds.get(t.id);
@@ -12188,64 +12253,87 @@ export default function QuestionBankApp() {
           }),
         });
       }
+      if (mirrorUpdates.length) await updateLibraryItems(mirrorUpdates);
     }
 
     const now = Date.now();
     const syncMode = cfg.syncMode || 'notebook';
-    const reviewTopic = {
-      id:`custom-study-${now}`,
-      title:`Estudo personalizado — ${new Date(now).toLocaleDateString('pt-BR')}`,
-      questions: final.map(({subject, topic, q, repeatIndex, repeatTotal}, i) => {
-        const correctText = (q.options || []).find(o=>o.isCorrect)?.text;
-        const options = correctText
-          ? shuffleList(q.options || []).map((opt, idx)=>({...opt, letter:'ABCDE'[idx], isCorrect:opt.text===correctText}))
-          : (q.options || []);
-        return {
-        ...q,
-        options,
-        id:`custom_${now}_${i}_${repeatIndex}_${q.id}`,
-        _originSubjectId:subject.id,
-        _originTopicId:topic.id,
-        _originQId:q.id,
-        _subjectTitle:subject.title,
-        _topicTitle:topic.title,
-        _repeatIndex:repeatIndex,
-        _repeatTotal:repeatTotal,
-        };
-      }),
-      answers:{}, favorites:[], errorNotebook:[], spacedReview:{},
-      summary:`Sessão personalizada criada a partir de ${sources.length} tópico(s), com ${repetitions} passagem(ns) por questão.`,
-      sourceFolderId:folder.id,
-      origin:{
-        source:'customStudy',
-        folderId:folder.id,
-        folderTitle:folder.title,
-        generatedAt:now,
-        repetitions,
-        syncMode,
-      },
-    };
-    const reviewTitle = 'Estudos personalizados';
-    const targetFolderId = folder.source === 'gemini' ? folder.id : null;
-    const existing = librarySubjects.find(s =>
-      s.source === 'gemini'
-      && s.title === reviewTitle
-      && s.origin?.source === 'customStudy'
-      && (s.folderId || null) === targetFolderId
-    );
-    if (existing) {
-      await updateSubject({ ...existing, folderId:targetFolderId, topics:[...(existing.topics || []), reviewTopic] });
-      setActiveSubjectId(existing.id);
+    const sessionLabel = `Estudo personalizado — ${new Date(now).toLocaleDateString('pt-BR')} ${new Date(now).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+    const questionRefs = final.map(({subject, topic, q, repeatIndex, repeatTotal}, index) => ({
+      id:`custom_${now}_${index}_${repeatIndex}_${q.id}`,
+      subjectId:subject.id,
+      topicId:topic.id,
+      questionId:q.id,
+      repeatIndex,
+      repeatTotal,
+      optionOrder:shuffleList((q.options || []).map((_, optionIndex) => optionIndex)),
+    }));
+    const requestedValue = Math.max(1, parseInt(cfg.blockValue, 10) || 1);
+    const questionRefBlocks = [];
+    if (cfg.blockMode === 'count') {
+      const blockCount = Math.min(requestedValue, questionRefs.length);
+      const baseSize = Math.floor(questionRefs.length / blockCount);
+      const remainder = questionRefs.length % blockCount;
+      let cursor = 0;
+      for (let index = 0; index < blockCount; index += 1) {
+        const size = baseSize + (index < remainder ? 1 : 0);
+        questionRefBlocks.push(questionRefs.slice(cursor, cursor + size));
+        cursor += size;
+      }
     } else {
-      const ns = { id:Date.now()+1, title:reviewTitle, source:'gemini', folderId:targetFolderId, fullSyllabus:'Sessões de estudo personalizadas.', topics:[reviewTopic], origin:{source:'customStudy', folderId:folder.id, generatedAt:now} };
-      await addSubject(ns);
-      setActiveSubjectId(ns.id);
+      const blockSize = cfg.blockMode === 'size' ? Math.min(requestedValue, questionRefs.length) : questionRefs.length;
+      for (let index = 0; index < questionRefs.length; index += blockSize) {
+        questionRefBlocks.push(questionRefs.slice(index, index + blockSize));
+      }
     }
-    setActiveTopicId(reviewTopic.id);
+    const targetFolderId = folder.source === 'gemini' ? folder.id : null;
+    const studyTopics = questionRefBlocks.map((questionRefsForBlock, index) => {
+      const blockNumber = index + 1;
+      const blockSuffix = questionRefBlocks.length > 1 ? ` · Bloco ${blockNumber}/${questionRefBlocks.length}` : '';
+      return {
+        id:`custom-study-${now}-${blockNumber}`,
+        title:`${sessionLabel}${blockSuffix}`,
+        questions:[],
+        questionRefs:questionRefsForBlock,
+        answers:{}, favorites:[], errorNotebook:[], spacedReview:{},
+        summary:`Sessão personalizada criada a partir de ${sources.length} tópico(s), com ${repetitions} passagem(ns) por questão.${questionRefBlocks.length > 1 ? ` Bloco ${blockNumber} de ${questionRefBlocks.length}.` : ''}`,
+        sourceFolderId:folder.id,
+        origin:{
+          source:'customStudy',
+          folderId:folder.id,
+          folderTitle:folder.title,
+          generatedAt:now,
+          repetitions,
+          syncMode,
+          block:blockNumber,
+          totalBlocks:questionRefBlocks.length,
+        },
+      };
+    });
+    const studySubject = {
+      id:`custom-study-subject-${now}`,
+      title:sessionLabel,
+      source:'gemini',
+      folderId:targetFolderId,
+      fullSyllabus:'Sessão de estudo personalizada.',
+      topics:studyTopics,
+      origin:{source:'customStudy', folderId:folder.id, generatedAt:now, totalBlocks:studyTopics.length},
+    };
+    await addSubject(studySubject);
+    setActiveSubjectId(studySubject.id);
+    setActiveTopicId(studyTopics[0].id);
     setFolderReviewModal(null);
     setLibFilter('gemini');
     setView('topic');
-    addToast(`${final.length} aparições adicionadas ao estudo personalizado.`, 'success', 5000);
+    addToast(`${final.length} aparições adicionadas ao estudo personalizado${studyTopics.length > 1 ? ` em ${studyTopics.length} blocos` : ''}.`, 'success', 5000);
+    } catch (error) {
+      console.error('Erro ao criar estudo personalizado:', error);
+      const message = `Não foi possível criar o estudo: ${error?.message || 'erro inesperado'}`;
+      setFolderReviewError(message);
+      addToast(message, 'error', 7000);
+    } finally {
+      setFolderReviewCreating(false);
+    }
   };
 
   const duplicateSubjectBlock = async (subject) => {
@@ -13082,7 +13170,7 @@ export default function QuestionBankApp() {
             const toggleLibraryFolder = (id) => setLibraryOpenFolders(p=>({...p,[id]:!(p[id] ?? false)}));
             const countSubjectQuestions = (subject) => subject.source==='academia'
               ? subject.topics.flatMap(t=>Object.values(t.fixationQuestions||{}).flat()).length
-              : subject.topics.reduce((acc,t)=>acc+(t.questions?.length||0), 0);
+              : subject.topics.reduce((acc,t)=>acc+(t.origin?.source === 'customStudy' ? (t.questionRefs?.length || 0) : (t.questions?.length || 0)), 0);
             const countFolderQuestions = (folder) => getSubjectsInFolderTree(folder).reduce((acc,s)=>acc+countSubjectQuestions(s),0);
             const directFolders = (parentId) => sortLibraryItems(sourceFolders(libFilter).filter(f=>(f.parentFolderId||null)===(parentId||null)));
             const directSubjects = (folderId) => sortLibraryItems(sourceSubjects(libFilter).filter(s=>(s.folderId||null)===(folderId||null)));
@@ -13722,10 +13810,16 @@ export default function QuestionBankApp() {
                 const fixAll = isAcademiaTopic ? Object.values(topic.fixationQuestions||{}).flat() : [];
                 const fixTotal = fixAll.length;
                 const fixAnswered = fixAll.filter(q=>isCompleteAnswerValue(getAcademiaQuestionAnswer(activeSubject, topic, q.id))).length;
+                const topicQuestionCount = topic.origin?.source === 'customStudy' ? (topic.questionRefs || []).length : (topic.questions || []).length;
+                const topicAnsweredCount = Object.keys(topic.answers || {}).filter(id =>
+                  topic.origin?.source === 'customStudy'
+                    ? (topic.questionRefs || []).some(ref => String(ref.id) === String(id))
+                    : (topic.questions || []).some(q => String(q.id) === String(id))
+                ).length;
                 const due=Object.values(topic.spacedReview||{}).filter(r=>r.dueDate<=Date.now()).length;
                 const pct=isAcademiaTopic
                   ?(topic.lessonGenerated?(fixTotal>0?Math.round(fixAnswered/fixTotal*100):100):0)
-                  :(topic.questions?.length?Math.round(countValidAnswers(topic)/topic.questions.length*100):0);
+                  :(topicQuestionCount?Math.round(topicAnsweredCount/topicQuestionCount*100):0);
 	                const topicActionMenuId = `topic-actions-${topic.id}`;
 	                const hasTopicActions = isAcademiaTopic && fixTotal > 0;
                 return (
@@ -13735,7 +13829,7 @@ export default function QuestionBankApp() {
                       <div className="truncate">
                         <h4 className="font-bold text-sm truncate">{topic.title}</h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-xs opacity-50">{isAcademiaTopic?(topic.lessonGenerated?`${fixAnswered}/${fixTotal} respostas`:'Aula não gerada'):(topic.questions?.length?`${countValidAnswers(topic)}/${topic.questions.length}`:'Sem questões')}</p>
+                          <p className="text-xs opacity-50">{isAcademiaTopic?(topic.lessonGenerated?`${fixAnswered}/${fixTotal} respostas`:'Aula não gerada'):(topicQuestionCount?`${topicAnsweredCount}/${topicQuestionCount}`:'Sem questões')}</p>
                           {(topic.favorites||[]).length>0&&<span className="text-xs text-red-400">♥{topic.favorites.length}</span>}
                           {(topic.subtopics?.length>0)&&<span className="text-xs text-blue-400 dark:text-blue-500" title={topic.subtopics.join('\n')}>📋 {topic.subtopics.length} subtópicos</span>}
                         </div>
@@ -13794,8 +13888,8 @@ export default function QuestionBankApp() {
               showErrorNotebook={canUseAdvancedFeatures}
               onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)}
               onReset={activeTopic.questions?.length>0?()=>setDeleteId({type:'reset',id:activeTopic.id}):null}
-              onRegenerate={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'?()=>openOracleRegenModal(activeTopic):null}
-              onAudit={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&isAdmin?auditActiveTopic:null}
+              onRegenerate={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'?()=>openOracleRegenModal(activeTopic):null}
+              onAudit={activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'&&isAdmin?auditActiveTopic:null}
               onExport={activeTopic.questions?.length>0?()=>setExportModal({topic:activeTopic,subject:activeSubject}):null}
               isGenerating={isBusy&&(activeTopic.questions?.length||0)===0}
               streamCount={streamCount}
@@ -13817,7 +13911,7 @@ export default function QuestionBankApp() {
 	                source:activeSubject?.source || 'oraculo',
 	              })) : null}
 	              generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
-	              onGenerate={activeSubject?.source==='gemini'?()=>generateBatch(activeTopic.id):null}
+	              onGenerate={activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
               topicType={filterQuestionTypesForAccess(activeTopic.questionTypes || visibleQuestionTypes, questionTypeAccess)[0]}
@@ -18797,9 +18891,16 @@ export default function QuestionBankApp() {
         const selectedCount = selectedSources.length;
         const selectedSubtopicCount = selectedSources.reduce((acc, item)=>acc + (item.topic.subtopics || []).length, 0);
         const selectedQuestionCount = selectedSources.reduce((acc, item)=>acc + item.questions.length, 0);
-        const selectedAnsweredCount = selectedSources.reduce((acc, item)=>acc + item.questions.filter(q=>isSourceQuestionAnswered(item.subject, item.topic, q)).length, 0);
         const repetitions = Math.max(1, Math.min(3, Number(folderReviewConfig.repetitions) || 1));
         const finalCount = selectedQuestionCount * repetitions;
+        const blockValue = Math.max(1, parseInt(folderReviewConfig.blockValue, 10) || 1);
+        const predictedBlockCount = !finalCount || folderReviewConfig.blockMode === 'single'
+          ? Math.min(finalCount, 1)
+          : folderReviewConfig.blockMode === 'count'
+          ? Math.min(blockValue, finalCount)
+          : Math.ceil(finalCount / blockValue);
+        const predictedMinQuestionsPerBlock = predictedBlockCount ? Math.floor(finalCount / predictedBlockCount) : 0;
+        const predictedMaxQuestionsPerBlock = predictedBlockCount ? Math.ceil(finalCount / predictedBlockCount) : 0;
         const selectedContentSummary = [
           `${selectedCount} tópico${selectedCount!==1?'s':''}`,
           `${selectedSubtopicCount} subtópico${selectedSubtopicCount!==1?'s':''}`,
@@ -18819,42 +18920,6 @@ export default function QuestionBankApp() {
           group.topics.forEach(({subject, topic}) => { selected[`${subject.id}__${topic.id}`] = checked; });
           return {...p, selected};
         });
-        if (folderReviewConfig.answeredPrompt) {
-          const confirmAnswered = (mode) => {
-            const next = {...folderReviewConfig, answeredMode:mode, answeredPrompt:false};
-            setFolderReviewConfig(next);
-            createFolderReview(next);
-          };
-          return (
-            <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setFolderReviewModal(null)}>
-              <div className={`w-full max-w-lg rounded-2xl border p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} onClick={e=>e.stopPropagation()}>
-                <div className="mb-6">
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1">Questões já respondidas</p>
-                  <h3 className="text-2xl font-serif font-bold text-yellow-600">Como montar o estudo?</h3>
-                  <p className="text-sm opacity-60 mt-2 leading-relaxed">
-                    Encontrei {selectedAnsweredCount} questão{selectedAnsweredCount!==1?'ões':''} já respondida{selectedAnsweredCount!==1?'s':''} dentro da seleção.
-                  </p>
-                </div>
-                <div className="space-y-3 mb-6">
-                  <button type="button" onClick={()=>confirmAnswered('clear')}
-                    className={`w-full p-4 rounded-xl border text-left transition-colors ${darkMode?'border-yellow-700 bg-yellow-900/10 hover:bg-yellow-900/20':'border-yellow-300 bg-yellow-50 hover:bg-yellow-100'}`}>
-                    <span className="block font-bold text-sm text-yellow-600">Limpar e adicionar</span>
-                    <span className="block text-xs opacity-60 mt-1">Remove as respostas dessas questões no bloco original e inclui tudo no estudo.</span>
-                  </button>
-                  <button type="button" onClick={()=>confirmAnswered('exclude')}
-                    className={`w-full p-4 rounded-xl border text-left transition-colors ${darkMode?'border-gray-700 hover:bg-gray-700':'border-gray-200 hover:bg-gray-50'}`}>
-                    <span className="block font-bold text-sm">Excluir respondidas</span>
-                    <span className="block text-xs opacity-60 mt-1">Cria o estudo apenas com questões ainda não respondidas.</span>
-                  </button>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={()=>setFolderReviewConfig(p=>({...p, answeredPrompt:false, answeredMode:null}))} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Voltar</button>
-                  <button onClick={()=>setFolderReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-900 hover:bg-gray-700 text-gray-300':'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>Cancelar</button>
-                </div>
-              </div>
-            </div>
-          );
-        }
         return (
           <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setFolderReviewModal(null)}>
             <div className={`w-full max-w-2xl rounded-2xl border p-8 overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}} onClick={e=>e.stopPropagation()}>
@@ -18869,7 +18934,7 @@ export default function QuestionBankApp() {
 
               <div className={`rounded-xl border p-4 mb-5 ${darkMode?'border-yellow-800/60 bg-yellow-900/10':'border-yellow-300 bg-yellow-50'}`}>
                 <p className={`text-sm leading-relaxed ${darkMode?'text-yellow-100':'text-yellow-900'}`}>
-                  O site embaralha as questões por passagens: primeiro você vê todas uma vez, depois a segunda rodada, depois a terceira. Isso evita a mesma questão concentrada no começo ou no fim.
+                  O site embaralha as questões por passagens e zera as respostas da seleção ao criar o estudo. O estudo salva apenas a ordem e as referências das questões originais.
                 </p>
               </div>
 
@@ -18895,6 +18960,39 @@ export default function QuestionBankApp() {
                     <option value="all">Respostas, revisão, favoritos e erros</option>
                   </select>
                 </div>
+              </div>
+              <div className="mb-5">
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Dividir o estudo</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    ['single','Um bloco'],
+                    ['count','Quantidade de blocos'],
+                    ['size','Questões por bloco'],
+                  ].map(([value,label])=>(
+                    <button key={value} type="button" onClick={()=>setFolderReviewConfig(p=>({
+                      ...p,
+                      blockMode:value,
+                      blockValue:value==='count' ? 1 : value==='size' ? Math.max(1, finalCount) : p.blockValue,
+                    }))}
+                      className={`min-h-[44px] px-3 py-2 rounded-xl border-2 text-sm font-bold transition-all ${folderReviewConfig.blockMode===value?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-900 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {folderReviewConfig.blockMode!=='single'&&(
+                  <div className="mt-3 flex items-center gap-3">
+                    <input type="number" min="1" value={folderReviewConfig.blockValue || 1}
+                      onChange={e=>setFolderReviewConfig(p=>({...p,blockValue:Math.max(1, Number(e.target.value) || 1)}))}
+                      className={`w-28 p-3 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`}/>
+                    <span className="text-sm opacity-60">
+                      {folderReviewConfig.blockMode==='count'
+                        ? `${predictedMinQuestionsPerBlock===predictedMaxQuestionsPerBlock
+                          ? `${predictedMaxQuestionsPerBlock} questões por bloco`
+                          : `${predictedMinQuestionsPerBlock}–${predictedMaxQuestionsPerBlock} questões por bloco`}.`
+                        : `${predictedBlockCount} bloco${predictedBlockCount!==1?'s':''} no total.`}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between gap-3 mb-3">
                 <label className="block text-xs font-bold uppercase tracking-widest opacity-50">Conteúdo ({selectedContentSummary})</label>
@@ -18945,9 +19043,10 @@ export default function QuestionBankApp() {
                   );
                 })}
               </div>
+              {folderReviewError&&<p className={`mb-5 rounded-lg border px-3 py-2 text-sm ${darkMode?'border-red-800 bg-red-950/30 text-red-300':'border-red-200 bg-red-50 text-red-700'}`}>{folderReviewError}</p>}
               <div className="flex gap-3">
                 <button onClick={()=>setFolderReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
-                <button onClick={createFolderReview} disabled={!selectedCount} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Criar estudo</button>
+                <button onClick={()=>createFolderReview()} disabled={!selectedCount||folderReviewCreating} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">{folderReviewCreating?'Criando estudo...':'Criar estudo'}</button>
               </div>
             </div>
 	          </div>
