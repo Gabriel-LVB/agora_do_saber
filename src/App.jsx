@@ -3236,6 +3236,7 @@ const QuestionView = ({
 	  nextUnitHelper='Continuar sequência',
 	  inReviewCount=0,
 	  displayMode='list',
+	  resumeAtFirstUnanswered=false,
 	  onExportAnki=null,
 	}) => {
   const dm = darkMode;
@@ -3274,6 +3275,9 @@ const QuestionView = ({
 	    Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
 	  );
 	  const questionIdsKey = questions.map(q=>q.id).join('|');
+	  const answerProgressKey = resumeAtFirstUnanswered
+	    ? questions.map(q=>`${q.id}:${answers?.[q.id] || ''}`).join('|')
+	    : '';
 	  const allFlashcards = questions.length > 0 && questions.every(q => isMemoryCard(q));
 	  const savedFlashcardAnswersKey = allFlashcards
 	    ? questions.map(q => `${q.id}:${answers?.[q.id] || ''}`).join('|')
@@ -3361,7 +3365,7 @@ const QuestionView = ({
 	    if (!singleMode || allFlashcards) return;
 	    const idx = questions.findIndex(q => q.isOpen ? !isOpenAnswered(q) : !validAnswers[q.id]);
 	    setSingleIndex(idx >= 0 ? idx : 0);
-	  }, [singleMode, allFlashcards, questionIdsKey]); // eslint-disable-line
+	  }, [singleMode, allFlashcards, questionIdsKey, answerProgressKey]); // eslint-disable-line
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
   const btnNeutral = dm ? `${btnBase} border-gray-600 text-gray-300 hover:bg-gray-700` : `${btnBase} border-gray-200 text-gray-600 hover:bg-gray-50`;
@@ -10757,13 +10761,27 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const q = resolveCustomStudyQuestions(activeTopic).find(x => sameId(x.id, qId));
       if (!q) return;
       const isRight = isAnswerCorrect(q, letter);
-      setShuffledSubjectTopic(topic => topic ? {
-        ...topic,
-        answers:{...(topic.answers || {}), [qId]:letter},
-        errorNotebook:canUseAdvancedFeatures && !isRight
-          ? addToList(topic.errorNotebook || [], qId)
-          : (topic.errorNotebook || []),
-      } : topic);
+      setShuffledSubjectTopic(topic => {
+        if (!topic) return topic;
+        const previousAnswers = topic.answers || {};
+        const wasAnswered = !!previousAnswers[qId] && previousAnswers[qId] !== 'SKIPPED';
+        let questionRefs = topic.questionRefs || [];
+        if (!wasAnswered) {
+          const currentRef = questionRefs.find(ref => sameId(ref.id, qId));
+          const otherRefs = questionRefs.filter(ref => !sameId(ref.id, qId));
+          const answeredRefs = otherRefs.filter(ref => previousAnswers[ref.id] && previousAnswers[ref.id] !== 'SKIPPED');
+          const pendingRefs = otherRefs.filter(ref => !previousAnswers[ref.id] || previousAnswers[ref.id] === 'SKIPPED');
+          questionRefs = currentRef ? [...answeredRefs, currentRef, ...pendingRefs] : questionRefs;
+        }
+        return {
+          ...topic,
+          questionRefs,
+          answers:{...previousAnswers, [qId]:letter},
+          errorNotebook:canUseAdvancedFeatures && !isRight
+            ? addToList(topic.errorNotebook || [], qId)
+            : (topic.errorNotebook || []),
+        };
+      });
       const nextSourceSubject = await syncCustomStudyOriginAnswer(q, letter, isRight, 'all');
       if (nextSourceSubject) await updateLibraryItems([nextSourceSubject]);
       return;
@@ -11645,11 +11663,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       if (listHasId(sourceTopic?.favorites || [], ref.questionId)) favorites.push(ref.id);
       if (listHasId(sourceTopic?.errorNotebook || [], ref.questionId)) errorNotebook.push(ref.id);
     });
+    const orderedRefs = [
+      ...refs.filter(ref => answers[ref.id] && answers[ref.id] !== 'SKIPPED'),
+      ...refs.filter(ref => !answers[ref.id] || answers[ref.id] === 'SKIPPED'),
+    ];
     const shuffledTopic = {
       id:`shuffled-subject-${subject.id}`,
       subjectId:subject.id,
       title:'Questões embaralhadas',
-      questionRefs:refs,
+      questionRefs:orderedRefs,
       answers,
       favorites,
       errorNotebook,
@@ -14479,7 +14501,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               oracleLength={settings.oracleLength||'medium'}
               onCall={callWithRotation}
 	              onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
-	              displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
+	              displayMode={isShuffledSubjectTopic ? 'single' : (canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list')}
+	              resumeAtFirstUnanswered={isShuffledSubjectTopic}
 	              onExportAnki={isAdmin && !isShuffledSubjectTopic ? (qs=>exportFlashcardsToAnki({
 	                questions:qs,
 	                title:activeTopic.title,
