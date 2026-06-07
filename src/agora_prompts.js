@@ -172,6 +172,7 @@ const QUESTION_TYPE_LABELS = {
   cespe: 'Certo ou Errado (CESPE)',
   open: 'Resposta Curta (aberta)',
   essay: 'Dissertativa',
+  old_exam: 'Provas antigas',
   flashcard: 'Flashcards',
   cloze: 'Flashcards Cloze',
 };
@@ -236,13 +237,31 @@ REGRAS DAS ALTERNATIVAS — AS MAIS IMPORTANTES DESTE PROMPT:
 REGRA 1 — ALTERNATIVA A É SEMPRE A CORRETA (CRÍTICO):
 Coloque a resposta correta como alternativa A, sempre. O site embaralha automaticamente.
 Isso permite que você use a alternativa A como âncora para calibrar os distratores:
-- Escreva A (correta) com o nível de detalhe ideal
-- Escreva B, C, D (e E) com comprimento similar ao de A (±10 palavras), alterando apenas o elemento que torna cada um incorreto
+- Escreva A (correta) no MENOR formato que responda integralmente ao que foi perguntado
+- Escreva B, C, D (e E) no mesmo formato compacto de A, alterando apenas o elemento que torna cada um incorreto
 - Distratores devem parecer tão plausíveis quanto A para quem estudou superficialmente
 EXEMPLO PROIBIDO: A) Sim, pela inibição da bomba de Na/K e ação sobre canais de Ca²⁺ / B) Não / C) Sim / D) Nunca
 EXEMPLO CORRETO: A) [resposta correta, 12 palavras] / B) [mesmo comprimento, mecanismo errado] / C) [mesmo comprimento, órgão errado] / D) [mesmo comprimento, dose/classe errada]
 
-REGRA 2 — DISTRATORES SOFISTICADOS (CRÍTICO):
+REGRA 2 — ALTERNATIVAS COMPACTAS E ALINHADAS AO ALVO (CRÍTICO):
+Alternativas não são explicações. Elas devem conter somente a informação necessária para responder ao alvo exato do enunciado.
+- Se a pergunta pede "qual fármaco?", coloque apenas nomes de fármacos. Não acrescente mecanismo, indicação, efeito adverso ou resumo após cada nome.
+- Se pede "qual manobra?", coloque apenas nomes das manobras.
+- Se pede "qual diagnóstico?", coloque apenas os diagnósticos.
+- Se pede "qual estrutura/agente/exame?", coloque apenas os nomes correspondentes.
+- Se pede mecanismo, fisiopatologia, conduta ou sequência, use frases curtas paralelas contendo somente a diferença necessária entre as opções.
+- Nunca acrescente detalhes às alternativas apenas para torná-las sofisticadas, longas ou autossuficientes. O contexto pertence ao enunciado; o ensino pertence à explicação.
+- Detalhes extras são proibidos quando permitem acertar sem recordar o alvo principal, por eliminação ou raciocínio sobre os resumos anexados.
+- Antes de finalizar, pergunte: "se eu remover esta oração/detalhe, a alternativa ainda identifica de forma única a opção?". Se sim, remova.
+- Prefira alternativas de 1 a 6 palavras quando o alvo for um nome/termo. Use alternativas maiores somente quando o próprio alvo exigir uma proposição.
+EXEMPLO RUIM — alvo é reconhecer o fármaco:
+A) Lamotrigina, estabilizador com baixo risco metabólico e ação em canais de sódio
+B) Valproato, estabilizador eficaz em mania e associado a teratogenicidade
+EXEMPLO BOM:
+A) Lamotrigina
+B) Valproato
+
+REGRA 3 — DISTRATORES SOFISTICADOS (CRÍTICO):
 Cada distrator deve ser uma afirmação que um estudante que estudou superficialmente poderia confundir com a resposta correta.
 Use: condições do mesmo grupo nosológico, fármacos da mesma classe, mecanismos parecidos, exceções da regra, valores próximos mas incorretos, inversões de causa/efeito, confusões clássicas do tema.
 PROIBIDO: distratores obviamente absurdos, anatomicamente impossíveis, ou que qualquer pessoa sem conhecimento médico eliminaria por bom senso.
@@ -250,14 +269,14 @@ PROIBIDO: distratores que são apenas a negação direta do enunciado.
 PROIBIDO: misturar categorias semânticas. Se a pergunta pede uma reação oftalmológica, todos os distratores devem ser reações/achados oftalmológicos plausíveis ou diagnósticos diferenciais oculares — nunca pancreatite, nefrolitíase, enjoo etc.
 Se você não conseguir criar distratores plausíveis dentro da mesma categoria, REESCREVA a questão.
 
-REGRA 3 — SEM PISTAS SINTÁTICAS:
+REGRA 4 — SEM PISTAS SINTÁTICAS:
 - A alternativa correta não pode ter estrutura gramatical diferente das erradas
 - A alternativa correta não pode ser sistematicamente a maior, mais detalhada, mais específica ou mais "bonita"
 - Todas as alternativas devem responder exatamente à mesma pergunta, no mesmo nível de especificidade e com comprimento visual parecido
 - Não use "todas as anteriores" ou "nenhuma das anteriores"
 - Não tente variar a letra correta: escreva a correta em A, pois o site embaralha antes de exibir
 
-REGRA 4 — DIFICULDADE REAL:
+REGRA 5 — DIFICULDADE REAL:
 Um estudante que nunca viu o tema deve errar. Um que estudou superficialmente deve hesitar. Só quem domina o conteúdo deve acertar com segurança.
 Antes de finalizar cada questão, faça este teste mental: "dá para acertar por eliminação grosseira, tamanho da alternativa, categoria absurda ou bom senso leigo?". Se sim, refaça alternativas e/ou enunciado.`;
 
@@ -381,7 +400,8 @@ Alternativas:
 INSTRUÇÃO CRÍTICA SOBRE AS ALTERNATIVAS:
 Coloque SEMPRE a alternativa CORRETA como alternativa A.
 Depois crie os distratores (B, C, D e E se houver) baseando-se na alternativa A:
-- Use a alternativa A como referência de comprimento — os distratores devem ter comprimento similar (±10 palavras)
+- Use a alternativa A como referência de formato compacto — os distratores devem ter comprimento e estrutura similares
+- Se a pergunta pedir um nome/termo, escreva apenas nomes/termos nas alternativas; não anexe resumos explicativos
 - Crie distratores alterando elementos específicos da alternativa A: troque doses, mecanismos, órgãos, fármacos por versões plausíveis mas incorretas
 - Distratores devem parecer igualmente corretos para quem não domina o assunto
 - O site embaralha as alternativas automaticamente antes de exibir — você não precisa se preocupar com isso
@@ -403,6 +423,8 @@ export const QUESTION_AUDIT_CHECKLIST = [
   'Dificuldade desejável: não acertável por eliminação grosseira ou conhecimento leigo',
   'Alternativa correta tecnicamente verdadeira, atual e sem ambiguidade',
   'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',
+  'Alternativas no menor texto suficiente para responder ao alvo, sem resumos explicativos que deem pistas',
+  'Quando o alvo for identificar fármaco, diagnóstico, manobra, estrutura, agente ou exame, alternativas contêm apenas os nomes correspondentes',
   'Alternativa correta não maior, mais detalhada, mais específica ou mais bem escrita que as erradas',
   'Todas as alternativas com comprimento visual parecido e mesma estrutura gramatical',
   'Sem "todas", "nenhuma", negações óbvias ou distratores absurdos',
@@ -491,6 +513,8 @@ REGRAS DE CORREÇÃO:
 - Adicione itens somente se a cobertura do tópico/subtópicos estiver insuficiente. Não adicione para inflar volume.
 - Se o usuário pediu foco específico, toda a bateria deve respeitar esse foco. Não troque o pedido por princípios amplos, adesão, polifarmácia, revisão de medicação ou recomendações administrativas.
 - Para questões fechadas, coloque SEMPRE a correta como A porque o site embaralha depois. Faça B/C/D/E plausíveis, parecidas em tamanho e categoria.
+- Enxugue alternativas que funcionem como mini-explicações. Se o enunciado pede identificar um fármaco, diagnóstico, manobra, estrutura, agente ou exame, deixe apenas os nomes nas alternativas. Preserve frases maiores somente quando o próprio alvo for mecanismo, conduta, fisiopatologia ou outra proposição.
+- Remova de todas as alternativas qualquer detalhe que permita acertar por eliminação sem recordar o alvo principal. O contexto fica no enunciado e o ensino fica na explicação.
 - Para flashcards/clozes, mantenha cobranças específicas, atômicas, respostas/lacunas curtas e explicações que ensinem o porquê/como daquela resposta.
 - Reescreva explicações que apenas repitam o gabarito. A explicação deve fazer a resposta ficar compreensível para quem errou, sem virar aula.
 - Reprove explicações que digam apenas "é primeira linha", "é eficaz", "é preferido" ou "é indicado" sem explicar a propriedade, mecanismo, perfil clínico ou razão prática que justifica isso.
@@ -762,7 +786,87 @@ ${studyMap ? '- Preserve ou recalcule [Q:n], [P:alta|média|baixa] e [OBJ:objeti
 export const buildExternalPrompt = (s) => {
   const na   = s.numAlternatives || 5;
   const qPerSub = Math.max(1, Number(s.qPerSub) || 1);
-  const types = s.questionTypes || ['direct'];
+  const selectedType = s.questionTypes?.[0] || 'direct';
+  const types = [selectedType];
+  if (selectedType === 'old_exam') {
+    return `[INSTRUÇÕES PARA TRANSCREVER PROVAS ANTIGAS — ÁGORA DO SABER]
+
+TAREFA:
+Depois destas instruções, enviarei questões antigas de prova em texto, imagem, PDF ou OCR. Transcreva TODAS as questões válidas e devolva-as prontas para importação no Ágora do Saber.
+
+REGRA CENTRAL — PRESERVAÇÃO VERBATIM:
+- Preserve integralmente o conteúdo original de cada enunciado e de cada alternativa.
+- Preserve a ordem das questões e a ordem original das alternativas.
+- NÃO resuma, modernize, simplifique, complete, melhore, adapte ou reescreva o conteúdo das questões.
+- NÃO transforme a questão em outra questão e NÃO crie questões novas.
+- As únicas alterações permitidas no texto original são correções inequívocas de OCR, caracteres corrompidos, palavras partidas, hifenização acidental, espaços duplicados e quebras de linha inadequadas.
+- Se uma palavra estiver duvidosa, preserve-a como recebida. Não invente uma correção.
+
+EXCEÇÃO — ALTERNATIVAS AUSENTES OU ILEGÍVEIS:
+- Se uma questão objetiva estiver claramente incompleta porque uma ou mais alternativas não aparecem, foram cortadas, estão totalmente ilegíveis ou se perderam no OCR, crie apenas as alternativas faltantes necessárias para completar a questão.
+- Nunca altere alternativas que estejam presentes e legíveis. Preserve-as verbatim e mantenha suas letras/ordem originais.
+- Analise a questão antes de completar: a resposta correta pode estar justamente entre as alternativas ausentes. Não presuma que uma alternativa sobrevivente precisa ser a correta.
+- As alternativas reconstruídas devem ser tecnicamente plausíveis, pertencer à mesma categoria das originais, ter tamanho semelhante e não entregar o gabarito.
+- Determine o gabarito considerando conjuntamente as alternativas originais e reconstruídas.
+- Na explicação da alternativa reconstruída, comece com "[ALTERNATIVA RECONSTRUÍDA]" para deixar claro que ela não estava integralmente disponível no material.
+- Não reconstrua alternativa por mera dúvida de leitura parcial: tente primeiro corrigir somente o OCR. Reconstrua apenas quando realmente faltar conteúdo suficiente para formar uma alternativa utilizável.
+
+LIMPEZA DO MATERIAL:
+- Ignore cabeçalhos e rodapés de prova, nome da instituição, disciplina, professor, aluno, turma, data, paginação, instruções gerais e campos de identificação.
+- Ignore rabiscos, anotações manuscritas, marca-texto, círculos, setas, respostas marcadas pelo aluno e qualquer conteúdo que não faça parte da impressão original da questão.
+- Remova números de página e elementos repetidos entre páginas.
+- Não trate comentários, gabaritos rabiscados ou resoluções manuscritas como parte do enunciado.
+
+GABARITO E EXPLICAÇÕES:
+- Se houver gabarito oficial confiável no material, use-o.
+- Se não houver gabarito oficial, resolva a questão e determine a resposta correta sem alterar o enunciado ou as alternativas.
+- Para questões objetivas, escreva uma aula curta que ensine o conhecimento necessário para acertar e explique separadamente por que cada alternativa está certa ou errada.
+- Para questões abertas, acrescente somente a resposta esperada e uma explicação didática.
+- Se a questão original estiver anulada, tecnicamente errada ou sem alternativa defensável, preserve-a e informe isso claramente na explicação; não conserte silenciosamente a questão.
+
+FORMATO OBRIGATÓRIO PARA QUESTÃO OBJETIVA:
+## Questão N
+[enunciado original limpo]
+A) [alternativa original limpa]
+B) [alternativa original limpa]
+C) [alternativa original limpa]
+D) [alternativa original limpa]
+[E), se existir na questão original]
+Alternativa correta: [letra]
+Explicação:
+Aula:
+[explicação do tema necessária para compreender e acertar a questão]
+
+Alternativas:
+[[ALT:A]]
+[por que A está certa ou errada]
+
+[[ALT:B]]
+[por que B está certa ou errada]
+
+[[ALT:C]]
+[por que C está certa ou errada]
+
+[[ALT:D]]
+[por que D está certa ou errada]
+
+[[ALT:E]]
+[por que E está certa ou errada, somente se existir]
+---
+
+FORMATO OBRIGATÓRIO PARA QUESTÃO ABERTA:
+## Questão N
+[enunciado original limpo]
+Resposta esperada: [resposta]
+Explicação: [explicação didática]
+---
+
+REGRAS FINAIS:
+- Use o formato correspondente à estrutura original de cada questão; não converta questões abertas em objetivas nem objetivas em abertas.
+- Não inclua comentários antes ou depois dos blocos.
+- Não omita questões válidas.
+- Aguarde eu enviar a prova antes de responder.${s.customPrompt ? `\n\nINSTRUÇÕES ADICIONAIS:\n${s.customPrompt}` : ''}`;
+  }
   const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
   const onlyFlashcards = onlyMemoryCards(types);
   const typeInst = buildTypeInst(types);
@@ -791,6 +895,19 @@ Para cada tópico gere ${onlyFlashcards ? `a quantidade ideal de ${memoryCardNam
   const closedBlock = hasClosed ? `
 FORMATO PARA QUESTÕES COM ALTERNATIVAS:
 ${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}` : '';
+  const importRule = selectedType === 'direct'
+    ? `Use exclusivamente blocos "## Questão N" com ${na} alternativas, "Alternativa correta: [letra]" e "Explicação:".`
+    : selectedType === 'vof'
+      ? 'Use exclusivamente blocos "## Questão N" com quatro assertivas I-IV, alternativas com combinações V/F, "Alternativa correta: [letra]" e "Explicação:".'
+      : selectedType === 'cespe'
+        ? 'Use exclusivamente blocos "## Questão N" com A) Certo, B) Errado, "Alternativa correta: [letra]" e "Explicação:".'
+        : selectedType === 'open'
+          ? 'Use exclusivamente blocos "## Questão N" com "Resposta esperada:" e "Explicação:", sem alternativas.'
+          : selectedType === 'essay'
+            ? 'Use exclusivamente blocos "## Questão N", "Tipo: Dissertativa", "Resposta esperada:" e "Explicação:", sem alternativas.'
+            : selectedType === 'flashcard'
+              ? 'Use exclusivamente blocos "## Flashcard N" com "Pergunta:", "Resposta:" e "Explicação:".'
+              : 'Use exclusivamente blocos "## Cloze N" com "Texto:" contendo {{c1::...}} e "Extra:".';
 
   return `[INSTRUÇÕES PARA IA EXTERNA — ÁGORA DO SABER]
 
@@ -799,7 +916,7 @@ ${parte1}
 ${parte2}
 
 TIPO DE ITEM A GERAR:
-${types.map(t => `- ${QUESTION_TYPE_LABELS[t] || t}`).join('\n')}
+${QUESTION_TYPE_LABELS[selectedType] || selectedType}
 
 ${typeInst ? `${typeInst}\n` : ''}
 ESTILO: ${STYLE_INST[s.questionStyle || 'mixed']}
@@ -810,11 +927,8 @@ ${closedBlock}
 
 REGRAS DE IMPORTAÇÃO NO ÁGORA:
 - Entregue os itens finais em blocos separados por "---".
-- Múltipla escolha, V/F e CESPE devem usar "## Questão N", alternativas A-E ou A-B, "Alternativa correta: A" ou "Gabarito: A", e "Explicação:".
-- Resposta curta deve usar "Resposta esperada:" e "Explicação:", sem alternativas.
-- Dissertativa deve usar "Resposta esperada:" e "Explicação:"; se possível, escreva "Tipo: Dissertativa" no bloco para o Ágora identificar.
-- Flashcards devem usar exatamente "## Flashcard N", "Pergunta:", "Resposta:" e "Explicação:".
-- Clozes devem usar exatamente "## Cloze N", "Texto:" com {{c1::...}} e "Extra:".
+- ${importRule}
+- Não use nenhum outro tipo ou formato de item.
 - Não coloque comentários fora dos blocos de itens, porque vou colar a resposta diretamente no importador do Ágora.`;
 };
 

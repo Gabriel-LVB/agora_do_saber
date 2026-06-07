@@ -472,6 +472,21 @@ const addToList = (list = [], id) => {
   return listHasId(safe, id) ? safe : [...safe, id];
 };
 
+const cleanFirestoreData = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(item => {
+    const clean = cleanFirestoreData(item);
+    return clean === undefined ? null : clean;
+  });
+  const out = {};
+  Object.entries(value).forEach(([key, item]) => {
+    const clean = cleanFirestoreData(item);
+    if (clean !== undefined) out[key] = clean;
+  });
+  return out;
+};
+
 const getTodayKey = () => new Date().toLocaleDateString('en-CA');
 
 const normalizeIntervals = (intervals = []) => (Array.isArray(intervals) ? intervals : [])
@@ -3275,15 +3290,13 @@ const QuestionView = ({
 	    Object.entries(answers).filter(([id]) => questions.some(q => q.id === id))
 	  );
 	  const questionIdsKey = questions.map(q=>q.id).join('|');
-	  const answerProgressKey = resumeAtFirstUnanswered
-	    ? questions.map(q=>`${q.id}:${answers?.[q.id] || ''}`).join('|')
-	    : '';
 	  const allFlashcards = questions.length > 0 && questions.every(q => isMemoryCard(q));
 	  const savedFlashcardAnswersKey = allFlashcards
 	    ? questions.map(q => `${q.id}:${answers?.[q.id] || ''}`).join('|')
 	    : '';
 	  const singleMode = (allFlashcards || displayMode === 'single') && questions.length > 0;
 	  const [singleIndex, setSingleIndex] = useState(0);
+	  const currentSingleQuestionIdRef = useRef(null);
 	  const [showCompletion, setShowCompletion] = useState(false);
 	  const [flashcardQueue, setFlashcardQueue] = useState([]);
 	  const [flashcardCursor, setFlashcardCursor] = useState(0);
@@ -3362,10 +3375,16 @@ const QuestionView = ({
 	  const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
 
 	  useEffect(() => {
-	    if (!singleMode || allFlashcards) return;
+	    if (!singleMode || allFlashcards || resumeAtFirstUnanswered) return;
 	    const idx = questions.findIndex(q => q.isOpen ? !isOpenAnswered(q) : !validAnswers[q.id]);
 	    setSingleIndex(idx >= 0 ? idx : 0);
-	  }, [singleMode, allFlashcards, questionIdsKey, answerProgressKey]); // eslint-disable-line
+	  }, [singleMode, allFlashcards, questionIdsKey]); // eslint-disable-line
+
+	  useEffect(() => {
+	    if (!resumeAtFirstUnanswered || !singleMode || allFlashcards) return;
+	    const idx = questions.findIndex(q => q.isOpen ? !isOpenAnswered(q) : !validAnswers[q.id]);
+	    setSingleIndex(idx >= 0 ? idx : 0);
+	  }, [resumeAtFirstUnanswered, singleMode, allFlashcards]); // eslint-disable-line
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
   const btnNeutral = dm ? `${btnBase} border-gray-600 text-gray-300 hover:bg-gray-700` : `${btnBase} border-gray-200 text-gray-600 hover:bg-gray-50`;
@@ -3391,6 +3410,14 @@ const QuestionView = ({
 	  const currentQuestion = allFlashcards && singleMode
 	    ? (activeFlashcardEntry ? getFlashcardById(activeFlashcardEntry.qid) : null)
 	    : (singleMode ? questions[Math.min(singleIndex, questions.length - 1)] : null);
+	  useEffect(() => {
+	    if (!resumeAtFirstUnanswered || !singleMode || allFlashcards || !currentSingleQuestionIdRef.current) return;
+	    const idx = questions.findIndex(q => q.id === currentSingleQuestionIdRef.current);
+	    if (idx >= 0 && idx !== singleIndex) setSingleIndex(idx);
+	  }, [resumeAtFirstUnanswered, singleMode, allFlashcards, questionIdsKey]); // eslint-disable-line
+	  useEffect(() => {
+	    if (resumeAtFirstUnanswered && currentQuestion) currentSingleQuestionIdRef.current = currentQuestion.id;
+	  }, [resumeAtFirstUnanswered, singleIndex]); // eslint-disable-line
 	  const navBtn = (disabled, primary=false) => `inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${disabled
 	    ? (dm?'border-gray-800 text-gray-700 bg-gray-900/40 cursor-default':'border-gray-100 text-gray-300 bg-gray-50 cursor-default')
 	    : primary
@@ -4479,11 +4506,12 @@ const QUESTION_TYPES = [
   { k: 'cespe',    label: '⚖️ Certo/Errado',  desc: 'Estilo CESPE — 1 afirmação' },
   { k: 'open',     label: '✏️ Aberta',        desc: 'Resposta curta corrigida pela IA' },
   { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
+  { k: 'old_exam', label: '📜 Provas antigas', desc: 'Preserva questões e corrige apenas OCR/formatação', externalOnly:true },
   { k: 'flashcard', label:'🃏 Flashcards',    desc: 'Pergunta, resposta e explicação', advancedOnly:true },
   { k: 'cloze',    label:'🧩 Cloze',           desc: 'Lacunas estilo AnKing/Anki', adminOnly:true },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false }) => {
   const dm = darkMode;
   const toggle = (k) => {
     if (single) { onChange([k]); return; }
@@ -4493,7 +4521,7 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, i
   };
   return (
     <div className="space-y-2">
-      {QUESTION_TYPES.filter(t => !t.adminOnly || isAdmin).filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin).map(t => {
+      {QUESTION_TYPES.filter(t => includeExternalOnly || !t.externalOnly).filter(t => !t.adminOnly || isAdmin).filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin).map(t => {
         const on = selected.includes(t.k);
         return (
           <button key={t.k} onClick={()=>toggle(t.k)}
@@ -5760,6 +5788,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
     customPrompt:    settings.customPrompt   || '',
   });
   const [copied, setCopied] = useState(false);
+  const isOldExamPrompt = (cfg.questionTypes || []).includes('old_exam');
   const hasClosedTypes = (cfg.questionTypes || ['direct']).some(t => ['direct','vof','cespe'].includes(t));
   const isMemoryPrompt = (cfg.questionTypes || ['direct']).some(isMemoryCardType);
 
@@ -5780,7 +5809,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
         </div>
         <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
           {/* AutoMode */}
-          <button onClick={()=>setCfg(p=>({...p,autoMode:!p.autoMode}))}
+          {!isOldExamPrompt&&<button onClick={()=>setCfg(p=>({...p,autoMode:!p.autoMode}))}
             className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.autoMode?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-gray-50')}`}>
             <div>
               <p className={`text-sm font-bold ${cfg.autoMode?'text-yellow-500':''}`}>✦ IA escolhe a estrutura</p>
@@ -5789,10 +5818,10 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
             <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.autoMode?'#ca8a04':'#9ca3af',flexShrink:0,display:'flex',alignItems:'center',transition:'background 0.2s'}}>
               <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
             </div>
-          </button>
+          </button>}
 
           {/* Estrutura */}
-          <div>
+          {!isOldExamPrompt&&<div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estrutura do sumário</p>
             <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 transition-opacity ${cfg.autoMode?'opacity-30 pointer-events-none':''}`}>
               {[{l:'Tópicos',k:'numTopics',mn:1,mx:20},{l:'Subtóp./Tópico',k:'numSubtopics',mn:1,mx:30}].map(f=>(
@@ -5804,7 +5833,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* Questões */}
           <div>
@@ -5818,12 +5847,19 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
                 single={true}
                 isAdmin={isAdmin}
                 canCreateFlashcards={canCreateFlashcards}
+                includeExternalOnly={true}
               />
               <p className="text-[11px] opacity-45 mt-2 leading-relaxed">
-                Escolha o tipo do prompt. A importação aceita alternativas, V/F, CESPE, resposta curta, dissertativa{canCreateFlashcards ? ', flashcards' : ''}{isAdmin ? ' e clozes' : ''}.
+                {isOldExamPrompt
+                  ? 'Cole o prompt na IA e, depois, envie as questões antigas. Ela preservará o texto e as alternativas, limpando somente ruídos de OCR e formatação.'
+                  : 'O prompt copiado conterá somente as regras e o formato do tipo selecionado.'}
               </p>
             </div>
-            {isMemoryPrompt ? (
+            {isOldExamPrompt ? (
+              <p className={`text-xs rounded-xl border px-3 py-2 ${dm?'border-yellow-800/50 bg-yellow-900/15 text-yellow-300':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
+                A quantidade será exatamente a quantidade de questões válidas fornecidas à IA.
+              </p>
+            ) : isMemoryPrompt ? (
               <p className={`text-xs rounded-xl border px-3 py-2 ${dm?'border-yellow-800/50 bg-yellow-900/15 text-yellow-300':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
                 {memoryCardTypeName(cfg.questionTypes)}: a IA decide a quantidade ideal, sem meta fixa por subtópico.
               </p>
@@ -5849,7 +5885,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
           </div>
 
           {/* Estilo */}
-          <div>
+          {!isOldExamPrompt&&<div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
@@ -5859,7 +5895,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* Instrução extra */}
           <div>
@@ -8206,7 +8242,7 @@ export default function QuestionBankApp() {
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
   const updateSubject = async (s) => {
-    const cleanSubject = pruneEmbeddedSpacedReview(s);
+    const cleanSubject = cleanFirestoreData(pruneEmbeddedSpacedReview(s));
     const previous = libraryRef.current.find(x=>x.id===cleanSubject.id);
     const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
     libraryRef.current = nextLibrary;
@@ -8217,7 +8253,7 @@ export default function QuestionBankApp() {
     if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const updateLibraryItems = async (items) => {
-    const cleanItems = items.map(pruneEmbeddedSpacedReview);
+    const cleanItems = items.map(item => cleanFirestoreData(pruneEmbeddedSpacedReview(item)));
     const changed = new Map(cleanItems.map(item=>[item.id,item]));
     const currentLibrary = libraryRef.current?.length ? libraryRef.current : library;
     const previousItems = cleanItems.map(item => currentLibrary.find(x => x.id === item.id)).filter(Boolean);
@@ -8254,7 +8290,7 @@ export default function QuestionBankApp() {
   }, [library.length]); // eslint-disable-line
 
   const addSubject = async (s) => {
-    let ns = s;
+    let ns = cleanFirestoreData(s);
     if (!Number.isFinite(Number(ns.sortOrder)) && ns.source) {
       const parent = isFolderItem(ns) ? (ns.parentFolderId || null) : (ns.folderId || null);
       const siblings = library.filter(item => item.source === ns.source && (isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null)) === parent);
@@ -9140,7 +9176,7 @@ export default function QuestionBankApp() {
   const shouldAuditQuestions = (sourceSettings = settingsRef.current) =>
     !!isAdmin && !!sourceSettings?.auditQuestions;
 
-  const QUESTION_AUDIT_VERSION = 2;
+  const QUESTION_AUDIT_VERSION = 3;
 
   const makeQuestionAuditMeta = (questionCount = 0, source = 'auto') => ({
     version:QUESTION_AUDIT_VERSION,
