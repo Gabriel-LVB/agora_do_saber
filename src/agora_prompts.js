@@ -613,6 +613,7 @@ ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper. Não resum
 
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const l = SYLLABUS_LIMITS.oracle;
+  const studyMap = !!s.adminStudyMap;
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
 OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
@@ -639,6 +640,14 @@ FONTE OBRIGATÓRIA — SIGA O MATERIAL:
 O sumário deve ser um índice fiel do material fornecido.
 Siga a ordem do material sempre que ela fizer sentido didático.
 Não extrapole para fora do que foi pedido. Não junte tópicos vizinhos apenas para economizar geração.
+
+HIERARQUIA DA INTENÇÃO DO USUÁRIO — REGRA CRÍTICA:
+Antes de montar o sumário, extraia mentalmente do material quatro listas: (1) o que o usuário quer dominar; (2) o que ele proibiu; (3) qual ordem/organização ele pediu; (4) qual tipo de decisão ou desempenho ele precisa treinar.
+- Restrições explícitas do usuário vencem qualquer modelo genérico de currículo. Se ele disser "não inclua doses", não crie dose, posologia, ajuste posológico ou titulação como objetivo próprio. Se disser "sem introdução/generalidades", não crie um bloco geral disfarçado com nome como princípios, fundamentos, panorama, considerações iniciais ou visão integrada.
+- Respeite qualificadores do pedido. Exemplo: "psicofarmacologia com foco em anticonvulsivantes" não significa um curso genérico de epilepsia; o enquadramento psicofarmacológico deve orientar seleção e peso dos conteúdos.
+- Respeite sequências explícitas como "primeiro por medicamentos; depois por patologias/casos". A estrutura final precisa tornar essa ordem visível.
+- Quando o usuário descreve como será avaliado, organize o sumário para treinar exatamente esse desempenho. Se a prova exige escolher entre fármacos parecidos, trocar após efeito adverso, reconhecer contraindicação ou definir linha terapêutica, a maior parte dos objetivos deve exigir essas decisões, não apenas listar ou identificar fatos isolados.
+- Não inclua um conteúdo só porque é importante em geral. Inclua-o apenas se servir ao objetivo específico descrito no material.
 
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para revisão e criação de questões de alto rendimento, não para uma apostila enciclopédica.
@@ -688,13 +697,38 @@ REGRAS FINAIS:
 - Obrigatório cobrir todo o material relevante, sem cortar conteúdo importante para caber em uma quantidade fixa
 - Obrigatório revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado
 - Obrigatório revisar tópicos gigantes e dividir qualquer tópico que passe de 30 subtópicos
+- Obrigatório fazer uma auditoria final contra o material: remova qualquer tópico proibido pelo usuário e confirme que todas as etapas/blocos solicitados aparecem.
+- Em pedidos clínicos orientados a decisão, prefira títulos que explicitem o contraste ou cenário: "X versus Y em paciente com...", "troca de X após...", "escolha em...", "quando evitar X". Evite objetivos vagos como apenas "indicações", "efeitos adversos" ou "primeira linha" quando o contexto discriminativo puder ser explicitado.
+- A seção de casos/patologias não pode ser uma recapitulação genérica dos fármacos. Ela deve transformar o conteúdo anterior em cenários de decisão plausíveis, com fatores do paciente que mudam a escolha.
 
+${studyMap ? `MAPA DE ESTUDO PROFISSIONAL:
+Para CADA subtópico, faça também um planejamento individual:
+- P mede IMPORTÂNCIA DE ESTUDO, não dificuldade nem quantidade de conteúdo:
+  - alta = ESSENCIAL: conceito central, recorrente em provas, muito útil na prática ou cuja ausência deixa uma lacuna importante.
+  - média = RELEVANTE: ajuda a compreender/aplicar o tema, mas não é um dos pilares indispensáveis.
+  - baixa = COMPLEMENTAR: útil e ainda testável, porém menos provável ou menos decisivo. Se for inútil, não crie o subtópico.
+- Q mede o número de COBRANÇAS DISTINTAS necessárias, não a prioridade:
+  - Q:1 = existe uma cobrança principal suficiente.
+  - Q:2 = existem dois raciocínios realmente diferentes, como reconhecer + aplicar ou comparar + decidir.
+  - Q:3 ou mais = há três ou mais decisões/conceitos independentes. Se Q ficar muito alto, prefira dividir o subtópico.
+- OBJ: objetivo de aprendizagem curto, específico e verificável. Ele deve dizer o que o estudante precisará compreender, diferenciar, reconhecer ou decidir.
+- Quando o pedido for clínico/prático, prefira verbos de decisão: selecionar, comparar, trocar, evitar, priorizar, diferenciar ou justificar. Use "listar/descrever/identificar" apenas quando recuperação factual for realmente o objetivo final.
+- Não use piso artificial de 2 questões. Não aumente Q para preencher volume.
+- Q deve contar cobranças distintas, não paráfrases da mesma pergunta.
+- Prioridade alta NÃO implica muitas questões: um conceito essencial e simples pode ser [P:alta] [Q:1].
+- Prioridade baixa NÃO implica uma questão fácil: prioridade fala de rendimento, não de dificuldade.
+
+FORMATO OBRIGATÓRIO DE CADA SUBTÓPICO:
+  - [Q:1] [P:alta] [OBJ:Diferenciar X de Y pelo achado que muda a conduta] Nome do subtópico
+- Use exatamente linhas "Tópico N: nome" e bullets iniciados por "- [Q:".
+- NÃO use tabelas, JSON, blocos de código, títulos "Eixo/Trilha/Módulo" nem comentários antes ou depois do mapa.
+` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - [Subtópico]
-  - [Subtópico]
+  - ${studyMap ? '[Q:1] [P:alta] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:2] [P:média] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 Tópico 2: [Nome]
-  - [Subtópico]
+  - ${studyMap ? '[Q:1] [P:baixa] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 
 Responda APENAS o sumário.`;
 };
@@ -703,6 +737,7 @@ Responda APENAS o sumário.`;
 
 export const buildOracleSyllabusRevisePrompt = (currentSyllabus, feedback, s) => {
   const l = s?.source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
+  const studyMap = !!s?.adminStudyMap;
   return `Você é o Arquiteto de Alexandria. Ajuste o sumário abaixo conforme a instrução do usuário.
 
 SUMÁRIO ATUAL:
@@ -718,6 +753,7 @@ REGRAS:
 - Cada subtópico deve render cobrança de prova ou utilidade real; não mantenha subtópico que só gere conselho genérico.
 - Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
 - Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
+${studyMap ? '- Preserve ou recalcule [Q:n], [P:alta|média|baixa] e [OBJ:objetivo verificável] em CADA subtópico. Q pode ser 1 quando uma cobrança forte for suficiente.' : ''}
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
 };
 
@@ -869,6 +905,7 @@ ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper ou comentar
 
 export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const l = SYLLABUS_LIMITS.academia;
+  const studyMap = !!s.adminStudyMap;
   const estrutura = autoMode
     ? `Defina uma estrutura completa para uma aula eficiente.
 O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria questões de fixação para o tópico como um todo. Portanto, os subtópicos devem ter fronteiras conceituais claras e não devem ser variações redundantes do mesmo eixo de cobrança.
@@ -891,6 +928,14 @@ ${estrutura}
 FONTE OBRIGATÓRIA — SIGA O MATERIAL:
 O sumário deve ser um índice fiel do material fornecido. Siga a ordem do material.
 Não reordene, não generalize, não extrapole. Não junte tópicos vizinhos apenas para economizar geração.
+
+HIERARQUIA DA INTENÇÃO DO USUÁRIO — REGRA CRÍTICA:
+Antes de montar o sumário, extraia mentalmente: o que deve ser aprendido, o que foi proibido, a ordem solicitada e qual desempenho o aluno precisa treinar.
+- Proibições explícitas vencem qualquer currículo genérico. "Não inclua doses" também proíbe criar seções próprias de dose, posologia, ajuste posológico ou titulação. "Sem introdução/generalidades" também proíbe blocos disfarçados como princípios, fundamentos, panorama ou considerações iniciais.
+- Respeite o enquadramento do pedido. Não transforme um recorte específico, como psicofarmacologia, em um curso geral da classe farmacológica.
+- Respeite ordens explícitas como "primeiro por medicamentos; depois por patologias/casos".
+- Se o usuário precisa escolher, comparar, evitar ou trocar tratamentos em casos clínicos, organize a aula para ensinar essas decisões. Não substitua isso por listas genéricas de indicações e efeitos adversos.
+- Faça uma auditoria final removendo qualquer seção que viole o pedido, mesmo que seja importante em um curso convencional.
 
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para estudo eficiente, não para uma apostila enciclopédica.
@@ -954,12 +999,33 @@ Proibido: repetir a mesma síndrome/doença em tópicos diferentes sem eixo de c
 Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber em uma quantidade fixa.
 Obrigatório: revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado.
 Obrigatório: antes de responder, revise tópicos gigantes e divida qualquer tópico que passe de 30 subtópicos.
+Obrigatório: em pedidos clínicos orientados a decisão, a parte de patologias/casos deve conter cenários que mudem escolha, troca, contraindicação ou linha terapêutica; não pode ser apenas uma recapitulação genérica.
+${studyMap ? `MAPA DE ESTUDO PROFISSIONAL:
+Para CADA subtópico, planeje:
+- P mede IMPORTÂNCIA DE ESTUDO, não dificuldade:
+  - alta = ESSENCIAL: pilar do assunto, recorrente em prova, muito útil na prática ou necessário para entender o restante.
+  - média = RELEVANTE: contribui para compreensão e aplicação, mas não é um pilar indispensável.
+  - baixa = COMPLEMENTAR: útil e testável, porém menos provável ou decisivo. Não inclua conteúdo inútil.
+- Q mede quantas COBRANÇAS DISTINTAS são necessárias:
+  - Q:1 = uma cobrança principal cobre bem o objetivo.
+  - Q:2 = dois raciocínios diferentes precisam ser recuperados.
+  - Q:3 ou mais = existem três ou mais conceitos/decisões independentes; divida o subtópico se o número ficar excessivo.
+- OBJ: objetivo de aprendizagem curto, específico e verificável.
+- Em pedidos clínicos/práticos, prefira objetivos com selecionar, comparar, trocar, evitar, priorizar, diferenciar ou justificar. Use listar/descrever apenas quando a recuperação factual for o objetivo final.
+- Não use piso artificial de 2 questões nem aumente Q para preencher volume.
+- Não derive Q de P: um objetivo essencial pode precisar de apenas uma questão.
+
+FORMATO OBRIGATÓRIO DE CADA SUBTÓPICO:
+  - [Q:1] [P:alta] [OBJ:Explicar por que X produz Y e reconhecer sua consequência] Nome do subtópico
+- Use exatamente linhas "Tópico N: nome" e bullets iniciados por "- [Q:".
+- NÃO use tabelas, JSON, blocos de código, títulos "Eixo/Trilha/Módulo" nem comentários antes ou depois do mapa.
+` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - [Subtópico]
-  - [Subtópico]
+  - ${studyMap ? '[Q:1] [P:alta] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:2] [P:média] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 Tópico 2: [Nome]
-  - [Subtópico]
+  - ${studyMap ? '[Q:1] [P:baixa] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 
 Responda APENAS o sumário.`;
 };
@@ -1044,7 +1110,7 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
-    ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
+    ? questionPlan.map(n => Math.max(1, Math.min(10, Number(n) || 1)))
     : subtopicsArr.map(() => 2);
   const totalQuestions = plan.reduce((acc, n) => acc + n, 0);
 
@@ -1058,10 +1124,10 @@ ${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s}
 ${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(types)} para revisar o essencial da aula, sem redundância. O conjunto deve permitir reconstruir a aula ativa e clinicamente, como uma revisão AnKing-like.` : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
-- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Gere no mínimo 2 questões por subtópico, seguindo exatamente a quantidade indicada acima.'}
+- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
 - ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
-- ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'Subtópicos maiores, mais importantes, mais densos ou com mais contrastes recebem 3 ou 4 questões.'}
+- ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'A quantidade já reflete densidade e prioridade; não aumente nem reduza o plano.'}
 - Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para completar quantidade.
@@ -1106,7 +1172,7 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
   const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
-    ? questionPlan.map(n => Math.max(2, Math.min(4, Number(n) || 2)))
+    ? questionPlan.map(n => Math.max(1, Math.min(10, Number(n) || 1)))
     : subtopicsArr.map(() => 2);
   const totalQuestions = plan.reduce((acc, n) => acc + n, 0);
 
@@ -1119,8 +1185,8 @@ ${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"
 ${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.` : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
 
 REGRA DA BATERIA EXTRA:
-- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Use a mesma lógica das questões de fixação: mínimo de 2 questões por subtópico.'}
-- ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes recebem 3 ou 4 questões, conforme indicado acima.'}
+- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
+- ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para preencher volume.
