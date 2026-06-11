@@ -13,6 +13,16 @@ No Firebase Console:
 
 Não reutilizar o projeto Firebase atual durante a reforma.
 
+### Publicar as regras do Firestore
+
+Depois de criar o banco, abra:
+
+```text
+Firestore Database → Rules
+```
+
+Substitua o conteúdo pelo arquivo `firestore.rules` deste repositório e clique em **Publish**. Sem isso, o login funciona, mas o site mostra `permission-denied`.
+
 ## 2. Testar localmente
 
 Criar `.env.local` a partir de `.env.example` e preencher com o Firebase 2.0:

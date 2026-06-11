@@ -9,6 +9,7 @@ const fail = message => {
 const appSource = fs.readFileSync('src/App.jsx', 'utf8');
 const firebaseSource = fs.readFileSync('src/config/firebase.js', 'utf8');
 const envExample = fs.readFileSync('.env.example', 'utf8');
+const firestoreRules = fs.readFileSync('firestore.rules', 'utf8');
 
 if (appSource.includes('projectId: "agora-do-saber"')) {
   fail('App.jsx voltou a conter as credenciais Firebase da produção.');
@@ -16,6 +17,14 @@ if (appSource.includes('projectId: "agora-do-saber"')) {
 
 if (!firebaseSource.includes("firebaseConfig.projectId === 'agora-do-saber'")) {
   fail('A proteção contra Firebase de produção foi removida.');
+}
+
+if (!firestoreRules.includes("request.auth.token.email == 'gabrielvieiraxc12@gmail.com'")) {
+  fail('As regras Firestore perderam a proteção administrativa.');
+}
+
+if (!firestoreRules.includes('match /users/{uid}/{document=**}')) {
+  fail('As regras Firestore não protegem os dados privados por usuário.');
 }
 
 [

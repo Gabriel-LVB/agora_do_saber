@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email == 'gabrielvieiraxc12@gmail.com';
+    }
+
+    // Perfil principal. Usuários acessam apenas o próprio perfil; o admin pode
+    // consultar todos para as ferramentas administrativas já existentes.
+    match /users/{uid} {
+      allow get, create, update, delete: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+    }
+
+    // Biblioteca, progresso, preferências, revisões e questões geradas.
+    match /users/{uid}/{document=**} {
+      allow read, write: if isOwner(uid) || isAdmin();
+    }
+
+    // Configurações compartilhadas precisam ser lidas durante o login.
+    match /config/{document} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Conteúdo global do curso.
+    match /lessons/{document} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /cronograma/{document} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Cada usuário registra apenas seu próprio dispositivo. A listagem global
+    // continua restrita ao painel administrativo.
+    match /user_devices/{deviceId} {
+      allow create, update: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid);
+      allow get: if isAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if isAdmin();
+    }
+
+    // Logs são criados por usuários autenticados e lidos somente pelo admin.
+    match /access_logs/{logId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Qualquer coleção não declarada permanece bloqueada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
