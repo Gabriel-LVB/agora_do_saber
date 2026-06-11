@@ -19,18 +19,12 @@ import {
 } from './agora_prompts.js';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
+import firebaseConfig, { appEnvironment } from './config/firebase.js';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
-  authDomain: "agora-do-saber.firebaseapp.com",
-  projectId: "agora-do-saber",
-  storageBucket: "agora-do-saber.firebasestorage.app",
-  messagingSenderId: "169091563204",
-  appId: "1:169091563204:web:de924d4507acb1649e9391",
-};
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db   = getFirestore(app);
+const IS_PRIVATE_2_ENV = appEnvironment !== 'production';
 
 const getGoogleProvider = () => {
   const provider = new GoogleAuthProvider();
@@ -13103,6 +13097,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         <div className="flex flex-col items-center text-center mb-8">
           <div className="p-4 bg-yellow-100 rounded-full mb-4"><Landmark className="w-10 h-10 text-yellow-600"/></div>
           <h1 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Ágora do Saber</h1>
+          {IS_PRIVATE_2_ENV&&<span className="mb-3 rounded-full border border-yellow-500/40 bg-yellow-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-yellow-700">Ágora 2.0 · ambiente privado</span>}
           <p className="opacity-70 text-sm">{loginView==='login'?'Acesse sua conta.':'Crie seu perfil.'}</p>
         </div>
         {loginView==='login'?(
@@ -13547,7 +13542,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	            <div className="bg-yellow-600 p-2 rounded-xl shadow-md flex-shrink-0"><Landmark className="w-5 h-5 text-white"/></div>
 	            <div className="min-w-0">
 	              <h1 className={`font-serif font-bold text-lg leading-none truncate ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
-	              <p className={`hidden sm:block text-[10px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
+	              <p className={`hidden sm:block text-[10px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>{IS_PRIVATE_2_ENV?'2.0 · ambiente privado':'Lux in Tenebris'}</p>
 	            </div>
 	          </div>
 
