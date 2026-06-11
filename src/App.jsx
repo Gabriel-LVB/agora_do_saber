@@ -963,9 +963,30 @@ const ORACLE_LENGTH = {
 };
 
 // ─── API ──────────────────────────────────────────────────────────────────────
+const normalizeGeminiApiKey = (value = '') => String(value || '').trim();
+const getGeminiRequestHeaders = (apiKey) => ({
+  'Content-Type':'application/json',
+  'x-goog-api-key':normalizeGeminiApiKey(apiKey),
+});
+const throwGeminiResponseError = async (response) => {
+  const data = await response.clone().json().catch(() => ({}));
+  const apiError = data?.error || {};
+  const reasons = (apiError.details || []).map(detail => detail?.reason).filter(Boolean);
+  if (
+    [401,403].includes(response.status)
+    || ['UNAUTHENTICATED','PERMISSION_DENIED'].includes(apiError.status)
+    || reasons.includes('API_KEY_INVALID')
+  ) throw new Error("API_KEY_INVALID");
+  if (response.status === 400) throw new Error("REQUEST_INVALID");
+  if (response.status === 404) throw new Error("RESOURCE_NOT_FOUND");
+  if (response.status === 429) throw new Error("QUOTA_EXCEEDED");
+  if ([500,503].includes(response.status)) throw new Error("SERVER_OVERLOADED");
+  throw new Error("CONNECTION_ERROR");
+};
+
 const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
-  if (!apiKey) throw new Error("API_KEY_MISSING");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  if (!normalizeGeminiApiKey(apiKey)) throw new Error("API_KEY_MISSING");
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   const parts = [{text:prompt}];
   images.forEach(img => parts.push({inline_data:{mime_type:img.mimeType,data:img.base64}}));
   const payload = {
@@ -979,12 +1000,9 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55000);
   try {
-    const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+    const res = await fetch(url,{method:'POST',headers:getGeminiRequestHeaders(apiKey),body:JSON.stringify(payload),signal:controller.signal});
     clearTimeout(timeout);
-    if (res.status===503) throw new Error("SERVER_OVERLOADED");  // sem retry — 1 req por chamada
-    if (res.status===429) throw new Error("QUOTA_EXCEEDED");
-    if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
-    if (!res.ok) throw new Error("CONNECTION_ERROR");
+    if (!res.ok) await throwGeminiResponseError(res);
     const data = await res.json();
     const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('');
     if (!text) throw new Error("CONNECTION_ERROR");
@@ -997,8 +1015,8 @@ const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
 };
 
 const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images=[], opts={}) => {
-  if (!apiKey) throw new Error("API_KEY_MISSING");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+  if (!normalizeGeminiApiKey(apiKey)) throw new Error("API_KEY_MISSING");
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse';
   const parts = [{text:prompt}];
   images.forEach(img => parts.push({inline_data:{mime_type:img.mimeType,data:img.base64}}));
   const payload = {
@@ -1012,11 +1030,8 @@ const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120000); // 2min timeout para streaming
   try {
-    const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
-    if (res.status===429) throw new Error("QUOTA_EXCEEDED");
-    if (res.status===503) throw new Error("SERVER_OVERLOADED");
-    if ([400,403,404].includes(res.status)) throw new Error("API_KEY_INVALID");
-    if (!res.ok) throw new Error("CONNECTION_ERROR");
+    const res = await fetch(url,{method:'POST',headers:getGeminiRequestHeaders(apiKey),body:JSON.stringify(payload),signal:controller.signal});
+    if (!res.ok) await throwGeminiResponseError(res);
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let full = '';
@@ -2352,7 +2367,11 @@ const getCourseVqQuestionPlan = ({ durationSecs = 0, suggestedQ = 10, isAdmin = 
   return { totalQ, qPerBlock, numBlocks:Math.ceil(totalQ / qPerBlock), adminMinuteRule:false };
 };
 
-const isLikelyValidGeminiKey = (value = '') => /^AIza[0-9A-Za-z_-]{30,80}$/.test(String(value || '').trim());
+// Gemini keys are opaque: both legacy standard keys and newer authorization keys are valid.
+const isLikelyValidGeminiKey = (value = '') => {
+  const clean = normalizeGeminiApiKey(value);
+  return clean.length >= 20 && clean.length <= 512 && !/\s/.test(clean);
+};
 const COURSE_CATALOG_SCOPE_LABEL = 'todas as matérias';
 const COURSE_CATALOG_KEY_COOLDOWN_MS = 75 * 1000;
 const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
@@ -4141,7 +4160,6 @@ const OpenAnswerInline = ({ question, darkMode, apiKey, onCall, oracleLength, sa
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(!parsed?.answer);
 
-  const isDaytime = () => { const h = new Date().getHours(); return h >= 6 && h < 20; };
   const callOracle = onCall || ((p,s) => callGemini(p, s, apiKey));
 
   const submit = async () => {
@@ -4170,7 +4188,7 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
       setEditing(false);
       onSave(JSON.stringify(saved));
     } catch(e) {
-      const saved = { answer, score: null, verdict: 'ERRO', feedback: isDaytime() ? 'Falha na correção. O Gemini funciona melhor à noite — tente novamente.' : 'Falha na correção. Tente novamente.' };
+      const saved = { answer, score: null, verdict: 'ERRO', feedback: 'Falha na correção. Verifique sua conexão e tente novamente.' };
       setResult(saved);
       setEditing(false);
       onSave(JSON.stringify(saved));
@@ -4182,12 +4200,6 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
 
   return (
     <div className="mb-4 space-y-3">
-      {isDaytime() && editing && (
-        <div className={`flex items-start gap-2 p-3 rounded-xl text-xs ${dm?'bg-orange-900/20 border border-orange-700/40 text-orange-300':'bg-orange-50 border border-orange-200 text-orange-800'}`}>
-          ⚠️ O Gemini funciona melhor à noite — a correção pode ser imprecisa agora.
-        </div>
-      )}
-
       {/* Campo de resposta */}
       {editing ? (
         <div className="space-y-2">
@@ -4257,18 +4269,8 @@ const OpenAnswerModal = ({ question, darkMode, apiKey, onCall, onClose, isEssay=
   const [result, setResult] = useState(null); // { score, feedback }
   const maxChars = isEssay ? 2000 : 400;
 
-  const isDaytime = () => {
-    const h = new Date().getHours();
-    return h >= 6 && h < 20; // 6h–20h = horário de pico
-  };
-
   const submit = async () => {
     if (!answer.trim() || loading) return;
-    if (isDaytime()) {
-      // Avisar mas não bloquear — deixar tentar
-      const ok = window.confirm('⚠️ Aviso: o Gemini costuma funcionar mal durante o dia (6h–20h). A correção pode ser imprecisa ou falhar.\n\nDeseja tentar mesmo assim?');
-      if (!ok) return;
-    }
     setLoading(true);
     try {
       const ctx = isEssay
@@ -4292,7 +4294,7 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
       const json = JSON.parse(raw.replace(/```json|```/g, '').trim());
       setResult(json);
     } catch(e) {
-      setResult({ nota: null, veredicto: 'ERRO', feedback: 'Não foi possível corrigir agora. ' + (isDaytime() ? 'Tente novamente à noite.' : 'Verifique sua conexão e tente novamente.') });
+      setResult({ nota: null, veredicto: 'ERRO', feedback: 'Não foi possível corrigir agora. Verifique sua conexão e tente novamente.' });
     }
     setLoading(false);
   };
@@ -4311,13 +4313,6 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
         </div>
         <div className="px-5 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
           <p className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</p>
-
-          {isDaytime() && !result && (
-            <div className={`flex items-start gap-2 p-3 rounded-xl text-xs ${dm?'bg-orange-900/20 border border-orange-700/40 text-orange-300':'bg-orange-50 border border-orange-200 text-orange-800'}`}>
-              <span>⚠️</span>
-              <span>O Gemini funciona melhor à noite. A correção pode ser imprecisa durante o dia.</span>
-            </div>
-          )}
 
           {!result ? (
             <>
@@ -5724,12 +5719,17 @@ const AdminStudyMapTopicList = ({ subject, darkMode, onOpenTopic }) => {
 const ERROR_CONFIGS = {
   QUOTA_EXCEEDED: {
     title: 'Limite de Requisições Atingido',
-    message: 'Esta chave API atingiu o limite gratuito (20 req/dia por chave). Isso é diferente de congestionamento — o limite foi mesmo atingido.\n\nOpções:\n• Aguardar renovação automática (reseta à meia-noite no horário de Brasília)\n• Cadastrar outra chave gratuita nas Configurações\n• Criar uma nova chave em outra conta Google',
+    message: 'O Gemini informou que um limite de uso ou cota foi atingido (erro 429).\n\nOpções:\n• Aguarde e tente novamente após a renovação da cota aplicável\n• Confira os limites e o faturamento do projeto no Google AI Studio\n• Cadastre outra chave autorizada nas Configurações',
     link: { label: 'Criar nova chave gratuita', url: 'https://aistudio.google.com/app/apikey' },
+  },
+  REQUEST_INVALID: {
+    title: 'Requisição Não Aceita',
+    message: 'O Gemini recusou o formato ou algum parâmetro da requisição (erro 400). Isso normalmente não indica problema na chave. Tente novamente e, se persistir, informe ao desenvolvedor do site.',
+    link: null,
   },
   API_KEY_INVALID: {
     title: 'Chave API Inválida',
-    message: 'A chave não foi aceita. Verifique:\n• Se foi copiada corretamente (sem espaços extras)\n• Se é de um projeto ativo no Google AI Studio\n• Se a API Gemini está habilitada\n\n⚠️ Atenção: durante horários de pico (manhã/tarde), o Gemini pode rejeitar requisições válidas com este mesmo erro. Se sua chave funcionou antes, tente novamente mais tarde ou à noite.',
+    message: 'A chave não foi aceita. Verifique:\n• Se foi copiada corretamente (sem espaços extras)\n• Se é de um projeto ativo no Google AI Studio\n• Se a API Gemini está habilitada e a chave tem permissão para usá-la',
     link: { label: 'Verificar minhas chaves', url: 'https://aistudio.google.com/app/apikey' },
   },
   API_KEY_MISSING: {
@@ -5737,14 +5737,19 @@ const ERROR_CONFIGS = {
     message: 'Você ainda não cadastrou uma chave API do Gemini. A chave é gratuita e necessária para gerar questões.\n\nComo criar:\n1. Acesse o link abaixo\n2. Clique em "Create API key"\n3. Copie a chave e cole nas Configurações do site',
     link: { label: 'Criar chave gratuita agora', url: 'https://aistudio.google.com/app/apikey' },
   },
+  RESOURCE_NOT_FOUND: {
+    title: 'Modelo Não Encontrado',
+    message: 'O recurso ou modelo solicitado não foi encontrado pelo Gemini (erro 404). Isso normalmente exige uma atualização do site, não a troca da chave.',
+    link: null,
+  },
   SERVER_OVERLOADED: {
     title: 'Gemini Sobrecarregado 😤',
-    message: 'Os servidores do Gemini estão com alto tráfego agora (erro 503). Isso é comum durante o dia, especialmente de manhã e à tarde.\n\nO que fazer:\n• Aguarde 2–5 minutos e tente novamente\n• Prefira usar o site à noite (horário de Brasília) — o Gemini funciona muito melhor\n• Sua chave está OK, o problema é no lado do Google',
+    message: 'O serviço do Gemini informou indisponibilidade temporária ou falta de capacidade (erro 503).\n\nO que fazer:\n• Aguarde alguns minutos e tente novamente\n• Consulte o status do Google AI\n• Se o erro persistir, teste outra chave ou modelo',
     link: { label: 'Ver status do Google AI', url: 'https://status.cloud.google.com' },
   },
   CONNECTION_ERROR: {
     title: 'Falha de Conexão',
-    message: 'Não foi possível conectar ao Gemini.\n\nPossíveis causas:\n• Problema de internet\n• Gemini sobrecarregado (comum durante o dia)\n• Timeout na requisição\n\nTente novamente. Se o problema persistir durante o dia, tente à noite.',
+    message: 'Não foi possível conectar ao Gemini.\n\nPossíveis causas:\n• Problema de internet\n• Falha temporária do serviço\n• Timeout na requisição\n\nTente novamente em alguns instantes.',
     link: null,
   },
   INCOMPLETE_GENERATION: {
@@ -18154,8 +18159,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <SettingsSection id="api" title="Chaves API (Gemini)" icon={<Key className="w-4 h-4"/>}>
               <div className={`p-3 rounded-xl mb-3 text-xs leading-relaxed ${darkMode?'bg-blue-900/20 border border-blue-800/40 text-blue-300':'bg-blue-50 border border-blue-200 text-blue-800'}`}>
                 <p className="font-bold mb-1">ℹ️ Sobre as chaves</p>
-                <p>Cada chave gratuita tem limite de ~20 requests/dia. Cadastre quantas chaves quiser para o site alternar automaticamente.</p>
-                <p className="mt-1 opacity-80">⚠️ O Gemini funciona melhor à noite. Erros durante o dia geralmente são sobrecarga dos servidores, não problema da sua chave.</p>
+                <p>Os limites variam por modelo, projeto e plano. Você pode cadastrar mais de uma chave autorizada para o site alternar automaticamente.</p>
+                <p className="mt-1 opacity-80">Chaves padrão antigas (`AIza...`) e novas chaves de autorização são aceitas.</p>
                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold block mt-1">Criar nova chave gratuita →</a>
               </div>
               {(() => {
