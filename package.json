@@ -1,15 +1,20 @@
 {
   "name": "vite-react-starter",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "ux:smoke": "node scripts/ux-smoke.mjs"
+    "ux:smoke": "node scripts/ux-smoke.mjs",
+    "test:preflight": "node scripts/preflight-2.mjs",
+    "check:2": "npm run test:preflight && npm run build"
   },
   "dependencies": {
     "@heroicons/react": "^1.0.5",
-    "firebase": "^12.12.0",
+    "firebase": "^12.14.0",
     "framer-motion": "^5.5.7",
     "lucide-react": "^1.8.0",
     "react": "^17.0.2",

@@ -1,3 +1,5 @@
+import { appEnvironment, isPrivate2Environment } from './environment.js';
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -17,5 +19,9 @@ if (missingFirebaseFields.length) {
   );
 }
 
-export const appEnvironment = import.meta.env.VITE_APP_ENV || 'agora-2-dev';
+if (isPrivate2Environment && firebaseConfig.projectId === 'agora-do-saber') {
+  throw new Error('Proteção da Ágora 2.0: o ambiente privado não pode usar o Firebase de produção.');
+}
+
+export { appEnvironment };
 export default firebaseConfig;

@@ -19,12 +19,13 @@ import {
 } from './agora_prompts.js';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
-import firebaseConfig, { appEnvironment } from './config/firebase.js';
+import firebaseConfig from './config/firebase.js';
+import { isPrivate2Environment } from './config/environment.js';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db   = getFirestore(app);
-const IS_PRIVATE_2_ENV = appEnvironment !== 'production';
+const IS_PRIVATE_2_ENV = isPrivate2Environment;
 
 const getGoogleProvider = () => {
   const provider = new GoogleAuthProvider();

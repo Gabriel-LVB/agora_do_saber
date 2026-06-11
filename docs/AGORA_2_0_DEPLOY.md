@@ -41,6 +41,16 @@ Na Vercel:
 - Antes de cada push, confirmar `git branch --show-current`.
 - Durante desenvolvimento, somente a branch `agora-2.0` recebe mudanças.
 
+## Deploy automático da branch 2.0
+
+Na interface atual da Vercel, abra o projeto `agora-do-saber-2-dev` e procure:
+
+```text
+Settings → Environments → Production → Branch Tracking
+```
+
+Associe o ambiente Production à branch `agora-2.0`. Depois disso, cada `git push` nessa branch atualiza automaticamente o endereço principal da 2.0. O projeto Vercel antigo continua associado à `main`.
+
 ## 5. Lançamento futuro
 
 Quando a 2.0 estiver pronta:

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const baseUrl = process.env.UX_BASE_URL || 'http://localhost:3003/';
+const expectPrivate2 = process.env.UX_EXPECT_PRIVATE_2 === 'true';
 const outDir = path.resolve('test-results/ux-smoke');
 const viewports = [
   { name:'desktop-dark', width:1440, height:900, dark:true, fontScale:100 },
@@ -34,8 +35,10 @@ async function main() {
   try {
     for (const cfg of viewports) {
       const page = await browser.newPage({ viewport:{ width:cfg.width, height:cfg.height } });
-      page.setDefaultTimeout(8000);
-      await page.goto(baseUrl, { waitUntil:'domcontentloaded' });
+      page.setDefaultTimeout(20000);
+      const pageErrors = [];
+      page.on('pageerror', error => pageErrors.push(error.message));
+      await page.goto(baseUrl, { waitUntil:'domcontentloaded', timeout:30000 });
 
       await page.evaluate(({ dark, fontScale }) => {
         localStorage.setItem('qb_dark', JSON.stringify(dark));
@@ -43,6 +46,13 @@ async function main() {
       }, cfg);
       await page.reload({ waitUntil:'domcontentloaded' });
       await page.locator('#root').waitFor({ state:'attached' });
+      await page.waitForFunction(
+        () => document.body.innerText.includes('Entrar com Google')
+          || document.body.innerText.includes('Acesso negado')
+          || document.body.innerText.includes('Ágora 2.0'),
+        null,
+        { timeout:30000 }
+      );
 
       const rootVisible = await page.locator('#root').evaluate(el => {
         const rect = el.getBoundingClientRect();
@@ -52,6 +62,13 @@ async function main() {
 
       const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 2);
       if (horizontalOverflow) fail(`${cfg.name}: overflow horizontal detectado.`);
+
+      const bodyText = await page.locator('body').innerText();
+      if (!bodyText.includes('Entrar com Google')) fail(`${cfg.name}: entrada Google não encontrada.`);
+      if (expectPrivate2 && !bodyText.includes('ÁGORA 2.0 · AMBIENTE PRIVADO')) {
+        fail(`${cfg.name}: selo do ambiente privado não encontrado.`);
+      }
+      if (pageErrors.length) fail(`${cfg.name}: erro de página: ${pageErrors.join(' | ')}`);
 
       await page.screenshot({ path:path.join(outDir, `${cfg.name}.png`), fullPage:true });
       await page.close();
