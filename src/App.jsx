@@ -3831,15 +3831,14 @@ const QuestionView = ({
           {/* Tipo de questão */}
           <div>
             <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Tipo de Questão</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {QUESTION_TYPES.filter(t => !t.adminOnly || isAdmin).filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin).map(t=>(
-                <button key={t.k} onClick={()=>onTopicStyleChange(t.k,'type')}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${topicType===t.k?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
-                  <span className={`text-sm font-bold ${topicType===t.k?(dm?'text-yellow-400':'text-yellow-700'):(dm?'text-gray-300':'text-gray-600')}`}>{t.label}</span>
-                  <span className={`text-xs ml-auto ${dm?'text-gray-500':'text-gray-400'}`}>{t.desc}</span>
-                </button>
-              ))}
-            </div>
+            <QuestionTypeSelector
+              selected={[topicType || 'direct']}
+              onChange={types=>onTopicStyleChange(types[0], 'type')}
+              darkMode={dm}
+              single={true}
+              isAdmin={isAdmin}
+              canCreateFlashcards={canCreateFlashcards}
+            />
           </div>
           {onGeminiThinkingChange&&(
             <div>
@@ -4494,14 +4493,14 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
 
 // ─── QUESTION TYPE SELECTOR ───────────────────────────────────────────────────
 const QUESTION_TYPES = [
-  { k: 'direct',   label: 'Múltipla escolha', desc: 'Uma pergunta com alternativas e apenas uma resposta correta' },
-  { k: 'vof',      label: 'Verdadeiro ou falso', desc: 'Avalia várias afirmações dentro da mesma questão' },
-  { k: 'cespe',    label: 'Certo ou errado', desc: 'Uma única afirmação para julgar, no estilo Cebraspe' },
-  { k: 'open',     label: 'Resposta curta', desc: 'Você escreve uma resposta breve e recebe correção da IA' },
-  { k: 'essay',    label: 'Dissertativa', desc: 'Resposta mais longa, com avaliação e feedback da IA' },
-  { k: 'old_exam', label: 'Questões já existentes', desc: 'Preserva o conteúdo original e corrige apenas OCR e formatação', externalOnly:true },
-  { k: 'flashcard', label:'Flashcards', desc: 'Recuperação ativa com pergunta, resposta e explicação', advancedOnly:true },
-  { k: 'cloze',    label:'Preencher lacunas', desc: 'Cartões com omissões no estilo AnKing e Anki', adminOnly:true },
+  { k:'direct', group:'closed', icon:CheckCircle2, label:'Múltipla escolha', desc:'Alternativas com apenas uma resposta correta' },
+  { k:'vof', group:'closed', icon:LayersIcon, label:'Verdadeiro ou falso', desc:'Várias afirmações avaliadas na mesma questão' },
+  { k:'cespe', group:'closed', icon:ShieldAlert, label:'Certo ou errado', desc:'Uma afirmação para julgar, no estilo Cebraspe' },
+  { k:'open', group:'open', icon:EditIcon, label:'Resposta curta', desc:'Resposta breve com correção e feedback da IA' },
+  { k:'essay', group:'open', icon:FileText, label:'Dissertativa', desc:'Resposta longa com avaliação detalhada da IA' },
+  { k:'old_exam', group:'import', icon:BlockIcon, label:'Questões já existentes', desc:'Preserva conteúdo e corrige apenas OCR e formatação', externalOnly:true },
+  { k:'flashcard', group:'memory', icon:RepeatIcon, label:'Flashcards', desc:'Pergunta e resposta para recuperação ativa', advancedOnly:true },
+  { k:'cloze', group:'memory', icon:LayersIcon, label:'Preencher lacunas', desc:'Cartões com omissões no estilo AnKing e Anki', adminOnly:true },
 ];
 
 const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false }) => {
@@ -4512,21 +4511,51 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, i
     if (next.length === 0) return;
     onChange(next);
   };
+  const visibleTypes = QUESTION_TYPES
+    .filter(t => includeExternalOnly || !t.externalOnly)
+    .filter(t => !t.adminOnly || isAdmin)
+    .filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin);
+  const groups = [
+    { k:'closed', label:'Questões objetivas', desc:'Escolha ou julgue uma resposta', icon:CheckCircle2 },
+    { k:'open', label:'Respostas abertas', desc:'Escreva e receba correção da IA', icon:EditIcon },
+    { k:'memory', label:'Memorização ativa', desc:'Revise até conseguir recuperar a resposta', icon:RepeatIcon },
+    { k:'import', label:'Importação', desc:'Trabalhe com questões que já existem', icon:BlockIcon },
+  ].filter(group => visibleTypes.some(type => type.group === group.k));
   return (
-    <div className="space-y-2">
-      {QUESTION_TYPES.filter(t => includeExternalOnly || !t.externalOnly).filter(t => !t.adminOnly || isAdmin).filter(t => !t.advancedOnly || canCreateFlashcards || isAdmin).map(t => {
-        const on = selected.includes(t.k);
+    <div className="space-y-5">
+      {groups.map(group => {
+        const GroupIcon = group.icon;
         return (
-          <button key={t.k} onClick={()=>toggle(t.k)}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
-            <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
-              {on && <svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+          <section key={group.k}>
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <GroupIcon className="w-4 h-4 text-yellow-600"/>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider">{group.label}</p>
+                <p className="text-[11px] opacity-45">{group.desc}</p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
-              <p className="text-xs opacity-50">{t.desc}</p>
+            <div className="space-y-2">
+              {visibleTypes.filter(t => t.group === group.k).map(t => {
+                const on = selected.includes(t.k);
+                const TypeIcon = t.icon;
+                return (
+                  <button key={t.k} onClick={()=>toggle(t.k)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
+                    <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                      <TypeIcon className="w-4 h-4"/>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
+                      <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+                      {on && <CheckIcon className="w-3 h-3 text-white"/>}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          </button>
+          </section>
         );
       })}
     </div>
@@ -13714,28 +13743,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
 	                const questionPct = Math.min(100, Math.round(dailyQuestions / questionGoal * 100));
 	                const minutePct = Math.min(100, Math.round(dailyMinutes / minuteGoal * 100));
-                  const DailyRing = ({label, value, goal, pct, unit='', accent='text-yellow-500'}) => {
-                    const radius = 30;
-                    const circumference = 2 * Math.PI * radius;
-                    const offset = circumference - (Math.min(100, pct) / 100) * circumference;
-                    return (
-                      <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${darkMode?'bg-gray-950/70':'bg-white/80'}`}>
-                        <div className="relative h-16 w-16 flex-shrink-0">
-                          <svg viewBox="0 0 72 72" className="h-16 w-16 -rotate-90">
-                            <circle cx="36" cy="36" r={radius} fill="none" stroke="currentColor" strokeWidth="7" className={darkMode?'text-gray-800':'text-gray-100'}/>
-                            <circle cx="36" cy="36" r={radius} fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} className={accent} style={{transition:'stroke-dashoffset .45s ease'}}/>
-                          </svg>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className={`text-sm font-serif font-bold ${darkMode?'text-white':'text-gray-900'}`}>{pct}%</span>
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <p className={`text-[11px] font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>{label}</p>
-                          <p className={`text-sm font-bold tabular-nums ${darkMode?'text-gray-200':'text-gray-800'}`}>{value}{unit}<span className="opacity-35"> / {goal}{unit}</span></p>
-                        </div>
+                  const CompactProgress = ({label, value, goal, pct, unit=''}) => (
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className={`font-bold ${darkMode?'text-gray-300':'text-gray-700'}`}>{label}</span>
+                        <span className="opacity-50 tabular-nums">{value}{unit} / {goal}{unit}</span>
                       </div>
-                    );
-                  };
+                      <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${darkMode?'bg-gray-800':'bg-gray-200'}`}>
+                        <div className="h-full bg-yellow-500 rounded-full" style={{width:`${pct}%`}}/>
+                      </div>
+                    </div>
+                  );
                   const renderHomeCard = (card, tone='study') => {
                     const accent = tone === 'admin'
                       ? (darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-100 text-yellow-800')
@@ -13757,46 +13775,43 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   );};
 				            return (
 				              <div className="space-y-6">
-                        <section className="app-hero rounded-2xl p-5 md:p-7 overflow-hidden">
-                          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(420px,520px)] lg:items-center">
+                        <section className="app-hero rounded-2xl p-5 md:p-6 overflow-hidden">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                             <div className="min-w-0 max-w-2xl">
-                              <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase mb-4 ${darkMode?'border-gray-700 bg-gray-950/50 text-gray-400':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
-                                <Sparkles className="w-3.5 h-3.5"/>Painel de estudos
-                              </div>
-                              <h2 className="text-3xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Escolha como continuar seus estudos</h2>
-                              <p className={`mt-3 text-sm md:text-base max-w-xl leading-relaxed ${darkMode?'text-gray-400':'text-gray-600'}`}>Comece pela Academia para aprender um assunto com explicação e fixação. Use o Oráculo quando quiser criar ou revisar bancos de questões.</p>
+                              <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Pórtico da Academia de Platão</p>
+                              <h2 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
                             </div>
-                            <div className="min-w-0 space-y-3">
-                              {homeCanUseAdvancedFeatures&&(
-                                <div className="glass-panel rounded-2xl p-3 md:p-4">
-                                  <div className="mb-3 flex items-center gap-2 px-1">
-                                    <CalendarCheck className="w-4 h-4 text-yellow-600"/>
-                                    <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Progresso de hoje</span>
-                                  </div>
-                                  <div className={`grid grid-cols-1 ${homeCanSeeVideoaulas ? 'sm:grid-cols-2' : ''} gap-3`}>
-                                    <DailyRing label="Questões" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
-                                    {homeCanSeeVideoaulas&&<DailyRing label="Tempo assistido" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min" accent="text-green-500"/>}
-                                  </div>
+                            {homeCanUseAdvancedFeatures&&(
+                              <div className={`w-full lg:max-w-md rounded-xl border p-4 ${darkMode?'border-gray-800 bg-gray-950/40':'border-gray-200 bg-white/70'}`}>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <CalendarCheck className="w-4 h-4 text-yellow-600"/>
+                                  <span className={`text-[11px] font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Hoje</span>
                                 </div>
-                              )}
-                              <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
-                                {homeCanUseAdvancedFeatures&&(
-                                  <button onClick={()=>openViewWithReturn('quick')} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
-                                    <Flame className="w-4 h-4 text-yellow-600"/>{QUICK_SUBJECT_TITLE}
-                                  </button>
-                                )}
-                                {homeCanUseAdvancedFeatures&&(
-                                  <button onClick={()=>openSpacedReview()} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
-                                    <RepeatIcon className="w-4 h-4"/>Revisão
-                                    {dueCount>0&&<span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-yellow-600 text-white">{dueCount}</span>}
-                                  </button>
-                                )}
-                                <button onClick={()=>setExamSetup({})} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
-                                  <Zap className="w-4 h-4 text-yellow-600"/>Modo Prova
-                                </button>
+                                <div className={`grid grid-cols-1 ${homeCanSeeVideoaulas?'sm:grid-cols-2':''} gap-4`}>
+                                  <CompactProgress label="Questões" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
+                                  {homeCanSeeVideoaulas&&<CompactProgress label="Aulas" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min"/>}
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
+                        </section>
+                        <section className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures?'md:grid-cols-3':'md:grid-cols-1'} gap-3`}>
+                          {homeCanUseAdvancedFeatures&&(
+                            <button onClick={()=>openViewWithReturn('quick')} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
+                              <Flame className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
+                              <span><strong className="block text-sm">Estudo rápido</strong><span className="block text-xs opacity-50 mt-1">Explique uma dúvida pontual e pratique logo depois.</span></span>
+                            </button>
+                          )}
+                          {homeCanUseAdvancedFeatures&&(
+                            <button onClick={()=>openSpacedReview()} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
+                              <RepeatIcon className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
+                              <span><strong className="block text-sm">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="block text-xs opacity-50 mt-1">Revise hoje o que está perto de ser esquecido.</span></span>
+                            </button>
+                          )}
+                          <button onClick={()=>setExamSetup({})} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
+                            <Zap className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
+                            <span><strong className="block text-sm">Modo prova</strong><span className="block text-xs opacity-50 mt-1">Monte um simulado e veja o resultado somente no final.</span></span>
+                          </button>
                         </section>
 			                <div className="space-y-5">
 			                  {isAdmin&&adminHomeMode!=='admin'&&(
