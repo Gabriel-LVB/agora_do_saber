@@ -727,34 +727,27 @@ REGRAS FINAIS:
 - Em pedidos clínicos orientados a decisão, prefira títulos que explicitem o contraste ou cenário: "X versus Y em paciente com...", "troca de X após...", "escolha em...", "quando evitar X". Evite objetivos vagos como apenas "indicações", "efeitos adversos" ou "primeira linha" quando o contexto discriminativo puder ser explicitado.
 - A seção de casos/patologias não pode ser uma recapitulação genérica dos fármacos. Ela deve transformar o conteúdo anterior em cenários de decisão plausíveis, com fatores do paciente que mudam a escolha.
 
-${studyMap ? `MAPA DE ESTUDO PROFISSIONAL:
+${studyMap ? `PLANO DE ESTUDO GUIADO:
 Para CADA subtópico, faça também um planejamento individual:
-- P mede IMPORTÂNCIA DE ESTUDO, não dificuldade nem quantidade de conteúdo:
-  - alta = ESSENCIAL: conceito central, recorrente em provas, muito útil na prática ou cuja ausência deixa uma lacuna importante.
-  - média = RELEVANTE: ajuda a compreender/aplicar o tema, mas não é um dos pilares indispensáveis.
-  - baixa = COMPLEMENTAR: útil e ainda testável, porém menos provável ou menos decisivo. Se for inútil, não crie o subtópico.
-- Q mede o número de COBRANÇAS DISTINTAS necessárias, não a prioridade:
-  - Q:1 = existe uma cobrança principal suficiente.
-  - Q:2 = existem dois raciocínios realmente diferentes, como reconhecer + aplicar ou comparar + decidir.
-  - Q:3 ou mais = há três ou mais decisões/conceitos independentes. Se Q ficar muito alto, prefira dividir o subtópico.
+- Q mede o número de QUESTÕES DISTINTAS recomendadas para revisar o objetivo:
+  - Use normalmente Q:2 a Q:4 para permitir recuperação por ângulos diferentes.
+  - Use Q:1 apenas para um objetivo realmente estreito e atômico, coberto com justiça por uma única pergunta.
+  - Use Q:5 ou Q:6 quando houver vários conceitos, decisões ou contrastes independentes; divida o subtópico se precisar de mais.
 - OBJ: objetivo de aprendizagem curto, específico e verificável. Ele deve dizer o que o estudante precisará compreender, diferenciar, reconhecer ou decidir.
 - Quando o pedido for clínico/prático, prefira verbos de decisão: selecionar, comparar, trocar, evitar, priorizar, diferenciar ou justificar. Use "listar/descrever/identificar" apenas quando recuperação factual for realmente o objetivo final.
-- Não use piso artificial de 2 questões. Não aumente Q para preencher volume.
 - Q deve contar cobranças distintas, não paráfrases da mesma pergunta.
-- Prioridade alta NÃO implica muitas questões: um conceito essencial e simples pode ser [P:alta] [Q:1].
-- Prioridade baixa NÃO implica uma questão fácil: prioridade fala de rendimento, não de dificuldade.
 
 FORMATO OBRIGATÓRIO DE CADA SUBTÓPICO:
-  - [Q:1] [P:alta] [OBJ:Diferenciar X de Y pelo achado que muda a conduta] Nome do subtópico
+  - [Q:3] [OBJ:Diferenciar X de Y pelo achado que muda a conduta] Nome do subtópico
 - Use exatamente linhas "Tópico N: nome" e bullets iniciados por "- [Q:".
 - NÃO use tabelas, JSON, blocos de código, títulos "Eixo/Trilha/Módulo" nem comentários antes ou depois do mapa.
 ` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - ${studyMap ? '[Q:1] [P:alta] [OBJ:objetivo verificável] ' : ''}[Subtópico]
-  - ${studyMap ? '[Q:2] [P:média] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:3] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:2] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 Tópico 2: [Nome]
-  - ${studyMap ? '[Q:1] [P:baixa] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:4] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 
 Responda APENAS o sumário.`;
 };
@@ -779,7 +772,7 @@ REGRAS:
 - Cada subtópico deve render cobrança de prova ou utilidade real; não mantenha subtópico que só gere conselho genérico.
 - Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
 - Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
-${studyMap ? '- Preserve ou recalcule [Q:n], [P:alta|média|baixa] e [OBJ:objetivo verificável] em CADA subtópico. Q pode ser 1 quando uma cobrança forte for suficiente.' : ''}
+${studyMap ? '- Preserve ou recalcule [Q:n] e [OBJ:objetivo verificável] em CADA subtópico. Use normalmente Q:2 a Q:4; reserve Q:1 para objetivos realmente estreitos.' : ''}
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
 };
 
@@ -1116,32 +1109,27 @@ Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber 
 Obrigatório: revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado.
 Obrigatório: antes de responder, revise tópicos gigantes e divida qualquer tópico que passe de 30 subtópicos.
 Obrigatório: em pedidos clínicos orientados a decisão, a parte de patologias/casos deve conter cenários que mudem escolha, troca, contraindicação ou linha terapêutica; não pode ser apenas uma recapitulação genérica.
-${studyMap ? `MAPA DE ESTUDO PROFISSIONAL:
+${studyMap ? `PLANO DE ESTUDO GUIADO:
 Para CADA subtópico, planeje:
-- P mede IMPORTÂNCIA DE ESTUDO, não dificuldade:
-  - alta = ESSENCIAL: pilar do assunto, recorrente em prova, muito útil na prática ou necessário para entender o restante.
-  - média = RELEVANTE: contribui para compreensão e aplicação, mas não é um pilar indispensável.
-  - baixa = COMPLEMENTAR: útil e testável, porém menos provável ou decisivo. Não inclua conteúdo inútil.
-- Q mede quantas COBRANÇAS DISTINTAS são necessárias:
-  - Q:1 = uma cobrança principal cobre bem o objetivo.
-  - Q:2 = dois raciocínios diferentes precisam ser recuperados.
-  - Q:3 ou mais = existem três ou mais conceitos/decisões independentes; divida o subtópico se o número ficar excessivo.
+- Q mede quantas QUESTÕES DISTINTAS são recomendadas para revisar o objetivo:
+  - Use normalmente Q:2 a Q:4 para permitir recuperação por ângulos diferentes.
+  - Use Q:1 apenas para um objetivo realmente estreito e atômico.
+  - Use Q:5 ou Q:6 quando houver vários conceitos, decisões ou contrastes independentes; divida o subtópico se precisar de mais.
 - OBJ: objetivo de aprendizagem curto, específico e verificável.
 - Em pedidos clínicos/práticos, prefira objetivos com selecionar, comparar, trocar, evitar, priorizar, diferenciar ou justificar. Use listar/descrever apenas quando a recuperação factual for o objetivo final.
-- Não use piso artificial de 2 questões nem aumente Q para preencher volume.
-- Não derive Q de P: um objetivo essencial pode precisar de apenas uma questão.
+- Q deve contar cobranças diferentes, não paráfrases da mesma pergunta.
 
 FORMATO OBRIGATÓRIO DE CADA SUBTÓPICO:
-  - [Q:1] [P:alta] [OBJ:Explicar por que X produz Y e reconhecer sua consequência] Nome do subtópico
+  - [Q:3] [OBJ:Explicar por que X produz Y e reconhecer sua consequência] Nome do subtópico
 - Use exatamente linhas "Tópico N: nome" e bullets iniciados por "- [Q:".
 - NÃO use tabelas, JSON, blocos de código, títulos "Eixo/Trilha/Módulo" nem comentários antes ou depois do mapa.
 ` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - ${studyMap ? '[Q:1] [P:alta] [OBJ:objetivo verificável] ' : ''}[Subtópico]
-  - ${studyMap ? '[Q:2] [P:média] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:3] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:2] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 Tópico 2: [Nome]
-  - ${studyMap ? '[Q:1] [P:baixa] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:4] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 
 Responda APENAS o sumário.`;
 };
@@ -1196,6 +1184,9 @@ ${ACADEMIA_LESSON_LENGTH_RULES[lengthMode]}
     ? 'Evite repetir literalmente o título do subtópico como abertura. Reescreva a ideia em formato de anotação de prova, usando negrito para rótulos clínicos quando ajudar.'
     : 'Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.'}
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
+- Marque com ==grifo de prova== os trechos que o aluno deve reconhecer, anotar ou prestar atenção especial por serem muito cobrados, mudarem conduta, diferenciarem diagnósticos ou representarem uma pegadinha importante.
+- Use os grifos com parcimônia: em geral 1 a 3 por seção. Grife uma afirmação completa e útil, não palavras soltas nem parágrafos inteiros.
+- O marcador deve permanecer exatamente no formato ==texto grifado==; não explique o marcador ao aluno.
 - Use listas (- item) para enumerações, classificações e doses.
 - Tabelas markdown (| col | col |) são aceitas e encorajadas para comparações.
 - Linguagem didática e densa. Português brasileiro.
@@ -1226,7 +1217,7 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
-    ? questionPlan.map(n => Math.max(1, Math.min(10, Number(n) || 1)))
+    ? questionPlan.map(n => Math.max(1, Math.min(30, Number(n) || 1)))
     : subtopicsArr.map(() => 2);
   const totalQuestions = plan.reduce((acc, n) => acc + n, 0);
 
@@ -1242,8 +1233,11 @@ ${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(type
 REGRA DE FIXAÇÃO (CRÍTICA):
 - ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
+- Textos entre ==...== são GRIFOS DE PROVA escolhidos pelo professor. Faça a maior parte da bateria testar diretamente esses pontos, variando mecanismo, reconhecimento, aplicação e contraste quando possível.
+- Não ignore o restante da aula: inclua também conceitos centrais não grifados para manter cobertura e contexto.
+- Não revele no enunciado que o conteúdo estava grifado e não transforme o grifo em uma pergunta óbvia de cópia literal.
 - ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
-- ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'A quantidade já reflete densidade e prioridade; não aumente nem reduza o plano.'}
+- ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'A quantidade já reflete a densidade do objetivo; não aumente nem reduza o plano.'}
 - Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para completar quantidade.
@@ -1288,7 +1282,7 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
   const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
-    ? questionPlan.map(n => Math.max(1, Math.min(10, Number(n) || 1)))
+    ? questionPlan.map(n => Math.max(1, Math.min(30, Number(n) || 1)))
     : subtopicsArr.map(() => 2);
   const totalQuestions = plan.reduce((acc, n) => acc + n, 0);
 
@@ -1303,6 +1297,8 @@ ${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(type
 REGRA DA BATERIA EXTRA:
 - ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
+- Textos entre ==...== são GRIFOS DE PROVA. Priorize esses pontos na bateria, variando o tipo de raciocínio, sem ignorar conceitos centrais não grifados.
+- Não revele no enunciado que um conteúdo estava grifado e não copie literalmente o trecho como pergunta.
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para preencher volume.

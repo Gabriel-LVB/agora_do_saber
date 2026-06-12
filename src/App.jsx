@@ -293,12 +293,10 @@ const formatSyllabusTopics = (topics) => topics.map((topic, index) => {
 
 const parseStudyMapSubtopic = (raw = '') => {
   const text = String(raw).replace(/^\s*\|?/, '').replace(/\|?\s*$/, '').replace(/\s*\|\s*/g, ' ');
-  const questions = Math.max(1, Math.min(10, Number(text.match(/\[Q:(\d+)\]/i)?.[1]) || 1));
-  const priorityRaw = String(text.match(/\[P:([^\]]+)\]/i)?.[1] || 'média').trim().toLowerCase();
-  const priority = priorityRaw.startsWith('alt') ? 'alta' : priorityRaw.startsWith('baix') ? 'baixa' : 'média';
+  const questions = Math.max(1, Math.min(30, Number(text.match(/\[Q:(\d+)\]/i)?.[1]) || 2));
   const objective = String(text.match(/\[OBJ:([^\]]+)\]/i)?.[1] || '').trim();
   const title = cleanSyllabusSubtopic(text.replace(/\[(?:Q|P|OBJ):[^\]]+\]\s*/gi, '').replace(/^(?:subt[óo]pico|objetivo)\s*:?\s*/i, '').trim());
-  return { title, questions, priority, objective };
+  return { title, questions, objective };
 };
 
 const parseStudyMapSyllabus = (syllabusText = '') => {
@@ -341,7 +339,7 @@ const parseStudyMapSyllabus = (syllabusText = '') => {
 const formatStudyMapSyllabus = (topics = []) => topics.map((topic, topicIndex) => {
   const cleanTitle = topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
   return `Tópico ${topicIndex + 1}: ${cleanTitle || topic.title}\n${topic.subtopics.map(subtopic =>
-    `  - [Q:${Math.max(1, Number(subtopic.questions) || 1)}] [P:${subtopic.priority || 'média'}] [OBJ:${subtopic.objective || `Dominar ${subtopic.title}`}] ${subtopic.title}`
+    `  - [Q:${Math.max(1, Math.min(30, Number(subtopic.questions) || 2))}] [OBJ:${subtopic.objective || `Dominar ${subtopic.title}`}] ${subtopic.title}`
   ).join('\n')}`;
 }).join('\n\n');
 
@@ -352,8 +350,7 @@ const getTopicStudyPlan = (topic = {}, subtopics = []) => {
     const plan = plans[index] || {};
     return {
       title,
-      questions:Math.max(1, Math.min(10, Number(plan.questions) || 1)),
-      priority:plan.priority || 'média',
+      questions:Math.max(1, Math.min(30, Number(plan.questions) || 2)),
       objective:plan.objective || `Dominar ${title}`,
     };
   });
@@ -361,9 +358,8 @@ const getTopicStudyPlan = (topic = {}, subtopics = []) => {
 
 const buildStudyPlanQuestionBlock = (plans = []) => {
   const total = plans.reduce((sum, plan) => sum + plan.questions, 0);
-  return `\n\nPLANO OBRIGATÓRIO DO MAPA DE ESTUDO:
+  return `\n\nPLANO DE ESTUDO GUIADO OBRIGATÓRIO:
 ${plans.map((plan, index) => `${index + 1}. ${plan.title} — EXATAMENTE ${plan.questions} questão(ões)
-   Prioridade: ${plan.priority}
    Objetivo: ${plan.objective}`).join('\n')}
 
 REGRA CRÍTICA: respeite a quantidade individual de CADA objetivo, inclusive quando for apenas 1. Cada questão deve medir uma cobrança distinta e contribuir diretamente para o objetivo indicado. Não crie paráfrases para completar quantidade. Total: EXATAMENTE ${total} questões.`;
@@ -2074,16 +2070,16 @@ const TexInline = ({ src, display=false }) => {
   return <span ref={ref} style={display ? {display:'block',textAlign:'center',margin:'8px 0'} : {display:'inline'}}/>;
 };
 
-// Render rich text: bold (**text**), italic, LaTeX ($...$, $$...$$), line breaks
+// Render rich text: bold, italic, grifo de prova (==texto==), LaTeX e line breaks
 const renderRichText = (text, multiline = false) => {
   if (!text) return null;
 
   // Tokeniza o texto em segmentos: $$...$$ (display), $...$ (inline), **...**, <b>, <i>, <br>, texto
   const tokenize = (str) => {
     const tokens = [];
-    // Regex: $$...$$, $...$, **...**, *...*, _..._, <b>...</b>, <i>...</i>, <br/>
+    // Regex: $$...$$, $...$, ==...==, **...**, *...*, _..._, <b>...</b>, <i>...</i>, <br/>
     // Nota: [\s\S] para capturar múltiplas linhas no bold
-    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[\s\S]*?\*\*|\*[^*\n]+?\*|(^|[^\w])_([^_\n_](?:[^_\n]*?[^_\n_])?)_(?=$|[^\w])|<b>[\s\S]*?<\/b>|<i>[\s\S]*?<\/i>|<br\s*\/?>)/g;
+    const re = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|==[^=\n]+?==|\*\*[\s\S]*?\*\*|\*[^*\n]+?\*|(^|[^\w])_([^_\n_](?:[^_\n]*?[^_\n_])?)_(?=$|[^\w])|<b>[\s\S]*?<\/b>|<i>[\s\S]*?<\/i>|<br\s*\/?>)/g;
     let last = 0, m;
     while ((m = re.exec(str)) !== null) {
       if (m.index > last) tokens.push({ type: 'text', val: str.slice(last, m.index) });
@@ -2094,6 +2090,7 @@ const renderRichText = (text, multiline = false) => {
       }
       else if (v.startsWith('$$')) tokens.push({ type: 'tex-display', val: v.slice(2, -2).trim() });
       else if (v.startsWith('$'))  tokens.push({ type: 'tex-inline', val: v.slice(1, -1).trim() });
+      else if (v.startsWith('==')) tokens.push({ type: 'highlight', val: v.slice(2, -2).trim() });
       else if (v.startsWith('**')) tokens.push({ type: 'bold', val: v.slice(2, -2) });
       else if (v.startsWith('*') && !v.startsWith('**')) tokens.push({ type: 'italic', val: v.slice(1, -1) });
       else if (v.startsWith('<b>'))tokens.push({ type: 'bold', val: v.slice(3, -4) });
@@ -2111,6 +2108,7 @@ const renderRichText = (text, multiline = false) => {
       switch (tok.type) {
         case 'bold':        return <strong key={k} className="font-bold">{tok.val}</strong>;
         case 'italic':      return <em key={k}>{tok.val}</em>;
+        case 'highlight':   return <mark key={k} title="Ponto de prova" className="rounded-sm bg-yellow-200 px-1 py-0.5 font-medium text-gray-900 dark:bg-yellow-700/60 dark:text-yellow-50">{renderTokens(tokenize(tok.val), `${k}-highlight`)}</mark>;
         case 'br':          return <br key={k}/>;
         case 'tex-inline':  return <TexInline key={k} src={tok.val} display={false}/>;
         case 'tex-display': return <TexInline key={k} src={tok.val} display={true}/>;
@@ -5565,33 +5563,28 @@ const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], t
   );
 };
 
-const StudyMapPreview = ({ syllabus, onChange, darkMode }) => {
+const StudyMapPreview = ({ syllabus, onChange, darkMode, multiplier=1, onMultiplierChange }) => {
   const topics = parseStudyMapSyllabus(syllabus);
   const [expanded, setExpanded] = useState({});
+  const multipliedQuestions = questions => Math.max(1, Math.min(30, questions * multiplier));
   const totalSubtopics = topics.reduce((sum, topic) => sum + topic.subtopics.length, 0);
-  const totalQuestions = topics.reduce((sum, topic) => sum + topic.subtopics.reduce((acc, subtopic) => acc + subtopic.questions, 0), 0);
+  const totalQuestions = topics.reduce((sum, topic) => sum + topic.subtopics.reduce((acc, subtopic) => acc + multipliedQuestions(subtopic.questions), 0), 0);
   const updateQuestions = (topicIndex, subtopicIndex, delta) => {
     const next = topics.map((topic, ti) => ({
       ...topic,
       subtopics:topic.subtopics.map((subtopic, si) =>
         ti === topicIndex && si === subtopicIndex
-          ? {...subtopic, questions:Math.max(1, Math.min(10, subtopic.questions + delta))}
+          ? {...subtopic, questions:Math.max(1, Math.min(30, subtopic.questions + delta))}
           : subtopic
       ),
     }));
     onChange(formatStudyMapSyllabus(next));
   };
-  const priorityTone = {
-    alta:darkMode ? 'text-red-300 border-red-800 bg-red-950/30' : 'text-red-700 border-red-200 bg-red-50',
-    média:darkMode ? 'text-yellow-300 border-yellow-800 bg-yellow-950/20' : 'text-yellow-700 border-yellow-200 bg-yellow-50',
-    baixa:darkMode ? 'text-blue-300 border-blue-800 bg-blue-950/20' : 'text-blue-700 border-blue-200 bg-blue-50',
-  };
-  const priorityLabel = {alta:'Prioridade 1 · Essencial', média:'Prioridade 2 · Relevante', baixa:'Prioridade 3 · Complementar'};
   if (!topics.length) {
     return (
       <div className={`rounded-xl border overflow-hidden ${darkMode?'border-red-900/60 bg-gray-900/40':'border-red-200 bg-white'}`}>
         <div className={`px-5 py-4 border-b ${darkMode?'border-red-900/60 bg-red-950/20':'border-red-200 bg-red-50'}`}>
-          <p className="font-bold text-red-500">O mapa não conseguiu organizar esta resposta</p>
+          <p className="font-bold text-red-500">O plano não conseguiu organizar esta resposta</p>
           <p className="text-xs opacity-60 mt-1">A resposta original foi preservada abaixo. Solicite uma revisão ou volte e gere novamente.</p>
         </div>
         <pre className={`max-h-[52vh] overflow-auto whitespace-pre-wrap p-5 text-xs ${darkMode?'text-gray-300':'text-gray-700'}`}>{syllabus || 'O Gemini devolveu uma resposta vazia.'}</pre>
@@ -5602,25 +5595,29 @@ const StudyMapPreview = ({ syllabus, onChange, darkMode }) => {
     <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
       <div className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Mapa de Alexandria</p>
-          <p className="text-sm opacity-60 mt-1">{topics.length} tópicos · {totalSubtopics} objetivos · {totalQuestions} cobranças planejadas</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Plano de estudo guiado</p>
+          <p className="text-sm opacity-60 mt-1">{topics.length} tópicos · {totalSubtopics} objetivos · {totalQuestions} questões planejadas</p>
         </div>
-        <Landmark className="w-7 h-7 text-yellow-600"/>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase opacity-40">Quantidade</span>
+          <div className={`flex rounded-lg border p-1 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
+            {[1,2,3].map(value=>(
+              <button key={value} type="button" onClick={()=>onMultiplierChange?.(value)}
+                title={`${value === 1 ? 'Usar' : value === 2 ? 'Dobrar' : 'Triplicar'} a quantidade recomendada`}
+                className={`h-7 min-w-[2rem] rounded-md px-2 text-xs font-bold transition-colors ${multiplier===value?'bg-yellow-600 text-white':darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>
+                ×{value}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className={`px-5 py-4 border-b grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-yellow-50/40'}`}>
-        <div>
-          <p className="font-bold text-sm">O que estudar primeiro</p>
-          <p className="opacity-55 mt-1 leading-relaxed"><strong>Prioridade 1</strong>: não pule. <strong>Prioridade 2</strong>: estude depois dos essenciais. <strong>Prioridade 3</strong>: deixe por último se faltar tempo. Isso não muda dificuldade nem quantidade de questões.</p>
-        </div>
-        <div>
-          <p className="font-bold text-sm">Cobranças recomendadas</p>
-          <p className="opacity-55 mt-1 leading-relaxed">É o número de perguntas <strong>realmente diferentes</strong> necessárias para cobrir o objetivo. Um conteúdo essencial pode precisar de apenas uma.</p>
-        </div>
+      <div className={`px-5 py-3 border-b text-xs leading-relaxed ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-yellow-50/40'}`}>
+        <p className="opacity-60">A IA dividiu o assunto em objetivos verificáveis e sugeriu questões suficientes para revisar cada um. Ajuste individualmente ou use o multiplicador antes de salvar.</p>
       </div>
       <div className="max-h-[52vh] overflow-y-auto">
         {topics.map((topic, topicIndex) => {
           const isOpen = expanded[topicIndex] ?? topicIndex === 0;
-          const topicQuestions = topic.subtopics.reduce((sum, subtopic) => sum + subtopic.questions, 0);
+          const topicQuestions = topic.subtopics.reduce((sum, subtopic) => sum + multipliedQuestions(subtopic.questions), 0);
           return (
             <section key={`${topic.title}-${topicIndex}`} className={`border-b last:border-b-0 ${darkMode?'border-gray-700':'border-gray-100'}`}>
               <button type="button" onClick={()=>setExpanded(prev=>({...prev,[topicIndex]:!isOpen}))}
@@ -5628,27 +5625,24 @@ const StudyMapPreview = ({ syllabus, onChange, darkMode }) => {
                 <span className="w-8 h-8 flex-shrink-0 rounded-lg bg-yellow-600 text-white flex items-center justify-center font-serif font-bold">{topicIndex + 1}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-bold truncate">{topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '')}</span>
-                  <span className="block text-xs opacity-50 mt-0.5">{topic.subtopics.length} objetivos · {topicQuestions} cobranças</span>
+                  <span className="block text-xs opacity-50 mt-0.5">{topic.subtopics.length} objetivos · {topicQuestions} questões</span>
                 </span>
                 <ChevronDown className={`w-4 h-4 transition-transform ${isOpen?'rotate-180':''}`}/>
               </button>
               {isOpen&&<div className="px-5 pb-5 space-y-2">
                 {topic.subtopics.map((subtopic, subtopicIndex)=>(
-                  <div key={`${subtopic.title}-${subtopicIndex}`} className={`border-l-2 pl-4 py-2 ${subtopic.priority==='alta'?'border-red-500':subtopic.priority==='baixa'?'border-blue-500':'border-yellow-500'}`}>
+                  <div key={`${subtopic.title}-${subtopicIndex}`} className={`border-l-2 pl-4 py-2 ${darkMode?'border-gray-600':'border-yellow-400'}`}>
                     <div className="flex flex-col sm:flex-row items-start gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold text-sm">{subtopic.title}</p>
-                          <span title={`${priorityLabel[subtopic.priority]}. Indica apenas a ordem recomendada de estudo.`} className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${priorityTone[subtopic.priority]}`}>{priorityLabel[subtopic.priority]}</span>
-                        </div>
+                        <p className="font-bold text-sm">{subtopic.title}</p>
                         <p className="text-xs opacity-55 mt-1 leading-relaxed">{subtopic.objective || `Dominar ${subtopic.title}`}</p>
                       </div>
                       <div className="flex flex-col items-start sm:items-end gap-1 flex-shrink-0">
-                        <span className="text-[10px] uppercase font-bold opacity-40">Cobranças</span>
+                        <span className="text-[10px] uppercase font-bold opacity-40">Questões</span>
                         <div title="Quantidade de perguntas distintas que serão geradas para este objetivo" className={`flex items-center rounded-lg border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
-                          <button type="button" aria-label="Diminuir cobranças" onClick={()=>updateQuestions(topicIndex, subtopicIndex, -1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>−</button>
-                          <span className="w-8 text-center text-sm font-bold tabular-nums">{subtopic.questions}</span>
-                          <button type="button" aria-label="Aumentar cobranças" onClick={()=>updateQuestions(topicIndex, subtopicIndex, 1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>+</button>
+                          <button type="button" aria-label="Diminuir questões" onClick={()=>updateQuestions(topicIndex, subtopicIndex, -1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>−</button>
+                          <span className="w-10 text-center text-sm font-bold tabular-nums">{multipliedQuestions(subtopic.questions)}</span>
+                          <button type="button" aria-label="Aumentar questões" onClick={()=>updateQuestions(topicIndex, subtopicIndex, 1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>+</button>
                         </div>
                       </div>
                     </div>
@@ -5676,15 +5670,12 @@ const TopicStudyPlanPanel = ({ plans = [], questions = [], answers = {}, darkMod
   const planned = plans.reduce((sum, plan) => sum + Math.max(1, Number(plan.questions) || 1), 0);
   const generated = questions.length;
   const answered = questions.filter(question => hasCompleteAnswer(answers?.[question.id])).length;
-  const essential = plans.filter(plan => plan.priority === 'alta').length;
-  const priorityLabel = {alta:'Prioridade 1', média:'Prioridade 2', baixa:'Prioridade 3'};
-
   return (
     <section className={`mb-5 rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
       <button type="button" onClick={()=>setShowObjectives(value=>!value)} className={`w-full px-4 py-3 flex items-center gap-3 text-left ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
         <Landmark className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
         <span className="text-sm font-bold min-w-0 flex-1">Plano do bloco</span>
-        <span className="text-xs opacity-45 hidden sm:inline">{plans.length} objetivos · {essential} prioridade 1</span>
+        <span className="text-xs opacity-45 hidden sm:inline">{plans.length} objetivos · {planned} questões planejadas</span>
         <span className={`text-xs font-bold ${generated===planned?'text-green-500':generated===0?'opacity-40':'text-yellow-500'}`}>{generated}/{planned}</span>
         {generated>0&&<span className="text-xs opacity-45 hidden sm:inline">{answered} respondidas</span>}
         <ChevronDown className={`w-4 h-4 opacity-40 transition-transform ${showObjectives?'rotate-180':''}`}/>
@@ -5692,9 +5683,9 @@ const TopicStudyPlanPanel = ({ plans = [], questions = [], answers = {}, darkMod
       {showObjectives&&<div className={`px-4 py-3 border-t space-y-2 ${darkMode?'border-gray-800':'border-gray-100'}`}>
         {plans.map((plan,index)=>(
           <div key={`${plan.title}-${index}`} className="flex items-start gap-2 text-xs">
-            <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${plan.priority==='alta'?'bg-red-500':plan.priority==='baixa'?'bg-blue-500':'bg-yellow-500'}`}/>
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 bg-yellow-500"/>
             <div className="min-w-0 flex-1">
-              <p><strong>{plan.title}</strong> <span className="opacity-40">· {priorityLabel[plan.priority] || 'Relevante'} · {Math.max(1, Number(plan.questions) || 1)} cobrança{Number(plan.questions)===1?'':'s'}</span></p>
+              <p><strong>{plan.title}</strong> <span className="opacity-40">· {Math.max(1, Number(plan.questions) || 1)} questão{Number(plan.questions)===1?'':'ões'}</span></p>
               <p className="opacity-45 mt-0.5 leading-relaxed">{plan.objective || `Dominar ${plan.title}`}</p>
             </div>
           </div>
@@ -5707,7 +5698,6 @@ const TopicStudyPlanPanel = ({ plans = [], questions = [], answers = {}, darkMod
 const AdminStudyMapTopicList = ({ subject, darkMode, onOpenTopic }) => {
   const [expanded, setExpanded] = useState({});
   const topics = subject?.topics || [];
-  const priorityLabel = {alta:'Prioridade 1', média:'Prioridade 2', baixa:'Prioridade 3'};
   const hasAnswer = value => !!value && value !== 'SKIPPED';
 
   return (
@@ -5719,7 +5709,6 @@ const AdminStudyMapTopicList = ({ subject, darkMode, onOpenTopic }) => {
         const generated = questions.length;
         const answered = questions.filter(question => hasAnswer(topic.answers?.[question.id])).length;
         const isOpen = !!expanded[topic.id];
-        const essential = plans.filter(plan => plan.priority === 'alta').length;
         const cleanTitle = String(topic.title || `Tópico ${index + 1}`).replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '');
         const generationStatus = generated === 0
           ? 'A gerar'
@@ -5743,7 +5732,7 @@ const AdminStudyMapTopicList = ({ subject, darkMode, onOpenTopic }) => {
                 <span className="min-w-0 flex-1">
                   <span className="block font-bold text-sm sm:text-base truncate">{cleanTitle}</span>
                   <span className="block text-xs opacity-45 mt-0.5 truncate">
-                    {plans.length} objetivos · {essential} prioridade 1 · {generated ? `${answered}/${generated} respondidas` : `${planned} questões planejadas`}
+                    {plans.length} objetivos · {generated ? `${answered}/${generated} respondidas` : `${planned} questões planejadas`}
                   </span>
                 </span>
               </button>
@@ -5758,9 +5747,9 @@ const AdminStudyMapTopicList = ({ subject, darkMode, onOpenTopic }) => {
               </div>
               {plans.map((plan, planIndex)=>(
                 <div key={`${topic.id}-${planIndex}`} className="flex items-start gap-2 text-xs">
-                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${plan.priority==='alta'?'bg-red-500':plan.priority==='baixa'?'bg-blue-500':'bg-yellow-500'}`}/>
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 bg-yellow-500"/>
                   <div className="min-w-0 flex-1">
-                    <p className="leading-relaxed"><strong>{plan.title}</strong> <span className="opacity-40">· {priorityLabel[plan.priority] || 'Relevante'} · {plan.questions} cobrança{plan.questions===1?'':'s'}</span></p>
+                    <p className="leading-relaxed"><strong>{plan.title}</strong> <span className="opacity-40">· {plan.questions} questão{plan.questions===1?'':'ões'}</span></p>
                     <p className="opacity-50 mt-0.5 leading-relaxed">{plan.objective || `Dominar ${plan.title}`}</p>
                   </div>
                 </div>
@@ -6266,6 +6255,12 @@ function AcademiaTopicView({
       {/* Conteúdo */}
       {hasLesson && !academiaGenerating && (
         <div>
+          {Object.values(liveTopic.lessonSections || {}).some(section => String(section?.content || '').includes('==')) && (
+            <div className={`mb-6 flex items-center gap-2 text-xs ${darkMode?'text-gray-400':'text-gray-500'}`}>
+              <mark className="rounded-sm bg-yellow-200 px-2 py-1 font-bold text-gray-900 dark:bg-yellow-700/60 dark:text-yellow-50">Grifo de prova</mark>
+              <span>Pontos para anotar e prestar atenção especial.</span>
+            </div>
+          )}
           {/* Explicações */}
           {subtopics.map((subtopic, idx) => {
 	            const section = liveTopic.lessonSections?.[idx];
@@ -6438,6 +6433,7 @@ export default function QuestionBankApp() {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [syllabus, setSyllabus]         = useState('');
   const [syllabusFB, setSyllabusFB]     = useState('');
+  const [studyPlanMultiplier, setStudyPlanMultiplier] = useState(1);
 
   // ── UI State ──────────────────────────────────────────────────────────────
   const [isBusy, setIsBusy]           = useState(false);
@@ -6508,6 +6504,7 @@ export default function QuestionBankApp() {
   const [academiaUploadedImages, setAcademiaUploadedImages] = useState([]);
   const [academiaSyllabus, setAcademiaSyllabus]       = useState('');
   const [academiaSyllabusFB, setAcademiaSyllabusFB]   = useState('');
+  const [academiaStudyPlanMultiplier, setAcademiaStudyPlanMultiplier] = useState(1);
   const [academiaFocusAreas, setAcademiaFocusAreas]   = useState([]);
   const academiaFileInputRef  = useRef(null);
   const academiaImageInputRef = useRef(null);
@@ -11411,7 +11408,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       setErrorModal({ title: 'Título obrigatório', message: 'Digite o nome do assunto antes de gerar a estrutura.', isAlert: true });
       return;
     }
-    if(!checkKey())return;setIsBusy(true);
+    if(!checkKey())return;setIsBusy(true);setStudyPlanMultiplier(1);
     const s = {...settingsRef.current, adminStudyMap:isAdmin && !!settingsRef.current.adminStudyMap};
     const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const orderedKeys = getTwoAttemptGeminiKeys();
@@ -11508,8 +11505,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         subtopics:cleanSubtopics,
         ...(useStudyMap ? {subtopicPlans:subtopics.map(subtopic => ({
           title:subtopic.title,
-          questions:subtopic.questions,
-          priority:subtopic.priority,
+          questions:Math.max(1, Math.min(30, subtopic.questions * studyPlanMultiplier)),
           objective:subtopic.objective,
         }))} : {}),
         questionStyle: settingsRef.current.questionStyle || 'mixed', // herdado do modal na criação
@@ -11519,7 +11515,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
     const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', folderId:libFilter==='gemini'?(activeFolder?.id || null):null, sourceMaterials: getMaterial(), focusAreas, topics };
     await addSubject(ns);
-    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1);
+    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1); setStudyPlanMultiplier(1);
     setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]); setFocusAreas([]);
   };
 
@@ -11982,6 +11978,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
     if (!checkKey()) return;
     setIsBusy(true);
+    setAcademiaStudyPlanMultiplier(1);
     const s = {...settingsRef.current, adminStudyMap:isAdmin && !!settingsRef.current.adminStudyMap};
     const sys = buildAcademiaSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const chunks = buildAcademiaMaterialChunks(academiaMaterialText, academiaUploadedFiles);
@@ -12082,8 +12079,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         subtopics:cleanSubtopics,
         ...(useStudyMap ? {subtopicPlans:subtopics.map(subtopic => ({
           title:subtopic.title,
-          questions:subtopic.questions,
-          priority:subtopic.priority,
+          questions:Math.max(1, Math.min(30, subtopic.questions * academiaStudyPlanMultiplier)),
           objective:subtopic.objective,
         }))} : {}),
         questionStyle: settingsRef.current.questionStyle || 'mixed',
@@ -12118,6 +12114,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setAcademiaUploadedImages([]);
     setAcademiaSyllabus('');
     setAcademiaFocusAreas([]);
+    setAcademiaStudyPlanMultiplier(1);
     setAcademiaCreatorStep(1);
     setView('library');
     addToast('Academia criada! Agora entre no assunto e gere as aulas.', 'success', 4000);
@@ -14847,8 +14844,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <div className="flex items-start gap-3">
                       <Landmark className={`w-5 h-5 mt-0.5 flex-shrink-0 ${settings.adminStudyMap?'text-yellow-500':'opacity-40'}`}/>
                       <div>
-                        <p className={`text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Mapa de Alexandria <span className="text-[10px] uppercase opacity-50">experimental</span></p>
-                        <p className="text-xs opacity-50 mt-0.5">Planeja objetivos, ordem recomendada de estudo e quantidade individual de questões.</p>
+                        <p className={`text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado</p>
+                        <p className="text-xs opacity-50 mt-0.5">Organiza objetivos verificáveis e sugere quantas questões revisar em cada um.</p>
                       </div>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 flex-shrink-0 ${settings.adminStudyMap?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
@@ -14894,7 +14891,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     {visibleQuestionTypes.some(isMemoryCardType)
                       ? `${memoryCardTypeName(visibleQuestionTypes)}: a IA decide a quantidade ideal, sem meta fixa por subtópico.`
                       : settings.adminStudyMap
-                      ? 'O mapa define uma quantidade própria para cada objetivo, sem piso artificial.'
+                      ? 'O plano sugere uma quantidade própria para cada objetivo; você poderá dobrar ou triplicar antes de salvar.'
                       : settings.qPerSubAuto
                       ? 'Questões/subtópico: a IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.'
                       : settings.autoMode
@@ -14964,7 +14961,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura Gerada</h2>
                 <p className={`text-sm rounded-xl border p-4 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200 text-gray-700'}`}>Revise os tópicos abaixo. Você pode pedir ajustes antes de confirmar; o assunto só será adicionado ao acervo ao clicar em <strong>Confirmar e salvar</strong>.</p>
                 {isAdmin&&settings.adminStudyMap
-                  ? <StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode}/>
+                  ? <StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode} multiplier={studyPlanMultiplier} onMultiplierChange={setStudyPlanMultiplier}/>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{syllabus}</div>}
                 <div className="relative">
                   <textarea value={syllabusFB} onChange={e=>setSyllabusFB(e.target.value)} placeholder="Solicite ajustes..." className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -15074,8 +15071,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <div className="flex items-start gap-3">
                       <Landmark className={`w-5 h-5 mt-0.5 flex-shrink-0 ${settings.adminStudyMap?'text-yellow-500':'opacity-40'}`}/>
                       <div>
-                        <p className={`text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Mapa de Alexandria <span className="text-[10px] uppercase opacity-50">experimental</span></p>
-                        <p className="text-xs opacity-50 mt-0.5">Organiza objetivos, ordem recomendada de estudo e quantidade individual de questões.</p>
+                        <p className={`text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado</p>
+                        <p className="text-xs opacity-50 mt-0.5">Organiza objetivos verificáveis e sugere quantas questões revisar em cada um.</p>
                       </div>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 flex-shrink-0 ${settings.adminStudyMap?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
@@ -15185,7 +15182,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   ✅ Revise os tópicos e subtópicos. Eles viram seções da aula; as questões de fixação serão geradas para a aula como um todo, evitando repetir o mesmo eixo de cobrança entre subtópicos próximos.
                 </p>
                 {isAdmin&&settings.adminStudyMap
-                  ? <StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode}/>
+                  ? <StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode} multiplier={academiaStudyPlanMultiplier} onMultiplierChange={setAcademiaStudyPlanMultiplier}/>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>}
                 <div className="relative">
                   <textarea value={academiaSyllabusFB} onChange={e=>setAcademiaSyllabusFB(e.target.value)} placeholder="Solicite ajustes (ex: adicione mais subtópicos sobre tratamento...)" className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
