@@ -14676,7 +14676,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             {creatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><Sparkles className="w-8 h-8 flex-shrink-0"/>Novo Assunto</h2>
+                <div className={`rounded-xl border p-4 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
+                  <p className="font-bold mb-1">Como funciona</p>
+                  <p>Informe o assunto e, se quiser, adicione materiais. O Oráculo primeiro cria uma estrutura para você revisar; nada será salvo antes da sua confirmação.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-2 opacity-50">Nome do assunto <span className="normal-case font-normal">(obrigatório)</span></label>
                 <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="Título (ex: Nefrologia)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                  <p className="text-xs mt-2 opacity-50">Use um nome específico. Exemplo: “Síndrome Nefrótica” funciona melhor que apenas “Nefrologia”.</p>
+                </div>
 
                 {/* Focus areas multi-select */}
                 <div>
@@ -14697,6 +14705,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base</div>
+                  <p className="text-xs mb-3 opacity-50">Opcional. Cole anotações ou envie arquivos para orientar o conteúdo e reduzir respostas genéricas.</p>
                   {uploadedFiles.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedFiles.map((f,i)=><div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border ${darkMode?'bg-gray-700 border-gray-600 text-gray-200':'bg-gray-100 border-gray-200 text-gray-700'}`}><FileText className="w-4 h-4 text-yellow-600"/><span className="max-w-[120px] truncate">{f.name}</span><button type="button" aria-label={`Remover ${f.name}`} onClick={()=>setUploadedFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-red-500"><XCircle className="w-4 h-4"/></button></div>)}</div>}
                   {uploadedImages.length>0&&<div className="flex flex-wrap gap-2 mb-3">{uploadedImages.map((img,i)=><div key={i} className="relative group"><img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-yellow-400"/><button type="button" aria-label={`Remover imagem ${i + 1}`} onClick={()=>setUploadedImages(p=>p.filter((_,j)=>j!==i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-100 sm:opacity-0 sm:group-hover:opacity-100">×</button></div>)}</div>}
                   <textarea value={materialText} onChange={e=>setMaterialText(e.target.value)} placeholder="Insira textos base, anotações, transcrições..." className={`w-full h-48 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -14840,13 +14849,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   </button>
                 )}
 
-                <button onClick={startCreation} disabled={isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
-                  {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura')}
+                <button onClick={startCreation} disabled={!newSubName.trim()||isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                  {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Criando estrutura...':(isUploading?'Processando materiais...':'Gerar estrutura para revisar')}
                 </button>
+                {!newSubName.trim()&&<p className="text-xs text-center opacity-50">Digite o nome do assunto para continuar.</p>}
               </div>
             ):(
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura Gerada</h2>
+                <p className={`text-sm rounded-xl border p-4 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200 text-gray-700'}`}>Revise os tópicos abaixo. Você pode pedir ajustes antes de confirmar; o assunto só será adicionado ao acervo ao clicar em <strong>Confirmar e salvar</strong>.</p>
                 {isAdmin&&settings.adminStudyMap
                   ? <StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode}/>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{syllabus}</div>}
@@ -14856,7 +14867,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
                 <div className="flex gap-4">
                   <button onClick={()=>setCreatorStep(1)} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
-                  <button onClick={finalizeSub} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700">Confirmar e Salvar</button>
+                  <button onClick={finalizeSub} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700">Confirmar e salvar</button>
                 </div>
               </div>
             )}
@@ -15071,8 +15082,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           <div className="max-w-3xl mx-auto">
             <button onClick={()=>setView('sub-library')} className={`flex items-center gap-2 mb-6 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Voltar</button>
             <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3 leading-tight"><Feather className="w-8 h-8 flex-shrink-0"/>Importar Questões</h2>
+            <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
+              <p className="font-bold mb-1">Importe sem alterar o texto original</p>
+              <p>Cole questões com alternativas A-E e indicação de resposta. Elas serão organizadas em um assunto e bloco do Acervo Externo.</p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Assunto <span className="normal-case font-normal">(opcional)</span></label>
                 <input value={pasteSubName} onChange={e=>{setPasteSubName(e.target.value);setShowSubSugs(true);}} onFocus={()=>setShowSubSugs(true)} onBlur={()=>setTimeout(()=>setShowSubSugs(false),200)} placeholder="Assunto Principal (opcional)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                 {showSubSugs&&library.filter(s=>s.source==='external'&&s.id!=='imported-folder'&&s.title.toLowerCase().includes(pasteSubName.toLowerCase())).length>0&&(
                   <ul className={`absolute z-20 w-full md:w-[calc(50%-0.5rem)] mt-1 rounded-xl border shadow-lg overflow-hidden ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
@@ -15080,10 +15096,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   </ul>
                 )}
               </div>
-              <input value={pasteTopic} onChange={e=>setPasteTopic(e.target.value)} placeholder="Nome do Bloco — ex: Bloco 1" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Nome do bloco <span className="normal-case font-normal">(opcional)</span></label>
+                <input value={pasteTopic} onChange={e=>setPasteTopic(e.target.value)} placeholder="Ex: Prova 2025 ou Bloco 1" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+              </div>
             </div>
+            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Texto das questões <span className="normal-case font-normal">(obrigatório)</span></label>
             <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder="Cole as questões aqui..." className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-white border-gray-200'}`}/>
-            <button onClick={handlePasteImport} disabled={!pasteText.trim()} className="mt-4 w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Salvar Importação</button>
+            <p className="text-xs mt-2 opacity-50">Também aceita questões V/F, CESPE, abertas, dissertativas e flashcards quando os rótulos de resposta e explicação estão presentes.</p>
+            <button onClick={handlePasteImport} disabled={!pasteText.trim()} className="mt-4 w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Importar e abrir questões</button>
           </div>
         )}
 
