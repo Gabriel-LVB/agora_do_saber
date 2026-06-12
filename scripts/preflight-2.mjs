@@ -27,6 +27,10 @@ if (!firestoreRules.includes('match /users/{uid}/{document=**}')) {
   fail('As regras Firestore não protegem os dados privados por usuário.');
 }
 
+if (!appSource.includes('LAST_STUDY_STORAGE_PREFIX') || !appSource.includes('openLastStudyLocation')) {
+  fail('A continuidade da última sessão de estudo foi removida.');
+}
+
 [
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',

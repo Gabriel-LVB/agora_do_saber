@@ -137,6 +137,7 @@ const FLASHCARD_WRONG = 'WRONG';
 const QUICK_SOURCE = 'quick';
 const QUICK_SUBJECT_ID = 'quick-plantao-rapido';
 const QUICK_SUBJECT_TITLE = 'Centelha do Saber';
+const LAST_STUDY_STORAGE_PREFIX = 'agora_last_study_';
 const GEMINI_THINKING_BUDGET_OFF = 0;
 const GEMINI_THINKING_BUDGET_DYNAMIC = -1;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
@@ -6343,6 +6344,7 @@ export default function QuestionBankApp() {
   const [activeSubjectId, setActiveSubjectId] = useState(null);
   const [activeTopicId, setActiveTopicId]     = useState(null);
   const [shuffledSubjectTopic, setShuffledSubjectTopic] = useState(null);
+  const [lastStudyLocation, setLastStudyLocation] = useState(null);
 
   // ── Creator ───────────────────────────────────────────────────────────────
   const [creatorStep, setCreatorStep]   = useState(1);
@@ -8181,6 +8183,124 @@ export default function QuestionBankApp() {
   const sourceSubjects = (source = libFilter) => librarySubjects.filter(s => s.source === source);
   const sourceFolders = (source = libFilter) => libraryFolders.filter(f => f.source === source);
   const activeFolder = activeFolderId ? libraryFolders.find(f => f.id === activeFolderId && f.source === libFilter) : null;
+
+  useEffect(() => {
+    if (!username) {
+      setLastStudyLocation(null);
+      return;
+    }
+    setLastStudyLocation(readStorageJson(`${LAST_STUDY_STORAGE_PREFIX}${username}`, null));
+  }, [username]);
+
+  useEffect(() => {
+    if (!username) return;
+    let location = null;
+    if (['topic', 'quick-topic', 'academia-topic'].includes(view) && activeSubject && activeTopic) {
+      location = {
+        view,
+        libFilter:activeSubject.source || libFilter,
+        activeFolderId:activeSubject.folderId || null,
+        activeSubjectId:activeSubject.id,
+        activeTopicId:activeTopic.id,
+        quickStudyTab,
+        title:activeTopic.title || 'Tópico',
+        context:activeSubject.title || 'Meus materiais',
+        kind:view === 'quick-topic' ? 'Estudo rápido' : view === 'academia-topic' ? 'Aula da Academia' : 'Tópico de estudo',
+        updatedAt:Date.now(),
+      };
+    } else if (view === 'videoaulas' && activeAula) {
+      location = {
+        view,
+        activeSubjectVid,
+        activeSubtopicVid,
+        activeAula,
+        title:activeAula.title || 'Videoaula',
+        context:[activeSubjectVid, String(activeSubtopicVid || '').split('::')[0]].filter(Boolean).join(' · ') || 'Portal do Curso',
+        kind:'Videoaula',
+        updatedAt:Date.now(),
+      };
+    } else if (view === 'videoquestions' && vqAula) {
+      location = {
+        view,
+        vqSubject,
+        vqTopic,
+        vqAula,
+        vqActiveBlock,
+        vqActiveBlockView,
+        title:vqActiveBlockView?.blockId ? 'Bloco de questões' : (vqAula.title || 'Questões da aula'),
+        context:[vqSubject, vqTopic, vqAula.title].filter(Boolean).join(' · '),
+        kind:'Questões do curso',
+        updatedAt:Date.now(),
+      };
+    } else if (view === 'curso') {
+      location = {
+        view,
+        cursoTab,
+        title:'Portal do Curso',
+        context:cursoTab === 'revisoes' ? 'Revisões' : cursoTab === 'cronograma' ? 'Cronograma' : cursoTab === 'questoes' ? 'Questões' : 'Videoaulas',
+        kind:'Curso',
+        updatedAt:Date.now(),
+      };
+    }
+    if (!location) return;
+    setLastStudyLocation(location);
+    writeStorageJson(`${LAST_STUDY_STORAGE_PREFIX}${username}`, location);
+  }, [
+    username,
+    view,
+    activeSubject?.id,
+    activeTopic?.id,
+    activeAula,
+    activeSubjectVid,
+    activeSubtopicVid,
+    vqSubject,
+    vqTopic,
+    vqAula,
+    vqActiveBlock,
+    vqActiveBlockView,
+    cursoTab,
+    quickStudyTab,
+    libFilter,
+  ]);
+
+  const openLastStudyLocation = () => {
+    const location = lastStudyLocation;
+    if (!location) return false;
+    if (['topic', 'quick-topic', 'academia-topic'].includes(location.view)) {
+      const subject = librarySubjects.find(item => String(item.id) === String(location.activeSubjectId));
+      const topic = subject?.topics?.find(item => String(item.id) === String(location.activeTopicId));
+      if (!subject || !topic) return false;
+      setLibFilter(subject.source || location.libFilter || 'gemini');
+      setActiveFolderId(subject.folderId || location.activeFolderId || null);
+      setActiveSubjectId(subject.id);
+      setActiveTopicId(topic.id);
+      setQuickStudyTab(location.quickStudyTab || 'lesson');
+      setView(location.view);
+      return true;
+    }
+    if (location.view === 'curso' && canSeeVideoaulas) {
+      setCursoTab(location.cursoTab || 'videoaulas');
+      setView('curso');
+      return true;
+    }
+    if (location.view === 'videoaulas' && canSeeVideoaulas && location.activeAula) {
+      setActiveSubjectVid(location.activeSubjectVid || null);
+      setActiveSubtopicVid(location.activeSubtopicVid || null);
+      setActiveAulaAndReset(location.activeAula);
+      setView('videoaulas');
+      return true;
+    }
+    if (location.view === 'videoquestions' && canSeeVideoaulas && location.vqAula) {
+      setVqSubject(location.vqSubject || null);
+      setVqTopic(location.vqTopic || null);
+      setVqAula(location.vqAula);
+      setVqActiveBlock(location.vqActiveBlock || null);
+      setVqActiveBlockView(location.vqActiveBlockView || null);
+      setView('videoquestions');
+      return true;
+    }
+    return false;
+  };
   const getFolderPath = (folderId) => {
     const path = [];
     let cur = libraryFolders.find(f => f.id === folderId);
@@ -13628,7 +13748,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   const todayLabel = new Intl.DateTimeFormat('pt-BR', {weekday:'long', day:'numeric', month:'long'}).format(new Date());
                   const todayProgressCount = Number(questionPct >= 100) + Number(homeCanSeeVideoaulas && minutePct >= 100);
                   const todayProgressTotal = homeCanSeeVideoaulas ? 2 : 1;
-                  const todayPrimary = homeCanUseAdvancedFeatures && dueCount > 0
+                  const resumableLibraryLocation = ['topic', 'quick-topic', 'academia-topic'].includes(lastStudyLocation?.view)
+                    && librarySubjects.some(subject => String(subject.id) === String(lastStudyLocation.activeSubjectId)
+                      && (subject.topics || []).some(topic => String(topic.id) === String(lastStudyLocation.activeTopicId)));
+                  const resumableCourseLocation = homeCanSeeVideoaulas && ['curso', 'videoaulas', 'videoquestions'].includes(lastStudyLocation?.view);
+                  const canResumeLastStudy = !!lastStudyLocation && (resumableLibraryLocation || resumableCourseLocation);
+                  const todayPrimary = canResumeLastStudy
+                    ? {
+                        eyebrow:'Continue de onde parou',
+                        title:lastStudyLocation.title || 'Retomar estudo',
+                        description:[lastStudyLocation.kind, lastStudyLocation.context].filter(Boolean).join(' · '),
+                        actionLabel:'Continuar estudando',
+                        icon:<PlayIcon className="w-6 h-6"/>,
+                        action:openLastStudyLocation,
+                      }
+                    : homeCanUseAdvancedFeatures && dueCount > 0
                     ? {
                         eyebrow:'Prioridade de hoje',
                         title:`Revisar ${dueCount} ${dueCount === 1 ? 'item pendente' : 'itens pendentes'}`,
