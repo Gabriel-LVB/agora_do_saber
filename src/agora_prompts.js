@@ -1298,6 +1298,8 @@ REGRA DA BATERIA EXTRA:
 - ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
 - Textos entre ==...== são GRIFOS DE PROVA. Priorize esses pontos na bateria, variando o tipo de raciocínio, sem ignorar conceitos centrais não grifados.
+- Como esta é uma bateria EXTRA, cubra obrigatoriamente também conteúdo relevante que NÃO esteja grifado e que ainda não tenha sido cobrado nas questões anteriores.
+- Reserve uma parte perceptível da bateria para esses pontos não grifados; o aluno precisa eventualmente revisar toda a aula, não apenas os destaques.
 - Não revele no enunciado que um conteúdo estava grifado e não copie literalmente o trecho como pergunta.
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.

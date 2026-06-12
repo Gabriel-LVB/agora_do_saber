@@ -6426,6 +6426,7 @@ export default function QuestionBankApp() {
 
   // ── Creator ───────────────────────────────────────────────────────────────
   const [creatorStep, setCreatorStep]   = useState(1);
+  const [creatorSetupStep, setCreatorSetupStep] = useState('content');
   const [newSubName, setNewSubName]     = useState('');
   const [focusAreas, setFocusAreas]     = useState([]); // selected focus area IDs for current creation
   const [materialText, setMaterialText] = useState('');
@@ -6498,6 +6499,7 @@ export default function QuestionBankApp() {
 
   // ── Academia do Saber ─────────────────────────────────────────────────────
   const [academiaCreatorStep, setAcademiaCreatorStep] = useState(1);
+  const [academiaSetupStep, setAcademiaSetupStep] = useState('content');
   const [academiaSubName, setAcademiaSubName]         = useState('');
   const [academiaMaterialText, setAcademiaMaterialText] = useState('');
   const [academiaUploadedFiles, setAcademiaUploadedFiles] = useState([]);
@@ -7934,8 +7936,8 @@ export default function QuestionBankApp() {
         }
         return true;
       }
-      if (view === 'creator') { setCreatorStep(1); setView('library'); return true; }
-      if (view === 'academia-creator') { setAcademiaCreatorStep(1); setView('library'); return true; }
+      if (view === 'creator') { setCreatorStep(1); setCreatorSetupStep('content'); setView('library'); return true; }
+      if (view === 'academia-creator') { setAcademiaCreatorStep(1); setAcademiaSetupStep('content'); setView('library'); return true; }
       if (view === 'paste') { setView('sub-library'); return true; }
       if (view === 'favorites') { setView('library'); return true; }
       if (view === 'settings') { restoreReturnTarget('library'); return true; }
@@ -11515,7 +11517,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
     const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', folderId:libFilter==='gemini'?(activeFolder?.id || null):null, sourceMaterials: getMaterial(), focusAreas, topics };
     await addSubject(ns);
-    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1); setStudyPlanMultiplier(1);
+    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1); setCreatorSetupStep('content'); setStudyPlanMultiplier(1);
     setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]); setFocusAreas([]);
   };
 
@@ -12116,6 +12118,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setAcademiaFocusAreas([]);
     setAcademiaStudyPlanMultiplier(1);
     setAcademiaCreatorStep(1);
+    setAcademiaSetupStep('content');
     setView('library');
     addToast('Academia criada! Agora entre no assunto e gere as aulas.', 'success', 4000);
   };
@@ -13840,8 +13843,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             const primaryLabel = libFilter==='gemini'?'Gerar assunto':libFilter==='academia'?'Nova aula':'Importar';
             const primaryIcon = libFilter==='gemini'?<Sparkles className="w-4 h-4"/>:libFilter==='academia'?<AcademiaIcon className="w-4 h-4"/>:<Feather className="w-4 h-4"/>;
             const primaryAction = () => {
-              if (libFilter==='gemini') setView('creator');
-              else if (libFilter==='academia') { setAcademiaCreatorStep(1); setView('academia-creator'); }
+              if (libFilter==='gemini') { setCreatorStep(1); setCreatorSetupStep('content'); setView('creator'); }
+              else if (libFilter==='academia') { setAcademiaCreatorStep(1); setAcademiaSetupStep('content'); setView('academia-creator'); }
               else { setPasteSubName(''); setPasteTopic('Bloco 1'); setView('paste'); }
             };
             const renderIconButton = (label, icon, fn, extra='') => (
@@ -14245,6 +14248,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       <p className="text-sm opacity-50 mt-1">{treeItemCount} item{treeItemCount!==1?'s':''} nesta pasta</p>
 	                    </div>
 	                    <div className="flex flex-wrap gap-2">
+                        {!activeFolderLocked&&<button onClick={()=>{setNewFolderParentId(activeFolderId || null);setNewFolderName('');setNewFolderModal(true);}} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}><PlusIcon className="w-4 h-4"/>Nova pasta</button>}
+                        {(libFilter!=='academia'||canUseAcademia)&&<button onClick={primaryAction} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm">{primaryIcon}{primaryLabel}</button>}
+                      </div>
+                  </div>
+                  <div className={`mt-4 pt-4 border-t flex flex-wrap items-center gap-2 ${darkMode?'border-gray-800':'border-gray-100'}`}>
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-35 mr-1">Estudar e organizar</span>
 	                      {activeFolder&&libFilter==='academia'&&countFolderQuestions(activeFolder)>0&&(()=>{
 	                        const id = `active-folder-actions-${activeFolder.id}`;
 	                        return (
@@ -14273,9 +14282,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                      {activeFolder&&activeFolderErrorCount>0&&<button onClick={()=>openFolderErrorReview(activeFolder)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}><BookOpen className="w-4 h-4"/>Caderno de erros ({activeFolderErrorCount})</button>}
 	                      {libFilter==='external'&&<button onClick={()=>setExternalPromptModal(true)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'} ${copiedPrompt?'ring-2 ring-yellow-500 text-yellow-600':''}`}>{copiedPrompt?<CheckCircle2 className="w-4 h-4 text-yellow-500"/>:<Copy className="w-4 h-4"/>}{copiedPrompt?'Copiado':'Prompt'}</button>}
 	                      {treeFolderIds.length>0&&<button onClick={()=>setAllTreeFoldersOpen(!allTreeFoldersOpen)} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{allTreeFoldersOpen?<ChevronUp className="w-4 h-4"/>:<ChevronDown className="w-4 h-4"/>}{allTreeFoldersOpen?'Recolher tudo':'Expandir tudo'}</button>}
-	                      {!activeFolderLocked&&<button onClick={()=>{setNewFolderParentId(activeFolderId || null);setNewFolderName('');setNewFolderModal(true);}} className={`px-4 py-2 rounded-xl font-bold text-sm border flex items-center gap-2 ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}><PlusIcon className="w-4 h-4"/>Nova pasta</button>}
-                      {(libFilter!=='academia'||canUseAcademia)&&<button onClick={primaryAction} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm">{primaryIcon}{primaryLabel}</button>}
-                    </div>
                   </div>
                 </div>
 
@@ -14774,14 +14780,23 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {/* ── CREATOR ── */}
         {view==='creator'&&(
           <div className="max-w-2xl mx-auto">
-            <button onClick={()=>{setCreatorStep(1);setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            <button onClick={()=>{setCreatorStep(1);setCreatorSetupStep('content');setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {creatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><Sparkles className="w-8 h-8 flex-shrink-0"/>Novo Assunto</h2>
                 <div className={`rounded-xl border p-4 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
                   <p className="font-bold mb-1">Como funciona</p>
-                  <p>Informe o assunto e, se quiser, adicione materiais. O Oráculo primeiro cria uma estrutura para você revisar; nada será salvo antes da sua confirmação.</p>
+                  <p>Primeiro informe o conteúdo. Depois escolha como as questões serão criadas. Nada será salvo antes da sua confirmação.</p>
                 </div>
+                <div className={`grid grid-cols-2 rounded-xl border p-1 ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-gray-50'}`}>
+                  {[{id:'content',label:'1. Conteúdo'},{id:'questions',label:'2. Questões'}].map(step=>(
+                    <button key={step.id} type="button" onClick={()=>setCreatorSetupStep(step.id)}
+                      className={`rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${creatorSetupStep===step.id?'bg-yellow-600 text-white':darkMode?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-white'}`}>
+                      {step.label}
+                    </button>
+                  ))}
+                </div>
+                <div className={creatorSetupStep==='content'?'space-y-6':'hidden'}>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-2 opacity-50">Nome do assunto <span className="normal-case font-normal">(obrigatório)</span></label>
                 <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="Título (ex: Nefrologia)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -14821,8 +14836,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {isBig()&&<div className={`text-xs p-3 rounded-lg flex gap-2 ${darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'}`}>
                   Material extenso — será processado em cerca de {materialRequestCount()} partes/requests.
                 </div>}
+                <button type="button" onClick={()=>setCreatorSetupStep('questions')} disabled={!newSubName.trim()}
+                  className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                  Continuar para as questões <ChevronRight className="w-4 h-4"/>
+                </button>
+                {!newSubName.trim()&&<p className="text-xs text-center opacity-50">Digite o nome do assunto para continuar.</p>}
+                </div>
 
                 {/* Parâmetros de geração */}
+                <div className={creatorSetupStep==='questions'?'space-y-6':'hidden'}>
                 <div>
                   <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros de Geração</div>
                   {/* Toggle autoMode */}
@@ -14929,6 +14951,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   </div>
                 )}
 
+                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Configurações avançadas</summary>
+                  <div className="mt-5 space-y-5">
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                   <GeminiThinkingSelector
@@ -14950,11 +14975,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     </div>
                   </button>
                 )}
+                  </div>
+                </details>
 
-                <button onClick={startCreation} disabled={!newSubName.trim()||isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
-                  {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Criando estrutura...':(isUploading?'Processando materiais...':'Gerar estrutura para revisar')}
-                </button>
-                {!newSubName.trim()&&<p className="text-xs text-center opacity-50">Digite o nome do assunto para continuar.</p>}
+                <div className="flex gap-3">
+                  <button type="button" onClick={()=>setCreatorSetupStep('content')} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
+                  <button onClick={startCreation} disabled={!newSubName.trim()||isBusy||isUploading} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                    {isBusy?<Spinner className="w-5 h-5 text-white"/>:<Sparkles className="w-5 h-5"/>}{isBusy?'Criando estrutura...':(isUploading?'Processando materiais...':'Gerar estrutura para revisar')}
+                  </button>
+                </div>
+                </div>
               </div>
             ):(
               <div className="space-y-6">
@@ -14979,14 +15009,23 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {/* ── ACADEMIA CREATOR ── */}
         {view==='academia-creator'&&canUseAcademia&&(
           <div className="max-w-2xl mx-auto">
-            <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setAcademiaFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSetupStep('content');setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setAcademiaFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {academiaCreatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><AcademiaIcon className="w-8 h-8 flex-shrink-0"/>Nova Aula</h2>
                 <p className={`text-sm rounded-xl p-4 ${darkMode?'bg-yellow-900/20 text-yellow-300 border border-yellow-800/30':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-                  A Academia gera <strong>aula + questões de fixação</strong> a partir do conteúdo. Quanto mais detalhado o material, melhor a aula.
+                  Monte a aula em três etapas curtas: conteúdo, estilo da explicação e questões de fixação.
                 </p>
+                <div className={`grid grid-cols-3 rounded-xl border p-1 ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-gray-50'}`}>
+                  {[{id:'content',label:'1. Conteúdo'},{id:'lesson',label:'2. Aula'},{id:'questions',label:'3. Fixação'}].map(step=>(
+                    <button key={step.id} type="button" onClick={()=>setAcademiaSetupStep(step.id)}
+                      className={`rounded-lg px-2 py-2.5 text-xs sm:text-sm font-bold transition-colors ${academiaSetupStep===step.id?'bg-yellow-600 text-white':darkMode?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-white'}`}>
+                      {step.label}
+                    </button>
+                  ))}
+                </div>
 
+                <div className={academiaSetupStep==='content'?'space-y-6':'hidden'}>
                 <input value={academiaSubName} onChange={e=>setAcademiaSubName(e.target.value)} placeholder="Título do assunto (ex: Síndrome Nefrótica)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
 
                 {/* Focus areas */}
@@ -15049,8 +15088,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                {academiaMaterialRequestCount()>1&&<div className={`text-xs p-3 rounded-lg flex gap-2 ${darkMode?'bg-yellow-900/20 text-yellow-300':'bg-yellow-50 text-yellow-800'}`}>
 	                  Material extenso — será processado em cerca de {academiaMaterialRequestCount()} partes/requests.
 	                </div>}
+                <button type="button" onClick={()=>setAcademiaSetupStep('lesson')} disabled={!academiaSubName.trim()}
+                  className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                  Continuar para configurar a aula <ChevronRight className="w-4 h-4"/>
+                </button>
+                {!academiaSubName.trim()&&<p className="text-xs text-center opacity-50">Digite o título da aula para continuar.</p>}
+                </div>
 
 	                {/* Parâmetros */}
+                <div className={academiaSetupStep==='lesson'?'space-y-6':'hidden'}>
                 <div>
                   <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros da Aula</div>
                   <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
@@ -15116,7 +15162,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       </div>
                     </div>
                   </details>
-                  {!visibleQuestionTypes.some(isMemoryCardType)&&<div className="mt-3">
+                </div>
+                <div className="flex gap-3">
+                  <button type="button" onClick={()=>setAcademiaSetupStep('content')} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
+                  <button type="button" onClick={()=>setAcademiaSetupStep('questions')} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold flex justify-center items-center gap-2">
+                    Continuar para fixação <ChevronRight className="w-4 h-4"/>
+                  </button>
+                </div>
+                </div>
+
+                <div className={academiaSetupStep==='questions'?'space-y-6':'hidden'}>
+                  {!visibleQuestionTypes.some(isMemoryCardType)&&<div>
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
                     <div className="flex gap-2">
                       {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(opt=>(
@@ -15128,7 +15184,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       ))}
                     </div>
                   </div>}
-                </div>
 
                 {/* Tipo e estilo das questões de fixação */}
                 <div>
@@ -15149,6 +15204,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   </div>
                 )}
 
+                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Configurações avançadas</summary>
+                  <div className="mt-5 space-y-5">
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                   <GeminiThinkingSelector
@@ -15170,10 +15228,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     </div>
                   </button>
                 )}
+                  </div>
+                </details>
 
-                <button onClick={startAcademiaCreation} disabled={isBusy||isUploading} className="w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
-                  {isBusy?<Spinner className="w-5 h-5 text-white"/>:<AcademiaIcon className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura da Aula')}
-                </button>
+                <div className="flex gap-3">
+                  <button type="button" onClick={()=>setAcademiaSetupStep('lesson')} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
+                  <button onClick={startAcademiaCreation} disabled={isBusy||isUploading} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2">
+                    {isBusy?<Spinner className="w-5 h-5 text-white"/>:<AcademiaIcon className="w-5 h-5"/>}{isBusy?'Consultando...':(isUploading?'Processando...':'Gerar Estrutura da Aula')}
+                  </button>
+                </div>
+                </div>
               </div>
             ):(
               <div className="space-y-6">
