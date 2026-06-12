@@ -32,7 +32,7 @@ Isso evita que uma mudança de formato, exclusão ou teste da 2.0 altere dados u
 
 Manter BYOK: chamadas diretas do navegador para o Gemini usando as chaves gratuitas de cada usuário.
 
-Na 2.0, as chaves não devem ser sincronizadas com o Firestore. Elas ficam apenas no dispositivo. Preferências sem segredo podem continuar sincronizadas.
+Na 2.0, as chaves continuam sincronizadas automaticamente pelo Firestore. Depois do cadastro, elas devem estar disponíveis em qualquer dispositivo no qual o usuário entrar.
 
 ## Limites dos planos gratuitos
 
@@ -80,7 +80,7 @@ Cada etapa precisa terminar em um estado utilizável dentro do ambiente 2.0. Fun
 - Separar shell, navegação e telas principais.
 - Criar camada única para Firestore.
 - Criar camada única para Gemini/BYOK.
-- Parar de sincronizar chaves Gemini.
+- Preservar e testar a sincronização automática das chaves Gemini.
 - Adicionar testes dos fluxos atuais antes de grandes mudanças.
 
 ### Fase 2: experiência principal
@@ -113,10 +113,8 @@ Cada etapa precisa terminar em um estado utilizável dentro do ambiente 2.0. Fun
 Usar flags simples para recursos ainda não prontos:
 
 ```text
-VITE_FEATURE_TODAY_HOME
 VITE_FEATURE_GLOBAL_SEARCH
 VITE_FEATURE_NEW_NAVIGATION
-VITE_FEATURE_LOCAL_GEMINI_KEYS
 ```
 
 Flags devem ocultar completamente fluxos incompletos, não apenas desabilitar botões.
@@ -128,7 +126,7 @@ Flags devem ocultar completamente fluxos incompletos, não apenas desabilitar bo
 - Dados reais foram migrados e conferidos.
 - Não há vulnerabilidade crítica conhecida.
 - Fluxos principais passam em desktop e mobile.
-- Chaves Gemini não são salvas no Firestore.
+- Chaves Gemini cadastradas são recuperadas corretamente em outros dispositivos.
 - Existe caminho simples para voltar à versão anterior durante o lançamento.
 
 ## Ordem recomendada das próximas entregas

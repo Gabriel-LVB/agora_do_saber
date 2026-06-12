@@ -13618,9 +13618,51 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
-	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
+                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
 	                const questionPct = Math.min(100, Math.round(dailyQuestions / questionGoal * 100));
 	                const minutePct = Math.min(100, Math.round(dailyMinutes / minuteGoal * 100));
+                  const firstName = String(username || 'Estudante').trim().split(/\s+/)[0].toLowerCase();
+                  const displayName = firstName ? `${firstName.charAt(0).toUpperCase()}${firstName.slice(1)}` : 'Estudante';
+                  const currentHour = new Date().getHours();
+                  const greeting = currentHour < 12 ? 'Bom dia' : currentHour < 18 ? 'Boa tarde' : 'Boa noite';
+                  const todayLabel = new Intl.DateTimeFormat('pt-BR', {weekday:'long', day:'numeric', month:'long'}).format(new Date());
+                  const todayProgressCount = Number(questionPct >= 100) + Number(homeCanSeeVideoaulas && minutePct >= 100);
+                  const todayProgressTotal = homeCanSeeVideoaulas ? 2 : 1;
+                  const todayPrimary = homeCanUseAdvancedFeatures && dueCount > 0
+                    ? {
+                        eyebrow:'Prioridade de hoje',
+                        title:`Revisar ${dueCount} ${dueCount === 1 ? 'item pendente' : 'itens pendentes'}`,
+                        description:'Comece pelo conteúdo que já está no momento certo para ser revisto.',
+                        actionLabel:'Começar revisão',
+                        icon:<RepeatIcon className="w-6 h-6"/>,
+                        action:()=>openSpacedReview(),
+                      }
+                    : homeCanSeeVideoaulas
+                      ? {
+                          eyebrow:'Próximo passo',
+                          title:'Continuar no Portal do Curso',
+                          description:'Abra seu plano de estudos e avance na próxima aula ou bateria.',
+                          actionLabel:'Abrir meu curso',
+                          icon:<GraduationCap className="w-6 h-6"/>,
+                          action:()=>setView('curso'),
+                        }
+                      : homeCanUseAdvancedFeatures
+                        ? {
+                          eyebrow:'Próximo passo',
+                          title:'Começar um estudo rápido',
+                          description:'Transforme uma dúvida ou tema em explicação, questões e flashcards.',
+                          actionLabel:'Começar agora',
+                          icon:<Flame className="w-6 h-6"/>,
+                          action:()=>openViewWithReturn('quick'),
+                          }
+                        : {
+                          eyebrow:'Próximo passo',
+                          title:'Continuar pelos seus materiais',
+                          description:'Abra seus assuntos e escolha o conteúdo que quer estudar agora.',
+                          actionLabel:'Abrir meus materiais',
+                          icon:<Landmark className="w-6 h-6"/>,
+                          action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');},
+                        };
                   const DailyRing = ({label, value, goal, pct, unit='', accent='text-yellow-500'}) => {
                     const radius = 30;
                     const circumference = 2 * Math.PI * radius;
@@ -13665,45 +13707,59 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 				            return (
 				              <div className="space-y-6">
                         <section className="app-hero rounded-2xl p-5 md:p-7 overflow-hidden">
-                          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(420px,520px)] lg:items-center">
-                            <div className="min-w-0 max-w-2xl">
-                              <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase mb-4 ${darkMode?'border-gray-700 bg-gray-950/50 text-gray-400':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
-                                <Sparkles className="w-3.5 h-3.5"/>Painel de estudos
+                          <div className="flex flex-col gap-1 mb-6">
+                            <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${darkMode?'text-gray-500':'text-gray-500'}`}>{todayLabel}</p>
+                            <h2 className="text-3xl md:text-4xl font-serif font-bold text-yellow-600 leading-tight">{greeting}, {displayName}</h2>
+                            <p className={`text-sm md:text-base ${darkMode?'text-gray-400':'text-gray-600'}`}>Seu estudo de hoje, organizado pelo que merece atenção primeiro.</p>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,.85fr)]">
+                            <div className={`rounded-2xl border p-5 md:p-6 flex flex-col justify-between min-h-[220px] ${darkMode?'bg-gray-950/60 border-yellow-700/40':'bg-white/90 border-yellow-200'}`}>
+                              <div>
+                                <div className={`h-12 w-12 rounded-xl flex items-center justify-center mb-5 ${darkMode?'bg-yellow-900/30 text-yellow-400':'bg-yellow-100 text-yellow-800'}`}>{todayPrimary.icon}</div>
+                                <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${darkMode?'text-gray-500':'text-gray-500'}`}>{todayPrimary.eyebrow}</p>
+                                <h3 className={`mt-2 text-2xl font-serif font-bold leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}>{todayPrimary.title}</h3>
+                                <p className={`mt-2 text-sm leading-relaxed max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>{todayPrimary.description}</p>
                               </div>
-                              <h2 className="text-3xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
-                              <p className={`mt-3 text-sm md:text-base max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>- Pórtico da Academia de Platão</p>
-                              <p className={`mt-3 text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}> </p>
+                              <button onClick={todayPrimary.action} className="mt-6 self-start inline-flex items-center gap-2 rounded-xl bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700">
+                                <PlayIcon className="w-4 h-4"/>{todayPrimary.actionLabel}<ChevronRight className="w-4 h-4"/>
+                              </button>
                             </div>
-                            <div className="min-w-0 space-y-3">
-                              {homeCanUseAdvancedFeatures&&(
-                                <div className="glass-panel rounded-2xl p-3 md:p-4">
-                                  <div className="mb-3 flex items-center gap-2 px-1">
-                                    <CalendarCheck className="w-4 h-4 text-yellow-600"/>
-                                    <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Progresso de hoje</span>
+
+                            {homeCanUseAdvancedFeatures&&(
+                              <div className="glass-panel rounded-2xl p-4 md:p-5">
+                                <div className="mb-4 flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <CalendarCheck className="w-4 h-4 text-yellow-600"/>
+                                      <span className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-400':'text-gray-600'}`}>Metas de hoje</span>
+                                    </div>
+                                    <p className={`mt-1 text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>{todayProgressCount} de {todayProgressTotal} concluída{todayProgressTotal !== 1 ? 's' : ''}</p>
                                   </div>
-                                  <div className={`grid grid-cols-1 ${homeCanSeeVideoaulas ? 'sm:grid-cols-2' : ''} gap-3`}>
-                                    <DailyRing label="Questões" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
-                                    {homeCanSeeVideoaulas&&<DailyRing label="Tempo assistido" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min" accent="text-green-500"/>}
-                                  </div>
+                                  <button onClick={openSettings} className={`text-xs font-bold hover:underline ${darkMode?'text-yellow-400':'text-yellow-700'}`}>Ajustar metas</button>
                                 </div>
-                              )}
-                              <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
-                                {homeCanUseAdvancedFeatures&&(
-                                  <button onClick={()=>openViewWithReturn('quick')} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
-                                    <Flame className="w-4 h-4 text-yellow-600"/>{QUICK_SUBJECT_TITLE}
-                                  </button>
-                                )}
-                                {homeCanUseAdvancedFeatures&&(
-                                  <button onClick={()=>openSpacedReview()} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
-                                    <RepeatIcon className="w-4 h-4"/>Revisão
-                                    {dueCount>0&&<span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-yellow-600 text-white">{dueCount}</span>}
-                                  </button>
-                                )}
-                                <button onClick={()=>setExamSetup({})} className={`glass-panel flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
-                                  <Zap className="w-4 h-4 text-yellow-600"/>Modo Prova
-                                </button>
+                                <div className="grid grid-cols-1 gap-3">
+                                  <DailyRing label="Questões respondidas" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
+                                  {homeCanSeeVideoaulas&&<DailyRing label="Minutos de aula" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min" accent="text-green-500"/>}
+                                </div>
                               </div>
-                            </div>
+                            )}
+                          </div>
+
+                          <div className={`mt-4 grid grid-cols-1 ${homeCanUseAdvancedFeatures ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
+                            {homeCanUseAdvancedFeatures&&(
+                              <button onClick={()=>openViewWithReturn('quick')} className={`glass-panel flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-left transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
+                                <Flame className="w-4 h-4 text-yellow-600"/><span><span className="block text-sm">Estudo rápido</span><span className="block text-xs font-normal opacity-50">{QUICK_SUBJECT_TITLE}</span></span>
+                              </button>
+                            )}
+                            {homeCanUseAdvancedFeatures&&(
+                              <button onClick={()=>openSpacedReview()} className={`glass-panel flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-left transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
+                                <RepeatIcon className="w-4 h-4"/><span className="flex-1"><span className="block text-sm">Revisão espaçada</span><span className="block text-xs font-normal opacity-50">{dueCount>0?`${dueCount} pendente${dueCount!==1?'s':''}`:'Tudo em dia'}</span></span>
+                              </button>
+                            )}
+                            <button onClick={()=>setExamSetup({})} className={`glass-panel flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-left transition-all ${darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-800 hover:bg-white'}`}>
+                              <Zap className="w-4 h-4 text-yellow-600"/><span><span className="block text-sm">Fazer simulado</span><span className="block text-xs font-normal opacity-50">Modo Prova</span></span>
+                            </button>
                           </div>
                         </section>
 			                <div className="space-y-5">

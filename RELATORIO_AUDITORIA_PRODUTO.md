@@ -97,13 +97,13 @@ Esses pontos devem ser preservados. A evolução ideal reduz atrito sem transfor
 
 As chaves gratuitas cadastradas pelos próprios usuários são enviadas diretamente pelo navegador ao Gemini e persistidas em `localStorage` e em documentos do usuário no Firestore. Isso aparece em `src/App.jsx:989`, `src/App.jsx:1019`, `src/App.jsx:9056` e `src/App.jsx:13010`.
 
-**Risco:** qualquer XSS, extensão maliciosa, regra Firestore permissiva ou acesso ao dispositivo pode expor as chaves. O risco principal evitável é sincronizar as chaves com o Firestore.
+**Risco aceito para este projeto:** qualquer XSS, extensão maliciosa, regra Firestore permissiva ou acesso ao dispositivo pode expor as chaves. A Ágora 2.0 manterá a sincronização automática pelo Firestore para que as chaves estejam disponíveis em todos os dispositivos.
 
 **Recomendação:**
 
 1. Preservar o modelo BYOK gratuito e as chamadas diretas ao Gemini.
-2. Parar de sincronizar chaves Gemini com o Firestore; mantê-las somente no dispositivo.
-3. Criar exportação/importação manual das preferências para troca de dispositivo.
+2. Preservar e testar a sincronização automática das chaves pelo Firestore.
+3. Restringir nas regras o acesso ao documento do usuário ao próprio dono e ao administrador.
 4. Reforçar proteção contra XSS e evitar scripts externos desnecessários.
 5. Implementar rotação, retry e limites no cliente sem depender de backend pago.
 
@@ -165,7 +165,7 @@ Depois do login, o produto apresenta muitos ambientes e nomes próprios. Não ex
 
 O modelo BYOK é adequado ao projeto porque mantém o uso gratuito e cada usuário administra sua própria cota. O problema atual é a experiência de configuração e recuperação.
 
-**Recomendação:** criar um assistente curto para cadastrar, testar, nomear e trocar chaves; explicar limites gratuitos; manter as chaves somente no dispositivo; e mostrar claramente quando uma cota acabou.
+**Recomendação:** criar um assistente curto para cadastrar, testar, nomear e trocar chaves; explicar limites gratuitos; confirmar a sincronização automática; e mostrar claramente quando uma cota acabou.
 
 ---
 
@@ -492,7 +492,7 @@ O usuário deve sempre poder:
 ## Fase 1: estabilizar e profissionalizar, 0 a 30 dias
 
 - Corrigir vulnerabilidades npm.
-- Parar de sincronizar chaves Gemini com o Firestore e preservar BYOK local.
+- Preservar e testar a sincronização automática das chaves Gemini no Firestore.
 - Versionar e testar regras Firestore.
 - Corrigir `lang`, modais e acessibilidade básica.
 - Criar Error Boundary e monitoramento de erros.
