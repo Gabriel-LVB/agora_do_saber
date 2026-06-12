@@ -6428,7 +6428,6 @@ export default function QuestionBankApp() {
   const [creatorStep, setCreatorStep]   = useState(1);
   const [creatorSetupStep, setCreatorSetupStep] = useState('content');
   const [newSubName, setNewSubName]     = useState('');
-  const [focusAreas, setFocusAreas]     = useState([]); // selected focus area IDs for current creation
   const [materialText, setMaterialText] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -6507,7 +6506,6 @@ export default function QuestionBankApp() {
   const [academiaSyllabus, setAcademiaSyllabus]       = useState('');
   const [academiaSyllabusFB, setAcademiaSyllabusFB]   = useState('');
   const [academiaStudyPlanMultiplier, setAcademiaStudyPlanMultiplier] = useState(1);
-  const [academiaFocusAreas, setAcademiaFocusAreas]   = useState([]);
   const academiaFileInputRef  = useRef(null);
   const academiaImageInputRef = useRef(null);
   // Academia topic view state
@@ -11515,10 +11513,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       };
     });
 
-    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', folderId:libFilter==='gemini'?(activeFolder?.id || null):null, sourceMaterials: getMaterial(), focusAreas, topics };
+    const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', folderId:libFilter==='gemini'?(activeFolder?.id || null):null, sourceMaterials: getMaterial(), focusAreas:[], topics };
     await addSubject(ns);
     setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1); setCreatorSetupStep('content'); setStudyPlanMultiplier(1);
-    setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]); setFocusAreas([]);
+    setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]);
   };
 
   // Paste import
@@ -12105,7 +12103,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       source: 'academia',
       folderId: libFilter==='academia' ? (activeFolder?.id || null) : null,
       sourceMaterials: getAcademiaMaterial(),
-      focusAreas: academiaFocusAreas,
+      focusAreas: [],
       topics,
     };
 
@@ -12115,7 +12113,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setAcademiaUploadedFiles([]);
     setAcademiaUploadedImages([]);
     setAcademiaSyllabus('');
-    setAcademiaFocusAreas([]);
     setAcademiaStudyPlanMultiplier(1);
     setAcademiaCreatorStep(1);
     setAcademiaSetupStep('content');
@@ -14780,46 +14777,30 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {/* ── CREATOR ── */}
         {view==='creator'&&(
           <div className="max-w-2xl mx-auto">
-            <button onClick={()=>{setCreatorStep(1);setCreatorSetupStep('content');setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            <button onClick={()=>{setCreatorStep(1);setCreatorSetupStep('content');setNewSubName('');setMaterialText('');setUploadedFiles([]);setUploadedImages([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {creatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><Sparkles className="w-8 h-8 flex-shrink-0"/>Novo Assunto</h2>
-                <div className={`rounded-xl border p-4 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
-                  <p className="font-bold mb-1">Como funciona</p>
-                  <p>Primeiro informe o conteúdo. Depois escolha como as questões serão criadas. Nada será salvo antes da sua confirmação.</p>
-                </div>
-                <div className={`grid grid-cols-2 rounded-xl border p-1 ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-gray-50'}`}>
-                  {[{id:'content',label:'1. Conteúdo'},{id:'questions',label:'2. Questões'}].map(step=>(
-                    <button key={step.id} type="button" onClick={()=>setCreatorSetupStep(step.id)}
-                      className={`rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${creatorSetupStep===step.id?'bg-yellow-600 text-white':darkMode?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-white'}`}>
-                      {step.label}
-                    </button>
-                  ))}
+                <div>
+                  <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest opacity-45 mb-2">
+                    <span>{creatorSetupStep==='content'?'Conteúdo':'Como praticar'}</span>
+                    <span>Etapa {creatorSetupStep==='content'?'1':'2'} de 2</span>
+                  </div>
+                  <div className={`h-1.5 rounded-full overflow-hidden ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
+                    <div className="h-full rounded-full bg-yellow-600 transition-all" style={{width:creatorSetupStep==='content'?'50%':'100%'}}/>
+                  </div>
                 </div>
                 <div className={creatorSetupStep==='content'?'space-y-6':'hidden'}>
+                <div>
+                  <h3 className="text-xl font-serif font-bold">O que você quer estudar?</h3>
+                  <p className="text-sm opacity-50 mt-1">Dê um nome claro e adicione material apenas quando ele ajudar a orientar as questões.</p>
+                </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-2 opacity-50">Nome do assunto <span className="normal-case font-normal">(obrigatório)</span></label>
                 <input value={newSubName} onChange={e=>setNewSubName(e.target.value)} placeholder="Título (ex: Nefrologia)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <p className="text-xs mt-2 opacity-50">Use um nome específico. Exemplo: “Síndrome Nefrótica” funciona melhor que apenas “Nefrologia”.</p>
                 </div>
 
-                {/* Focus areas multi-select */}
-                <div>
-                  <div className="text-xs font-bold uppercase mb-3 opacity-50">Ênfases das questões <span className="opacity-60 normal-case font-normal">(opcional — selecione uma ou mais)</span></div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {FOCUS_AREAS.map(area=>{
-                      const selected = focusAreas.includes(area.id);
-                      return (
-                        <button key={area.id} type="button"
-                          onClick={()=>setFocusAreas(p=>p.includes(area.id)?p.filter(x=>x!==area.id):[...p,area.id])}
-                          className={`text-left p-3 rounded-xl border-2 transition-all ${selected?'border-yellow-500 bg-yellow-600 text-white':(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-yellow-600':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400')}`}>
-                          <div className="font-bold text-sm">{area.label}</div>
-                          <div className={`text-xs mt-0.5 ${selected?'text-yellow-100 opacity-80':'opacity-40'}`}>{area.desc}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Material Base</div>
                   <p className="text-xs mb-3 opacity-50">Opcional. Cole anotações ou envie arquivos para orientar o conteúdo e reduzir respostas genéricas.</p>
@@ -14846,7 +14827,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {/* Parâmetros de geração */}
                 <div className={creatorSetupStep==='questions'?'space-y-6':'hidden'}>
                 <div>
-                  <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros de Geração</div>
+                  <h3 className="text-xl font-serif font-bold">Como você quer praticar?</h3>
+                  <p className="text-sm opacity-50 mt-1">Escolha o formato principal. A Ágora pode decidir a quantidade e organizar o restante.</p>
+                </div>
+                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar quantidade e estrutura</summary>
+                  <div className="mt-5 space-y-4">
                   {/* Toggle autoMode */}
                   <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
@@ -14886,7 +14872,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       </div>
                     ))}
                   </div>
-                  {!visibleQuestionTypes.some(isMemoryCardType)&&!settings.adminStudyMap&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {!visibleQuestionTypes.some(isMemoryCardType)&&!settings.adminStudyMap&&<div className={`grid grid-cols-1 gap-3 mt-3 ${visibleQuestionTypes.includes('direct')?'sm:grid-cols-2':''}`}>
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
                       <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -14901,13 +14887,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         </button>
                       </div>
                     </div>
-                    <div>
+                    {visibleQuestionTypes.includes('direct')&&<div>
                       <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
                       <select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} style={{colorScheme:darkMode?'dark':'light'}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}>
                         <option value={4}>4 (A-D)</option>
                         <option value={5}>5 (A-E)</option>
                       </select>
-                    </div>
+                    </div>}
                   </div>}
                   <p className={`text-xs mt-2 opacity-40`}>
                     {visibleQuestionTypes.some(isMemoryCardType)
@@ -14920,7 +14906,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       ? `O sumário fica automático; cada subtópico gerado terá ${settings.qPerSub||1} questão(ões).`
                       : `Total estimado: ${(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões`}
                   </p>
-                </div>
+                  </div>
+                </details>
 
                 {/* Tipo e estilo das questões */}
                 <div>
@@ -15009,42 +14996,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {/* ── ACADEMIA CREATOR ── */}
         {view==='academia-creator'&&canUseAcademia&&(
           <div className="max-w-2xl mx-auto">
-            <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSetupStep('content');setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setAcademiaFocusAreas([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSetupStep('content');setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {academiaCreatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><AcademiaIcon className="w-8 h-8 flex-shrink-0"/>Nova Aula</h2>
-                <p className={`text-sm rounded-xl p-4 ${darkMode?'bg-yellow-900/20 text-yellow-300 border border-yellow-800/30':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-                  Monte a aula em três etapas curtas: conteúdo, estilo da explicação e questões de fixação.
-                </p>
-                <div className={`grid grid-cols-3 rounded-xl border p-1 ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-gray-50'}`}>
-                  {[{id:'content',label:'1. Conteúdo'},{id:'lesson',label:'2. Aula'},{id:'questions',label:'3. Fixação'}].map(step=>(
-                    <button key={step.id} type="button" onClick={()=>setAcademiaSetupStep(step.id)}
-                      className={`rounded-lg px-2 py-2.5 text-xs sm:text-sm font-bold transition-colors ${academiaSetupStep===step.id?'bg-yellow-600 text-white':darkMode?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-white'}`}>
-                      {step.label}
-                    </button>
-                  ))}
+                <div>
+                  <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest opacity-45 mb-2">
+                    <span>{academiaSetupStep==='content'?'Conteúdo':academiaSetupStep==='lesson'?'Formato da aula':'Fixação'}</span>
+                    <span>Etapa {academiaSetupStep==='content'?'1':academiaSetupStep==='lesson'?'2':'3'} de 3</span>
+                  </div>
+                  <div className={`h-1.5 rounded-full overflow-hidden ${darkMode?'bg-gray-800':'bg-gray-100'}`}>
+                    <div className="h-full rounded-full bg-yellow-600 transition-all" style={{width:academiaSetupStep==='content'?'33%':academiaSetupStep==='lesson'?'66%':'100%'}}/>
+                  </div>
                 </div>
 
                 <div className={academiaSetupStep==='content'?'space-y-6':'hidden'}>
-                <input value={academiaSubName} onChange={e=>setAcademiaSubName(e.target.value)} placeholder="Título do assunto (ex: Síndrome Nefrótica)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-
-                {/* Focus areas */}
                 <div>
-                  <div className="text-xs font-bold uppercase mb-3 opacity-50">Ênfases <span className="opacity-60 normal-case font-normal">(opcional)</span></div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {FOCUS_AREAS.map(area=>{
-                      const selected = academiaFocusAreas.includes(area.id);
-                      return (
-                        <button key={area.id} type="button"
-                          onClick={()=>setAcademiaFocusAreas(p=>p.includes(area.id)?p.filter(x=>x!==area.id):[...p,area.id])}
-                          className={`text-left p-3 rounded-xl border-2 transition-all ${selected?'border-yellow-500 bg-yellow-600 text-white':(darkMode?'border-gray-600 bg-gray-800 text-gray-300 hover:border-yellow-600':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400')}`}>
-                          <div className="font-bold text-sm">{area.label}</div>
-                          <div className={`text-xs mt-0.5 ${selected?'text-yellow-100 opacity-80':'opacity-40'}`}>{area.desc}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <h3 className="text-xl font-serif font-bold">Sobre o que será a aula?</h3>
+                  <p className="text-sm opacity-50 mt-1">Informe o tema e forneça material quando quiser que a aula siga uma fonte específica.</p>
                 </div>
+                <input value={academiaSubName} onChange={e=>setAcademiaSubName(e.target.value)} placeholder="Título do assunto (ex: Síndrome Nefrótica)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
 
                 {/* Material */}
                 <div>
@@ -15098,7 +15069,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                {/* Parâmetros */}
                 <div className={academiaSetupStep==='lesson'?'space-y-6':'hidden'}>
                 <div>
-                  <div className="text-xs font-bold uppercase mb-3 opacity-50 flex items-center gap-2"><Sparkles className="w-3 h-3"/>Parâmetros da Aula</div>
+                  <h3 className="text-xl font-serif font-bold">Como a aula deve ser explicada?</h3>
+                  <p className="text-sm opacity-50 mt-1">Escolha a profundidade. O formato padrão já prioriza clareza, pontos de prova e boa organização.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-2 opacity-40">Profundidade da explicação</label>
+                  <ExplanationLengthSelector
+                    value={settings.explanationLength || 'complete'}
+                    onChange={(length)=>{const ns={...settings,explanationLength:length};setSettings(ns);saveSettings(ns);}}
+                    darkMode={darkMode}
+                  />
+                </div>
+                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estrutura da aula</summary>
+                  <div className="mt-5 space-y-4">
                   <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                     <div>
@@ -15136,15 +15120,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4">
-                    <label className="block text-xs font-bold uppercase mb-2 opacity-40">Profundidade da explicação</label>
-                    <ExplanationLengthSelector
-                      value={settings.explanationLength || 'complete'}
-                      onChange={(length)=>{const ns={...settings,explanationLength:length};setSettings(ns);saveSettings(ns);}}
-                      darkMode={darkMode}
-                    />
                   </div>
-                  <details className={`mt-4 rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                </details>
+                  <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
                     <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estilo da aula</summary>
                     <p className="text-xs opacity-50 mt-2 mb-4">Opcional. Ajuste como a aula será escrita sem mudar o conteúdo técnico.</p>
                     <div className="space-y-5">
@@ -15161,9 +15139,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         <LessonPreferenceSelector value={settings.lessonTone || 'formal'} onChange={lessonTone=>{const ns={...settings,lessonTone};setSettings(ns);saveSettings(ns);}} options={LESSON_TONE_OPTIONS} darkMode={darkMode}/>
                       </div>
                     </div>
-                  </details>
-                </div>
-                <div className="flex gap-3">
+                    </details>
+                  <div className="flex gap-3">
                   <button type="button" onClick={()=>setAcademiaSetupStep('content')} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
                   <button type="button" onClick={()=>setAcademiaSetupStep('questions')} className="flex-[2] bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold flex justify-center items-center gap-2">
                     Continuar para fixação <ChevronRight className="w-4 h-4"/>
@@ -15172,24 +15149,27 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
 
                 <div className={academiaSetupStep==='questions'?'space-y-6':'hidden'}>
-                  {!visibleQuestionTypes.some(isMemoryCardType)&&<div>
-                    <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
-                    <div className="flex gap-2">
-                      {[{v:4,l:'4 (A-D)'},{v:5,l:'5 (A-E)'}].map(opt=>(
-                        <button key={opt.v} type="button"
-                          onClick={()=>{const ns={...settings,numAlternatives:opt.v};setSettings(ns);saveSettings(ns);}}
-                          className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${(settings.numAlternatives||5)===opt.v?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                          {opt.l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>}
-
+                  <div>
+                    <h3 className="text-xl font-serif font-bold">Como você quer fixar a aula?</h3>
+                    <p className="text-sm opacity-50 mt-1">Escolha um formato de revisão. As questões usarão a aula como fonte principal.</p>
+                  </div>
                 {/* Tipo e estilo das questões de fixação */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões de fixação — tipo</div>
 	                  <QuestionTypeSelector selected={visibleQuestionTypes} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
                 </div>
+                {visibleQuestionTypes.includes('direct')&&<div>
+                  <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
+                  <div className="flex gap-2">
+                    {[{v:4,l:'4 alternativas'},{v:5,l:'5 alternativas'}].map(opt=>(
+                      <button key={opt.v} type="button"
+                        onClick={()=>{const ns={...settings,numAlternatives:opt.v};setSettings(ns);saveSettings(ns);}}
+                        className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${(settings.numAlternatives||5)===opt.v?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                        {opt.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>}
                 {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t)))&&(
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
