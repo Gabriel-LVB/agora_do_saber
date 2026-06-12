@@ -146,9 +146,9 @@ const GEMINI_THINKING_BUDGET_OFF = 0;
 const GEMINI_THINKING_BUDGET_DYNAMIC = -1;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const EXPLANATION_LENGTHS = [
-  { k:'essential', label:'Nível 1', desc:'Resumo ultra-direto com pontos essenciais' },
-  { k:'balanced', label:'Nível 2', desc:'Explicação enxuta com raciocínio e exemplos' },
-  { k:'complete', label:'Nível 3', desc:'Explicação mais aprofundada e contextualizada' },
+  { k:'essential', label:'Essencial', desc:'Revisão curta, em tópicos, apenas com o que mais importa' },
+  { k:'balanced', label:'Equilibrada', desc:'Explica o raciocínio sem aprofundar além do necessário' },
+  { k:'complete', label:'Aprofundada', desc:'Cobre contexto, mecanismos, exemplos e detalhes relevantes' },
 ];
 const getGeminiThinkingBudget = (enabled) => enabled ? GEMINI_THINKING_BUDGET_DYNAMIC : GEMINI_THINKING_BUDGET_OFF;
 const buildAcademiaMaterialText = (text = '', files = [], maxChars = MAX_MATERIAL_CHARS) => {
@@ -951,10 +951,10 @@ const getSubtopicOrder = (key) => {
 };
 
 const FOCUS_AREAS = [
-  { id:'bases',          label:'🔬 Bases',          desc:'Anatomia, Fisiologia, Histologia, Bioquímica',         inst:'Priorize questões de anatomia, fisiologia, histologia e bioquímica fundamentais ao tema.' },
-  { id:'fisiopatologia', label:'⚙️ Fisiopatologia',  desc:'Mecanismos de doença, alterações fisiopatológicas',    inst:'Priorize questões sobre mecanismos de doença, fisiopatologia e alterações moleculares/celulares.' },
-  { id:'clinica',        label:'🩺 Clínica',         desc:'Semiologia, manobras, apresentações clínicas',         inst:'Priorize questões de semiologia, exame físico, manobras, apresentações clínicas e diagnóstico diferencial.' },
-  { id:'farmacologia',   label:'💊 Farmacologia',    desc:'Fármacos, mecanismos, doses, efeitos adversos',        inst:'Priorize questões de farmacologia: mecanismos de ação, indicações, efeitos adversos e interações.' },
+  { id:'bases',          label:'Bases',          desc:'Anatomia, fisiologia, histologia e bioquímica',         inst:'Priorize questões de anatomia, fisiologia, histologia e bioquímica fundamentais ao tema.' },
+  { id:'fisiopatologia', label:'Fisiopatologia', desc:'Mecanismos de doença e alterações fisiopatológicas',    inst:'Priorize questões sobre mecanismos de doença, fisiopatologia e alterações moleculares/celulares.' },
+  { id:'clinica',        label:'Clínica',        desc:'Semiologia, exame físico e apresentações clínicas',     inst:'Priorize questões de semiologia, exame físico, manobras, apresentações clínicas e diagnóstico diferencial.' },
+  { id:'farmacologia',   label:'Farmacologia',   desc:'Fármacos, mecanismos, doses e efeitos adversos',        inst:'Priorize questões de farmacologia: mecanismos de ação, indicações, efeitos adversos e interações.' },
 ];
 const ORACLE_LENGTH = {
   short:  { label:'⚡ Curta',   inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
@@ -3310,9 +3310,6 @@ const QuestionView = ({
 	  );
 	  const questionIdsKey = questions.map(q=>q.id).join('|');
 	  const allFlashcards = questions.length > 0 && questions.every(q => isMemoryCard(q));
-	  const savedFlashcardAnswersKey = allFlashcards
-	    ? questions.map(q => `${q.id}:${answers?.[q.id] || ''}`).join('|')
-	    : '';
 	  const singleMode = (allFlashcards || displayMode === 'single') && questions.length > 0;
 	  const [singleIndex, setSingleIndex] = useState(0);
 	  const currentSingleQuestionIdRef = useRef(null);
@@ -3363,7 +3360,9 @@ const QuestionView = ({
 	    setFlashcardEntryAnswers(initialEntryAnswers);
 	    setFlashcardAttempts(initialAttempts);
 	    setShowCompletion(allInitiallyMastered);
-	  }, [allFlashcards, questionIdsKey, savedFlashcardAnswersKey]); // eslint-disable-line
+	  // Respostas mudam durante a sessão. Reiniciar a fila a cada acerto fazia o
+	  // cursor voltar ao primeiro cartão errado em vez de seguir em frente.
+	  }, [allFlashcards, questionIdsKey]); // eslint-disable-line
 
 	  const wrongIds = questions.filter(q => {
 	    if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
@@ -3414,7 +3413,7 @@ const QuestionView = ({
     onGoToAula ? { label:goToAulaLabel, icon:goToAulaIcon, fn:onGoToAula } : null,
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
     onAudit ? { label:'Auditar', icon:<ShieldAlert className="w-4 h-4"/>, fn:onAudit } : null,
-    showBizuario&&onBizuario ? { label:bizuarioCached?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:onBizuario, active:bizuarioCached } : null,
+    showBizuario&&onBizuario ? { label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:onBizuario } : null,
     onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
 	    onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
 	    onOpenErrorReviewResult && errorReviewResultCount > 0 ? { label:errorReviewResultCount>1?`Abrir revisões geradas (${errorReviewResultCount})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:onOpenErrorReviewResult } : null,
@@ -3572,10 +3571,9 @@ const QuestionView = ({
         fn:onGenerateExtra,
       } : null,
       showBizuario&&onBizuario ? {
-        label:bizuarioCached?'Bizuário ✓':'Bizuário',
-        icon:<BrainIcon className="w-4 h-4"/>,
+        label:'Criar aula sobre isso',
+        icon:<GraduationCap className="w-4 h-4"/>,
         fn:onBizuario,
-        active:bizuarioCached,
       } : null,
     ].filter(Boolean);
     const notebookBtnClass = dm
@@ -4496,14 +4494,14 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
 
 // ─── QUESTION TYPE SELECTOR ───────────────────────────────────────────────────
 const QUESTION_TYPES = [
-  { k: 'direct',   label: '📋 Direta',       desc: 'Pergunta + alternativas' },
-  { k: 'vof',      label: '☑️ V ou F',        desc: 'Assertivas verdadeiro/falso' },
-  { k: 'cespe',    label: '⚖️ Certo/Errado',  desc: 'Estilo CESPE — 1 afirmação' },
-  { k: 'open',     label: '✏️ Aberta',        desc: 'Resposta curta corrigida pela IA' },
-  { k: 'essay',    label: '📝 Dissertativa',  desc: 'Resposta longa corrigida pela IA' },
-  { k: 'old_exam', label: '📜 Provas antigas', desc: 'Preserva questões e corrige apenas OCR/formatação', externalOnly:true },
-  { k: 'flashcard', label:'🃏 Flashcards',    desc: 'Pergunta, resposta e explicação', advancedOnly:true },
-  { k: 'cloze',    label:'🧩 Cloze',           desc: 'Lacunas estilo AnKing/Anki', adminOnly:true },
+  { k: 'direct',   label: 'Múltipla escolha', desc: 'Uma pergunta com alternativas e apenas uma resposta correta' },
+  { k: 'vof',      label: 'Verdadeiro ou falso', desc: 'Avalia várias afirmações dentro da mesma questão' },
+  { k: 'cespe',    label: 'Certo ou errado', desc: 'Uma única afirmação para julgar, no estilo Cebraspe' },
+  { k: 'open',     label: 'Resposta curta', desc: 'Você escreve uma resposta breve e recebe correção da IA' },
+  { k: 'essay',    label: 'Dissertativa', desc: 'Resposta mais longa, com avaliação e feedback da IA' },
+  { k: 'old_exam', label: 'Questões já existentes', desc: 'Preserva o conteúdo original e corrige apenas OCR e formatação', externalOnly:true },
+  { k: 'flashcard', label:'Flashcards', desc: 'Recuperação ativa com pergunta, resposta e explicação', advancedOnly:true },
+  { k: 'cloze',    label:'Preencher lacunas', desc: 'Cartões com omissões no estilo AnKing e Anki', adminOnly:true },
 ];
 
 const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false }) => {
@@ -4552,6 +4550,37 @@ const ExplanationLengthSelector = ({ value='complete', onChange, darkMode }) => 
     </div>
   );
 };
+
+const LessonPreferenceSelector = ({ value, onChange, options, darkMode }) => {
+  const dm = darkMode;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {options.map(opt => {
+        const on = value === opt.k;
+        return (
+          <button key={opt.k} type="button" onClick={()=>onChange(opt.k)}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
+            <span className="block text-sm font-bold">{opt.label}</span>
+            <span className="block text-xs font-normal opacity-60 mt-1 leading-snug">{opt.desc}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const LESSON_FORMAT_OPTIONS = [
+  { k:'outline', label:'Tópicos de revisão', desc:'Estrutura escaneável, semelhante a Pathoma e First Aid' },
+  { k:'narrative', label:'Aula em parágrafos', desc:'Explicação contínua, conectando as ideias passo a passo' },
+];
+const LESSON_COVERAGE_OPTIONS = [
+  { k:'high-yield', label:'Mais importante', desc:'Prioriza o que mais cai, muda conduta ou ajuda a entender o tema' },
+  { k:'complete', label:'Cobertura ampla', desc:'Inclui também detalhes complementares relevantes' },
+];
+const LESSON_TONE_OPTIONS = [
+  { k:'formal', label:'Formal', desc:'Texto objetivo, técnico e semelhante a uma apostila' },
+  { k:'conversational', label:'Professor ao lado', desc:'Explicação direta e informal, mantendo os termos corretos' },
+];
 
 const GeminiThinkingSelector = ({ value=false, onChange, darkMode, compact=false }) => {
   const dm = darkMode;
@@ -5922,7 +5951,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -5953,6 +5982,11 @@ function AcademiaTopicView({
   const hideSubtopicTitles = true;
   const setLessonLength = (length) => {
     const ns = { ...settings, explanationLength: length };
+    setSettings(ns);
+    saveSettings(ns);
+  };
+  const setLessonPreference = (field, value) => {
+    const ns = { ...settings, [field]: value };
     setSettings(ns);
     saveSettings(ns);
   };
@@ -6157,12 +6191,29 @@ function AcademiaTopicView({
           </div>
           {canUseAcademia && (
             <div className="max-w-xl mx-auto mb-6">
-              <div className="text-xs font-bold uppercase mb-2 opacity-50 text-left">Tamanho da aula</div>
+              <div className="text-xs font-bold uppercase mb-2 opacity-50 text-left">Profundidade da explicação</div>
               <ExplanationLengthSelector
                 value={settings.explanationLength || 'complete'}
                 onChange={setLessonLength}
                 darkMode={darkMode}
               />
+              <details className={`mt-4 rounded-xl border p-4 text-left ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estilo da aula</summary>
+                <div className="space-y-5 mt-4">
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Formato</div>
+                    <LessonPreferenceSelector value={settings.lessonFormat || 'outline'} onChange={value=>setLessonPreference('lessonFormat', value)} options={LESSON_FORMAT_OPTIONS} darkMode={darkMode}/>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Cobertura</div>
+                    <LessonPreferenceSelector value={settings.lessonCoverage || 'high-yield'} onChange={value=>setLessonPreference('lessonCoverage', value)} options={LESSON_COVERAGE_OPTIONS} darkMode={darkMode}/>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Tom</div>
+                    <LessonPreferenceSelector value={settings.lessonTone || 'formal'} onChange={value=>setLessonPreference('lessonTone', value)} options={LESSON_TONE_OPTIONS} darkMode={darkMode}/>
+                  </div>
+                </div>
+              </details>
             </div>
           )}
           {canUseAcademia && (
@@ -6453,6 +6504,9 @@ export default function QuestionBankApp() {
   const [academiaExtraThinking, setAcademiaExtraThinking] = useState(false);
   const [academiaExtraAudit, setAcademiaExtraAudit] = useState(false);
   const [academiaRegenLength, setAcademiaRegenLength] = useState('complete');
+  const [academiaRegenFormat, setAcademiaRegenFormat] = useState('outline');
+  const [academiaRegenCoverage, setAcademiaRegenCoverage] = useState('high-yield');
+  const [academiaRegenTone, setAcademiaRegenTone] = useState('formal');
   const [academiaRegenQStyle, setAcademiaRegenQStyle] = useState('mixed');
   const [academiaRegenQTypes, setAcademiaRegenQTypes] = useState(['direct']);
   const [academiaRegenQAlts, setAcademiaRegenQAlts]   = useState(5);
@@ -11614,52 +11668,75 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
   };
 
-  // Statistics
-  // Open Bizuário — cached in topic.bizuario
-  // Bug 7: accepts optional overrideData (e.g. from exam results) skipping topicData
-  // Open Bizuário for a topic — cached in topic.bizuario, regenerated only if not cached
-  const openBizuario = (topic, subject) => {
-    if (!checkKey()) return;
-    const cachedText = topic.bizuario || null;
-    const onSave = (txt) => updateSubject({
-      ...subject,
-      topics: subject.topics.map(t => t.id === topic.id ? { ...t, bizuario: txt } : t)
-    });
-    setBizuarioModal({
-      topicTitle: topic.title,
-      subjectTitle: subject?.title || '',
-      questions: topic.questions || [],
-      subtopics: topic.subtopics || [],
-      cachedText,
-      onSave,
-      forceRegen: false,
-    });
+  const prepareAcademiaLessonModal = (topic, subject, createMode = false) => {
+    setAcademiaRegenLength(settingsRef.current.explanationLength || 'complete');
+    setAcademiaRegenFormat(settingsRef.current.lessonFormat || 'outline');
+    setAcademiaRegenCoverage(settingsRef.current.lessonCoverage || 'high-yield');
+    setAcademiaRegenTone(settingsRef.current.lessonTone || 'formal');
+    setAcademiaRegenQStyle(settingsRef.current.questionStyle || 'mixed');
+    setAcademiaRegenQTypes(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], questionTypeAccess));
+    setAcademiaRegenQAlts(settingsRef.current.numAlternatives || 5);
+    setAcademiaRegenThinking(!!settingsRef.current.geminiThinkingEnabled);
+    setAcademiaRegenReason('');
+    setAcademiaRegenModal({ topic, subject, createMode });
   };
 
-  // Bizuário for a full subject — aggregates all topics
-  const openBizuarioSubject = (subject) => {
-    if (!checkKey()) return;
-    const cachedText = subject.bizuario || null;
-    const onSave = (txt) => updateSubject({ ...subject, bizuario: txt });
+  // Transforma um tópico do Oráculo/Acervo em uma aula configurável da Academia.
+  const openBizuario = async (topic, subject) => {
+    if (!canUseAcademia || !topic || !subject) return;
+    const currentLibrary = libraryRef.current?.length ? libraryRef.current : library;
+    let academiaSubject = currentLibrary.find(item => item.source === 'academia' && item.title.trim().toLowerCase() === subject.title.trim().toLowerCase());
+    const existingTopic = academiaSubject?.topics?.find(item => item.title.trim().toLowerCase() === topic.title.trim().toLowerCase());
+    if (existingTopic) {
+      prepareAcademiaLessonModal(existingTopic, academiaSubject, !existingTopic.lessonGenerated);
+      return;
+    }
+    const createdTopic = {
+      id:`academia-from-${topic.id}-${Date.now()}`,
+      title:topic.title,
+      subtopics:(topic.subtopics || []).length ? topic.subtopics : [topic.title],
+      questions:[],
+      answers:{},
+      favorites:[],
+      errorNotebook:[],
+      spacedReview:{},
+      lessonSections:{},
+      fixationQuestions:{},
+      lessonGenerated:false,
+    };
+    const questionContext = summarizeQuestionsForPrompt(topic.questions || []);
+    if (academiaSubject) {
+      academiaSubject = {
+        ...academiaSubject,
+        sourceMaterials:[academiaSubject.sourceMaterials || '', questionContext].filter(Boolean).join('\n\n'),
+        topics:[...(academiaSubject.topics || []), createdTopic],
+      };
+      await updateSubject(academiaSubject);
+    } else {
+      academiaSubject = {
+        id:`academia-from-${subject.id}-${Date.now()}`,
+        title:subject.title,
+        fullSyllabus:`Aulas criadas a partir de ${subject.title}.`,
+        source:'academia',
+        folderId:null,
+        sourceMaterials:[subject.sourceMaterials || '', questionContext].filter(Boolean).join('\n\n'),
+        focusAreas:subject.focusAreas || [],
+        topics:[createdTopic],
+      };
+      await addSubject(academiaSubject);
+    }
+    prepareAcademiaLessonModal(createdTopic, academiaSubject, true);
+  };
 
-    // Build aggregated context: for topics with questions use them, for others use subtopics
-    const allQuestions = [];
-    const topicContexts = subject.topics.map(t => {
-      const qs = t.questions || [];
-      const subs = t.subtopics || [];
-      return { title: t.title, questions: qs, subtopics: subs };
-    });
-
-    setBizuarioModal({
-      topicTitle: subject.title,
-      subjectTitle: '',
-      questions: [],           // not used directly — topicContexts handles it
-      subtopics: [],
-      topicContexts,           // full subject mode
-      cachedText,
-      onSave,
-      forceRegen: false,
-    });
+  const openBizuarioSubject = async (subject) => {
+    const topics = subject.topics || [];
+    const consolidatedTopic = {
+      id:`subject-${subject.id}`,
+      title:subject.title,
+      subtopics:topics.flatMap(topic => (topic.subtopics || []).length ? topic.subtopics : [topic.title]).slice(0, 40),
+      questions:topics.flatMap(topic => topic.questions || []),
+    };
+    await openBizuario(consolidatedTopic, subject);
   };
 
   const createFocusedBatch = async (topicData) => {
@@ -12040,9 +12117,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (shouldGenerateLesson) {
       lessonText = '';
       const lessonLevel = s.explanationLength || 'complete';
-      const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, s.regenReason || '');
+      const lessonPreferenceInstruction = [
+        s.lessonFormat === 'narrative'
+          ? 'FORMATO ESCOLHIDO: escreva principalmente em parágrafos conectados. Use listas apenas quando elas realmente facilitarem uma classificação, comparação ou sequência.'
+          : 'FORMATO ESCOLHIDO: escreva em tópicos de revisão claros e hierárquicos, fáceis de escanear, no estilo Pathoma/First Aid.',
+        s.lessonCoverage === 'complete'
+          ? 'COBERTURA ESCOLHIDA: faça cobertura ampla do conteúdo relevante, incluindo detalhes complementares que ajudem a consolidar o tema.'
+          : 'COBERTURA ESCOLHIDA: priorize conteúdo high-yield; destaque o que mais cai, muda conduta, diferencia diagnósticos ou sustenta o raciocínio.',
+        s.lessonTone === 'conversational'
+          ? 'TOM ESCOLHIDO: explique como um professor experiente ao lado do aluno, com linguagem direta e natural, sem abandonar termos técnicos corretos.'
+          : 'TOM ESCOLHIDO: use linguagem formal, objetiva e didática, semelhante a uma boa apostila.',
+        s.regenReason || '',
+      ].filter(Boolean).join('\n');
+      const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, lessonPreferenceInstruction);
       const lessonSystemPrompt = lessonLevel === 'essential'
-        ? 'Você é professor de medicina. Escreva em português. Modo Nível 1: escreva em outline de revisão tipo Pathoma/First Aid. Após cada ##, comece com um título curto em negrito que dê contexto aos bullets. Use bullets densos e sem letras ou números como marcadores.'
+        ? 'Você é professor de medicina. Escreva em português. No modo essencial, corte tudo que não ajuda a lembrar, diferenciar ou decidir. Após cada ##, comece com um título curto em negrito.'
         : 'Você é professor de medicina. Escreva em português. Após cada ##, comece com um título curto em negrito que dê contexto à explicação.';
       onProgress?.('📝 Gerando explicação dos subtópicos...');
       let lessonErr = null;
@@ -13609,15 +13698,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
 	          (()=>{
-			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aulas autorais com fixação no final.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
+			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aprenda um assunto com aula personalizada e questões de fixação.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
 			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', meta:'curso', action:()=>setView('curso')} : null;
-			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Acervo do Oráculo', desc:'Assuntos, blocos e simulados gerados por IA.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
+			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Acervo do Oráculo', desc:'Ferramenta complementar para criar e revisar bancos de questões.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
 			    const externalCard = {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', meta:`${sourceSubjects('external').length} assuntos · ${sourceFolders('external').length} pastas`, action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}};
-			    const studyCards = [cursoCard, academiaCard].filter(Boolean);
+			    const studyCards = [academiaCard, cursoCard].filter(Boolean);
 			    const archiveCards = [geminiCard, externalCard].filter(Boolean);
 			    const homeSections = [
-			      studyCards.length ? {title:'Estudo', cards:studyCards, tone:'study'} : null,
-			      archiveCards.length ? {title:'Acervo', cards:archiveCards, tone:'archive'} : null,
+			      studyCards.length ? {title:'Começar a estudar', cards:studyCards, tone:'study'} : null,
+			      archiveCards.length ? {title:'Biblioteca e ferramentas', cards:archiveCards, tone:'archive'} : null,
 			    ].filter(Boolean);
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
@@ -13674,9 +13763,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                               <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase mb-4 ${darkMode?'border-gray-700 bg-gray-950/50 text-gray-400':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
                                 <Sparkles className="w-3.5 h-3.5"/>Painel de estudos
                               </div>
-                              <h2 className="text-3xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
-                              <p className={`mt-3 text-sm md:text-base max-w-xl ${darkMode?'text-gray-400':'text-gray-600'}`}>- Pórtico da Academia de Platão</p>
-                              <p className={`mt-3 text-sm italic ${darkMode?'text-gray-500':'text-gray-500'}`}> </p>
+                              <h2 className="text-3xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Escolha como continuar seus estudos</h2>
+                              <p className={`mt-3 text-sm md:text-base max-w-xl leading-relaxed ${darkMode?'text-gray-400':'text-gray-600'}`}>Comece pela Academia para aprender um assunto com explicação e fixação. Use o Oráculo quando quiser criar ou revisar bancos de questões.</p>
                             </div>
                             <div className="min-w-0 space-y-3">
                               {homeCanUseAdvancedFeatures&&(
@@ -14239,10 +14327,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 		                      danger:true,
 		                    } : null,
 			                    activeSubject.source!=='academia' ? {
-			                      label:activeSubject.bizuario?'Bizuário ✓':'Bizuário da Pasta',
-			                      icon:<BrainIcon className="w-4 h-4"/>,
+			                      label:'Criar aula sobre este assunto',
+			                      icon:<GraduationCap className="w-4 h-4"/>,
 			                      fn:()=>openBizuarioSubject(activeSubject),
-			                      active:!!activeSubject.bizuario,
 			                    } : null,
 			                    isAdmin && activeSubject.source !== 'academia' && activeSubject.id !== 'imported-folder' ? {
 			                      label:'Copiar bloco',
@@ -14645,6 +14732,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             setAcademiaExtraModal={setAcademiaExtraModal}
             setAcademiaRegenModal={(payload)=>{
               setAcademiaRegenLength(settings.explanationLength || 'complete');
+              setAcademiaRegenFormat(settings.lessonFormat || 'outline');
+              setAcademiaRegenCoverage(settings.lessonCoverage || 'high-yield');
+              setAcademiaRegenTone(settings.lessonTone || 'formal');
               setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
               setAcademiaRegenQTypes(visibleQuestionTypes);
               setAcademiaRegenQAlts(settings.numAlternatives || 5);
@@ -14727,7 +14817,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                     <div>
-                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
+                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>Deixar o Oráculo escolher</p>
                       <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos e subtópicos</p>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
@@ -14882,7 +14972,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><AcademiaIcon className="w-8 h-8 flex-shrink-0"/>Nova Aula</h2>
                 <p className={`text-sm rounded-xl p-4 ${darkMode?'bg-yellow-900/20 text-yellow-300 border border-yellow-800/30':'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-                  📖 A Academia gera <strong>aula + questões de fixação</strong> a partir do conteúdo — como um curso profissional. Quanto mais detalhado o material, melhor a aula.
+                  A Academia gera <strong>aula + questões de fixação</strong> a partir do conteúdo. Quanto mais detalhado o material, melhor a aula.
                 </p>
 
                 <input value={academiaSubName} onChange={e=>setAcademiaSubName(e.target.value)} placeholder="Título do assunto (ex: Síndrome Nefrótica)" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -14954,7 +15044,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                     <div>
-                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
+                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>Deixar o Oráculo escolher</p>
                       <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos e subtópicos</p>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400'}`}>
@@ -14989,13 +15079,31 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     ))}
                   </div>
                   <div className="mt-4">
-                    <label className="block text-xs font-bold uppercase mb-2 opacity-40">Tamanho da aula gerada</label>
+                    <label className="block text-xs font-bold uppercase mb-2 opacity-40">Profundidade da explicação</label>
                     <ExplanationLengthSelector
                       value={settings.explanationLength || 'complete'}
                       onChange={(length)=>{const ns={...settings,explanationLength:length};setSettings(ns);saveSettings(ns);}}
                       darkMode={darkMode}
                     />
                   </div>
+                  <details className={`mt-4 rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                    <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estilo da aula</summary>
+                    <p className="text-xs opacity-50 mt-2 mb-4">Opcional. Ajuste como a aula será escrita sem mudar o conteúdo técnico.</p>
+                    <div className="space-y-5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase mb-2 opacity-50">Formato</label>
+                        <LessonPreferenceSelector value={settings.lessonFormat || 'outline'} onChange={lessonFormat=>{const ns={...settings,lessonFormat};setSettings(ns);saveSettings(ns);}} options={LESSON_FORMAT_OPTIONS} darkMode={darkMode}/>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase mb-2 opacity-50">Cobertura</label>
+                        <LessonPreferenceSelector value={settings.lessonCoverage || 'high-yield'} onChange={lessonCoverage=>{const ns={...settings,lessonCoverage};setSettings(ns);saveSettings(ns);}} options={LESSON_COVERAGE_OPTIONS} darkMode={darkMode}/>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tom da explicação</label>
+                        <LessonPreferenceSelector value={settings.lessonTone || 'formal'} onChange={lessonTone=>{const ns={...settings,lessonTone};setSettings(ns);saveSettings(ns);}} options={LESSON_TONE_OPTIONS} darkMode={darkMode}/>
+                      </div>
+                    </div>
+                  </details>
                   {!visibleQuestionTypes.some(isMemoryCardType)&&<div className="mt-3">
                     <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
                     <div className="flex gap-2">
@@ -17491,15 +17599,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     streamCount={streamCount}
                     showBizuario={qs.length>0}
                     onBizuario={()=>{
-                      if(!checkKey()) return;
-                      const syntheticTopic = {title: visibleTitle, questions:visibleQuestions, subtopics:block.subtopics||[]};
-                      const cachedText = block.bizuario||null;
-                      const onSave = async (txt) => {
-                        await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,bizuario:txt}}});
-                      };
-                      setBizuarioModal({topicTitle:syntheticTopic.title,subjectTitle:vqAula.title,questions:visibleQuestions,subtopics:block.subtopics||[],cachedText,onSave});
+                      openBizuario(
+                        {id:`course-${aulaIdNew}-${blockId}`, title:visibleTitle, questions:visibleQuestions, subtopics:block.subtopics||[]},
+                        {id:`course-${aulaIdNew}`, title:vqAula.title, sourceMaterials:''}
+                      );
                     }}
-                    bizuarioCached={!!block.bizuario}
                     darkMode={darkMode}
                     apiKey={getKey()}
 	                    oracleLength={settings.oracleLength}
@@ -17647,18 +17751,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         questionIds:qs.map(q=>q.id),
                       });
                       const openBlockBizuario = () => {
-                        if(!checkKey() || !hasQs) return;
-                        const syntheticTopic = {title:blockTitle, questions:qs, subtopics:block.subtopics||[]};
-                        const cachedText = block.bizuario||null;
-                        const onSave = async (txt) => {
-                          await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,bizuario:txt}}});
-                        };
-                        setBizuarioModal({topicTitle:syntheticTopic.title,subjectTitle:vqAula.title,questions:qs,subtopics:block.subtopics||[],cachedText,onSave});
+                        if(!hasQs) return;
+                        openBizuario(
+                          {id:`course-${aulaIdNew}-${blockId}`, title:blockTitle, questions:qs, subtopics:block.subtopics||[]},
+                          {id:`course-${aulaIdNew}`, title:vqAula.title, sourceMaterials:''}
+                        );
                       };
                       const cardActions = hasQs ? [
                         {label:'Assistir aula', icon:<VideoIcon className="w-4 h-4"/>, fn:()=>{setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}},
                         {label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:()=>setExportModal({topic:{title:`${vqAula.title} — ${blockTitle}`,questions:qs},subject:null})},
-                        {label:block.bizuario?'Bizuário ✓':'Bizuário', icon:<BrainIcon className="w-4 h-4"/>, fn:openBlockBizuario, active:!!block.bizuario},
+                        {label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:openBlockBizuario},
                         {label:Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length>0?`Gerenciar revisão (${Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle, questions:qs, answers:ans, notebookIds:Array.isArray(block.errorNotebook)?block.errorNotebook:[], meta:{source:'curso',aulaTitle:vqAula.title,blockTitle}})},
                         blockErrorReviews.length ? {label:blockErrorReviews.length>1?`Abrir revisões geradas (${blockErrorReviews.length})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:()=>openErrorNotebookReviewResult(blockErrorReviews[0])} : null,
                         {label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:()=>generateVqBlock(aulaIdNew,blockId)},
@@ -19208,13 +19310,33 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       {academiaRegenModal&&(
         <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setAcademiaRegenModal(null)}>
           <div onClick={e=>e.stopPropagation()} className={`w-full max-w-lg rounded-2xl p-7 border overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
-            <h3 className="text-xl font-serif font-bold text-yellow-600 mb-1 flex items-center gap-2"><RotateCcw className="w-5 h-5"/>Regenerar aula</h3>
-            <p className="text-sm mb-6 opacity-60">A aula e as questões de fixação atuais serão substituídas.</p>
+            <h3 className="text-xl font-serif font-bold text-yellow-600 mb-1 flex items-center gap-2">
+              {academiaRegenModal.createMode?<GraduationCap className="w-5 h-5"/>:<RotateCcw className="w-5 h-5"/>}
+              {academiaRegenModal.createMode?'Criar aula sobre isso':'Regenerar aula'}
+            </h3>
+            <p className="text-sm mb-6 opacity-60">{academiaRegenModal.createMode?'Escolha como deseja aprender o conteúdo antes de gerar a aula.':'A aula e as questões de fixação atuais serão substituídas.'}</p>
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Profundidade da aula</div>
                 <ExplanationLengthSelector value={academiaRegenLength} onChange={setAcademiaRegenLength} darkMode={darkMode}/>
               </div>
+              <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+                <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estilo da aula</summary>
+                <div className="space-y-5 mt-4">
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Formato</div>
+                    <LessonPreferenceSelector value={academiaRegenFormat} onChange={setAcademiaRegenFormat} options={LESSON_FORMAT_OPTIONS} darkMode={darkMode}/>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Cobertura</div>
+                    <LessonPreferenceSelector value={academiaRegenCoverage} onChange={setAcademiaRegenCoverage} options={LESSON_COVERAGE_OPTIONS} darkMode={darkMode}/>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Tom</div>
+                    <LessonPreferenceSelector value={academiaRegenTone} onChange={setAcademiaRegenTone} options={LESSON_TONE_OPTIONS} darkMode={darkMode}/>
+                  </div>
+                </div>
+              </details>
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Por que regenerar? <span className="normal-case font-normal opacity-70">(opcional)</span></div>
                 <textarea
@@ -19274,6 +19396,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <button onClick={()=>{
                 const regenSettings = {
                   explanationLength: academiaRegenLength,
+                  lessonFormat: academiaRegenFormat,
+                  lessonCoverage: academiaRegenCoverage,
+                  lessonTone: academiaRegenTone,
                   regenReason: academiaRegenReason.trim(),
                   questionStyle: academiaRegenQStyle,
                   questionTypes: academiaRegenQTypes,
@@ -19285,11 +19410,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 const ns = { ...settings, ...persistedSettings };
                 saveSettings(ns);
                 const { topic, subject } = academiaRegenModal;
+                const createMode = !!academiaRegenModal.createMode;
                 setAcademiaRegenModal(null);
                 setAcademiaRegenReason('');
+                if (createMode) openAcademiaTopicView(subject, topic);
                 generateAcademiaLesson(topic, subject, regenSettings);
               }} className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2">
-                <Sparkles className="w-4 h-4"/>Regenerar
+                <Sparkles className="w-4 h-4"/>{academiaRegenModal.createMode?'Criar aula':'Regenerar'}
               </button>
             </div>
           </div>

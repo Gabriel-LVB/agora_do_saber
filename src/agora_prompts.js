@@ -336,7 +336,9 @@ const ACADEMIA_LESSON_LENGTH_RULES = {
 PROFUNDIDADE DA AULA: Nível 1
 - MODO RESUMO DE PROVA: escreva em outline de revisão, como Pathoma/First Aid em português, sem virar texto telegráfico.
 - Cada seção do Nível 1 deve começar com uma linha de título curto em negrito, sem marcador e sem ##, resumindo o bloco em 2 a 5 palavras. Exemplos: "**Tipos de hérnias**", "**Fisiopatologia das hérnias**", "**Causas de aderências**".
-- Use 3 a 5 bullets principais por subtópico; use sub-bullets apenas quando houver classificação, sequência fisiopatológica ou contraste importante.
+- Use 2 a 4 bullets principais por subtópico e, em regra, no máximo 80 palavras por seção.
+- Se um fato não muda diagnóstico, mecanismo, conduta, prognóstico ou desempenho em prova, corte-o do Nível 1.
+- Use sub-bullets apenas quando houver classificação, sequência fisiopatológica ou contraste indispensável.
 - O título curto deve dar o contexto geral; os bullets abaixo detalham itens, etapas ou consequências daquele bloco.
 - Cada bullet deve ser uma frase curta, clara e cobrável. Depois do título curto, rótulos simples como "**Incisionais:**", "**Umbilicais:**", "**Aprisionamento venoso:**" e "**Infarto intestinal:**" são adequados.
 - Não use letras ou números como marcadores internos (A., B., 1., i.). Use apenas "- " e, se necessário, sub-bullets indentados.
@@ -357,7 +359,7 @@ PROFUNDIDADE DA AULA: Nível 3
 const ACADEMIA_LESSON_OBJECTIVE = {
   essential: `
 OBJETIVO DE LEITURA:
-Escreva como revisão rápida de prova, no estilo "First Aid/Pathoma em português": outline limpo, denso, hierárquico e fácil de escanear.
+Escreva como revisão rápida de prova, no estilo "First Aid/Pathoma em português": outline curto, denso, hierárquico e fácil de escanear.
 O aluno deve bater o olho, ler o título curto do bloco e capturar o que cai nos bullets.
 Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`,
   balanced: `
