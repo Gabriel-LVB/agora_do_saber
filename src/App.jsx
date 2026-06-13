@@ -6412,6 +6412,7 @@ export default function QuestionBankApp() {
   const [darkMode, setDarkMode] = useState(()=>readStorageJson('qb_dark', false));
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
   const [headerVisible, setHeaderVisible] = useState(true); // hide on scroll down
+  const [bottomNavVisible, setBottomNavVisible] = useState(true);
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
   const hdr   = darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200';
   const badge = darkMode?'bg-gray-700 text-gray-200':'bg-gray-100 text-gray-800';
@@ -8012,8 +8013,14 @@ export default function QuestionBankApp() {
     let lastY = window.scrollY;
     const onScroll = () => {
       const y = window.scrollY;
-      if (y > lastY && y > 60) setHeaderVisible(false);
-      else setHeaderVisible(true);
+      const delta = y - lastY;
+      if (delta > 4 && y > 72) {
+        setHeaderVisible(false);
+        setBottomNavVisible(false);
+      } else if (delta < -4 || y < 32) {
+        setHeaderVisible(true);
+        setBottomNavVisible(true);
+      }
       lastY = y;
     };
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -13672,7 +13679,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       `}</style>
 	      {/* HEADER */}
 	      <header className={`${hdr} relative lg:sticky top-0 z-30 border-b transition-transform duration-300 ${headerVisible?'lg:translate-y-0':'lg:-translate-y-full'}`}>
-	        <div className="max-w-6xl mx-auto flex items-center justify-between px-3 py-1.5 md:px-4 md:py-2.5">
+	        <div className="max-w-6xl mx-auto flex items-center justify-between px-3 py-2.5 md:px-4 md:py-2.5">
 	          {/* Logo */}
 	          <div className="flex items-center gap-2.5 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
 	            <div className="flex h-9 w-9 rounded-lg items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-5 h-5"/></div>
@@ -19164,7 +19171,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </main>
 
       {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
-      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-1 pb-[calc(.2rem+env(safe-area-inset-bottom))] transition-transform duration-300 ${headerVisible?'translate-y-0':'translate-y-[calc(100%+env(safe-area-inset-bottom))]'} ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff'}} aria-label="Navegação principal">
+      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] transition-transform duration-300 ${bottomNavVisible?'translate-y-0':'translate-y-[calc(100%+env(safe-area-inset-bottom))]'} ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff'}} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
@@ -19174,7 +19181,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             {label:'Mais', icon:<MoreIcon className="w-4 h-4"/>, active:menuOpen, action:()=>setMenuOpen(true)},
           ].filter(Boolean).map(item=>(
             <button key={item.label} type="button" onClick={item.action}
-              className={`min-w-0 flex-1 flex flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-[9px] font-bold transition-colors ${item.active?(darkMode?'text-yellow-400 bg-yellow-900/20':'text-yellow-700 bg-yellow-50'):(darkMode?'text-gray-500':'text-gray-500')}`}>
+              className={`min-w-0 flex-1 flex flex-col items-center justify-center gap-1 rounded-lg py-1.5 text-[9px] font-bold transition-colors ${item.active?(darkMode?'text-yellow-400 bg-yellow-900/20':'text-yellow-700 bg-yellow-50'):(darkMode?'text-gray-500':'text-gray-500')}`}>
               {item.icon}
               <span className="truncate w-full">{item.label}</span>
             </button>
