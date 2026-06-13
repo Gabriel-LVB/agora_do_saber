@@ -6404,9 +6404,16 @@ export default function QuestionBankApp() {
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
   const [headerVisible, setHeaderVisible] = useState(true); // hide on scroll down
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(()=>readStorageJson('agora_sidebar_collapsed', false));
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
   const hdr   = darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200';
   const badge = darkMode?'bg-gray-700 text-gray-200':'bg-gray-100 text-gray-800';
+
+  const toggleDesktopSidebar = () => {
+    const next = !desktopSidebarCollapsed;
+    setDesktopSidebarCollapsed(next);
+    writeStorageJson('agora_sidebar_collapsed', next);
+  };
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [user, setUser]           = useState(null);
@@ -13343,6 +13350,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         '--font-sm':`${0.875 * fontScale / 100}rem`,
         '--font-base':`${fontScale / 100}rem`,
         '--font-lg':`${1.125 * Math.min(fontScale, 112) / 100}rem`,
+        '--desktop-sidebar-width':desktopSidebarCollapsed ? '0rem' : '15rem',
       }}
     >
       <style>{`
@@ -13708,15 +13716,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         @media (min-width: 1024px) {
           .agora-shell main.desktop-shell-content {
-            margin-left: 16.5rem;
+            margin-left: var(--desktop-sidebar-width);
             margin-right: 0;
-            width: calc(100% - 16.5rem);
+            width: calc(100% - var(--desktop-sidebar-width));
             max-width: none;
-            padding-left: 2rem;
-            padding-right: 2rem;
+            padding-left: clamp(2rem, 4vw, 4.5rem);
+            padding-right: clamp(2rem, 4vw, 4.5rem);
+            transition: margin-left .22s ease, width .22s ease;
+          }
+          .agora-shell main.desktop-shell-content > *:not(.fixed) {
+            width: min(100%, 78rem);
+            margin-left: auto;
+            margin-right: auto;
           }
           .agora-shell .desktop-content-limit {
-            width: min(100%, 82rem);
+            width: 100%;
             margin-left: auto;
             margin-right: auto;
           }
@@ -13748,17 +13762,24 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
       `}</style>
         {/* Navegação lateral do desktop */}
-        <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-[16.5rem] flex-col border-r ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-          <button type="button" onClick={()=>setView('library')} className={`flex items-center gap-3 px-5 py-5 border-b text-left ${darkMode?'border-gray-800':'border-gray-100'}`}>
-            <span className="flex h-11 w-11 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-6 h-6"/></span>
-            <span className="min-w-0">
-              <strong className={`block font-serif text-xl leading-tight ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
-              <span className="block text-[9px] font-bold uppercase tracking-[0.16em] mt-1 opacity-45">Lux in Tenebris</span>
-            </span>
-          </button>
+        <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-60 flex-col border-r transition-transform duration-200 ${desktopSidebarCollapsed?'-translate-x-full':'translate-x-0'} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+          <div className={`flex items-center border-b ${desktopSidebarCollapsed?'flex-col gap-2 px-2 py-4':'gap-2 px-4 py-4'} ${darkMode?'border-gray-800':'border-gray-100'}`}>
+            <button type="button" onClick={()=>setView('library')} title="Ir para o início"
+              className={`min-w-0 flex items-center text-left ${desktopSidebarCollapsed?'justify-center':'flex-1 gap-3'}`}>
+              <span className="flex h-11 w-11 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-6 h-6"/></span>
+              {!desktopSidebarCollapsed&&<span className="min-w-0">
+                <strong className={`block font-serif text-lg leading-tight whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
+                <span className="block text-[8px] font-bold uppercase tracking-[0.16em] mt-1 opacity-45">Lux in Tenebris</span>
+              </span>}
+            </button>
+            <button type="button" onClick={toggleDesktopSidebar} title={desktopSidebarCollapsed?'Expandir menu':'Recolher menu'} aria-label={desktopSidebarCollapsed?'Expandir menu':'Recolher menu'}
+              className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+              {desktopSidebarCollapsed?<ChevronRight className="w-4 h-4"/>:<ChevronLeft className="w-4 h-4"/>}
+            </button>
+          </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-5">
-            <p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Navegação</p>
+          <div className={`flex-1 overflow-y-auto py-5 ${desktopSidebarCollapsed?'px-2':'px-3'}`}>
+            {!desktopSidebarCollapsed&&<p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Navegação</p>}
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
@@ -13766,18 +13787,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {label:'Oráculo', desc:'Bancos de questões', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
                 homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Videoaulas e cronograma', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
               ].filter(Boolean).map(item=>(
-                <button key={item.label} type="button" onClick={item.action}
-                  className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                <button key={item.label} type="button" onClick={item.action} title={desktopSidebarCollapsed?item.label:undefined}
+                  className={`w-full flex items-center rounded-xl py-3 text-left transition-colors ${desktopSidebarCollapsed?'justify-center px-2':'gap-3 px-3'} ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
                   <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${item.active?(darkMode?'bg-yellow-900/40':'bg-yellow-100'):(darkMode?'bg-gray-800':'bg-gray-100')}`}>{item.icon}</span>
-                  <span className="min-w-0">
+                  {!desktopSidebarCollapsed&&<span className="min-w-0">
                     <strong className="block text-sm leading-tight">{item.label}</strong>
                     <span className="block text-[10px] mt-1 opacity-45 truncate">{item.desc}</span>
-                  </span>
+                  </span>}
                 </button>
               ))}
             </nav>
 
-            <p className="px-3 mt-7 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>
+            {!desktopSidebarCollapsed&&<p className="px-3 mt-7 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>}
+            {desktopSidebarCollapsed&&<div className={`my-4 mx-2 border-t ${darkMode?'border-gray-800':'border-gray-200'}`}/>}
             <div className="space-y-1">
               {[
                 canUseAdvancedFeatures ? {label:'Centelha', icon:<Flame className="w-5 h-5"/>, action:()=>openViewWithReturn('quick'), active:view==='quick'} : null,
@@ -13785,29 +13807,44 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {label:'Modo prova', icon:<Zap className="w-5 h-5"/>, action:()=>setExamSetup({}), active:view==='exam'},
                 {label:'Favoritos', icon:<Heart className="w-5 h-5"/>, action:()=>setView('favorites'), active:view==='favorites'},
               ].filter(Boolean).map(item=>(
-                <button key={item.label} type="button" onClick={item.action}
-                  className={`w-full flex items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-bold transition-colors ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
-                  {item.icon}<span className="flex-1">{item.label}</span>
+                <button key={item.label} type="button" onClick={item.action} title={desktopSidebarCollapsed?item.label:undefined}
+                  className={`relative w-full flex items-center rounded-xl py-2.5 text-left text-sm font-bold transition-colors ${desktopSidebarCollapsed?'justify-center px-2':'gap-3 px-4'} ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
+                  {item.icon}{!desktopSidebarCollapsed&&<span className="flex-1">{item.label}</span>}
                   {(item.badge||0)>0&&<span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-center text-[10px] ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{item.badge}</span>}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className={`p-3 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
-            <div className={`rounded-xl p-2 ${darkMode?'bg-gray-800/60':'bg-gray-50'}`}>
-              <div className="flex items-center gap-2 px-2 py-2 mb-1">
-                <span className={`h-8 w-8 rounded-full border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-white'}`}><UserIcon className="w-4 h-4"/></span>
-                <span className="min-w-0"><strong className="block text-xs truncate">{username}</strong><span className="block text-[9px] opacity-40">{isAdmin?'Administrador':'Estudante'}</span></span>
-              </div>
-              <div className="grid grid-cols-3 gap-1">
-                <button type="button" onClick={openSettings} title="Configurações" className={`h-9 rounded-lg flex items-center justify-center ${view==='settings'?'text-yellow-500':''}`}><SettingsIcon className="w-4 h-4"/></button>
-                <button type="button" onClick={()=>setDarkMode(!darkMode)} title={darkMode?'Tema claro':'Tema escuro'} className="h-9 rounded-lg flex items-center justify-center">{darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}</button>
-                <button type="button" onClick={handleLogout} title="Sair" className="h-9 rounded-lg flex items-center justify-center text-red-500"><LogOut className="w-4 h-4"/></button>
+          <div className={`border-t ${desktopSidebarCollapsed?'p-2':'p-3'} ${darkMode?'border-gray-800':'border-gray-100'}`}>
+            {!desktopSidebarCollapsed&&<div className="flex items-center gap-3 px-2 py-2 mb-2">
+              <span className={`h-9 w-9 rounded-full border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-gray-50'}`}><UserIcon className="w-4 h-4"/></span>
+              <span className="min-w-0"><strong className="block text-xs truncate">{username}</strong><span className="block text-[10px] opacity-40">{isAdmin?'Administrador':'Estudante'}</span></span>
+            </div>}
+            <div className={desktopSidebarCollapsed?'space-y-1':'space-y-1'}>
+              <button type="button" onClick={openSettings} title="Configurações"
+                className={`w-full h-10 rounded-lg flex items-center ${desktopSidebarCollapsed?'justify-center':'gap-3 px-3'} ${view==='settings'?'text-yellow-500':''} ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                <SettingsIcon className="w-4 h-4"/>{!desktopSidebarCollapsed&&<span className="text-xs font-bold">Configurações</span>}
+              </button>
+              <div className={desktopSidebarCollapsed?'space-y-1':'grid grid-cols-2 gap-1'}>
+                <button type="button" onClick={()=>setDarkMode(!darkMode)} title={darkMode?'Tema claro':'Tema escuro'}
+                  className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                  {darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}{!desktopSidebarCollapsed&&<span className="text-[11px] font-bold">Tema</span>}
+                </button>
+                <button type="button" onClick={handleLogout} title="Sair"
+                  className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-red-500 ${darkMode?'hover:bg-red-950/40':'hover:bg-red-50'}`}>
+                  <LogOut className="w-4 h-4"/>{!desktopSidebarCollapsed&&<span className="text-[11px] font-bold">Sair</span>}
+                </button>
               </div>
             </div>
           </div>
         </aside>
+        {desktopSidebarCollapsed&&(
+          <button type="button" onClick={toggleDesktopSidebar} title="Mostrar menu" aria-label="Mostrar menu"
+            className={`hidden lg:flex fixed left-4 top-4 z-40 h-11 w-11 rounded-xl border items-center justify-center shadow-lg ${darkMode?'bg-gray-900 border-gray-700 text-yellow-400 hover:bg-gray-800':'bg-white border-gray-200 text-yellow-700 hover:bg-gray-50'}`}>
+            <Landmark className="w-5 h-5"/>
+          </button>
+        )}
 
 	      {/* Header mobile */}
 	      <header className={`${hdr} lg:hidden relative top-0 z-30 border-b`}>
