@@ -398,6 +398,29 @@ const cleanQuestionExplanation = (explanation = '') => {
   return exp;
 };
 
+const splitQuestionCase = (question = {}) => {
+  const explicitCase = String(question.caseContext || '').trim();
+  const explicitStatement = String(question.statement || '').trim();
+  if (explicitCase) return { caseContext:explicitCase, statement:explicitStatement };
+
+  const raw = explicitStatement.replace(/\r\n/g, '\n');
+  if (!/^\s*Caso\s+\d+\b/i.test(raw)) return { caseContext:'', statement:raw };
+  const parts = raw.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+  if (parts.length < 2) return { caseContext:'', statement:raw };
+  return { caseContext:parts[0], statement:parts.slice(1).join('\n\n') };
+};
+
+const extractStructuredQuestionText = (rawStatement = '') => {
+  const raw = String(rawStatement || '').replace(/\r\n/g, '\n').trim();
+  const caseMatch = raw.match(/(?:^|\n)\s*Caso-base\s*:\s*([\s\S]*?)(?=\n\s*Enunciado\s*:|$)/i);
+  const statementMatch = raw.match(/(?:^|\n)\s*Enunciado\s*:\s*([\s\S]*)$/i);
+  if (!caseMatch || !statementMatch) return { caseContext:'', statement:raw };
+  return {
+    caseContext:caseMatch[1].trim(),
+    statement:statementMatch[1].trim(),
+  };
+};
+
 const cleanStructuredExplanationPart = (text = '') => String(text || '')
   .replace(/\r\n/g, '\n')
   .replace(/^\s*(?:Aula|Alternativas)\s*:\s*/i, '')
@@ -548,7 +571,7 @@ const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questi
   const styleInst = {
     clinical: 'Use vinhetas clínicas quando isso ajudar a testar aplicação: idade/sexo/contexto, evolução, achados relevantes e um dado discriminativo que obrigue raciocínio clínico.',
     direct: 'Use questões diretas de alto rendimento: alvo estreito, resposta previsível e cobrança que diferencie conceitos próximos, sem curiosidade solta.',
-    mixed: 'Organize a bateria em uma quantidade ideal de casos clínicos. Para cada caso, crie 2 a 5 questões progressivas com decisões diferentes; identifique Caso 1, Caso 2 etc. e mantenha cada questão compreensível isoladamente.',
+    mixed: 'Organize a bateria em uma quantidade ideal de casos clínicos. Para cada caso, crie 2 a 5 questões progressivas com decisões diferentes. Em toda questão use "Caso-base: Caso N — [vinheta original completa]" e depois "Enunciado: [pergunta específica]"; repita integralmente o mesmo caso-base na sequência.',
   }[settings.questionStyle || 'mixed'];
   const na = settings.numAlternatives || 5;
   const alts = na === 4
@@ -1513,6 +1536,8 @@ const parseData = (text, namespace = '') => {
       }
       stmt = stmt.trim();
       if (!stmt || stmt.length < 5) return;
+      const structuredQuestionText = extractStructuredQuestionText(stmt);
+      stmt = structuredQuestionText.statement;
 
       const ansM =
         block.match(/(?:[Aa]lternativa[ \t]+correta|[Gg]abarito(?:[ \t]+oficial)?|[Rr]esposta(?:[ \t]+correta)?|[Cc]orreta)[ \t]*[:\-–—][ \t]*(?:\*{0,2}[ \t]*)?(?:letra[ \t]*)?\(?([A-Ea-e])\)?/im);
@@ -1585,6 +1610,7 @@ const parseData = (text, namespace = '') => {
         questions.push({
           id,
           statement: stmt,
+          caseContext:structuredQuestionText.caseContext,
           options: final,
           explanation: exp,
           explanationParts: structuredExp.hasStructured ? { lesson:exp, alternatives:structuredExp.alternatives } : null,
@@ -1597,7 +1623,7 @@ const parseData = (text, namespace = '') => {
           isCorrect: false,
           explanation:structuredExp.alternatives?.[o.letter] || '',
         }));
-        questions.push({ id, statement: stmt, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)' });
+        questions.push({ id, statement: stmt, caseContext:structuredQuestionText.caseContext, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)' });
       }
     } catch(e) {}
   });
@@ -1633,6 +1659,8 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
         .replace(/(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][^\n]*\n?/, '')
         .trim();
       if (!stmt || stmt.length < 5) return;
+      const structuredQuestionText = extractStructuredQuestionText(stmt);
+      stmt = structuredQuestionText.statement;
 
       const expectedAnswer = respMatch ? respMatch[1].trim() : '';
 
@@ -1642,7 +1670,7 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
         ? /(?:dissertativa|disserte|discuta|explique\s+detalhadamente|relacione|compare\s+criticamente|analise\s+criticamente)/i.test(block)
         : !!isEssay;
 
-      questions.push({ id, statement: stmt, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay:questionIsEssay });
+      questions.push({ id, statement: stmt, caseContext:structuredQuestionText.caseContext, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay:questionIsEssay });
     } catch(e) {}
   });
 
@@ -1852,7 +1880,7 @@ const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', 
   const styleInst = {
     clinical:'Prefira vinhetas clínicas curtas e cobráveis, com dado discriminativo real e sem entregar diagnóstico/conduta no enunciado.',
     direct:'Prefira perguntas diretas com alvo estreito: mecanismo, critério, exceção, comparação ou consequência prática.',
-    mixed:'Organize a prática em poucos casos encadeados. Cada caso deve gerar perguntas progressivas e diferentes, mantendo cada questão compreensível isoladamente.',
+    mixed:'Organize a prática em poucos casos encadeados. Cada caso deve gerar perguntas progressivas e diferentes. Em toda questão use "Caso-base: Caso N — [vinheta original completa]" e depois "Enunciado: [pergunta específica]"; repita integralmente o mesmo caso-base na sequência.',
   }[settings.questionStyle || 'mixed'];
   const adminExplanationFormat = settings.adminQuestionExplanations ? `
 FORMATO ADMIN PARA EXPLICAÇÕES DAS QUESTÕES:
@@ -2035,8 +2063,9 @@ Explicação: ${q.explanation || ''}
 ---`;
   }
   if (q.isOpen) {
+    const { caseContext, statement } = splitQuestionCase(q);
     return `## Questão ${index + 1}
-${q.statement || ''}
+${caseContext ? `Caso-base: ${caseContext}\nEnunciado: ${statement}` : statement}
 Resposta esperada: ${q.expectedAnswer || ''}
 Explicação: ${q.explanation || ''}
 ---`;
@@ -2053,8 +2082,9 @@ Alternativas:
 ${ordered.map((opt, i) => `[[ALT:${'ABCDE'[i]}]]
 ${opt.explanation || ''}`).join('\n\n')}`
     : (q.explanation || '');
+  const { caseContext, statement } = splitQuestionCase(q);
   return `## Questão ${index + 1}
-${q.statement || ''}
+${caseContext ? `Caso-base: ${caseContext}\nEnunciado: ${statement}` : statement}
 ${options}
 Alternativa correta: A
 Explicação:
@@ -4648,7 +4678,8 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
     setMessages(p=>[...p,{role:'user',text:msg}]);
     setLoading(true);
     try {
-      const ctx = `Questão: ${question.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`;
+      const questionText = splitQuestionCase(question);
+      const ctx = `${questionText.caseContext ? `Caso clínico: ${questionText.caseContext}\n\n` : ''}Questão: ${questionText.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`;
       const sys = `Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Responda com precisão clínica. Contexto:\n${ctx}`;
       const hist = messages.map(m=>`${m.role==='user'?'Estudante':'Oráculo'}: ${m.text}`).join('\n');
       const r = await callOracle(`${hist}\nEstudante: ${msg}`, sys);
@@ -4689,7 +4720,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
                     : (darkMode?'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600':'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200');
                 return (
                   <button key={opt.letter}
-                    onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const ctx=`Questão: ${question.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
+                    onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const questionText=splitQuestionCase(question); const ctx=`${questionText.caseContext ? `Caso clínico: ${questionText.caseContext}\n\n` : ''}Questão: ${questionText.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
                     title={opt.isCorrect ? 'Alternativa correta' : isWrongSelected ? 'Sua resposta' : `Explicar alternativa ${opt.letter}`}
                     className={`h-8 min-w-8 px-3 rounded-lg border text-sm font-bold transition-colors flex-shrink-0 ${tone}`}>
                     {opt.letter}
@@ -4727,6 +4758,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
   const explanation = cleanQuestionExplanation(question.explanation);
+  const questionText = splitQuestionCase(question);
   const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
@@ -4773,12 +4805,24 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           </button>
         </div>
       </div>}
-	      {!(question.isFlashcard && flashcardLarge)&&<div
-	        className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : 'text-base md:text-lg mb-6 leading-relaxed'} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
-	        style={{userSelect:'text'}}
-	      >
-	        {parseHtmlTextChat(question.statement)}
-	      </div>}
+	      {!(question.isFlashcard && flashcardLarge)&&<>
+          {questionText.caseContext&&(
+            <section className={`mb-5 overflow-hidden rounded-xl border ${darkMode?'border-gray-600 bg-gray-900/55':'border-gray-200 bg-gray-50'}`}>
+              <div className={`border-b px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'border-gray-700 text-yellow-400':'border-gray-200 text-yellow-700'}`}>
+                Caso clínico
+              </div>
+              <div className={`select-text px-4 py-4 text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`} style={{userSelect:'text'}}>
+                {parseHtmlTextChat(questionText.caseContext)}
+              </div>
+            </section>
+          )}
+          <div
+            className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg mb-6 leading-relaxed ${questionText.caseContext?'font-semibold':''}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
+            style={{userSelect:'text'}}
+          >
+            {parseHtmlTextChat(questionText.statement)}
+          </div>
+        </>}
 
 	      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
 	      {question.isFlashcard ? (
@@ -4791,7 +4835,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	            return onAnswer(l);
 	          }}
 	          large={flashcardLarge || flashcardStudyMode}
-	          front={parseHtmlTextChat(question.statement)}
+	          front={parseHtmlTextChat(questionText.statement)}
 	        />
       ) : question.isOpen ? (
         <OpenAnswerInline
@@ -10813,7 +10857,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const qStyleInst = {
       clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas com contexto, evolução, achados relevantes e dado discriminativo. O caso deve exigir inferência clínica, não só reconhecer palavras-chave.',
       direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo estreito, resposta previsível, sem caso clínico e sem trivia solta.',
-      mixed:    'Organize a bateria em uma quantidade ideal de casos encadeados. Cada caso deve gerar 2 a 5 questões progressivas, distintas e compreensíveis isoladamente.',
+      mixed:    'Organize a bateria em uma quantidade ideal de casos encadeados. Cada caso deve gerar 2 a 5 questões progressivas. Em toda questão use "Caso-base: Caso N — [vinheta original completa]" e depois "Enunciado: [pergunta específica]"; repita integralmente o mesmo caso-base na sequência.',
     }[meta.questionStyle||'mixed'];
 
     const PROMPT = buildVqBlockPrompt(block, withAdminQuestionPromptSettings(meta || {}), subtopicsArr, transcriptSlice, alts);
@@ -13350,7 +13394,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         '--font-sm':`${0.875 * fontScale / 100}rem`,
         '--font-base':`${fontScale / 100}rem`,
         '--font-lg':`${1.125 * Math.min(fontScale, 112) / 100}rem`,
-        '--desktop-sidebar-width':desktopSidebarCollapsed ? '0rem' : '15rem',
+        '--desktop-sidebar-width':desktopSidebarCollapsed ? '0rem' : '18rem',
       }}
     >
       <style>{`
@@ -13762,24 +13806,24 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
       `}</style>
         {/* Navegação lateral do desktop */}
-        <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-60 flex-col border-r transition-transform duration-200 ${desktopSidebarCollapsed?'-translate-x-full':'translate-x-0'} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-          <div className={`flex items-center border-b ${desktopSidebarCollapsed?'flex-col gap-2 px-2 py-4':'gap-2 px-4 py-4'} ${darkMode?'border-gray-800':'border-gray-100'}`}>
+        <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-72 flex-col border-r transition-transform duration-200 ${desktopSidebarCollapsed?'-translate-x-full':'translate-x-0'} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+          <div className={`relative flex items-center border-b gap-3 px-5 py-5 ${darkMode?'border-gray-800':'border-gray-100'}`}>
             <button type="button" onClick={()=>setView('library')} title="Ir para o início"
-              className={`min-w-0 flex items-center text-left ${desktopSidebarCollapsed?'justify-center':'flex-1 gap-3'}`}>
-              <span className="flex h-11 w-11 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-6 h-6"/></span>
-              {!desktopSidebarCollapsed&&<span className="min-w-0">
-                <strong className={`block font-serif text-lg leading-tight whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
-                <span className="block text-[8px] font-bold uppercase tracking-[0.16em] mt-1 opacity-45">Lux in Tenebris</span>
-              </span>}
+              className="min-w-0 flex flex-1 items-center gap-3 text-left">
+              <span className="flex h-12 w-12 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-6 h-6"/></span>
+              <span className="min-w-0">
+                <strong className={`block font-serif text-xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
+                <span className="block text-[9px] font-bold uppercase tracking-[0.14em] mt-1 opacity-55">Lux in Tenebris</span>
+              </span>
             </button>
-            <button type="button" onClick={toggleDesktopSidebar} title={desktopSidebarCollapsed?'Expandir menu':'Recolher menu'} aria-label={desktopSidebarCollapsed?'Expandir menu':'Recolher menu'}
-              className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-              {desktopSidebarCollapsed?<ChevronRight className="w-4 h-4"/>:<ChevronLeft className="w-4 h-4"/>}
+            <button type="button" onClick={toggleDesktopSidebar} title="Ocultar menu" aria-label="Ocultar menu"
+              className={`absolute -right-3 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full border flex items-center justify-center shadow-sm transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
+              <ChevronLeft className="w-3.5 h-3.5"/>
             </button>
           </div>
 
-          <div className={`flex-1 overflow-y-auto py-5 ${desktopSidebarCollapsed?'px-2':'px-3'}`}>
-            {!desktopSidebarCollapsed&&<p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Navegação</p>}
+          <div className="flex-1 overflow-y-auto px-4 py-5">
+            <p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Navegação</p>
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
@@ -13787,19 +13831,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {label:'Oráculo', desc:'Bancos de questões', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
                 homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Videoaulas e cronograma', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
               ].filter(Boolean).map(item=>(
-                <button key={item.label} type="button" onClick={item.action} title={desktopSidebarCollapsed?item.label:undefined}
-                  className={`w-full flex items-center rounded-xl py-3 text-left transition-colors ${desktopSidebarCollapsed?'justify-center px-2':'gap-3 px-3'} ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                <button key={item.label} type="button" onClick={item.action}
+                  className={`w-full flex items-center rounded-xl gap-3 px-3 py-3 text-left transition-colors ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
                   <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${item.active?(darkMode?'bg-yellow-900/40':'bg-yellow-100'):(darkMode?'bg-gray-800':'bg-gray-100')}`}>{item.icon}</span>
-                  {!desktopSidebarCollapsed&&<span className="min-w-0">
+                  <span className="min-w-0">
                     <strong className="block text-sm leading-tight">{item.label}</strong>
-                    <span className="block text-[10px] mt-1 opacity-45 truncate">{item.desc}</span>
-                  </span>}
+                    <span className="block text-[10px] mt-1 opacity-45">{item.desc}</span>
+                  </span>
                 </button>
               ))}
             </nav>
 
-            {!desktopSidebarCollapsed&&<p className="px-3 mt-7 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>}
-            {desktopSidebarCollapsed&&<div className={`my-4 mx-2 border-t ${darkMode?'border-gray-800':'border-gray-200'}`}/>}
+            <p className="px-3 mt-7 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>
             <div className="space-y-1">
               {[
                 canUseAdvancedFeatures ? {label:'Centelha', icon:<Flame className="w-5 h-5"/>, action:()=>openViewWithReturn('quick'), active:view==='quick'} : null,
@@ -13807,42 +13850,32 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {label:'Modo prova', icon:<Zap className="w-5 h-5"/>, action:()=>setExamSetup({}), active:view==='exam'},
                 {label:'Favoritos', icon:<Heart className="w-5 h-5"/>, action:()=>setView('favorites'), active:view==='favorites'},
               ].filter(Boolean).map(item=>(
-                <button key={item.label} type="button" onClick={item.action} title={desktopSidebarCollapsed?item.label:undefined}
-                  className={`relative w-full flex items-center rounded-xl py-2.5 text-left text-sm font-bold transition-colors ${desktopSidebarCollapsed?'justify-center px-2':'gap-3 px-4'} ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
-                  {item.icon}{!desktopSidebarCollapsed&&<span className="flex-1">{item.label}</span>}
+                <button key={item.label} type="button" onClick={item.action}
+                  className={`relative w-full flex items-center rounded-xl gap-3 px-4 py-2.5 text-left text-sm font-bold transition-colors ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
+                  {item.icon}<span className="flex-1">{item.label}</span>
                   {(item.badge||0)>0&&<span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-center text-[10px] ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{item.badge}</span>}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className={`border-t ${desktopSidebarCollapsed?'p-2':'p-3'} ${darkMode?'border-gray-800':'border-gray-100'}`}>
-            {!desktopSidebarCollapsed&&<div className="flex items-center gap-3 px-2 py-2 mb-2">
-              <span className={`h-9 w-9 rounded-full border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-gray-50'}`}><UserIcon className="w-4 h-4"/></span>
-              <span className="min-w-0"><strong className="block text-xs truncate">{username}</strong><span className="block text-[10px] opacity-40">{isAdmin?'Administrador':'Estudante'}</span></span>
-            </div>}
-            <div className={desktopSidebarCollapsed?'space-y-1':'space-y-1'}>
-              <button type="button" onClick={openSettings} title="Configurações"
-                className={`w-full h-10 rounded-lg flex items-center ${desktopSidebarCollapsed?'justify-center':'gap-3 px-3'} ${view==='settings'?'text-yellow-500':''} ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
-                <SettingsIcon className="w-4 h-4"/>{!desktopSidebarCollapsed&&<span className="text-xs font-bold">Configurações</span>}
-              </button>
-              <div className={desktopSidebarCollapsed?'space-y-1':'grid grid-cols-2 gap-1'}>
-                <button type="button" onClick={()=>setDarkMode(!darkMode)} title={darkMode?'Tema claro':'Tema escuro'}
-                  className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
-                  {darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}{!desktopSidebarCollapsed&&<span className="text-[11px] font-bold">Tema</span>}
-                </button>
-                <button type="button" onClick={handleLogout} title="Sair"
-                  className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 text-red-500 ${darkMode?'hover:bg-red-950/40':'hover:bg-red-50'}`}>
-                  <LogOut className="w-4 h-4"/>{!desktopSidebarCollapsed&&<span className="text-[11px] font-bold">Sair</span>}
-                </button>
-              </div>
-            </div>
+          <div className={`border-t p-3 ${darkMode?'border-gray-800':'border-gray-100'}`}>
+            <button type="button" onClick={openSettings}
+              className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${view==='settings'?'text-yellow-500':''} ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+              <span className={`h-10 w-10 rounded-full border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-gray-50'}`}><UserIcon className="w-4 h-4"/></span>
+              <span className="min-w-0 flex-1"><strong className="block text-xs truncate">{username}</strong><span className="block text-[10px] opacity-45">{isAdmin?'Administrador':'Estudante'} · Configurações</span></span>
+              <ChevronRight className="w-4 h-4 opacity-35"/>
+            </button>
+            <button type="button" onClick={()=>setDarkMode(!darkMode)} title={darkMode?'Usar tema claro':'Usar tema escuro'}
+              className={`mt-1 w-full h-9 rounded-lg flex items-center gap-3 px-4 text-xs font-bold opacity-60 ${darkMode?'hover:bg-gray-800 hover:opacity-100':'hover:bg-gray-50 hover:opacity-100'}`}>
+              {darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}<span>{darkMode?'Tema claro':'Tema escuro'}</span>
+            </button>
           </div>
         </aside>
         {desktopSidebarCollapsed&&(
           <button type="button" onClick={toggleDesktopSidebar} title="Mostrar menu" aria-label="Mostrar menu"
-            className={`hidden lg:flex fixed left-4 top-4 z-40 h-11 w-11 rounded-xl border items-center justify-center shadow-lg ${darkMode?'bg-gray-900 border-gray-700 text-yellow-400 hover:bg-gray-800':'bg-white border-gray-200 text-yellow-700 hover:bg-gray-50'}`}>
-            <Landmark className="w-5 h-5"/>
+            className={`hidden lg:flex fixed left-0 top-1/2 -translate-y-1/2 z-40 h-14 w-7 rounded-r-xl border border-l-0 items-center justify-center shadow-sm transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
+            <ChevronRight className="w-4 h-4"/>
           </button>
         )}
 
@@ -13890,7 +13923,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:openSettings},
                 {icon:darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>, label:darkMode?'Tema claro':'Tema escuro', action:()=>setDarkMode(!darkMode)},
-                {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
               ].filter(Boolean).map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
                   className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-950':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
@@ -19292,6 +19324,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
               </SettingsSection>
             )}
+
+            <SettingsSection id="account" title="Conta" icon={<UserIcon className="w-4 h-4"/>}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-bold truncate">{username}</p>
+                  <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>{user?.email || (isAdmin?'Administrador':'Estudante')}</p>
+                </div>
+                <button type="button" onClick={handleLogout}
+                  className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/40':'border-red-200 text-red-600 hover:bg-red-50'}`}>
+                  <LogOut className="w-4 h-4"/>Sair da conta
+                </button>
+              </div>
+            </SettingsSection>
 
             {/* Zona de perigo */}
             {canSeeVideoaulas&&(

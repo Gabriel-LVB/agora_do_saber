@@ -205,8 +205,12 @@ Cada caso deve sustentar uma sequência de 2 a 5 questões progressivas, cada um
 REGRAS DOS CASOS ENCADEADOS:
 - Respeite a quantidade total solicitada. Se ela não comportar ao menos duas questões sobre um caso, crie uma questão clínica independente em vez de forçar um encadeamento artificial.
 - Agrupe questões pelo caso e conclua a sequência antes de iniciar o próximo.
-- Identifique no começo de cada enunciado: "Caso 1", "Caso 2" etc.
-- Cada questão deve continuar compreensível isoladamente em revisão, exportação e Modo Prova. Repita somente o contexto mínimo indispensável ou informe claramente a nova evolução; não copie a vinheta inteira sem necessidade.
+- Em TODAS as questões da sequência, use exatamente dois campos separados antes das alternativas:
+  Caso-base: Caso 1 — [vinheta clínica original completa, repetida sem abreviar]
+  Enunciado: [pergunta específica desta questão; inclua aqui qualquer evolução nova necessária]
+- Repita o mesmo Caso-base integralmente em todas as questões ligadas a ele. Nunca escreva "paciente do caso anterior", "conforme o caso anterior" ou qualquer referência que obrigue o aluno a procurar outra questão.
+- O Caso-base apresenta apenas a vinheta compartilhada. O Enunciado apresenta somente a pergunta daquela questão e eventual evolução nova, sem recontar a vinheta.
+- Cada questão deve continuar compreensível isoladamente em revisão, exportação e Modo Prova.
 - Faça o caso evoluir quando isso criar uma nova decisão legítima. Não invente evolução apenas para preencher quantidade.
 - Cada questão da sequência deve testar um eixo diferente. É proibido perguntar a mesma ideia com outras palavras.
 - Use casos suficientes para cobrir perspectivas importantes e populações/situações distintas, sem pulverizar o conteúdo em muitos casos rasos.
@@ -385,10 +389,11 @@ Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isola
 Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`
 };
 
-const TEMPLATE_QUESTAO = (alts, adminQuestionExplanations = false) => `
+const TEMPLATE_QUESTAO = (alts, adminQuestionExplanations = false, caseSeries = false) => `
 FORMATO OBRIGATÓRIO (uma questão por bloco ---):
 ## Questão 1.1.1
-[Enunciado]
+${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa; repita-a integralmente em cada questão da sequência]
+Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 ${alts}
 Alternativa correta: [Letra]
 Explicação:
@@ -463,6 +468,7 @@ export const buildQuestionAuditPrompt = ({
   const types = settings.questionTypes || ['direct'];
   const onlyFlashcards = onlyMemoryCards(types);
   const onlyOpen = types.every(t => ['open', 'essay'].includes(t));
+  const caseSeries = !onlyFlashcards && settings.questionStyle === 'mixed';
   const na = settings.numAlternatives || 5;
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
@@ -474,13 +480,15 @@ FORMATO DE SAÍDA OBRIGATÓRIO:
 ${memoryCardFormat(types).trim().replace('## Flashcard 1', '## Flashcard N').replace('## Cloze 1', '## Cloze N')}` : onlyOpen ? `
 FORMATO DE SAÍDA OBRIGATÓRIO:
 ## Questão N
-[Enunciado]
+${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa]
+Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 Resposta esperada: [resposta objetiva]
 Explicação: [explicação didática]
 ---` : `
 FORMATO DE SAÍDA OBRIGATÓRIO:
 ## Questão N
-[Enunciado]
+${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa]
+Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 ${alts}
 Alternativa correta: A
 Explicação:
@@ -637,10 +645,11 @@ REGRA DE QUANTIDADE:
 - Não aceite cartão que só ensine conduta óbvia, conselho geral ou princípio administrativo.` : onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ## Questão 1.1.1
-[Enunciado]
+${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa; repita-a integralmente em cada questão da sequência]
+Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 Resposta esperada: [resposta objetiva]
 Explicação: [explicação didática]
----` : `${REGRAS_ALTERNATIVAS}\n${explanationInst}\n${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}`;
+---` : `${REGRAS_ALTERNATIVAS}\n${explanationInst}\n${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, caseSeries)}`;
 
   return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
 
@@ -910,7 +919,7 @@ Para cada tópico gere ${onlyFlashcards ? `a quantidade ideal de ${memoryCardNam
 
   const closedBlock = hasClosed ? `
 FORMATO PARA QUESTÕES COM ALTERNATIVAS:
-${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}` : '';
+${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, s.questionStyle === 'mixed')}` : '';
   const importRule = selectedType === 'direct'
     ? `Use exclusivamente blocos "## Questão N" com ${na} alternativas, "Alternativa correta: [letra]" e "Explicação:".`
     : selectedType === 'vof'
@@ -1022,7 +1031,7 @@ ${caseSeries ? 'ORGANIZAÇÃO: decida a quantidade ideal de casos para o bloco i
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? memoryCardFormat(types) : `${REGRAS_ALTERNATIVAS}
 ${explanationInst}
-${TEMPLATE_QUESTAO(alts, !!meta.adminQuestionExplanations)}`}
+${TEMPLATE_QUESTAO(alts, !!meta.adminQuestionExplanations, caseSeries)}`}
 
 Use o ID como número sequencial simples (${onlyFlashcards ? `${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : '1, 2, 3...'}).
 
@@ -1277,7 +1286,7 @@ ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
 ${onlyFlashcards ? `REGRAS DA EXPLICAÇÃO:
 - Explique o porquê/como da resposta ou lacuna. A explicação deve ajudar quem errou a entender a resposta, sem virar aula.
 - Não repita o gabarito com mais palavras.` : explanationInst}
-${onlyFlashcards ? memoryCardFormat(types) : TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}
+${onlyFlashcards ? memoryCardFormat(types) : TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, caseSeries)}
 
 ${onlyFlashcards ? `Use IDs sequenciais simples: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : `Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
 ## Questão 1.1
@@ -1333,7 +1342,7 @@ REGRA DA BATERIA EXTRA:
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : `${REGRAS_ALTERNATIVAS}
 ${explanationInst}
-${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations)}`}
+${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, caseSeries)}`}
 ${onlyFlashcards ? memoryCardFormat(types) : ''}
 
 ${onlyFlashcards ? `Use IDs sequenciais simples: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : 'Use o ID no formato SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 1.1, ## Questão 1.2, ## Questão 2.1...).'}
