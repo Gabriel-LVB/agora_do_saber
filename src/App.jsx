@@ -7648,13 +7648,14 @@ export default function QuestionBankApp() {
     };
     Object.entries(reviewQueue).forEach(([aulaId, blocks]) => {
       const aulaData = vqBlocks[aulaId];
-      if (aulaData && !canSeeVideoaulas) return;
+      const queueLooksLikeCourse = !!aulaData || !String(aulaId).startsWith('lib_');
+      if (queueLooksLikeCourse && !canSeeVideoaulas) return;
       Object.entries(blocks).forEach(([blockId, qMap]) => {
         const block = aulaData?.blocks?.[blockId];
         const questions = Array.isArray(block?.questions) ? block.questions : [];
         Object.entries(qMap).forEach(([qId, item]) => {
           if (item.dueDate <= now) {
-            const itemSource = item.source || (aulaData ? 'curso' : 'oraculo');
+            const itemSource = item.source || (queueLooksLikeCourse ? 'curso' : 'oraculo');
             if (itemSource === 'curso' && !canSeeVideoaulas) return;
             const q = questions.find(x => x.id === qId) || resolveFromLibrary(item, qId);
             if (q) due.push({
