@@ -435,6 +435,26 @@ const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze
 const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
 const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
 const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
+const QUESTION_STYLE_OPTIONS = [
+  { k:'mixed', label:'Casos encadeados', desc:'A IA decide quantos casos usar e faz várias questões progressivas sobre cada um.' },
+  { k:'clinical', label:'Casos independentes', desc:'Cada questão apresenta uma situação clínica diferente.' },
+  { k:'direct', label:'Diretas', desc:'Perguntas objetivas, sem caso clínico.' },
+];
+const QuestionStyleSelector = ({ value='mixed', onChange, darkMode=false }) => (
+  <div className="grid grid-cols-1 gap-2">
+    {QUESTION_STYLE_OPTIONS.map(option=>(
+      <button type="button" key={option.k} onClick={()=>onChange(option.k)}
+        className={`w-full rounded-xl border-2 px-3 py-3 text-left transition-all ${
+          value===option.k
+            ? (darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-800')
+            : (darkMode?'border-gray-700 bg-gray-800/70 text-gray-200 hover:border-gray-500':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')
+        }`}>
+        <span className="block text-sm font-bold leading-tight">{option.label}</span>
+        <span className="mt-1 block text-xs font-normal leading-snug opacity-65">{option.desc}</span>
+      </button>
+    ))}
+  </div>
+);
 const hasRegenerationInstruction = (text = '') => String(text || '').trim().length > 0;
 const canUseQuestionType = (type, access = {}) => {
   if (type === 'cloze') return !!access.isAdmin;
@@ -528,7 +548,7 @@ const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questi
   const styleInst = {
     clinical: 'Use vinhetas clínicas quando isso ajudar a testar aplicação: idade/sexo/contexto, evolução, achados relevantes e um dado discriminativo que obrigue raciocínio clínico.',
     direct: 'Use questões diretas de alto rendimento: alvo estreito, resposta previsível e cobrança que diferencie conceitos próximos, sem curiosidade solta.',
-    mixed: 'Misture questões diretas para conceito central e questões clínicas para aplicação/pegadinhas.',
+    mixed: 'Organize a bateria em uma quantidade ideal de casos clínicos. Para cada caso, crie 2 a 5 questões progressivas com decisões diferentes; identifique Caso 1, Caso 2 etc. e mantenha cada questão compreensível isoladamente.',
   }[settings.questionStyle || 'mixed'];
   const na = settings.numAlternatives || 5;
   const alts = na === 4
@@ -1832,7 +1852,7 @@ const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', 
   const styleInst = {
     clinical:'Prefira vinhetas clínicas curtas e cobráveis, com dado discriminativo real e sem entregar diagnóstico/conduta no enunciado.',
     direct:'Prefira perguntas diretas com alvo estreito: mecanismo, critério, exceção, comparação ou consequência prática.',
-    mixed:'Misture casos clínicos curtos e perguntas diretas.',
+    mixed:'Organize a prática em poucos casos encadeados. Cada caso deve gerar perguntas progressivas e diferentes, mantendo cada questão compreensível isoladamente.',
   }[settings.questionStyle || 'mixed'];
   const adminExplanationFormat = settings.adminQuestionExplanations ? `
 FORMATO ADMIN PARA EXPLICAÇÕES DAS QUESTÕES:
@@ -3137,15 +3157,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           {(questionTypes.includes('direct') || questionTypes.includes('vof') || questionTypes.includes('cespe')) && (
             <div>
               <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
-                  <button key={opt.k} onClick={()=>setQuestionStyle(opt.k)}
-                    className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${questionStyle===opt.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                    {opt.label}
-                    <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
-                  </button>
-                ))}
-              </div>
+              <QuestionStyleSelector value={questionStyle} onChange={setQuestionStyle} darkMode={dm}/>
             </div>
           )}
 
@@ -3818,15 +3830,7 @@ const QuestionView = ({
 	          {/* Estilo do enunciado */}
 	          {!isMemoryCardType(topicType || 'direct') && <div>
 	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
-	            <div className="flex gap-2">
-	              {[{k:'mixed',l:'Misto',d:'Clínico + Direto'},{k:'clinical',l:'Clínico',d:'Casos clínicos'},{k:'direct',l:'Direto',d:'Conceitos'}].map(o=>(
-                <button key={o.k} onClick={()=>onTopicStyleChange(o.k,'style')}
-                  className={`flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${topicStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
-                  {o.l}
-                  <p className="font-normal opacity-50 mt-0.5 hidden sm:block">{o.d}</p>
-                </button>
-	              ))}
-	            </div>
+	            <QuestionStyleSelector value={topicStyle} onChange={value=>onTopicStyleChange(value,'style')} darkMode={dm}/>
 	          </div>}
           {/* Tipo de questão */}
           <div>
@@ -3967,14 +3971,7 @@ const VqConfigModal = ({ darkMode, settings, onSave, onClose }) => {
           {/* Estilo */}
           <div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
-                <button key={o.k} onClick={()=>setStyle(o.k)}
-                  className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${style===o.k?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
-                  {o.l}
-                </button>
-              ))}
-            </div>
+            <QuestionStyleSelector value={style} onChange={setStyle} darkMode={dm}/>
           </div>
 
           {/* Alternativas */}
@@ -5941,14 +5938,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
           {/* Estilo */}
           {!isOldExamPrompt&&<div>
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {[{k:'mixed',l:'Misto'},{k:'clinical',l:'Clínico'},{k:'direct',l:'Direto'}].map(o=>(
-                <button key={o.k} onClick={()=>setCfg(p=>({...p,questionStyle:o.k}))}
-                  className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===o.k?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-300':'border-gray-200 text-gray-600')}`}>
-                  {o.l}
-                </button>
-              ))}
-            </div>
+            <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>setCfg(p=>({...p,questionStyle:value}))} darkMode={dm}/>
           </div>}
 
           {/* Instrução extra */}
@@ -10784,7 +10774,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const qStyleInst = {
       clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas com contexto, evolução, achados relevantes e dado discriminativo. O caso deve exigir inferência clínica, não só reconhecer palavras-chave.',
       direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo estreito, resposta previsível, sem caso clínico e sem trivia solta.',
-      mixed:    'Misture questões com caso clínico e questões diretas sobre conceitos.',
+      mixed:    'Organize a bateria em uma quantidade ideal de casos encadeados. Cada caso deve gerar 2 a 5 questões progressivas, distintas e compreensíveis isoladamente.',
     }[meta.questionStyle||'mixed'];
 
     const PROMPT = buildVqBlockPrompt(block, withAdminQuestionPromptSettings(meta || {}), subtopicsArr, transcriptSlice, alts);
@@ -15001,15 +14991,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t))) && (
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
-                        <button key={opt.k} onClick={()=>{ const ns={...settings,questionStyle:opt.k}; setSettings(ns); saveSettings(ns); }}
-                          className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                          {opt.label}
-                          <p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
-                        </button>
-                      ))}
-                    </div>
+                    <QuestionStyleSelector value={settings.questionStyle||'mixed'} onChange={value=>{ const ns={...settings,questionStyle:value}; setSettings(ns); saveSettings(ns); }} darkMode={darkMode}/>
                   </div>
                 )}
 
@@ -15248,14 +15230,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t)))&&(
                   <div>
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {[{k:'mixed',label:'Misto',desc:'Clínicas e diretas'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Perguntas diretas'}].map(opt=>(
-                        <button key={opt.k} onClick={()=>{const ns={...settings,questionStyle:opt.k};setSettings(ns);saveSettings(ns);}}
-                          className={`py-2.5 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${(settings.questionStyle||'mixed')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                          {opt.label}<p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
-                        </button>
-                      ))}
-                    </div>
+                    <QuestionStyleSelector value={settings.questionStyle||'mixed'} onChange={value=>{const ns={...settings,questionStyle:value};setSettings(ns);saveSettings(ns);}} darkMode={darkMode}/>
                   </div>
                 )}
 
@@ -19345,14 +19320,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               {errorReviewQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
-                      <button key={opt.k} onClick={()=>setErrorReviewQStyle(opt.k)}
-                        className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${errorReviewQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                  <QuestionStyleSelector value={errorReviewQStyle} onChange={setErrorReviewQStyle} darkMode={darkMode}/>
                 </div>
               )}
               {errorReviewQTypes.some(t=>['direct','vof'].includes(t))&&<div>
@@ -19504,14 +19472,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
-                      <button key={opt.k} onClick={()=>setAcademiaRegenQStyle(opt.k)}
-                        className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${academiaRegenQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                  <QuestionStyleSelector value={academiaRegenQStyle} onChange={setAcademiaRegenQStyle} darkMode={darkMode}/>
                 </div>
               )}
               {!academiaRegenQTypes.some(isMemoryCardType)&&<div>
@@ -19589,14 +19550,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
-                      <button key={opt.k} onClick={()=>setAcademiaExtraQStyle(opt.k)}
-                        className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${academiaExtraQStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                  <QuestionStyleSelector value={academiaExtraQStyle} onChange={setAcademiaExtraQStyle} darkMode={darkMode}/>
                 </div>
               )}
               {!academiaExtraQTypes.some(isMemoryCardType)&&<div>
@@ -19708,14 +19662,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               {((oracleRegenConfig.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
                 <div>
                   <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[{k:'mixed',label:'Misto',desc:'Conceito + clínica'},{k:'clinical',label:'Clínico',desc:'Casos clínicos'},{k:'direct',label:'Direto',desc:'Conceitos secos'}].map(opt=>(
-                      <button key={opt.k} onClick={()=>setOracleRegenConfig(p=>({...p,questionStyle:opt.k}))}
-                        className={`py-3 px-2 rounded-xl border-2 text-xs font-bold transition-all text-center ${oracleRegenConfig.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                        {opt.label}<p className="font-normal opacity-60 mt-0.5">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
+                  <QuestionStyleSelector value={oracleRegenConfig.questionStyle} onChange={value=>setOracleRegenConfig(p=>({...p,questionStyle:value}))} darkMode={darkMode}/>
                 </div>
               )}
 
@@ -20098,14 +20045,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     {showsQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
-                            <button key={opt.k} onClick={()=>updateBulkConfig({questionStyle:opt.k})}
-                              className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
+                        <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>updateBulkConfig({questionStyle:value})} darkMode={darkMode}/>
                       </div>
                     )}
                     {showsQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
@@ -20174,14 +20114,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     {showsOracleQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {[{k:'mixed',label:'Misto'},{k:'clinical',label:'Clínico'},{k:'direct',label:'Direto'}].map(opt=>(
-                            <button key={opt.k} onClick={()=>updateBulkConfig({questionStyle:opt.k})}
-                              className={`py-2 rounded-xl border-2 text-xs font-bold transition-all ${cfg.questionStyle===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
+                        <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>updateBulkConfig({questionStyle:value})} darkMode={darkMode}/>
                       </div>
                     )}
                     {showsOracleQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (

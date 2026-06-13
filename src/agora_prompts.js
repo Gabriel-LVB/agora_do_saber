@@ -197,7 +197,24 @@ Explicação: [explicação curta do porquê/como da resposta]
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas reais e bem construídas: paciente + contexto + evolução + achados relevantes + ponto de decisão. O caso deve exigir raciocínio clínico, não ser uma pergunta direta fantasiada de caso.',
   direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo de cobrança estreito, resposta previsível e distratores próximos. A pergunta deve testar mecanismo, critério, classificação, conduta, exceção, comparação ou consequência prática — nunca curiosidade solta.',
-  mixed:    'Siga esta ordem ao longo das questões: as primeiras questões (mais fundamentais, conceituais) devem ser DIRETAS — perguntando sobre definição, mecanismo, classificação ou critério. As últimas questões (mais avançadas, de aplicação) devem ser CLÍNICAS — casos com paciente, contexto, decisão terapêutica ou diagnóstica. A transição deve ser gradual e natural, como uma aula que vai do conceito à prática.',
+  mixed:    `ESTILO: CASOS ENCADEADOS
+Organize a bateria em uma quantidade IDEAL de casos clínicos, escolhida por você conforme a amplitude, densidade e diversidade do conteúdo. Não crie automaticamente um caso por tópico ou subtópico e não force uma quantidade fixa.
+
+Cada caso deve sustentar uma sequência de 2 a 5 questões progressivas, cada uma cobrando uma decisão ou conceito diferente. Primeiro apresente o cenário clínico com dados realmente discriminativos; nas questões seguintes, aprofunde o mesmo caso por novos ângulos úteis, como hipótese, interpretação de achado, mecanismo, próxima conduta, escolha entre opções próximas, contraindicação, troca após evento adverso, complicação, prognóstico ou mudança diante de nova informação.
+
+REGRAS DOS CASOS ENCADEADOS:
+- Respeite a quantidade total solicitada. Se ela não comportar ao menos duas questões sobre um caso, crie uma questão clínica independente em vez de forçar um encadeamento artificial.
+- Agrupe questões pelo caso e conclua a sequência antes de iniciar o próximo.
+- Identifique no começo de cada enunciado: "Caso 1", "Caso 2" etc.
+- Cada questão deve continuar compreensível isoladamente em revisão, exportação e Modo Prova. Repita somente o contexto mínimo indispensável ou informe claramente a nova evolução; não copie a vinheta inteira sem necessidade.
+- Faça o caso evoluir quando isso criar uma nova decisão legítima. Não invente evolução apenas para preencher quantidade.
+- Cada questão da sequência deve testar um eixo diferente. É proibido perguntar a mesma ideia com outras palavras.
+- Use casos suficientes para cobrir perspectivas importantes e populações/situações distintas, sem pulverizar o conteúdo em muitos casos rasos.
+- O caso deve nascer do material e do tópico fornecidos. Não presuma que a prova é de farmacologia, semiologia, cirurgia ou qualquer disciplina específica.
+- Quando o material trouxer preferências de professor, padrões de prova ou focos específicos, incorpore-os. Sem essa informação, use critérios médicos gerais de alto rendimento.
+- Preserve integralmente todas as regras compartilhadas de enunciado, alternativas, distratores, explicação, dificuldade e utilidade.
+
+Antes de finalizar, audite a bateria: a quantidade de casos é adequada? cada caso aprofunda de verdade? cada questão exige uma decisão distinta? o conjunto cobre o conteúdo sem repetição?`,
 };
 
 // ─── REGRAS COMPARTILHADAS ────────────────────────────────────────────────────
@@ -552,6 +569,7 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const types = s.questionTypes || ['direct'];
   const onlyFlashcards = onlyMemoryCards(types);
   const autoQuestionCount = !!s.qPerSubAuto && !onlyFlashcards;
+  const caseSeries = !onlyFlashcards && s.questionStyle === 'mixed';
 
   const estruturaInst = onlyFlashcards
     ? `
@@ -601,6 +619,12 @@ ESTRUTURA OBRIGATÓRIA:
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const onlyOpen = types.every(t => ['open','essay'].includes(t));
   const explanationInst = questionExplanationRules(s);
+  const caseSeriesStructure = caseSeries ? `
+ORGANIZAÇÃO ESPECIAL PARA CASOS ENCADEADOS:
+- As metas por subtópico/eixo garantem cobertura; elas NÃO significam um caso separado para cada item.
+- Decida a quantidade ideal de casos para o tópico inteiro. Um caso pode integrar vários subtópicos relacionados.
+- Organize a ordem final por caso e conclua sua sequência antes de iniciar o próximo, mesmo que isso altere a ordem dos subtópicos.
+- Preserve a quantidade total pedida e cubra todos os eixos obrigatórios sem divisão artificial.` : '';
 
   const templateBlock = onlyFlashcards ? `
 FORMATO OBRIGATÓRIO para cada ${onlyClozeCards(types) ? 'cloze' : 'flashcard'} (separe com ---):
@@ -623,6 +647,7 @@ Explicação: [explicação didática]
 ${focusBlock ? focusBlock + '\n' : ''}
 ESTILO DE ENUNCIADO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}${estruturaInst}
+${caseSeriesStructure}
 ${REGRAS_ENUNCIADO}
 ${templateBlock}
 
@@ -980,6 +1005,7 @@ export const buildVqBlockPrompt = (block, meta, subtopicsArr, transcriptSlice, a
   const total = subtopicsArr.length || meta.qPerBlock || 5;
   const types = meta.questionTypes || ['direct'];
   const onlyFlashcards = onlyMemoryCards(types);
+  const caseSeries = !onlyFlashcards && meta.questionStyle === 'mixed';
   const typeInst = buildTypeInst(types);
   const explanationInst = questionExplanationRules(meta);
 
@@ -988,10 +1014,11 @@ export const buildVqBlockPrompt = (block, meta, subtopicsArr, transcriptSlice, a
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
 
-SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : 'gere 1 questão por subtópico, nesta ordem exata'}):
+SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : caseSeries ? 'cubra todos; os casos podem integrar vários subtópicos relacionados' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
 ${onlyFlashcards ? `QUANTIDADE: a IA deve decidir a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com cobranças específicas e explicações que ensinem o porquê/como da resposta. Corte cartões de conselho geral e mantenha só itens testáveis em prova ou úteis na vida real.` : `TOTAL: EXATAMENTE ${total} questões.`}
+${caseSeries ? 'ORGANIZAÇÃO: decida a quantidade ideal de casos para o bloco inteiro. Não crie um caso por subtópico; um caso pode integrar vários subtópicos. Organize a bateria por caso e cubra todos os subtópicos ao longo dela.' : ''}
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? memoryCardFormat(types) : `${REGRAS_ALTERNATIVAS}
 ${explanationInst}
@@ -1214,6 +1241,7 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const types = s.questionTypes || ['direct'];
   const onlyFlashcards = onlyMemoryCards(types);
+  const caseSeries = !onlyFlashcards && s.questionStyle === 'mixed';
   const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
@@ -1231,7 +1259,7 @@ ${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s}
 ${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(types)} para revisar o essencial da aula, sem redundância. O conjunto deve permitir reconstruir a aula ativa e clinicamente, como uma revisão AnKing-like.` : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
-- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
+- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : caseSeries ? 'Use a quantidade individual indicada como meta de COBERTURA de cada subtópico, mas organize a bateria pelos casos. Um caso pode integrar vários subtópicos relacionados; não crie um caso por subtópico.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
 - Distribua a bateria entre os conceitos centrais da aula, sem concentrar questões demais em uma única frase ou seção.
 - ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
@@ -1242,7 +1270,7 @@ REGRA DE FIXAÇÃO (CRÍTICA):
 - É proibido criar duas questões que testem praticamente a mesma ideia, mesmo com enunciados, casos ou alternativas diferentes.
 - Se subtópicos vizinhos falarem do mesmo fenômeno, una mentalmente a cobrança e varie o eixo; não repita a pergunta.
 - Não crie questão sobre conteúdo que não apareceu na aula/material.
-- Antes de finalizar, confira se cada subtópico recebeu exatamente a quantidade pedida e se não há repetição conceitual.
+- Antes de finalizar, confira se cada subtópico recebeu exatamente a quantidade pedida e se não há repetição conceitual.${caseSeries ? ' Confira também se a quantidade de casos foi decidida para o tópico inteiro e se cada sequência aprofunda o caso de verdade.' : ''}
 
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
@@ -1256,7 +1284,7 @@ ${onlyFlashcards ? `Use IDs sequenciais simples: ## ${onlyClozeCards(types) ? 'C
 ## Questão 1.2
 ## Questão 1.3
 ## Questão 2.1
-Não pule subtópicos. Não crie IDs fora do plano.`}
+${caseSeries ? 'A ordem dos IDs pode alternar entre subtópicos para preservar a sequência do caso.' : 'Não pule subtópicos.'} Não crie IDs fora do plano.`}
 
 ${lessonText ? `CONTEXTO DA AULA:\n${lessonText.substring(0, 12000)}` : ''}
 
@@ -1277,6 +1305,7 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
   const typeInst = buildTypeInst(s.questionTypes || ['direct']);
   const types = s.questionTypes || ['direct'];
   const onlyFlashcards = onlyMemoryCards(types);
+  const caseSeries = !onlyFlashcards && s.questionStyle === 'mixed';
   const explanationInst = questionExplanationRules(s);
   const subtopicsArr = Array.isArray(subtopics) ? subtopics : [subtopics];
   const plan = Array.isArray(questionPlan) && questionPlan.length
@@ -1293,13 +1322,13 @@ ${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"
 ${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.` : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
 
 REGRA DA BATERIA EXTRA:
-- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
+- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : caseSeries ? 'Use as quantidades por subtópico como metas de cobertura, mas decida a quantidade ideal de casos para o tópico inteiro. Um caso pode integrar vários subtópicos relacionados; não crie um caso por subtópico.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
 - Priorize conteúdo relevante ainda não cobrado e amplie a cobertura para além da bateria de fixação.
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para preencher volume.
-- Não pule subtópicos e não crie questões fora do plano.
+- Cubra todos os subtópicos e não crie questões fora do plano.${caseSeries ? ' Organize a ordem final pelas sequências dos casos, não pela lista de subtópicos.' : ''}
 
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : `${REGRAS_ALTERNATIVAS}
