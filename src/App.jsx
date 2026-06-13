@@ -6211,6 +6211,13 @@ function AcademiaTopicView({
                 <GraduationCap className="w-3.5 h-3.5"/>Questões de fixação
               </button>
             )}
+            {canUseAcademia && allFixqs.length === 0 && (
+              <button onClick={()=>setAcademiaRegenModal({topic:liveTopic, subject:liveSubject, generationMode:'questions'})}
+                disabled={academiaGenerating}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-yellow-500 bg-yellow-600 text-white transition-all hover:bg-yellow-700 disabled:opacity-40">
+                <GraduationCap className="w-3.5 h-3.5"/>Criar questões de fixação
+              </button>
+            )}
             {hasLessonHighlights && (
               <button onClick={toggleLessonHighlights}
                 aria-pressed={showLessonHighlights}
@@ -19397,16 +19404,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>setAcademiaRegenModal(null)}>
           <div onClick={e=>e.stopPropagation()} className={`w-full max-w-lg rounded-2xl p-7 border overflow-y-auto ${darkMode?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200 text-gray-900'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
             <h3 className="text-xl font-serif font-bold text-yellow-600 mb-1 flex items-center gap-2">
-              {academiaRegenModal.createMode?<GraduationCap className="w-5 h-5"/>:<RotateCcw className="w-5 h-5"/>}
-              {academiaRegenModal.createMode?'Criar aula sobre isso':'Regenerar aula'}
+              {academiaRegenModal.createMode || academiaRegenModal.generationMode==='questions'?<GraduationCap className="w-5 h-5"/>:<RotateCcw className="w-5 h-5"/>}
+              {academiaRegenModal.generationMode==='questions'?'Criar questões de fixação':academiaRegenModal.createMode?'Criar aula sobre isso':'Regenerar aula'}
             </h3>
-            <p className="text-sm mb-6 opacity-60">{academiaRegenModal.createMode?'Escolha como deseja aprender o conteúdo antes de gerar a aula.':'A aula e as questões de fixação atuais serão substituídas.'}</p>
+            <p className="text-sm mb-6 opacity-60">{academiaRegenModal.generationMode==='questions'?'A aula atual será preservada e usada como fonte para criar as questões.':academiaRegenModal.createMode?'Escolha como deseja aprender o conteúdo antes de gerar a aula.':'A aula e as questões de fixação atuais serão substituídas.'}</p>
             <div className="space-y-5">
-              <div>
+              {academiaRegenModal.generationMode!=='questions'&&<div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Profundidade da aula</div>
                 <ExplanationLengthSelector value={academiaRegenLength} onChange={setAcademiaRegenLength} darkMode={darkMode}/>
-              </div>
-              <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
+              </div>}
+              {academiaRegenModal.generationMode!=='questions'&&<details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
                 <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estilo da aula</summary>
                 <div className="space-y-5 mt-4">
                   <div>
@@ -19422,13 +19429,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <LessonPreferenceSelector value={academiaRegenTone} onChange={setAcademiaRegenTone} options={LESSON_TONE_OPTIONS} darkMode={darkMode}/>
                   </div>
                 </div>
-              </details>
+              </details>}
               <div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Por que regenerar? <span className="normal-case font-normal opacity-70">(opcional)</span></div>
+                <div className="text-xs font-bold uppercase mb-2 opacity-50">{academiaRegenModal.generationMode==='questions'?'Orientações adicionais':'Por que regenerar?'} <span className="normal-case font-normal opacity-70">(opcional)</span></div>
                 <textarea
                   value={academiaRegenReason}
                   onChange={e=>setAcademiaRegenReason(e.target.value)}
-                  placeholder="Ex: ficou prolixo, faltaram exemplos de prova, quero mais foco em tratamento..."
+                  placeholder={academiaRegenModal.generationMode==='questions'?'Ex: quero mais casos clínicos e foco em tratamento...':'Ex: ficou prolixo, faltaram exemplos de prova, quero mais foco em tratamento...'}
                   className={`w-full h-24 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}
                 />
               </div>
@@ -19491,8 +19498,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   numAlternatives: academiaRegenQAlts,
                   geminiThinkingEnabled: academiaRegenThinking,
                   auditQuestions: academiaRegenAudit,
+                  generationMode: academiaRegenModal.generationMode || 'full',
                 };
-                const { regenReason, ...persistedSettings } = regenSettings;
+                const { regenReason, generationMode, ...persistedSettings } = regenSettings;
                 const ns = { ...settings, ...persistedSettings };
                 saveSettings(ns);
                 const { topic, subject } = academiaRegenModal;
@@ -19502,7 +19510,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 if (createMode) openAcademiaTopicView(subject, topic);
                 generateAcademiaLesson(topic, subject, regenSettings);
               }} className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 flex items-center justify-center gap-2">
-                <Sparkles className="w-4 h-4"/>{academiaRegenModal.createMode?'Criar aula':'Regenerar'}
+                <Sparkles className="w-4 h-4"/>{academiaRegenModal.generationMode==='questions'?'Criar questões':academiaRegenModal.createMode?'Criar aula':'Regenerar'}
               </button>
             </div>
           </div>
