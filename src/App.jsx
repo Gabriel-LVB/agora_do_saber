@@ -8011,9 +8011,8 @@ export default function QuestionBankApp() {
   }, [appBackRouteKey]); // eslint-disable-line
   useEffect(()=>{
     let lastY = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      const delta = y - lastY;
+    let lastTouchY = null;
+    const updateNavigationVisibility = (delta, y = window.scrollY) => {
       if (delta > 4 && y > 72) {
         setHeaderVisible(false);
         setBottomNavVisible(false);
@@ -8021,10 +8020,32 @@ export default function QuestionBankApp() {
         setHeaderVisible(true);
         setBottomNavVisible(true);
       }
+    };
+    const onScroll = () => {
+      const y = window.scrollY;
+      updateNavigationVisibility(y - lastY, y);
       lastY = y;
     };
+    const onTouchStart = event => {
+      lastTouchY = event.touches?.[0]?.clientY ?? null;
+    };
+    const onTouchMove = event => {
+      const touchY = event.touches?.[0]?.clientY;
+      if (lastTouchY === null || touchY === undefined) return;
+      updateNavigationVisibility(lastTouchY - touchY, Math.max(window.scrollY, 73));
+      lastTouchY = touchY;
+    };
+    const onWheel = event => updateNavigationVisibility(event.deltaY, Math.max(window.scrollY, 73));
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('wheel', onWheel, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('wheel', onWheel);
+    };
   }, []);
 
   // Exam timer
