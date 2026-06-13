@@ -78,7 +78,7 @@ export const BackToTopButton = ({ darkMode }) => (
   <IconButton
     label="Voltar ao topo"
     onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-    className={`fixed bottom-5 right-5 z-30 h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${darkMode?'bg-gray-800 border-gray-700 text-yellow-400 hover:bg-gray-700':'bg-white border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}
+    className={`fixed bottom-16 right-4 sm:bottom-5 sm:right-5 z-30 h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${darkMode?'bg-gray-800 border-gray-700 text-yellow-400 hover:bg-gray-700':'bg-white border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}
   >
     <ChevronUpIcon className="w-5 h-5"/>
   </IconButton>

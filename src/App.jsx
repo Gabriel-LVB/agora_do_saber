@@ -13595,10 +13595,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           .agora-shell button {
             min-height: 2.5rem;
           }
-          .agora-shell .fixed.bottom-5.right-5 {
-            bottom: 1rem;
-            right: 1rem;
-          }
           .agora-shell h1,
           .agora-shell h2 {
             overflow-wrap: anywhere;
@@ -13679,9 +13675,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        <div className="max-w-6xl mx-auto flex items-center justify-between px-3 py-1.5 md:px-4 md:py-2.5">
 	          {/* Logo */}
 	          <div className="flex items-center gap-2.5 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
-	            <div className="bg-yellow-600 p-1.5 md:p-2 rounded-lg md:rounded-xl flex-shrink-0"><Landmark className="w-4 h-4 md:w-5 md:h-5 text-white"/></div>
+	            <div className={`hidden sm:flex h-8 w-8 rounded-lg border items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 text-yellow-500':'border-yellow-200 text-yellow-700'}`}><Landmark className="w-4 h-4"/></div>
 	            <div className="min-w-0">
-	              <h1 className={`font-serif font-bold text-base md:text-lg leading-none truncate ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
+	              <h1 className={`font-serif font-bold text-lg md:text-xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
 	              <p className={`hidden lg:block text-[9px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
 	            </div>
 	          </div>
@@ -13720,12 +13716,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <button type="button" onClick={handleLogout} title="Sair" aria-label="Sair" className={`h-9 w-9 rounded-lg flex items-center justify-center ${darkMode?'text-gray-500 hover:text-red-400 hover:bg-gray-800':'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}><LogOut className="w-4 h-4"/></button>
           </div>
 
-          {/* Mobile profile */}
-          <div className="flex lg:hidden items-center">
-            <button type="button" onClick={()=>setMenuOpen(true)} className={`h-8 w-8 rounded-full border flex items-center justify-center ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`} aria-label="Abrir opções">
-              <UserIcon className="w-4 h-4"/>
-            </button>
-          </div>
         </div>
 
         {/* Mobile options sheet */}
@@ -13785,6 +13775,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 			    const studyCards = [academiaCard, cursoCard].filter(Boolean);
 			    const archiveCards = [geminiCard, externalCard].filter(Boolean);
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
+                const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
 	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
                   const renderHomeCard = (card, tone='study', compact=false) => {
@@ -13812,24 +13803,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         <section className="app-hero rounded-2xl px-4 py-4 md:px-6 md:py-5">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8">
                             <div className="min-w-0">
-                              <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5 ${darkMode?'text-gray-500':'text-gray-500'}`}>Pórtico</p>
-                              <h2 className="font-serif text-lg md:text-2xl font-bold leading-tight">“Não são admitidos ignorantes em geometria.”</h2>
+                              <p className={`text-[10px] font-bold uppercase tracking-[0.18em] mb-1.5 ${darkMode?'text-gray-400':'text-gray-500'}`}>Pórtico da Academia do Gabigol</p>
+                              <h2 className="font-serif text-lg md:text-2xl font-bold leading-tight text-yellow-600">“Não são admitidos ignorantes em medicina.”</h2>
                             </div>
                             {homeCanUseAdvancedFeatures&&(
-                              <div className="flex items-center gap-5 md:gap-7 flex-shrink-0">
-                                <div>
-                                  <span className="block text-[9px] font-bold uppercase tracking-wide opacity-50">Questões hoje</span>
+                              <div className={`grid grid-cols-3 rounded-xl border overflow-hidden flex-shrink-0 ${darkMode?'border-gray-800 divide-x divide-gray-800':'border-gray-200 divide-x divide-gray-200'}`}>
+                                <div className="px-3 py-2 min-w-[74px]">
+                                  <span className="block text-[8px] font-bold uppercase tracking-wide opacity-50">Questões</span>
                                   <strong className="block text-sm mt-0.5 tabular-nums">{dailyQuestions}<span className="font-normal opacity-40">/{questionGoal}</span></strong>
+                                  <div className={`h-1 mt-1.5 rounded-full overflow-hidden ${darkMode?'bg-gray-800':'bg-gray-200'}`}><div className="h-full bg-yellow-500" style={{width:`${Math.min(100,dailyQuestions/questionGoal*100)}%`}}/></div>
                                 </div>
-                                <div>
-                                  <span className="block text-[9px] font-bold uppercase tracking-wide opacity-50">{homeCanSeeVideoaulas?'Aula hoje':'Revisões'}</span>
-                                  <strong className="block text-sm mt-0.5 tabular-nums">{homeCanSeeVideoaulas?`${dailyMinutes}min`:dueCount}</strong>
+                                <div className="px-3 py-2 min-w-[74px]">
+                                  <span className="block text-[8px] font-bold uppercase tracking-wide opacity-50">Aulas</span>
+                                  <strong className="block text-sm mt-0.5 tabular-nums">{dailyMinutes}<span className="font-normal opacity-40">/{minuteGoal}min</span></strong>
+                                  <div className={`h-1 mt-1.5 rounded-full overflow-hidden ${darkMode?'bg-gray-800':'bg-gray-200'}`}><div className="h-full bg-yellow-500" style={{width:`${Math.min(100,dailyMinutes/minuteGoal*100)}%`}}/></div>
                                 </div>
-                                {dueCount>0&&(
-                                  <button onClick={()=>openSpacedReview()} className={`h-9 px-3 rounded-lg border text-xs font-bold inline-flex items-center gap-2 ${darkMode?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50'}`}>
-                                    <RepeatIcon className="w-4 h-4 text-yellow-600"/><span className="hidden sm:inline">Revisar</span> {dueCount}
-                                  </button>
-                                )}
+                                <button onClick={()=>openSpacedReview()} className={`px-3 py-2 min-w-[74px] text-left ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                                  <span className="block text-[8px] font-bold uppercase tracking-wide opacity-50">Revisões</span>
+                                  <strong className="flex items-center gap-1.5 text-sm mt-0.5 tabular-nums"><RepeatIcon className="w-3.5 h-3.5 text-yellow-600"/>{dueCount}</strong>
+                                  <span className="block text-[8px] opacity-40 mt-1">{dueCount>0?'pendentes':'em dia'}</span>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -19176,7 +19169,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </main>
 
       {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
-      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-1 pb-[calc(.2rem+env(safe-area-inset-bottom))] ${darkMode?'bg-gray-950 border-gray-800':'bg-white border-gray-200'}`} aria-label="Navegação principal">
+      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-1 pb-[calc(.2rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff'}} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
