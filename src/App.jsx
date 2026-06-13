@@ -13693,6 +13693,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	            </div>
 	          </div>
 
+          {/* Main navigation */}
+          <nav className="hidden lg:flex items-center gap-1 rounded-xl border p-1 bg-white/40 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700" aria-label="Navegação principal">
+            {[
+              {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
+              homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-4 h-4"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
+              {label:'Oráculo', icon:<Sparkles className="w-4 h-4"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
+              homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-4 h-4"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
+            ].filter(Boolean).map(item=>(
+              <button key={item.label} type="button" onClick={item.action}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${item.active?(darkMode?'bg-gray-800 text-yellow-400':'bg-white text-yellow-700 shadow-sm'):(darkMode?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-white/70')}`}>
+                {item.icon}{item.label}
+              </button>
+            ))}
+          </nav>
+
           {/* Desktop nav buttons */}
           <div className="hidden md:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 border rounded-full px-3 py-2 ${darkMode?'border-gray-700 bg-gray-900 text-gray-400':'border-gray-200 bg-white text-gray-500'}`}><UserIcon className="w-3 h-3"/>{username}</span>
@@ -13727,6 +13742,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {/* Mobile dropdown menu */}
         {menuOpen&&(
           <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+            <div className={`px-4 py-3 grid grid-cols-2 gap-2 border-b ${darkMode?'border-gray-700':'border-gray-100'}`}>
+              {[
+                {label:'Início', icon:<Landmark className="w-4 h-4"/>, action:()=>setView('library')},
+                homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-4 h-4"/>, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
+                {label:'Oráculo', icon:<Sparkles className="w-4 h-4"/>, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
+                homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-4 h-4"/>, action:()=>setView('curso')} : null,
+              ].filter(Boolean).map(item=>(
+                <button key={item.label} onClick={()=>{item.action();setMenuOpen(false);}}
+                  className={`flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-bold ${darkMode?'bg-gray-900 text-gray-200 hover:bg-gray-700':'bg-gray-50 text-gray-700 hover:bg-yellow-50'}`}>
+                  {item.icon}{item.label}
+                </button>
+              ))}
+            </div>
             <div className="px-4 py-2 grid grid-cols-2 gap-1">
               {[
                 canUseAdvancedFeatures ? {icon:<Flame className="w-5 h-5 text-yellow-600"/>, label:QUICK_SUBJECT_TITLE, action:()=>openViewWithReturn('quick')} : null,
@@ -13757,16 +13785,52 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 			    const externalCard = {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', meta:`${sourceSubjects('external').length} assuntos · ${sourceFolders('external').length} pastas`, action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}};
 			    const studyCards = [academiaCard, cursoCard].filter(Boolean);
 			    const archiveCards = [geminiCard, externalCard].filter(Boolean);
-			    const homeSections = [
-			      studyCards.length ? {title:'Começar a estudar', cards:studyCards, tone:'study'} : null,
-			      archiveCards.length ? {title:'Biblioteca e ferramentas', cards:archiveCards, tone:'archive'} : null,
-			    ].filter(Boolean);
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
 	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
 	                const questionPct = Math.min(100, Math.round(dailyQuestions / questionGoal * 100));
 	                const minutePct = Math.min(100, Math.round(dailyMinutes / minuteGoal * 100));
+                  const academiaCount = sourceSubjects('academia').length;
+                  const recommendation = dueCount > 0 && homeCanUseAdvancedFeatures
+                    ? {
+                        kind:'review',
+                        eyebrow:'Prioridade de hoje',
+                        title:`Revise ${dueCount} item${dueCount!==1?'s':''} antes de avançar`,
+                        desc:'Uma sessão curta agora protege o que você já estudou e evita acumular revisões.',
+                        button:`Começar revisão · ${dueCount}`,
+                        icon:<RepeatIcon className="w-5 h-5"/>,
+                        action:()=>openSpacedReview(),
+                      }
+                    : homeCanUseAcademia
+                      ? academiaCount > 0
+                        ? {
+                            kind:'academia',
+                            eyebrow:'Recomendado para continuar',
+                            title:'Continue aprendendo pela Academia',
+                            desc:'Abra suas aulas, avance no conteúdo e crie questões de fixação quando precisar.',
+                            button:'Abrir Academia',
+                            icon:<AcademiaIcon className="w-5 h-5"/>,
+                            action:academiaCard.action,
+                          }
+                        : {
+                            kind:'academia',
+                            eyebrow:'Seu primeiro passo',
+                            title:'Crie sua primeira aula personalizada',
+                            desc:'Escolha um assunto e a Academia organiza a explicação e a prática para você.',
+                            button:'Criar primeira aula',
+                            icon:<AcademiaIcon className="w-5 h-5"/>,
+                            action:()=>{setAcademiaCreatorStep(1);setAcademiaSetupStep('content');setView('academia-creator');},
+                          }
+                      : {
+                          kind:'oracle',
+                          eyebrow:'Comece por aqui',
+                          title:'Escolha um assunto para praticar',
+                          desc:'O Oráculo transforma um tema em uma estrutura organizada de questões.',
+                          button:'Abrir Oráculo',
+                          icon:<Sparkles className="w-5 h-5"/>,
+                          action:geminiCard.action,
+                        };
                   const CompactProgress = ({label, value, goal, pct, unit=''}) => (
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2 text-xs">
@@ -13778,18 +13842,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       </div>
                     </div>
                   );
-                  const renderHomeCard = (card, tone='study') => {
+                  const renderHomeCard = (card, tone='study', compact=false) => {
                     const accent = tone === 'admin'
                       ? (darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-100 text-yellow-800')
                       : tone === 'archive'
                         ? (darkMode?'bg-gray-800 text-yellow-400':'bg-white text-yellow-700')
                         : (darkMode?'bg-gray-800 text-yellow-400':'bg-yellow-50 text-yellow-700');
                     return (
-                    <button key={card.key} onClick={card.action} className="app-card group text-left rounded-xl p-4 md:p-5 flex items-center gap-4 transition-all min-h-[104px]">
-                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
+                    <button key={card.key} onClick={card.action} className={`app-card group text-left rounded-xl flex items-center gap-4 transition-all ${compact?'p-4 min-h-[84px]':'p-4 md:p-5 min-h-[104px]'}`}>
+                      <div className={`${compact?'h-10 w-10':'h-12 w-12'} rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-serif font-bold text-lg text-yellow-600 mobile-wrap sm:truncate leading-tight">{card.title}</h3>
-                        <p className={`text-sm mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
+                        <h3 className={`${compact?'text-sm':'font-serif text-lg'} font-bold text-yellow-600 mobile-wrap sm:truncate leading-tight`}>{card.title}</h3>
+                        <p className={`${compact?'text-xs':'text-sm'} mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
                       </div>
                       <div className="hidden sm:block text-right flex-shrink-0">
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${badge}`}>{card.meta}</span>
@@ -13798,35 +13862,58 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     </button>
                   );};
 				            return (
-				              <div className="space-y-6">
-                        <section className="app-hero rounded-2xl p-5 md:p-6 overflow-hidden">
-                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                            <div className="min-w-0 max-w-2xl">
-                              <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mb-2 ${darkMode?'text-gray-500':'text-gray-400'}`}>Pórtico da Academia de Platão</p>
-                              <h2 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Não são admitidos ignorantes em geometria</h2>
+				              <div className="space-y-8">
+                        <section className="app-hero rounded-2xl p-5 md:p-7 overflow-hidden">
+                          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.48fr)] gap-6 lg:gap-8">
+                            <div className="min-w-0 flex flex-col justify-center">
+                              <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mb-2 ${darkMode?'text-gray-400':'text-gray-500'}`}>{recommendation.eyebrow}</p>
+                              <h2 className="text-2xl md:text-4xl font-serif font-bold text-yellow-600 leading-tight max-w-2xl">{recommendation.title}</h2>
+                              <p className={`text-sm md:text-base mt-3 max-w-xl leading-relaxed ${darkMode?'text-gray-300':'text-gray-600'}`}>{recommendation.desc}</p>
+                              <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                                <button onClick={recommendation.action} className="bg-yellow-600 text-white px-5 py-3.5 rounded-xl font-bold inline-flex items-center justify-center gap-2">
+                                  {recommendation.icon}{recommendation.button}<ChevronRight className="w-4 h-4"/>
+                                </button>
+                                {homeCanUseAdvancedFeatures&&recommendation.kind!=='review'&&dueCount>0&&(
+                                  <button onClick={()=>openSpacedReview()} className={`px-5 py-3.5 rounded-xl border font-bold inline-flex items-center justify-center gap-2 ${darkMode?'border-gray-700 bg-gray-900/60 text-gray-300':'border-gray-200 bg-white/70 text-gray-700'}`}>
+                                    <RepeatIcon className="w-4 h-4"/>Revisões pendentes · {dueCount}
+                                  </button>
+                                )}
+                              </div>
+                              <p className={`mt-6 text-xs font-serif italic ${darkMode?'text-gray-500':'text-gray-400'}`}>“Não são admitidos ignorantes em geometria.”</p>
                             </div>
                             {homeCanUseAdvancedFeatures&&(
-                              <div className={`w-full lg:max-w-md rounded-xl border p-4 ${darkMode?'border-gray-800 bg-gray-950/40':'border-gray-200 bg-white/70'}`}>
-                                <div className="flex items-center gap-2 mb-3">
-                                  <CalendarCheck className="w-4 h-4 text-yellow-600"/>
-                                  <span className={`text-[11px] font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Hoje</span>
+                              <aside className={`rounded-xl border p-5 self-stretch ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                                <div className="flex items-start justify-between gap-3 mb-5">
+                                  <div>
+                                    <span className={`text-[11px] font-bold uppercase tracking-widest ${darkMode?'text-gray-400':'text-gray-500'}`}>Seu progresso hoje</span>
+                                    <p className="text-xs opacity-50 mt-1">Continue sem precisar completar tudo de uma vez.</p>
+                                  </div>
+                                  <CalendarCheck className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
                                 </div>
-                                <div className={`grid grid-cols-1 ${homeCanSeeVideoaulas?'sm:grid-cols-2':''} gap-4`}>
-                                  <CompactProgress label="Questões" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
-                                  {homeCanSeeVideoaulas&&<CompactProgress label="Aulas" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min"/>}
+                                <div className="space-y-5">
+                                  <CompactProgress label="Questões respondidas" value={dailyQuestions} goal={questionGoal} pct={questionPct}/>
+                                  {homeCanSeeVideoaulas&&<CompactProgress label="Minutos de aula" value={dailyMinutes} goal={minuteGoal} pct={minutePct} unit="min"/>}
                                 </div>
-                              </div>
+                              </aside>
                             )}
                           </div>
                         </section>
-                        <section className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures?'md:grid-cols-3':'md:grid-cols-1'} gap-3`}>
+
+                        <section className="space-y-3">
+                          <div className="flex items-end justify-between gap-3 px-1">
+                            <div>
+                              <h3 className="font-serif font-bold text-xl">Outras formas de estudar</h3>
+                              <p className="text-xs opacity-50 mt-1">Use quando souber exatamente o tipo de sessão que precisa.</p>
+                            </div>
+                          </div>
+                          <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures?(recommendation.kind==='review'?'md:grid-cols-2':'md:grid-cols-3'):'md:grid-cols-1'} gap-3`}>
                           {homeCanUseAdvancedFeatures&&(
                             <button onClick={()=>openViewWithReturn('quick')} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
                               <Flame className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
                               <span><strong className="block text-sm">Estudo rápido</strong><span className="block text-xs opacity-50 mt-1">Explique uma dúvida pontual e pratique logo depois.</span></span>
                             </button>
                           )}
-                          {homeCanUseAdvancedFeatures&&(
+                          {homeCanUseAdvancedFeatures&&recommendation.kind!=='review'&&(
                             <button onClick={()=>openSpacedReview()} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
                               <RepeatIcon className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
                               <span><strong className="block text-sm">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="block text-xs opacity-50 mt-1">Revise hoje o que está perto de ser esquecido.</span></span>
@@ -13836,6 +13923,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                             <Zap className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
                             <span><strong className="block text-sm">Modo prova</strong><span className="block text-xs opacity-50 mt-1">Monte um simulado e veja o resultado somente no final.</span></span>
                           </button>
+                          </div>
                         </section>
 			                <div className="space-y-5">
 			                  {isAdmin&&adminHomeMode!=='admin'&&(
@@ -13844,14 +13932,25 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 			                      <button onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:'admin'})} className="text-xs font-bold text-yellow-600 hover:underline self-start sm:self-auto">Voltar para admin</button>
 			                    </div>
 			                  )}
-			                  {homeSections.map(section=>(
-			                    <section key={section.title} className="space-y-3">
-			                      <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>{section.title}</h3>
-			                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-			                        {section.cards.map(card=>renderHomeCard(card, section.tone))}
-			                      </div>
-			                    </section>
-			                  ))}
+                        {studyCards.length>0&&(
+                          <section className="space-y-3">
+                            <div className="px-1">
+                              <h3 className="font-serif font-bold text-xl">Seus espaços de estudo</h3>
+                              <p className="text-xs opacity-50 mt-1">Entre onde seu conteúdo principal está organizado.</p>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {studyCards.map(card=>renderHomeCard(card, 'study'))}
+                            </div>
+                          </section>
+                        )}
+                        {archiveCards.length>0&&(
+                          <section className="space-y-3">
+                            <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Biblioteca e ferramentas</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {archiveCards.map(card=>renderHomeCard(card, 'archive', true))}
+                            </div>
+                          </section>
+                        )}
 			                </div>
 	              </div>
 	            );
