@@ -334,14 +334,10 @@ const questionExplanationRules = (settings = {}) => settings.adminQuestionExplan
 const ACADEMIA_LESSON_LENGTH_RULES = {
   essential: `
 PROFUNDIDADE DA AULA: Nível 1
-- MODO RESUMO DE PROVA: escreva em outline de revisão, como Pathoma/First Aid em português, sem virar texto telegráfico.
+- MODO RESUMO DE PROVA: preserve apenas o necessário para lembrar, diferenciar e decidir, sem virar texto telegráfico.
 - Cada seção do Nível 1 deve começar com uma linha de título curto em negrito, sem marcador e sem ##, resumindo o bloco em 2 a 5 palavras. Exemplos: "**Tipos de hérnias**", "**Fisiopatologia das hérnias**", "**Causas de aderências**".
-- Use 2 a 4 bullets principais por subtópico e, em regra, no máximo 80 palavras por seção.
+- Use, em regra, no máximo 80 palavras por seção.
 - Se um fato não muda diagnóstico, mecanismo, conduta, prognóstico ou desempenho em prova, corte-o do Nível 1.
-- Use sub-bullets apenas quando houver classificação, sequência fisiopatológica ou contraste indispensável.
-- O título curto deve dar o contexto geral; os bullets abaixo detalham itens, etapas ou consequências daquele bloco.
-- Cada bullet deve ser uma frase curta, clara e cobrável. Depois do título curto, rótulos simples como "**Incisionais:**", "**Umbilicais:**", "**Aprisionamento venoso:**" e "**Infarto intestinal:**" são adequados.
-- Não use letras ou números como marcadores internos (A., B., 1., i.). Use apenas "- " e, se necessário, sub-bullets indentados.
 - Priorize definição operacional, mecanismo-chave, achado/conduta cobrável e pegadinha, conectando causa → mecanismo → consequência quando fizer sentido.
 - Corte rodeios, aberturas genéricas e repetição literal do subtópico, mas não sacrifique clareza para economizar palavras.`,
   balanced: `
@@ -359,8 +355,8 @@ PROFUNDIDADE DA AULA: Nível 3
 const ACADEMIA_LESSON_OBJECTIVE = {
   essential: `
 OBJETIVO DE LEITURA:
-Escreva como revisão rápida de prova, no estilo "First Aid/Pathoma em português": outline curto, denso, hierárquico e fácil de escanear.
-O aluno deve bater o olho, ler o título curto do bloco e capturar o que cai nos bullets.
+Escreva como revisão rápida de prova, curta, densa e fácil de escanear.
+O aluno deve bater o olho no título curto do bloco e capturar rapidamente o que mais importa.
 Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`,
   balanced: `
 OBJETIVO DE LEITURA:
@@ -1136,12 +1132,13 @@ Responda APENAS o sumário.`;
 
 // ─── PROMPT: AULA DA ACADEMIA ─────────────────────────────────────────────────
 
-export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', subjectName = '', explanationLength = 'complete', extraInstruction = '') => {
+export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', subjectName = '', explanationLength = 'complete', extraInstruction = '', lessonFormat = 'outline') => {
   const lengthMode = ACADEMIA_LESSON_LENGTH_RULES[explanationLength] ? explanationLength : 'complete';
+  const useOutline = lessonFormat !== 'narrative';
   // Gera exemplo de saída esperada com os 2 primeiros subtópicos para a IA imitar o padrão
   const exampleOutput = subtopics.slice(0, 2).map((s, i) =>
-    lengthMode === 'essential'
-      ? `## ${s}\n**[título curto do bloco]**\n- **[item/etapa principal]:** [frase curta e cobrável]\n- **[item/etapa principal]:** [relação de causa e consequência em linguagem direta]\n- **[ponto de prova]:** [exceção, associação ou conduta quando houver]`
+    useOutline
+      ? `## ${s}\n**[título curto do bloco]**\n- **[item principal]:** [frase clara]\n- **[grupo, sequência ou mnemônico]:**\n  - [componente subordinado]\n  - [componente subordinado]\n- **[outro item principal]:** [consequência ou conduta]`
       : `## ${s}\n**[título curto do bloco]**\n[explicação aqui]`
   ).join('\n\n');
 
@@ -1171,26 +1168,26 @@ REGRAS DE CONTEÚDO:
 ${ACADEMIA_LESSON_LENGTH_RULES[lengthMode]}
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
 - Logo após o ## obrigatório, crie um título curto em negrito que sintetize o subtópico sem copiar tudo. Errado: repetir "Tipos especiais de hérnias: incisionais, umbilicais e inguinais". Certo: "**Tipos de hérnias**".
+- ${useOutline
+    ? 'FORMATO EM TÓPICOS: escreva em outline de revisão, com bullets densos e frases completas.'
+    : 'FORMATO EM PARÁGRAFOS: escreva em fluxo narrativo e conectado. Não transforme a seção em uma lista apenas porque a profundidade escolhida é Essencial.'}
+- ${useOutline
+    ? 'Quando um bullet-pai introduzir classificação, componentes de mnemônico, sequência ou exemplos, coloque cada componente em sub-bullets indentados com dois espaços antes de "-". Nunca deixe filhos visuais no mesmo nível do pai.'
+    : 'Use listas somente quando uma classificação ou sequência perderia clareza em prosa; fora desses casos, mantenha parágrafos.'}
+- ${useOutline
+    ? 'Não use letras ou números como marcadores internos. Use "- " para bullets principais e "  - " para sub-bullets.'
+    : 'A profundidade controla o tamanho do texto, não o transforma em tópicos.'}
 - ${lengthMode === 'essential'
-    ? 'Escreva em outline de revisão, com bullets densos e frases completas; não escreva como parágrafo acadêmico.'
-    : 'Escreva em fluxo narrativo: conecte a seção atual à anterior quando fizer sentido, usando transições naturais.'}
-- ${lengthMode === 'essential'
-    ? 'Não comece com fragmentos soltos como "dor, distensão, vômitos". Transforme isso em bullet útil, por exemplo: "A hérnia obstrutiva costuma causar dor, distensão, vômitos e constipação."'
+    ? 'Não use fragmentos soltos como "dor, distensão, vômitos". Transforme-os em uma frase útil, por exemplo: "A hérnia obstrutiva costuma causar dor, distensão, vômitos e constipação."'
     : 'Evite começar toda seção com "[subtópico] é..." ou "[subtópico] refere-se...". Varie a abertura e dê continuidade ao raciocínio.'}
 - ${lengthMode === 'essential'
     ? 'Não use frases como "é fundamental observar", "desempenha papéis cruciais" ou similares; elas inflam o texto.'
     : 'Comece pelo papel daquele conceito dentro do assunto maior, depois explique mecanismo, critério ou consequência relevante.'}
 - ${lengthMode === 'essential'
-    ? 'Evite repetir literalmente o título do subtópico como abertura. Reescreva a ideia em formato de anotação de prova, usando negrito para rótulos clínicos quando ajudar.'
+    ? 'Evite repetir literalmente o título do subtópico como abertura. Reescreva a ideia de forma compacta, usando negrito para rótulos clínicos quando ajudar.'
     : 'Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.'}
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
-- O grifo é uma exceção rara, não uma obrigação. Use no máximo 1 grifo a cada 2 seções e no máximo 5 na aula inteira; se não houver uma regra realmente decisiva, não grife nada.
-- Marque com ==grifo de prova== apenas uma afirmação autossuficiente que o aluno possa anotar e usar: regra que muda conduta, relação mecanismo-consequência, critério/limiar decisivo, contraste que diferencia diagnósticos ou exceção/pegadinha muito cobrada.
-- O trecho grifado deve continuar fazendo sentido quando lido sozinho e normalmente deve conter sujeito + relação/ação + consequência ou contexto.
-- PROIBIDO grifar palavras soltas, nomes isolados, listas de efeitos, consequências sem causa, exemplos, títulos, trechos genéricos ou apenas a resposta curta de uma possível questão.
-- Errado: "==quedas==", "==álcool==", "==curta meia-vida==" ou "risco de ==depressão respiratória==". Certo: "==Benzodiazepínicos aumentam o risco de quedas e fraturas em idosos==" ou "==A retirada abrupta de BZD de curta meia-vida aumenta o risco de abstinência grave==".
-- O marcador deve permanecer exatamente no formato ==texto grifado==; não explique o marcador ao aluno.
-- Use listas (- item) para enumerações, classificações e doses.
+- ${useOutline ? 'Use listas para organizar o conteúdo e preserve a hierarquia entre bullets e sub-bullets.' : 'Não use listas por padrão; use-as apenas quando forem claramente melhores que um parágrafo curto.'}
 - Tabelas markdown (| col | col |) são aceitas e encorajadas para comparações.
 - Linguagem didática e densa. Português brasileiro.
 
@@ -1236,9 +1233,7 @@ ${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(type
 REGRA DE FIXAÇÃO (CRÍTICA):
 - ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
-- Textos entre ==...== são GRIFOS DE PROVA escolhidos pelo professor. Use-os como âncoras importantes, mas faça no máximo metade da bateria testá-los diretamente.
-- A outra metade deve cobrar conceitos centrais não grifados, mantendo cobertura equilibrada da aula.
-- Não revele no enunciado que o conteúdo estava grifado e não transforme o grifo em uma pergunta óbvia de cópia literal.
+- Distribua a bateria entre os conceitos centrais da aula, sem concentrar questões demais em uma única frase ou seção.
 - ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'A quantidade já reflete a densidade do objetivo; não aumente nem reduza o plano.'}
 - Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
@@ -1300,10 +1295,7 @@ ${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(type
 REGRA DA BATERIA EXTRA:
 - ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
-- Textos entre ==...== são GRIFOS DE PROVA, mas esta bateria EXTRA deve priorizar conteúdo relevante NÃO grifado ou ainda não cobrado.
-- Use um grifo apenas quando ele permitir um novo raciocínio ou contraste; não repita cobranças da fixação.
-- A maior parte da bateria extra deve ampliar a cobertura para além dos destaques.
-- Não revele no enunciado que um conteúdo estava grifado e não copie literalmente o trecho como pergunta.
+- Priorize conteúdo relevante ainda não cobrado e amplie a cobertura para além da bateria de fixação.
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para preencher volume.
