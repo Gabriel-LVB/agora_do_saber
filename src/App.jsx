@@ -8012,6 +8012,7 @@ export default function QuestionBankApp() {
   useEffect(()=>{
     let lastY = window.scrollY;
     let lastTouchY = null;
+    const scrollPositions = new WeakMap();
     const updateNavigationVisibility = (delta, y = window.scrollY) => {
       if (delta > 4 && y > 72) {
         setHeaderVisible(false);
@@ -8026,6 +8027,14 @@ export default function QuestionBankApp() {
       updateNavigationVisibility(y - lastY, y);
       lastY = y;
     };
+    const onAnyScroll = event => {
+      const target = event.target;
+      if (!target || target === document || target === document.documentElement || target === document.body) return;
+      const y = target.scrollTop || 0;
+      const previousY = scrollPositions.get(target) ?? y;
+      updateNavigationVisibility(y - previousY, Math.max(y, 73));
+      scrollPositions.set(target, y);
+    };
     const onTouchStart = event => {
       lastTouchY = event.touches?.[0]?.clientY ?? null;
     };
@@ -8037,11 +8046,13 @@ export default function QuestionBankApp() {
     };
     const onWheel = event => updateNavigationVisibility(event.deltaY, Math.max(window.scrollY, 73));
     window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('scroll', onAnyScroll, { passive: true, capture: true });
     window.addEventListener('touchstart', onTouchStart, { passive: true });
     window.addEventListener('touchmove', onTouchMove, { passive: true });
     window.addEventListener('wheel', onWheel, { passive: true });
     return () => {
       window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('scroll', onAnyScroll, true);
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('wheel', onWheel);
@@ -19192,7 +19203,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </main>
 
       {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
-      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] transition-transform duration-300 ${bottomNavVisible?'translate-y-0':'translate-y-[calc(100%+env(safe-area-inset-bottom))]'} ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff'}} aria-label="Navegação principal">
+      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff',transform:bottomNavVisible?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 260ms ease'}} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
