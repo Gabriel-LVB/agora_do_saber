@@ -1184,8 +1184,11 @@ ${ACADEMIA_LESSON_LENGTH_RULES[lengthMode]}
     ? 'Evite repetir literalmente o título do subtópico como abertura. Reescreva a ideia em formato de anotação de prova, usando negrito para rótulos clínicos quando ajudar.'
     : 'Não transforme cada subtópico em um fato isolado. Mostre como as ideias se encadeiam.'}
 - Use **negrito** para termos-chave, valores críticos e critérios diagnósticos.
-- Marque com ==grifo de prova== os trechos que o aluno deve reconhecer, anotar ou prestar atenção especial por serem muito cobrados, mudarem conduta, diferenciarem diagnósticos ou representarem uma pegadinha importante.
-- Use os grifos com parcimônia: em geral 1 a 3 por seção. Grife uma afirmação completa e útil, não palavras soltas nem parágrafos inteiros.
+- O grifo é uma exceção rara, não uma obrigação. Use no máximo 1 grifo a cada 2 seções e no máximo 5 na aula inteira; se não houver uma regra realmente decisiva, não grife nada.
+- Marque com ==grifo de prova== apenas uma afirmação autossuficiente que o aluno possa anotar e usar: regra que muda conduta, relação mecanismo-consequência, critério/limiar decisivo, contraste que diferencia diagnósticos ou exceção/pegadinha muito cobrada.
+- O trecho grifado deve continuar fazendo sentido quando lido sozinho e normalmente deve conter sujeito + relação/ação + consequência ou contexto.
+- PROIBIDO grifar palavras soltas, nomes isolados, listas de efeitos, consequências sem causa, exemplos, títulos, trechos genéricos ou apenas a resposta curta de uma possível questão.
+- Errado: "==quedas==", "==álcool==", "==curta meia-vida==" ou "risco de ==depressão respiratória==". Certo: "==Benzodiazepínicos aumentam o risco de quedas e fraturas em idosos==" ou "==A retirada abrupta de BZD de curta meia-vida aumenta o risco de abstinência grave==".
 - O marcador deve permanecer exatamente no formato ==texto grifado==; não explique o marcador ao aluno.
 - Use listas (- item) para enumerações, classificações e doses.
 - Tabelas markdown (| col | col |) são aceitas e encorajadas para comparações.
@@ -1233,8 +1236,8 @@ ${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(type
 REGRA DE FIXAÇÃO (CRÍTICA):
 - ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
 - A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
-- Textos entre ==...== são GRIFOS DE PROVA escolhidos pelo professor. Faça a maior parte da bateria testar diretamente esses pontos, variando mecanismo, reconhecimento, aplicação e contraste quando possível.
-- Não ignore o restante da aula: inclua também conceitos centrais não grifados para manter cobertura e contexto.
+- Textos entre ==...== são GRIFOS DE PROVA escolhidos pelo professor. Use-os como âncoras importantes, mas faça no máximo metade da bateria testá-los diretamente.
+- A outra metade deve cobrar conceitos centrais não grifados, mantendo cobertura equilibrada da aula.
 - Não revele no enunciado que o conteúdo estava grifado e não transforme o grifo em uma pergunta óbvia de cópia literal.
 - ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'A quantidade já reflete a densidade do objetivo; não aumente nem reduza o plano.'}
@@ -1297,9 +1300,9 @@ ${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(type
 REGRA DA BATERIA EXTRA:
 - ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
-- Textos entre ==...== são GRIFOS DE PROVA. Priorize esses pontos na bateria, variando o tipo de raciocínio, sem ignorar conceitos centrais não grifados.
-- Como esta é uma bateria EXTRA, cubra obrigatoriamente também conteúdo relevante que NÃO esteja grifado e que ainda não tenha sido cobrado nas questões anteriores.
-- Reserve uma parte perceptível da bateria para esses pontos não grifados; o aluno precisa eventualmente revisar toda a aula, não apenas os destaques.
+- Textos entre ==...== são GRIFOS DE PROVA, mas esta bateria EXTRA deve priorizar conteúdo relevante NÃO grifado ou ainda não cobrado.
+- Use um grifo apenas quando ele permitir um novo raciocínio ou contraste; não repita cobranças da fixação.
+- A maior parte da bateria extra deve ampliar a cobertura para além dos destaques.
 - Não revele no enunciado que um conteúdo estava grifado e não copie literalmente o trecho como pergunta.
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.

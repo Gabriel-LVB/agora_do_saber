@@ -79,6 +79,7 @@ const FileUp      = ic('<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2
 const Sparkles    = ic('<path d="m12 3 1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/>');
 const Send        = ic('<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>');
 const Eraser      = ic('<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>');
+const Highlighter = ic('<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4 4L8 6l4-4z"/><path d="m4 20 5-5"/>');
 const Copy        = ic('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>');
 const Key         = ic('<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>');
 const LogOut      = ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>');
@@ -724,6 +725,14 @@ ${shapeRule}
 ${antiHugeTopicRule}
 Ao consolidar, reorganize os blocos: se algum tópico ficar grande demais, quebre-o em tópicos menores e preserve subtópicos relevantes.`;
 };
+
+const isUsefulLessonHighlight = (text = '') =>
+  String(text).trim().split(/\s+/).filter(Boolean).length >= 5;
+
+const normalizeLessonHighlights = (text = '') =>
+  String(text).replace(/==([^=\n]+?)==/g, (full, content) =>
+    isUsefulLessonHighlight(content) ? full : content.trim()
+  );
 
 const parseAcademiaLessonSections = (lessonText, subtopics) => {
   const lessonSections = {};
@@ -2071,7 +2080,7 @@ const TexInline = ({ src, display=false }) => {
 };
 
 // Render rich text: bold, italic, grifo de prova (==texto==), LaTeX e line breaks
-const renderRichText = (text, multiline = false) => {
+const renderRichText = (text, multiline = false, showHighlights = true) => {
   if (!text) return null;
 
   // Tokeniza o texto em segmentos: $$...$$ (display), $...$ (inline), **...**, <b>, <i>, <br>, texto
@@ -2108,7 +2117,9 @@ const renderRichText = (text, multiline = false) => {
       switch (tok.type) {
         case 'bold':        return <strong key={k} className="font-bold">{tok.val}</strong>;
         case 'italic':      return <em key={k}>{tok.val}</em>;
-        case 'highlight':   return <mark key={k} title="Ponto de prova" className="rounded-sm bg-yellow-200 px-1 py-0.5 font-medium text-gray-900 dark:bg-yellow-700/60 dark:text-yellow-50">{renderTokens(tokenize(tok.val), `${k}-highlight`)}</mark>;
+        case 'highlight':   return showHighlights && isUsefulLessonHighlight(tok.val)
+          ? <mark key={k} title="Ponto de prova" className="rounded-sm bg-yellow-200 px-0.5 py-0.1 font-medium dark:bg-yellow-700/60 dark:text-yellow-50">{renderTokens(tokenize(tok.val), `${k}-highlight`)}</mark>
+          : <React.Fragment key={k}>{renderTokens(tokenize(tok.val), `${k}-highlight`)}</React.Fragment>;
         case 'br':          return <br key={k}/>;
         case 'tex-inline':  return <TexInline key={k} src={tok.val} display={false}/>;
         case 'tex-display': return <TexInline key={k} src={tok.val} display={true}/>;
@@ -5969,7 +5980,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',showLessonHighlights:true,quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -5998,6 +6009,10 @@ function AcademiaTopicView({
   const subtopics = liveTopic.subtopics || [];
   const hasLesson = liveTopic.lessonGenerated;
   const hideSubtopicTitles = true;
+  const showLessonHighlights = settings.showLessonHighlights !== false;
+  const hasLessonHighlights = Object.values(liveTopic.lessonSections || {}).some(section =>
+    [...String(section?.content || '').matchAll(/==([^=\n]+?)==/g)].some(match => isUsefulLessonHighlight(match[1]))
+  );
   const setLessonLength = (length) => {
     const ns = { ...settings, explanationLength: length };
     setSettings(ns);
@@ -6008,6 +6023,12 @@ function AcademiaTopicView({
     setSettings(ns);
     saveSettings(ns);
   };
+  const toggleLessonHighlights = () => {
+    const ns = { ...settings, showLessonHighlights: !showLessonHighlights };
+    setSettings(ns);
+    saveSettings(ns);
+  };
+  const parseLessonText = (text) => renderRichText(text, false, showLessonHighlights);
 
   // Renderiza markdown da aula com suporte a tabelas, listas e parágrafos
   const renderLesson = (md) => {
@@ -6044,7 +6065,7 @@ function AcademiaTopicView({
               <thead>
                 <tr className={`border-b-2 ${darkMode?'border-gray-600':'border-gray-300'}`}>
                   {header && parseCells(header).map((cell, ci) => (
-                    <th key={ci} className={`px-3 py-2 text-left font-bold ${darkMode?'bg-gray-800/80':'bg-gray-100'}`}>{parseHtmlText(cell)}</th>
+                    <th key={ci} className={`px-3 py-2 text-left font-bold ${darkMode?'bg-gray-800/80':'bg-gray-100'}`}>{parseLessonText(cell)}</th>
                   ))}
                 </tr>
               </thead>
@@ -6052,7 +6073,7 @@ function AcademiaTopicView({
                 {body.map((row, ri) => (
                   <tr key={ri} className={`border-b ${darkMode?'border-gray-700/50':'border-gray-200'}`}>
                     {parseCells(row).map((cell, ci) => (
-                      <td key={ci} className="px-3 py-2">{parseHtmlText(cell)}</td>
+                      <td key={ci} className="px-3 py-2">{parseLessonText(cell)}</td>
                     ))}
                   </tr>
                 ))}
@@ -6070,14 +6091,14 @@ function AcademiaTopicView({
         }
         elements.push(
           <ul key={`ul-${i}`} className={`list-disc ml-5 space-y-1 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
-            {items.map((item, ii) => <li key={ii}>{parseHtmlText(item)}</li>)}
+            {items.map((item, ii) => <li key={ii}>{parseLessonText(item)}</li>)}
           </ul>
         );
         continue;
       }
       if (!line.trim()) { elements.push(<div key={`sp-${i}`} className="h-2"/>); i++; continue; }
       elements.push(
-        <p key={`p-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseHtmlText(line)}</p>
+        <p key={`p-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseLessonText(line)}</p>
       );
       i++;
     }
@@ -6190,6 +6211,13 @@ function AcademiaTopicView({
                 <GraduationCap className="w-3.5 h-3.5"/>Questões de fixação
               </button>
             )}
+            {hasLessonHighlights && (
+              <button onClick={toggleLessonHighlights}
+                aria-pressed={showLessonHighlights}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${showLessonHighlights?(darkMode?'border-yellow-700 text-yellow-400 bg-yellow-900/20':'border-yellow-400 text-yellow-700 bg-yellow-50'):(darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600':'border-gray-200 text-gray-500 hover:border-yellow-500')}`}>
+                <Highlighter className="w-3.5 h-3.5"/>{showLessonHighlights?'Ocultar grifos':'Mostrar grifos'}
+              </button>
+            )}
             {fixationErrorReviews.length > 0 && (
               <button onClick={()=>openErrorNotebookReviewResult?.(fixationErrorReviews[0])}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
@@ -6255,9 +6283,9 @@ function AcademiaTopicView({
       {/* Conteúdo */}
       {hasLesson && !academiaGenerating && (
         <div>
-          {Object.values(liveTopic.lessonSections || {}).some(section => String(section?.content || '').includes('==')) && (
+          {showLessonHighlights && hasLessonHighlights && (
             <div className={`mb-6 flex items-center gap-2 text-xs ${darkMode?'text-gray-400':'text-gray-500'}`}>
-              <mark className="rounded-sm bg-yellow-200 px-2 py-1 font-bold text-gray-900 dark:bg-yellow-700/60 dark:text-yellow-50">Grifo de prova</mark>
+              <mark className="rounded-sm bg-yellow-200 px-2 py-1 font-bold dark:bg-yellow-700/60 dark:text-yellow-50">Grifo de prova</mark>
               <span>Pontos para anotar e prestar atenção especial.</span>
             </div>
           )}
@@ -12179,8 +12207,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
       }
       if (!lessonText) throw lessonErr || new Error('CONNECTION_ERROR');
+      lessonText = normalizeLessonHighlights(lessonText);
       lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
     }
+    lessonText = normalizeLessonHighlights(lessonText);
 
     let fixationBySubtopic = topic.fixationQuestions || {};
     let fixQuestions = Object.values(fixationBySubtopic || {}).flat();
