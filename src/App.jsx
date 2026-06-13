@@ -13285,26 +13285,23 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     >
       <style>{`
         .agora-shell {
-          --bg: ${darkMode ? '#0b1118' : '#f6f3ea'};
-          --bg-soft: ${darkMode ? '#101923' : '#fbfaf5'};
-          --surface: ${darkMode ? '#111827' : 'rgba(255, 255, 255, .94)'};
-          --surface-strong: ${darkMode ? '#111827' : '#ffffff'};
-          --surface-muted: ${darkMode ? '#172131' : 'rgba(248, 246, 238, .94)'};
-          --line: ${darkMode ? 'rgba(148, 163, 184, .24)' : 'rgba(120, 113, 108, .18)'};
-          --line-strong: ${darkMode ? 'rgba(217, 119, 6, .42)' : 'rgba(180, 83, 9, .3)'};
+          --bg: ${darkMode ? '#0c111a' : '#f5f5f4'};
+          --bg-soft: ${darkMode ? '#0c111a' : '#f5f5f4'};
+          --surface: ${darkMode ? '#131b28' : '#ffffff'};
+          --surface-strong: ${darkMode ? '#131b28' : '#ffffff'};
+          --surface-muted: ${darkMode ? '#1a2433' : '#f7f7f6'};
+          --line: ${darkMode ? '#293548' : '#e7e5e4'};
+          --line-strong: ${darkMode ? '#596579' : '#c9c5bf'};
           --text: ${darkMode ? '#f1f5f9' : '#1f2933'};
           --muted: ${darkMode ? '#cbd5e1' : '#667085'};
           --accent: #b45309;
           --accent-2: #0f766e;
           --accent-3: #1d4ed8;
           --danger: #dc2626;
-          --shadow-sm: ${darkMode ? '0 10px 30px rgba(0, 0, 0, .26)' : '0 10px 26px rgba(42, 32, 14, .08)'};
-          --shadow-md: ${darkMode ? '0 18px 50px rgba(0, 0, 0, .38)' : '0 20px 48px rgba(42, 32, 14, .12)'};
+          --shadow-sm: ${darkMode ? '0 1px 2px rgba(0, 0, 0, .24)' : '0 1px 2px rgba(28, 25, 23, .06)'};
+          --shadow-md: ${darkMode ? '0 12px 30px rgba(0, 0, 0, .28)' : '0 12px 30px rgba(28, 25, 23, .09)'};
           color: var(--text);
-          background:
-            linear-gradient(180deg, ${darkMode ? 'rgba(15, 23, 42, .96)' : 'rgba(255, 251, 235, .72)'} 0%, transparent 22rem),
-            radial-gradient(circle at top left, ${darkMode ? 'rgba(15, 118, 110, .16)' : 'rgba(15, 118, 110, .08)'} 0%, ${darkMode ? 'rgba(15, 118, 110, .16)' : 'rgba(15, 118, 110, .08)'} 24rem, transparent 24.5rem),
-            linear-gradient(135deg, var(--bg), var(--bg-soft));
+          background: var(--bg);
           min-height: 100vh;
           overflow-x: hidden;
         }
@@ -13313,10 +13310,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           box-sizing: border-box;
         }
         .agora-shell header {
-          background: ${darkMode ? 'rgba(11, 17, 24, .82)' : 'rgba(255, 255, 255, .78)'} !important;
+          background: ${darkMode ? '#0f1622' : '#ffffff'} !important;
           border-color: var(--line) !important;
-          box-shadow: ${darkMode ? '0 14px 38px rgba(0, 0, 0, .24)' : '0 14px 34px rgba(42, 32, 14, .07)'} !important;
-          backdrop-filter: blur(18px) saturate(1.25);
+          box-shadow: 0 1px 0 var(--line) !important;
         }
         .agora-shell main {
           position: relative;
@@ -13411,7 +13407,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         .agora-shell input,
         .agora-shell textarea {
-          background: ${darkMode ? '#0f172a' : 'rgba(255, 255, 255, .88)'} !important;
+          background: ${darkMode ? '#0f172a' : '#ffffff'} !important;
           border-color: var(--line) !important;
           color: var(--text) !important;
           font-size: var(--font-base);
@@ -13489,11 +13485,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           background: #d97706;
         }
         .agora-shell .app-hero {
-          background:
-            linear-gradient(135deg, ${darkMode ? 'rgba(17, 24, 39, .94)' : 'rgba(255, 255, 255, .94)'}, ${darkMode ? 'rgba(17, 34, 42, .9)' : 'rgba(240, 253, 250, .86)'}),
-            linear-gradient(90deg, rgba(180, 83, 9, .14), rgba(15, 118, 110, .12));
+          background: var(--surface-strong);
           border: 1px solid var(--line);
-          box-shadow: var(--shadow-md);
+          box-shadow: var(--shadow-sm);
         }
         .agora-shell .app-card {
           background: var(--surface);
@@ -13505,9 +13499,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           box-shadow: var(--shadow-md);
         }
         .agora-shell .glass-panel {
-          background: ${darkMode ? '#101827' : 'rgba(255, 255, 255, .86)'};
+          background: var(--surface-strong);
           border: 1px solid var(--line);
-          backdrop-filter: ${darkMode ? 'none' : 'blur(14px) saturate(1.2)'};
         }
         .agora-shell .modal-scroll > div {
           background-color: ${darkMode ? '#111827' : '#ffffff'} !important;
@@ -13682,7 +13675,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
       `}</style>
 	      {/* HEADER */}
-	      <header className={`${hdr} sticky top-0 z-30 shadow-sm transition-transform duration-300 ${headerVisible?'md:translate-y-0':'md:-translate-y-full'}`}>
+	      <header className={`${hdr} sticky top-0 z-30 border-b transition-transform duration-300 ${headerVisible?'lg:translate-y-0':'lg:-translate-y-full'}`}>
 	        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-2.5 md:py-3">
 	          {/* Logo */}
 	          <div className="flex items-center gap-3 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
@@ -13694,7 +13687,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	          </div>
 
           {/* Main navigation */}
-          <nav className="hidden lg:flex items-center gap-1 rounded-xl border p-1 bg-white/40 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700" aria-label="Navegação principal">
+          <nav className="hidden lg:flex items-center gap-1 rounded-xl border p-1 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700" aria-label="Navegação principal">
             {[
               {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
               homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-4 h-4"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
@@ -13709,7 +13702,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           </nav>
 
           {/* Desktop nav buttons */}
-          <div className="hidden md:flex items-center gap-1.5">
+          <div className="hidden lg:flex items-center gap-1.5">
             <span className={`flex items-center gap-2 text-xs font-bold mr-2 border rounded-full px-3 py-2 ${darkMode?'border-gray-700 bg-gray-900 text-gray-400':'border-gray-200 bg-white text-gray-500'}`}><UserIcon className="w-3 h-3"/>{username}</span>
             {[
               canUseAdvancedFeatures ? {icon:<Flame className="w-4 h-4"/>,       action:()=>openViewWithReturn('quick'),      title:QUICK_SUBJECT_TITLE} : null,
@@ -13726,7 +13719,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           </div>
 
           {/* Mobile profile */}
-          <div className="flex md:hidden items-center">
+          <div className="flex lg:hidden items-center">
             <button type="button" onClick={()=>setMenuOpen(true)} className={`h-9 w-9 rounded-full border flex items-center justify-center ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`} aria-label="Abrir opções">
               <UserIcon className="w-4 h-4"/>
             </button>
@@ -13735,7 +13728,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
         {/* Mobile options sheet */}
         {menuOpen&&(
-          <div className="md:hidden fixed inset-0 z-50 bg-black/60 flex items-end" onClick={()=>setMenuOpen(false)}>
+          <div className="lg:hidden fixed inset-0 z-50 bg-black/60 flex items-end" onClick={()=>setMenuOpen(false)}>
             <div onClick={e=>e.stopPropagation()} className={`w-full rounded-t-2xl border-t p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="min-w-0">
@@ -13744,7 +13737,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
                 <button onClick={()=>setMenuOpen(false)} aria-label="Fechar" className={`h-9 w-9 rounded-full flex items-center justify-center ${darkMode?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}><XCircle className="w-5 h-5"/></button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
               {[
                 canUseAdvancedFeatures ? {icon:<Flame className="w-5 h-5 text-yellow-600"/>, label:QUICK_SUBJECT_TITLE, action:()=>openViewWithReturn('quick')} : null,
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
@@ -13754,8 +13747,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
               ].filter(Boolean).map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
-                  className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border font-bold text-sm transition-colors ${item.danger?(darkMode?'border-red-900/50 text-red-400 bg-red-950/20':'border-red-100 text-red-500 bg-red-50'):(darkMode?'border-gray-700 text-gray-200 bg-gray-800':'border-gray-200 text-gray-700 bg-gray-50')}`}>
-                  {item.icon}{item.label}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-950':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                  <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${item.danger?(darkMode?'bg-red-950':'bg-red-50'):(darkMode?'bg-gray-800':'bg-gray-100')}`}>{item.icon}</span>
+                  <span className="flex-1 text-left">{item.label}</span>
+                  <ChevronRight className="w-4 h-4 opacity-30"/>
                 </button>
               ))}
               </div>
@@ -13764,7 +13759,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
       </header>
 
-      <main className={view==='videoaulas'||view==='curso'?'pb-20 md:pb-0':'max-w-6xl mx-auto px-4 py-5 pb-24 md:py-10 md:pb-10'}>
+      <main className={view==='videoaulas'||view==='curso'?'pb-20 lg:pb-0':'max-w-6xl mx-auto px-4 py-5 pb-24 md:py-8 lg:py-10 lg:pb-10'}>
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
@@ -13865,18 +13860,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                   {recommendation.icon}{recommendation.button}<ChevronRight className="w-4 h-4"/>
                                 </button>
                                 {homeCanUseAdvancedFeatures&&recommendation.kind!=='review'&&dueCount>0&&(
-                                  <button onClick={()=>openSpacedReview()} className={`px-5 py-3.5 rounded-xl border font-bold inline-flex items-center justify-center gap-2 ${darkMode?'border-gray-700 bg-gray-900/60 text-gray-300':'border-gray-200 bg-white/70 text-gray-700'}`}>
+                                  <button onClick={()=>openSpacedReview()} className={`px-5 py-3.5 rounded-xl border font-bold inline-flex items-center justify-center gap-2 ${darkMode?'border-gray-700 bg-gray-900 text-gray-300':'border-gray-200 bg-white text-gray-700'}`}>
                                     <RepeatIcon className="w-4 h-4"/>Revisões pendentes · {dueCount}
                                   </button>
                                 )}
                               </div>
                               {homeCanUseAdvancedFeatures&&(
                                 <div className="md:hidden grid grid-cols-2 gap-2 mt-4">
-                                  <div className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                                  <div className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-800 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
                                     <span className="block text-[10px] font-bold uppercase tracking-wide opacity-50">Questões hoje</span>
                                     <strong className="block text-sm mt-0.5 tabular-nums">{dailyQuestions} <span className="font-normal opacity-40">/ {questionGoal}</span></strong>
                                   </div>
-                                  <div className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                                  <div className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-800 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
                                     <span className="block text-[10px] font-bold uppercase tracking-wide opacity-50">{homeCanSeeVideoaulas?'Aula hoje':'Revisões'}</span>
                                     <strong className="block text-sm mt-0.5 tabular-nums">{homeCanSeeVideoaulas?`${dailyMinutes}min`:dueCount} <span className="font-normal opacity-40">{homeCanSeeVideoaulas?`/ ${minuteGoal}min`:'pendentes'}</span></strong>
                                   </div>
@@ -13885,7 +13880,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                               <p className={`hidden md:block mt-6 text-xs font-serif italic ${darkMode?'text-gray-500':'text-gray-400'}`}>“Não são admitidos ignorantes em geometria.”</p>
                             </div>
                             {homeCanUseAdvancedFeatures&&(
-                              <aside className={`hidden lg:block rounded-xl border p-5 self-stretch ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                              <aside className={`hidden lg:block rounded-xl border p-5 self-stretch ${darkMode?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
                                 <div className="flex items-start justify-between gap-3 mb-5">
                                   <div>
                                     <span className={`text-[11px] font-bold uppercase tracking-widest ${darkMode?'text-gray-400':'text-gray-500'}`}>Seu progresso hoje</span>
@@ -13903,58 +13898,43 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         </section>
 
                         <section className="space-y-3">
-                          <div className="flex items-end justify-between gap-3 px-1">
-                            <div>
-                              <h3 className="font-serif font-bold text-xl">Outras formas de estudar</h3>
-                              <p className="hidden md:block text-xs opacity-50 mt-1">Use quando souber exatamente o tipo de sessão que precisa.</p>
-                            </div>
-                          </div>
-                          <div className={`grid grid-cols-2 ${homeCanUseAdvancedFeatures?(recommendation.kind==='review'?'md:grid-cols-2':'md:grid-cols-3'):'md:grid-cols-1'} gap-3`}>
-                          {homeCanUseAdvancedFeatures&&(
-                            <button onClick={()=>openViewWithReturn('quick')} className="app-card text-left rounded-xl p-3 md:p-4 flex items-center md:items-start gap-3">
-                              <Flame className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
-                              <span><strong className="block text-sm">Estudo rápido</strong><span className="hidden md:block text-xs opacity-50 mt-1">Explique uma dúvida pontual e pratique logo depois.</span></span>
+                          <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Ações rápidas</h3>
+                          <div className={`app-card rounded-xl overflow-hidden grid ${homeCanUseAdvancedFeatures?'grid-cols-3':'grid-cols-1'} divide-x ${darkMode?'divide-gray-800':'divide-gray-200'}`}>
+                            {homeCanUseAdvancedFeatures&&(
+                              <button onClick={()=>openViewWithReturn('quick')} className={`px-2 py-4 md:px-5 text-center flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3 ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                                <Flame className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
+                                <span className="text-xs md:text-sm font-bold">Estudo rápido</span>
+                              </button>
+                            )}
+                            {homeCanUseAdvancedFeatures&&(
+                              <button onClick={()=>openSpacedReview()} className={`px-2 py-4 md:px-5 text-center flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3 ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                                <RepeatIcon className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
+                                <span className="text-xs md:text-sm font-bold">Revisar {dueCount>0&&`· ${dueCount}`}</span>
+                              </button>
+                            )}
+                            <button onClick={()=>setExamSetup({})} className={`px-2 py-4 md:px-5 text-center flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3 ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+                              <Zap className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
+                              <span className="text-xs md:text-sm font-bold">Modo prova</span>
                             </button>
-                          )}
-                          {homeCanUseAdvancedFeatures&&recommendation.kind!=='review'&&(
-                            <button onClick={()=>openSpacedReview()} className="app-card text-left rounded-xl p-3 md:p-4 flex items-center md:items-start gap-3">
-                              <RepeatIcon className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
-                              <span><strong className="block text-sm">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="hidden md:block text-xs opacity-50 mt-1">Revise hoje o que está perto de ser esquecido.</span></span>
-                            </button>
-                          )}
-                          <button onClick={()=>setExamSetup({})} className="app-card text-left rounded-xl p-3 md:p-4 flex items-center md:items-start gap-3">
-                            <Zap className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
-                            <span><strong className="block text-sm">Modo prova</strong><span className="hidden md:block text-xs opacity-50 mt-1">Monte um simulado e veja o resultado somente no final.</span></span>
-                          </button>
                           </div>
                         </section>
-			                <div className="space-y-5">
-			                  {isAdmin&&adminHomeMode!=='admin'&&(
-			                    <div className={`rounded-xl border px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'bg-gray-900/70 border-gray-800 text-gray-400':'bg-white border-yellow-100 text-gray-600'}`}>
-			                      <span>Prévia ativa: {adminHomeMode==='course'?'aluno com curso':'aluno sem curso'}</span>
-			                      <button onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:'admin'})} className="text-xs font-bold text-yellow-600 hover:underline self-start sm:self-auto">Voltar para admin</button>
-			                    </div>
-			                  )}
-                        {studyCards.length>0&&(
-                          <section className="space-y-3">
-                            <div className="px-1">
-                              <h3 className="font-serif font-bold text-xl">Seus espaços de estudo</h3>
-                              <p className="hidden md:block text-xs opacity-50 mt-1">Entre onde seu conteúdo principal está organizado.</p>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {studyCards.map(card=>renderHomeCard(card, 'study'))}
-                            </div>
-                          </section>
+
+                        {isAdmin&&adminHomeMode!=='admin'&&(
+                          <div className={`rounded-xl border px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'bg-gray-900 border-gray-800 text-gray-400':'bg-white border-gray-200 text-gray-600'}`}>
+                            <span>Prévia ativa: {adminHomeMode==='course'?'aluno com curso':'aluno sem curso'}</span>
+                            <button onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:'admin'})} className="text-xs font-bold text-yellow-600 hover:underline self-start sm:self-auto">Voltar para admin</button>
+                          </div>
                         )}
-                        {archiveCards.length>0&&(
-                          <section className="space-y-3">
-                            <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Biblioteca e ferramentas</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {archiveCards.map(card=>renderHomeCard(card, 'archive', true))}
-                            </div>
-                          </section>
-                        )}
-			                </div>
+
+                        <section className="space-y-3">
+                          <div className="px-1">
+                            <h3 className="font-serif font-bold text-xl">Áreas de estudo</h3>
+                            <p className="hidden md:block text-xs opacity-50 mt-1">Todo o seu conteúdo organizado em um único lugar.</p>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {[...studyCards, ...archiveCards].map(card=>renderHomeCard(card, studyCards.some(item=>item.key===card.key)?'study':'archive', true))}
+                          </div>
+                        </section>
 	              </div>
 	            );
 	          })()
@@ -19258,7 +19238,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </main>
 
       {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
-      <nav className={`md:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-1.5 pb-[calc(.4rem+env(safe-area-inset-bottom))] backdrop-blur-xl ${darkMode?'bg-gray-950/95 border-gray-800':'bg-white/95 border-gray-200'}`} aria-label="Navegação principal">
+      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-1.5 pb-[calc(.4rem+env(safe-area-inset-bottom))] ${darkMode?'bg-gray-950 border-gray-800':'bg-white border-gray-200'}`} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
