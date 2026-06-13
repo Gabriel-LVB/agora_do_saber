@@ -13682,14 +13682,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
       `}</style>
 	      {/* HEADER */}
-	      <header className={`${hdr} sticky top-0 z-20 shadow-sm transition-transform duration-300 ${headerVisible?'translate-y-0':'-translate-y-full'}`}>
-	        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+	      <header className={`${hdr} sticky top-0 z-30 shadow-sm transition-transform duration-300 ${headerVisible?'md:translate-y-0':'md:-translate-y-full'}`}>
+	        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-2.5 md:py-3">
 	          {/* Logo */}
 	          <div className="flex items-center gap-3 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
 	            <div className="bg-yellow-600 p-2 rounded-xl shadow-md flex-shrink-0"><Landmark className="w-5 h-5 text-white"/></div>
 	            <div className="min-w-0">
 	              <h1 className={`font-serif font-bold text-lg leading-none truncate ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
-	              <p className={`hidden sm:block text-[10px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
+	              <p className={`hidden md:block text-[10px] font-bold uppercase mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
 	            </div>
 	          </div>
 
@@ -13725,56 +13725,46 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             ))}
           </div>
 
-          {/* Mobile right: theme + hamburger */}
-          <div className="flex md:hidden items-center gap-1">
-            <button type="button" onClick={()=>setDarkMode(!darkMode)} aria-label="Alternar tema" className={`p-2 rounded-xl border ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`}>
-              {darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>}
-            </button>
-            <button type="button" onClick={()=>setMenuOpen(!menuOpen)} className={`p-2 rounded-xl border ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`} aria-label="Menu">
-              {menuOpen
-                ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
-              }
+          {/* Mobile profile */}
+          <div className="flex md:hidden items-center">
+            <button type="button" onClick={()=>setMenuOpen(true)} className={`h-9 w-9 rounded-full border flex items-center justify-center ${darkMode?'border-gray-700 bg-gray-900 text-yellow-500':'border-gray-200 bg-white text-yellow-700'}`} aria-label="Abrir opções">
+              <UserIcon className="w-4 h-4"/>
             </button>
           </div>
         </div>
 
-        {/* Mobile dropdown menu */}
+        {/* Mobile options sheet */}
         {menuOpen&&(
-          <div className={`md:hidden border-t ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-            <div className={`px-4 py-3 grid grid-cols-2 gap-2 border-b ${darkMode?'border-gray-700':'border-gray-100'}`}>
-              {[
-                {label:'Início', icon:<Landmark className="w-4 h-4"/>, action:()=>setView('library')},
-                homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-4 h-4"/>, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
-                {label:'Oráculo', icon:<Sparkles className="w-4 h-4"/>, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
-                homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-4 h-4"/>, action:()=>setView('curso')} : null,
-              ].filter(Boolean).map(item=>(
-                <button key={item.label} onClick={()=>{item.action();setMenuOpen(false);}}
-                  className={`flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-bold ${darkMode?'bg-gray-900 text-gray-200 hover:bg-gray-700':'bg-gray-50 text-gray-700 hover:bg-yellow-50'}`}>
-                  {item.icon}{item.label}
-                </button>
-              ))}
-            </div>
-            <div className="px-4 py-2 grid grid-cols-2 gap-1">
+          <div className="md:hidden fixed inset-0 z-50 bg-black/60 flex items-end" onClick={()=>setMenuOpen(false)}>
+            <div onClick={e=>e.stopPropagation()} className={`w-full rounded-t-2xl border-t p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <p className="font-bold truncate">{username}</p>
+                  <p className="text-xs opacity-50 mt-0.5">Opções e ferramentas</p>
+                </div>
+                <button onClick={()=>setMenuOpen(false)} aria-label="Fechar" className={`h-9 w-9 rounded-full flex items-center justify-center ${darkMode?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}><XCircle className="w-5 h-5"/></button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
               {[
                 canUseAdvancedFeatures ? {icon:<Flame className="w-5 h-5 text-yellow-600"/>, label:QUICK_SUBJECT_TITLE, action:()=>openViewWithReturn('quick')} : null,
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:openSettings},
                 {icon:<Zap className="w-5 h-5 text-yellow-600"/>, label:'Modo Prova', action:()=>setExamSetup({})},
+                {icon:darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>, label:darkMode?'Tema claro':'Tema escuro', action:()=>setDarkMode(!darkMode)},
                 {icon:<LogOut className="w-5 h-5 text-red-500"/>, label:'Sair',     action:handleLogout, danger:true},
               ].filter(Boolean).map((item,i)=>(
                 <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-900/20':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
+                  className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border font-bold text-sm transition-colors ${item.danger?(darkMode?'border-red-900/50 text-red-400 bg-red-950/20':'border-red-100 text-red-500 bg-red-50'):(darkMode?'border-gray-700 text-gray-200 bg-gray-800':'border-gray-200 text-gray-700 bg-gray-50')}`}>
                   {item.icon}{item.label}
                 </button>
               ))}
+              </div>
             </div>
-            <div className={`px-6 py-3 border-t text-xs font-bold opacity-40 ${darkMode?'border-gray-700':'border-gray-100'}`}>{username}</div>
           </div>
         )}
       </header>
 
-      <main className={view==='videoaulas'||view==='curso'?'':'max-w-6xl mx-auto px-4 py-8 md:py-10'}>
+      <main className={view==='videoaulas'||view==='curso'?'pb-20 md:pb-0':'max-w-6xl mx-auto px-4 py-5 pb-24 md:py-10 md:pb-10'}>
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
@@ -13849,11 +13839,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         ? (darkMode?'bg-gray-800 text-yellow-400':'bg-white text-yellow-700')
                         : (darkMode?'bg-gray-800 text-yellow-400':'bg-yellow-50 text-yellow-700');
                     return (
-                    <button key={card.key} onClick={card.action} className={`app-card group text-left rounded-xl flex items-center gap-4 transition-all ${compact?'p-4 min-h-[84px]':'p-4 md:p-5 min-h-[104px]'}`}>
-                      <div className={`${compact?'h-10 w-10':'h-12 w-12'} rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
+                    <button key={card.key} onClick={card.action} className={`app-card group text-left rounded-xl flex items-center gap-3 md:gap-4 transition-all p-3 min-h-[76px] md:p-5 md:min-h-[104px]`}>
+                      <div className={`h-10 w-10 md:h-12 md:w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
                       <div className="min-w-0 flex-1">
-                        <h3 className={`${compact?'text-sm':'font-serif text-lg'} font-bold text-yellow-600 mobile-wrap sm:truncate leading-tight`}>{card.title}</h3>
-                        <p className={`${compact?'text-xs':'text-sm'} mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
+                        <h3 className="text-sm md:font-serif md:text-lg font-bold text-yellow-600 mobile-wrap sm:truncate leading-tight">{card.title}</h3>
+                        <p className={`hidden md:block ${compact?'text-xs':'text-sm'} mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
+                        <p className={`md:hidden text-[11px] mt-1 truncate ${darkMode?'text-gray-500':'text-gray-500'}`}>{card.meta}</p>
                       </div>
                       <div className="hidden sm:block text-right flex-shrink-0">
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${badge}`}>{card.meta}</span>
@@ -13862,15 +13853,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     </button>
                   );};
 				            return (
-				              <div className="space-y-8">
-                        <section className="app-hero rounded-2xl p-5 md:p-7 overflow-hidden">
+				              <div className="space-y-6 md:space-y-8">
+                        <section className="app-hero rounded-2xl p-4 md:p-7 overflow-hidden">
                           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.48fr)] gap-6 lg:gap-8">
                             <div className="min-w-0 flex flex-col justify-center">
                               <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mb-2 ${darkMode?'text-gray-400':'text-gray-500'}`}>{recommendation.eyebrow}</p>
                               <h2 className="text-2xl md:text-4xl font-serif font-bold text-yellow-600 leading-tight max-w-2xl">{recommendation.title}</h2>
-                              <p className={`text-sm md:text-base mt-3 max-w-xl leading-relaxed ${darkMode?'text-gray-300':'text-gray-600'}`}>{recommendation.desc}</p>
-                              <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                                <button onClick={recommendation.action} className="bg-yellow-600 text-white px-5 py-3.5 rounded-xl font-bold inline-flex items-center justify-center gap-2">
+                              <p className={`text-sm md:text-base mt-2 md:mt-3 max-w-xl leading-relaxed ${darkMode?'text-gray-300':'text-gray-600'}`}>{recommendation.desc}</p>
+                              <div className="flex flex-col sm:flex-row gap-3 mt-5 md:mt-6">
+                                <button onClick={recommendation.action} className="bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2">
                                   {recommendation.icon}{recommendation.button}<ChevronRight className="w-4 h-4"/>
                                 </button>
                                 {homeCanUseAdvancedFeatures&&recommendation.kind!=='review'&&dueCount>0&&(
@@ -13879,10 +13870,22 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                   </button>
                                 )}
                               </div>
-                              <p className={`mt-6 text-xs font-serif italic ${darkMode?'text-gray-500':'text-gray-400'}`}>“Não são admitidos ignorantes em geometria.”</p>
+                              {homeCanUseAdvancedFeatures&&(
+                                <div className="md:hidden grid grid-cols-2 gap-2 mt-4">
+                                  <div className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                                    <span className="block text-[10px] font-bold uppercase tracking-wide opacity-50">Questões hoje</span>
+                                    <strong className="block text-sm mt-0.5 tabular-nums">{dailyQuestions} <span className="font-normal opacity-40">/ {questionGoal}</span></strong>
+                                  </div>
+                                  <div className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                                    <span className="block text-[10px] font-bold uppercase tracking-wide opacity-50">{homeCanSeeVideoaulas?'Aula hoje':'Revisões'}</span>
+                                    <strong className="block text-sm mt-0.5 tabular-nums">{homeCanSeeVideoaulas?`${dailyMinutes}min`:dueCount} <span className="font-normal opacity-40">{homeCanSeeVideoaulas?`/ ${minuteGoal}min`:'pendentes'}</span></strong>
+                                  </div>
+                                </div>
+                              )}
+                              <p className={`hidden md:block mt-6 text-xs font-serif italic ${darkMode?'text-gray-500':'text-gray-400'}`}>“Não são admitidos ignorantes em geometria.”</p>
                             </div>
                             {homeCanUseAdvancedFeatures&&(
-                              <aside className={`rounded-xl border p-5 self-stretch ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
+                              <aside className={`hidden lg:block rounded-xl border p-5 self-stretch ${darkMode?'border-gray-800 bg-gray-950/45':'border-gray-200 bg-white/70'}`}>
                                 <div className="flex items-start justify-between gap-3 mb-5">
                                   <div>
                                     <span className={`text-[11px] font-bold uppercase tracking-widest ${darkMode?'text-gray-400':'text-gray-500'}`}>Seu progresso hoje</span>
@@ -13903,25 +13906,25 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           <div className="flex items-end justify-between gap-3 px-1">
                             <div>
                               <h3 className="font-serif font-bold text-xl">Outras formas de estudar</h3>
-                              <p className="text-xs opacity-50 mt-1">Use quando souber exatamente o tipo de sessão que precisa.</p>
+                              <p className="hidden md:block text-xs opacity-50 mt-1">Use quando souber exatamente o tipo de sessão que precisa.</p>
                             </div>
                           </div>
-                          <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures?(recommendation.kind==='review'?'md:grid-cols-2':'md:grid-cols-3'):'md:grid-cols-1'} gap-3`}>
+                          <div className={`grid grid-cols-2 ${homeCanUseAdvancedFeatures?(recommendation.kind==='review'?'md:grid-cols-2':'md:grid-cols-3'):'md:grid-cols-1'} gap-3`}>
                           {homeCanUseAdvancedFeatures&&(
-                            <button onClick={()=>openViewWithReturn('quick')} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
+                            <button onClick={()=>openViewWithReturn('quick')} className="app-card text-left rounded-xl p-3 md:p-4 flex items-center md:items-start gap-3">
                               <Flame className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
-                              <span><strong className="block text-sm">Estudo rápido</strong><span className="block text-xs opacity-50 mt-1">Explique uma dúvida pontual e pratique logo depois.</span></span>
+                              <span><strong className="block text-sm">Estudo rápido</strong><span className="hidden md:block text-xs opacity-50 mt-1">Explique uma dúvida pontual e pratique logo depois.</span></span>
                             </button>
                           )}
                           {homeCanUseAdvancedFeatures&&recommendation.kind!=='review'&&(
-                            <button onClick={()=>openSpacedReview()} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
+                            <button onClick={()=>openSpacedReview()} className="app-card text-left rounded-xl p-3 md:p-4 flex items-center md:items-start gap-3">
                               <RepeatIcon className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
-                              <span><strong className="block text-sm">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="block text-xs opacity-50 mt-1">Revise hoje o que está perto de ser esquecido.</span></span>
+                              <span><strong className="block text-sm">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="hidden md:block text-xs opacity-50 mt-1">Revise hoje o que está perto de ser esquecido.</span></span>
                             </button>
                           )}
-                          <button onClick={()=>setExamSetup({})} className="app-card text-left rounded-xl p-4 flex items-start gap-3">
+                          <button onClick={()=>setExamSetup({})} className="app-card text-left rounded-xl p-3 md:p-4 flex items-center md:items-start gap-3">
                             <Zap className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
-                            <span><strong className="block text-sm">Modo prova</strong><span className="block text-xs opacity-50 mt-1">Monte um simulado e veja o resultado somente no final.</span></span>
+                            <span><strong className="block text-sm">Modo prova</strong><span className="hidden md:block text-xs opacity-50 mt-1">Monte um simulado e veja o resultado somente no final.</span></span>
                           </button>
                           </div>
                         </section>
@@ -13936,7 +13939,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           <section className="space-y-3">
                             <div className="px-1">
                               <h3 className="font-serif font-bold text-xl">Seus espaços de estudo</h3>
-                              <p className="text-xs opacity-50 mt-1">Entre onde seu conteúdo principal está organizado.</p>
+                              <p className="hidden md:block text-xs opacity-50 mt-1">Entre onde seu conteúdo principal está organizado.</p>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {studyCards.map(card=>renderHomeCard(card, 'study'))}
@@ -19253,6 +19256,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           </div>
         )}
       </main>
+
+      {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
+      <nav className={`md:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-1.5 pb-[calc(.4rem+env(safe-area-inset-bottom))] backdrop-blur-xl ${darkMode?'bg-gray-950/95 border-gray-800':'bg-white/95 border-gray-200'}`} aria-label="Navegação principal">
+        <div className="flex gap-1 max-w-lg mx-auto">
+          {[
+            {label:'Início', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
+            homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-5 h-5"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
+            {label:'Oráculo', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
+            homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : {label:'Prova', icon:<Zap className="w-5 h-5"/>, active:false, action:()=>setExamSetup({})},
+            {label:'Mais', icon:<MoreIcon className="w-5 h-5"/>, active:menuOpen, action:()=>setMenuOpen(true)},
+          ].filter(Boolean).map(item=>(
+            <button key={item.label} type="button" onClick={item.action}
+              className={`min-w-0 flex-1 flex flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[10px] font-bold transition-colors ${item.active?(darkMode?'text-yellow-400 bg-yellow-900/20':'text-yellow-700 bg-yellow-50'):(darkMode?'text-gray-500':'text-gray-500')}`}>
+              {item.icon}
+              <span className="truncate w-full">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+      )}
 
 
 
