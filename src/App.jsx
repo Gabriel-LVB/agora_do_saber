@@ -106,6 +106,8 @@ const MoreIcon    = ic('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r
 const VideoIcon   = ic('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>');
 const SkipForward = ic('<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>');
 const SkipBack    = ic('<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>');
+const MaximizeIcon= ic('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>');
+const MinimizeIcon= ic('<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>');
 
 const RepeatIcon = ic('<path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>');
 const AcademiaIcon = ic('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="12" y1="7" x2="16" y2="7"/><line x1="12" y1="11" x2="16" y2="11"/><line x1="9" y1="7" x2="9.01" y2="7"/><line x1="9" y1="11" x2="9.01" y2="11"/>');
@@ -3367,9 +3369,10 @@ const QuestionView = ({
 	  displayMode='list',
 	  resumeAtFirstUnanswered=false,
 	  onExportAnki=null,
-	}) => {
+}) => {
   const dm = darkMode;
   const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
+  const [flashcardFullscreen, setFlashcardFullscreen] = useState(false);
 
   // Auto-scroll to first unanswered question when block loads
   useEffect(() => {
@@ -3488,6 +3491,14 @@ const QuestionView = ({
 	  const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
 
 	  useEffect(() => {
+	    const active = allFlashcards && singleMode;
+	    window.dispatchEvent(new CustomEvent('agora-flashcard-layout', { detail:{ active, fullscreen:active && flashcardFullscreen } }));
+	    return () => {
+	      window.dispatchEvent(new CustomEvent('agora-flashcard-layout', { detail:{ active:false, fullscreen:false } }));
+	    };
+	  }, [allFlashcards, singleMode, flashcardFullscreen]);
+
+	  useEffect(() => {
 	    if (!singleMode || allFlashcards || resumeAtFirstUnanswered) return;
 	    const idx = questions.findIndex(q => q.isOpen ? !isOpenAnswered(q) : !validAnswers[q.id]);
 	    setSingleIndex(idx >= 0 ? idx : 0);
@@ -3506,6 +3517,32 @@ const QuestionView = ({
     : <VideoIcon className="w-4 h-4"/>;
   const actionMenuItems = questions.length>0 ? [
     onGoToAula ? { label:goToAulaLabel, icon:goToAulaIcon, fn:onGoToAula } : null,
+    allFlashcards && singleMode ? {
+      label:`Cartão ${Math.min(flashcardCursor + 1, Math.max(1, flashcardQueue.length))} de ${Math.max(1, flashcardQueue.length)}`,
+      icon:<LayersIcon className="w-4 h-4"/>,
+      disabled:true,
+    } : null,
+    allFlashcards && singleMode ? {
+      label:'Cartão anterior',
+      icon:<ChevronLeft className="w-4 h-4"/>,
+      fn:()=>setFlashcardCursor(i=>Math.max(0,i-1)),
+      disabled:flashcardCursor===0,
+    } : null,
+    allFlashcards && singleMode ? {
+      label:flashcardCursor>=flashcardQueue.length-1 ? 'Concluir bloco' : 'Próximo cartão',
+      icon:flashcardCursor>=flashcardQueue.length-1 ? <CheckIcon className="w-4 h-4"/> : <ChevronRight className="w-4 h-4"/>,
+      fn:()=>{
+        if (flashcardCursor>=flashcardQueue.length-1) setShowCompletion(true);
+        else setFlashcardCursor(i=>Math.min(flashcardQueue.length-1,i+1));
+      },
+      disabled:flashcardCursor>=flashcardQueue.length-1 ? !allDone : false,
+    } : null,
+    allFlashcards && singleMode ? {
+      label:flashcardFullscreen ? 'Sair da tela cheia' : 'Tela cheia',
+      icon:flashcardFullscreen ? <MinimizeIcon className="w-4 h-4"/> : <MaximizeIcon className="w-4 h-4"/>,
+      fn:()=>setFlashcardFullscreen(v=>!v),
+      active:flashcardFullscreen,
+    } : null,
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
     onAudit ? { label:'Auditar', icon:<ShieldAlert className="w-4 h-4"/>, fn:onAudit } : null,
     showBizuario&&onBizuario ? { label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:onBizuario } : null,
@@ -3752,34 +3789,20 @@ const QuestionView = ({
   }
 
   return (
-    <div className={`w-full ${allFlashcards && singleMode ? 'h-[calc(100dvh-84px)] md:h-[calc(100dvh-94px)] -my-4 md:-my-6 flex flex-col overflow-hidden' : ''}`}>
+    <div className={`w-full ${allFlashcards && singleMode ? `${flashcardFullscreen ? 'flashcard-fullscreen-stage' : 'flashcard-mobile-stage h-[calc(100dvh-84px)] md:h-[calc(100dvh-94px)] md:-my-6'} flex flex-col overflow-hidden` : ''}`}>
       {/* ── Header ── */}
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center ${allFlashcards ? 'mb-2 pb-0 gap-1' : 'mb-6 pb-6 gap-4 border-b'} ${!allFlashcards ? (dm?'border-gray-700':'border-gray-200') : ''}`}>
         <div className="min-w-0 flex-1">
           {allFlashcards && singleMode ? (
-            <div className="flex items-center justify-between gap-2">
-              <button onClick={onBack} className={`h-8 flex items-center gap-1.5 rounded-lg pr-2 text-sm font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
-                <ArrowLeft className="w-4 h-4"/>{backLabel}
-              </button>
-              <h2 className="min-w-0 flex-1 truncate text-sm font-serif font-bold text-yellow-600">{title}</h2>
-              <div className="flex items-center gap-0.5">
-                <button disabled={flashcardCursor===0} onClick={()=>setFlashcardCursor(i=>Math.max(0,i-1))} className={flashcardNavBtn(flashcardCursor===0)} title="Cartão anterior" aria-label="Cartão anterior">
-                  <ChevronLeft className="w-4 h-4"/>
-                </button>
-                <button
-                  disabled={flashcardCursor>=flashcardQueue.length-1 ? !allDone : false}
-                  onClick={()=>{
-                    if (flashcardCursor>=flashcardQueue.length-1) setShowCompletion(true);
-                    else setFlashcardCursor(i=>Math.min(flashcardQueue.length-1,i+1));
-                  }}
-                  className={flashcardNavBtn(flashcardCursor>=flashcardQueue.length-1 ? !allDone : false, true)}
-                  title={flashcardCursor>=flashcardQueue.length-1 ? 'Concluir' : 'Próximo cartão'}
-                  aria-label={flashcardCursor>=flashcardQueue.length-1 ? 'Concluir' : 'Próximo cartão'}
-                >
-                  {flashcardCursor>=flashcardQueue.length-1 ? <CheckIcon className="w-4 h-4"/> : <ChevronRight className="w-4 h-4"/>}
-                </button>
-              </div>
-              <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
+            <div className="w-full space-y-1.5">
+              <div className={`flashcard-study-topbar flex min-w-0 items-center gap-2 ${flashcardFullscreen ? '' : ''}`}>
+                {!flashcardFullscreen&&(
+                  <button onClick={onBack} className={`h-8 flex flex-shrink-0 items-center gap-1.5 rounded-lg pr-1 text-sm font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+                    <ArrowLeft className="w-4 h-4"/><span className="max-w-[5.5rem] truncate">{backLabel}</span>
+                  </button>
+                )}
+                <h2 className="min-w-0 flex-1 truncate text-sm font-serif font-bold text-yellow-600">{title}</h2>
+                <span className={`flex-shrink-0 text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
               {actionMenuItems.length>0&&(
                 <div className="relative flex-shrink-0">
                   <button
@@ -3794,8 +3817,9 @@ const QuestionView = ({
                       {actionMenuItems.map(item=>(
                         <button
                           key={item.label}
-                          onClick={()=>{setHeaderActionsOpen(false);item.fn();}}
-                          className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors ${item.danger?(dm?'text-red-400 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):item.active?(dm?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(dm?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                          disabled={item.disabled}
+                          onClick={()=>{if(item.disabled)return;setHeaderActionsOpen(false);item.fn();}}
+                          className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors disabled:cursor-default ${item.disabled?(dm?'text-gray-500 bg-gray-950/30':'text-gray-400 bg-gray-50'):item.danger?(dm?'text-red-400 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):item.active?(dm?'text-green-400 hover:bg-gray-800':'text-green-700 hover:bg-gray-50'):(dm?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
                           {item.icon}{item.label}
                         </button>
                       ))}
@@ -3803,6 +3827,7 @@ const QuestionView = ({
                   )}
                 </div>
               )}
+              </div>
             </div>
           ) : (
             <>
@@ -4449,10 +4474,10 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
   if (large) {
     return (
       <div className="flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 overflow-y-auto px-1 py-3 md:px-8 md:py-7">
+        <div className="flashcard-study-scroll flex-1 min-h-0 overflow-y-auto px-1 py-3 md:px-8 md:py-7">
           <div className="min-h-full max-w-3xl mx-auto flex items-center">
-            <section className="w-full rounded-2xl bg-[#f8f5ed] px-5 py-8 text-[#1f2933] shadow-[0_18px_60px_rgba(0,0,0,0.28)] md:px-12 md:py-11">
-              <div className="min-h-[42vh] md:min-h-[46vh] flex flex-col justify-center">
+            <section className="flashcard-study-card w-full rounded-2xl px-5 py-8 shadow-[0_18px_60px_rgba(0,0,0,0.28)] md:px-12 md:py-11">
+              <div className="flashcard-study-card-inner min-h-[42vh] md:min-h-[46vh] flex flex-col justify-center">
                 <div className="mx-auto max-w-2xl text-center text-lg md:text-2xl font-semibold leading-relaxed select-text" style={{userSelect:'text'}}>
                   {front || parseHtmlTextChat(question.statement)}
                 </div>
@@ -4477,22 +4502,22 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
             </section>
           </div>
         </div>
-        <div className={`flex-shrink-0 px-1 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] ${dm?'':'bg-transparent'}`}>
+        <div className="flashcard-study-actions flex-shrink-0">
           {!revealed ? (
             <button
               type="button"
               onClick={()=>setRevealed(true)}
-              className="mx-auto w-full max-w-md min-h-[54px] px-7 py-3.5 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.99]"
+              className={`flashcard-reveal-btn mx-auto w-full max-w-md min-h-[54px] px-7 py-3.5 rounded-2xl border font-black transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] ${dm?'border-yellow-700 bg-yellow-900/40 text-yellow-100 hover:bg-yellow-900/60':'border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100'}`}
             >
               <BookOpen className="w-4 h-4"/>Mostrar resposta
             </button>
           ) : (
-            <div className="mx-auto grid w-full max-w-xl grid-cols-2 gap-3">
+            <div className="flashcard-answer-grid mx-auto grid w-full max-w-xl grid-cols-2 gap-3">
               <button
                 type="button"
                 disabled={answered}
                 onClick={()=>onSave(FLASHCARD_WRONG)}
-                className={`min-h-[62px] px-5 py-4 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? (dm?'border-red-300 text-red-200 bg-red-950/40':'border-red-500 text-red-700 bg-red-50') : (dm?'border-red-500 text-red-200 hover:border-red-300 hover:text-red-100':'border-red-300 text-red-700 hover:border-red-500 hover:text-red-800')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
+                className={`flashcard-answer-btn flashcard-wrong-btn min-h-[58px] px-5 py-3.5 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? (dm?'border-red-300 text-red-100 bg-red-950/60':'border-red-500 text-red-700 bg-red-50') : (dm?'border-red-800 bg-red-950/30 text-red-200 hover:border-red-500 hover:bg-red-950/50':'border-red-200 bg-white text-red-700 hover:border-red-400 hover:bg-red-50')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
               >
                 Errei
               </button>
@@ -4500,7 +4525,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
                 type="button"
                 disabled={answered}
                 onClick={()=>onSave(FLASHCARD_CORRECT)}
-                className={`min-h-[62px] px-5 py-4 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? (dm?'border-green-300 text-green-200 bg-green-950/40':'border-green-500 text-green-700 bg-green-50') : (dm?'border-green-500 text-green-200 hover:border-green-300 hover:text-green-100':'border-green-300 text-green-700 hover:border-green-500 hover:text-green-800')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
+                className={`flashcard-answer-btn flashcard-correct-btn min-h-[58px] px-5 py-3.5 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? (dm?'border-green-300 text-green-100 bg-green-950/60':'border-green-500 text-green-700 bg-green-50') : (dm?'border-green-800 bg-green-950/30 text-green-200 hover:border-green-500 hover:bg-green-950/50':'border-green-200 bg-white text-green-700 hover:border-green-400 hover:bg-green-50')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}
               >
                 Acertei
               </button>
@@ -6562,6 +6587,8 @@ export default function QuestionBankApp() {
   const [darkMode, setDarkMode] = useState(()=>readStorageJson('qb_dark', false));
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
+  const [flashcardFullscreen, setFlashcardFullscreen] = useState(false);
+  const keepBottomNavVisibleRef = useRef(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(()=>readStorageJson('agora_sidebar_collapsed', false));
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
   const hdr   = darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200';
@@ -8172,6 +8199,10 @@ export default function QuestionBankApp() {
     let accumulatedDelta = 0;
     const scrollPositions = new WeakMap();
     const updateNavigationVisibility = (delta, y = window.scrollY) => {
+      if (keepBottomNavVisibleRef.current) {
+        setBottomNavVisible(true);
+        return;
+      }
       if (Math.sign(delta) !== Math.sign(accumulatedDelta)) accumulatedDelta = 0;
       accumulatedDelta += delta;
       if (accumulatedDelta > 28 && y > 96) {
@@ -8204,12 +8235,28 @@ export default function QuestionBankApp() {
   }, []);
 
   useEffect(() => {
+    if (keepBottomNavVisibleRef.current) {
+      setBottomNavVisible(true);
+      return;
+    }
     setBottomNavVisible(!(menuOpen || mobileNavOpen));
   }, [menuOpen, mobileNavOpen]);
 
   useEffect(() => {
     setBottomNavVisible(true);
   }, [view]);
+
+  useEffect(() => {
+    const onFlashcardLayout = (event) => {
+      const nextActive = !!event.detail?.active;
+      const nextFullscreen = !!event.detail?.fullscreen;
+      keepBottomNavVisibleRef.current = nextActive && !nextFullscreen;
+      setFlashcardFullscreen(nextFullscreen);
+      setBottomNavVisible(nextActive ? true : !(menuOpen || mobileNavOpen));
+    };
+    window.addEventListener('agora-flashcard-layout', onFlashcardLayout);
+    return () => window.removeEventListener('agora-flashcard-layout', onFlashcardLayout);
+  }, [menuOpen, mobileNavOpen]);
 
   // Exam timer
   useEffect(()=>{
@@ -13449,9 +13496,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const block = blocks[vqActiveBlockView.blockId] || {};
     return isPureFlashcardSet(Array.isArray(block.questions) ? block.questions : []);
   })();
-  const hideBackToTop = reviewSession
+  const activeReviewFlashcardBlock = !!reviewSession?.items?.length && reviewSession.items.every(item => item.question?.isFlashcard);
+  const activeFlashcardStudy = activeReviewFlashcardBlock
     || (view === 'topic' && isPureFlashcardSet(activeTopic?.questions || []))
     || activeCourseFlashcardBlock
+    || (view === 'quick' && quickStudyTab === 'flashcards');
+  const hideBackToTop = reviewSession
+    || activeFlashcardStudy
     || (canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'single' && (['topic','videoquestions'].includes(view) || (view === 'curso' && vqActiveBlockView)));
   const openAcademiaTopicView = (subject, topic) => {
     if (!subject || !topic) return;
@@ -13497,7 +13548,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div
-      className={`agora-shell min-h-screen font-sans transition-colors duration-300 ${bg}`}
+      className={`agora-shell min-h-screen font-sans transition-colors duration-300 ${flashcardFullscreen?'agora-flashcards-fullscreen':''} ${bg}`}
       data-theme={darkMode ? 'dark' : 'light'}
       style={{
         '--font-xs':`${0.75 * fontScale / 100}rem`,
@@ -13798,6 +13849,90 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           }
         }
         @media (max-width: 640px) {
+          html,
+          body,
+          #root {
+            margin: 0 !important;
+            width: 100%;
+            min-width: 100%;
+          }
+          .agora-shell .flashcard-mobile-stage {
+            position: fixed;
+            inset: 5.05rem 0 calc(4.85rem + env(safe-area-inset-bottom)) 0;
+            z-index: 35;
+            height: auto !important;
+            padding: .5rem .85rem .65rem .85rem;
+            background: var(--bg);
+          }
+          .agora-shell .flashcard-fullscreen-stage {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            height: auto !important;
+            padding: calc(env(safe-area-inset-top) + .5rem) .85rem calc(env(safe-area-inset-bottom) + .75rem) .85rem;
+            background: var(--bg);
+          }
+          .agora-shell .flashcard-mobile-stage > .flex:first-child,
+          .agora-shell .flashcard-fullscreen-stage > .flex:first-child {
+            flex-shrink: 0;
+            margin-bottom: .45rem !important;
+          }
+          .agora-shell .flashcard-study-topbar {
+            min-height: 2rem;
+          }
+          .agora-shell .flashcard-study-pager {
+            min-height: 2.15rem;
+            width: 7.5rem;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 12px !important;
+          }
+          .agora-shell .flashcard-study-card {
+            background: ${darkMode ? '#121826' : '#f8f5ed'};
+            color: ${darkMode ? '#f3f4f6' : '#1f2933'};
+            box-shadow: none !important;
+            border-radius: 16px !important;
+            padding: 1.35rem 1.25rem !important;
+          }
+          .agora-shell .flashcard-study-card-inner {
+            min-height: 0 !important;
+            justify-content: flex-start !important;
+          }
+          .agora-shell .flashcard-study-scroll {
+            padding: .65rem 0 .75rem 0 !important;
+            overscroll-behavior: contain;
+          }
+          .agora-shell .flashcard-study-actions {
+            position: relative;
+            flex-shrink: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            box-shadow: none !important;
+            backdrop-filter: none;
+          }
+          .agora-shell .flashcard-reveal-btn,
+          .agora-shell .flashcard-answer-btn {
+            border-radius: 14px !important;
+            background: ${darkMode ? '#111827' : '#ffffff'} !important;
+          }
+          .agora-shell .flashcard-reveal-btn {
+            color: ${darkMode ? '#f6e7bf' : '#8a520f'} !important;
+            border-color: #b45309 !important;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, .18) !important;
+          }
+          .agora-shell .flashcard-wrong-btn {
+            color: ${darkMode ? '#fecaca' : '#b91c1c'} !important;
+            border-color: ${darkMode ? '#7f1d1d' : '#fecaca'} !important;
+          }
+          .agora-shell .flashcard-correct-btn {
+            color: ${darkMode ? '#bbf7d0' : '#047857'} !important;
+            border-color: ${darkMode ? '#14532d' : '#bbf7d0'} !important;
+          }
+          .agora-shell.agora-flashcards-fullscreen main:not(:empty) {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
           .agora-shell .modal-scroll {
             padding: .75rem !important;
             overflow-y: auto !important;
@@ -14012,7 +14147,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         </button>
 
 	      {/* Header mobile */}
-	      <header className={`${hdr} lg:hidden relative top-0 ${menuOpen?'z-[60]':'z-30'} border-b`}>
+	      <header className={`${hdr} lg:hidden relative top-0 ${menuOpen?'z-[60]':'z-30'} border-b ${flashcardFullscreen?'hidden':''}`}>
 	        <div className="max-w-6xl mx-auto flex items-center justify-between px-3 py-2.5 md:px-4 md:py-2.5">
 	          {/* Logo */}
 	          <div className="flex items-center gap-2.5 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
@@ -14069,7 +14204,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
       </header>
 
-      <main className={`desktop-shell-content ${view==='videoaulas'?'course-workspace-shell pb-16 lg:pb-0':view==='curso'?'pb-16 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-16 md:py-7 lg:py-10 lg:pb-10'}`}>
+      <main className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-16 lg:pb-0':view==='curso'?'pb-16 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-16 md:py-7 lg:py-10 lg:pb-10'}`}>
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
@@ -19479,7 +19614,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
       </main>
 
-      {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
+      {!flashcardFullscreen&&['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
       <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff',transform:bottomNavVisible&&!menuOpen&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 220ms ease'}} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
