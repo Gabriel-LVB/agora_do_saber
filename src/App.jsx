@@ -13910,8 +13910,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           </div>
         </aside>
         <button type="button" onClick={toggleDesktopSidebar} title={desktopSidebarCollapsed?'Mostrar menu':'Ocultar menu'} aria-label={desktopSidebarCollapsed?'Mostrar menu':'Ocultar menu'}
-          style={{top:'calc(50% - 1.375rem)', left:desktopSidebarCollapsed?'0':'calc(var(--desktop-sidebar-width) - .75rem)'}}
-          className={`hidden lg:flex fixed z-50 h-11 w-6 items-center justify-center border shadow-sm transition-all duration-200 ${desktopSidebarCollapsed?'rounded-r-lg border-l-0':'rounded-full'} ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
+          style={{top:'calc(50% - 1.375rem)', left:0, transform:desktopSidebarCollapsed?'translateX(0)':'translateX(calc(18rem - .75rem))'}}
+          className={`hidden lg:flex fixed z-50 h-11 w-6 items-center justify-center border shadow-sm transition-transform duration-200 ${desktopSidebarCollapsed?'rounded-r-lg border-l-0':'rounded-full'} ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
           {desktopSidebarCollapsed?<ChevronRight className="w-3.5 h-3.5"/>:<ChevronLeft className="w-3.5 h-3.5"/>}
         </button>
 
