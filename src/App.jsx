@@ -13824,6 +13824,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             margin-left: auto;
             margin-right: auto;
           }
+          .agora-shell main.desktop-shell-content.course-workspace-shell {
+            padding: 0;
+          }
+          .agora-shell main.desktop-shell-content.course-workspace-shell > .course-workspace {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+          }
+          .agora-shell .course-workspace,
+          .agora-shell .course-workspace-nav,
+          .agora-shell .course-workspace-main {
+            height: 100dvh;
+            min-height: 100dvh;
+          }
         }
         .modal-scroll,
         .modal-scroll * {
@@ -13982,7 +13996,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
       </header>
 
-      <main className={`desktop-shell-content ${view==='videoaulas'||view==='curso'?'pb-16 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-16 md:py-7 lg:py-10 lg:pb-10'}`}>
+      <main className={`desktop-shell-content ${view==='videoaulas'?'course-workspace-shell pb-16 lg:pb-0':view==='curso'?'pb-16 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-16 md:py-7 lg:py-10 lg:pb-10'}`}>
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
@@ -17292,10 +17306,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           };
 
           return (
-            <div className={`flex w-full ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100vh - 62px)',overflow:'hidden'}}>
+            <div className={`course-workspace flex w-full overflow-hidden ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100dvh - 62px)'}}>
 
               {/* ══ SIDEBAR ══ */}
-              <div className={`w-64 xl:w-80 flex-shrink-0 border-r ${sideBg} ${sideBorder} hidden md:flex flex-col`} style={{height:'calc(100vh - 62px)'}}>
+              <div className={`course-workspace-nav w-60 xl:w-64 flex-shrink-0 border-r ${sideBg} ${sideBorder} hidden md:flex flex-col`} style={{height:'calc(100dvh - 62px)'}}>
                 <div className={`px-4 py-3 border-b ${sideBorder} flex-shrink-0`}>
                   <div className="flex items-center gap-2 mb-2">
                     <button onClick={()=>setView('library')} className={`p-1 rounded ${dm?'hover:bg-gray-700 text-gray-500':'hover:bg-gray-100 text-gray-400'}`}><ArrowLeft className="w-4 h-4"/></button>
@@ -17421,7 +17435,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
 
               {/* ══ MAIN ══ */}
-              <div ref={videoMainScrollRef} className="flex-1 overflow-y-auto" style={{height:'calc(100vh - 62px)'}}>
+              <div ref={videoMainScrollRef} className="course-workspace-main min-w-0 flex-1 overflow-y-auto" style={{height:'calc(100dvh - 62px)'}}>
                 {/* Mobile back bar */}
                 <div className={`flex items-center gap-2 px-3 py-2.5 md:hidden border-b flex-shrink-0 ${sideBorder} ${dm?'bg-gray-800':'bg-white'}`}>
                   <button onClick={()=>setView('library')} className={`p-1.5 rounded-lg ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
