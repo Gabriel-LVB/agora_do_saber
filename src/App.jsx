@@ -3686,7 +3686,7 @@ const QuestionView = ({
 
   if (!isGenerating && questions.length > 0 && showCompletion && allDone) {
     return (
-      <div className="w-full max-w-5xl mx-auto">
+      <div className="w-full">
         <div className={`mb-4 border-b pb-4 ${dm?'border-gray-700':'border-gray-200'}`}>
           <button onClick={onBack} className={`flex items-center gap-2 mb-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
             <ArrowLeft className="w-4 h-4"/>{backLabel}
@@ -3699,7 +3699,7 @@ const QuestionView = ({
   }
 
   return (
-    <div className={`w-full max-w-5xl mx-auto ${allFlashcards && singleMode ? 'h-[calc(100dvh-84px)] md:h-[calc(100dvh-94px)] -my-4 md:-my-6 flex flex-col overflow-hidden' : ''}`}>
+    <div className={`w-full ${allFlashcards && singleMode ? 'h-[calc(100dvh-84px)] md:h-[calc(100dvh-94px)] -my-4 md:-my-6 flex flex-col overflow-hidden' : ''}`}>
       {/* ── Header ── */}
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center ${allFlashcards ? 'mb-2 pb-0 gap-1' : 'mb-6 pb-6 gap-4 border-b'} ${!allFlashcards ? (dm?'border-gray-700':'border-gray-200') : ''}`}>
         <div className="min-w-0 flex-1">
@@ -4846,7 +4846,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       </div>}
 	      {!(question.isFlashcard && flashcardLarge)&&<>
           {questionText.caseContext&&(
-            <section className={`mb-5 w-full rounded-r-xl border-l-[3px] px-4 py-4 md:px-5 ${darkMode?'border-yellow-600 bg-gray-900/45':'border-yellow-600 bg-amber-50/70'}`}>
+            <section className={`mb-6 w-full border-y py-4 ${darkMode?'border-gray-700':'border-gray-200'}`}>
               <div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-yellow-400':'text-yellow-800'}`}>
                 Caso clínico
               </div>
@@ -6265,7 +6265,7 @@ function AcademiaTopicView({
     questionIds:allFixqs.map(q => q.id),
   }) : [];
   return (
-    <div className="w-full max-w-5xl mx-auto">
+    <div className="w-full">
       {/* Header */}
       <button onClick={onBack} className={`flex items-center gap-2 mb-8 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
         <ArrowLeft className="w-4 h-4"/>Voltar
@@ -13806,7 +13806,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             transition: margin-left .22s ease, width .22s ease;
           }
           .agora-shell main.desktop-shell-content > *:not(.fixed) {
-            width: min(100%, 78rem);
+            width: min(100%, 64rem);
             margin-left: auto;
             margin-right: auto;
           }
@@ -17869,7 +17869,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               };
 
               return (
-                <div className="w-full max-w-5xl mx-auto">
+                <div className="w-full">
                   <QuestionView
                     title={visibleTitle}
                     onBack={backFromCourseQuestions}
@@ -18422,7 +18422,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             const examQuestion = activeExam.questions[examIndex];
             const answeredExamCount = Object.keys(activeExam.answers).length;
             return (
-          <div className="w-full max-w-5xl mx-auto">
+          <div className="w-full">
             <div className={`sticky top-2 lg:top-3 z-10 mb-6 p-4 rounded-xl border flex items-center justify-between ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} shadow-md`}>
               <div>
                 <h2 className="font-serif font-bold text-yellow-600">Modo Prova{activeExam.blindMode?' (Cego)':''}</h2>
