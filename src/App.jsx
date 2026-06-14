@@ -6143,13 +6143,28 @@ function AcademiaTopicView({
         continue;
       }
       // Lista
-      if (/^\s*[-*•]\s/.test(line)) {
+      if (/^\s*[-*•](?:\s+|$)/.test(line)) {
         const items = [];
         let activeParentLevel = null;
-        while (i < mdLines.length && /^\s*[-*•]\s/.test(mdLines[i])) {
-          const match = mdLines[i].match(/^(\s*)[-*•]\s+(.*)$/);
+        const isListLine = (value = '') => /^\s*[-*•](?:\s+|$)/.test(value);
+        const isBlockBoundary = (value = '') => {
+          const trimmed = value.trim();
+          return !trimmed ||
+            /^\s*\|.+\|\s*$/.test(value) ||
+            /^#{1,6}\s+/.test(trimmed) ||
+            /^\*\*([^*]+?)\*\*:?\s*$/.test(trimmed);
+        };
+        while (i < mdLines.length && isListLine(mdLines[i])) {
+          const match = mdLines[i].match(/^(\s*)[-*•](?:\s+(.*)|\s*)$/);
           const explicitLevel = Math.min(2, Math.floor((match?.[1] || '').replace(/\t/g, '  ').length / 2));
-          const text = match?.[2] || mdLines[i].replace(/^\s*[-*•]\s/, '');
+          let text = (match?.[2] || '').trim();
+          const continuation = [];
+          let j = i + 1;
+          while (j < mdLines.length && !isListLine(mdLines[j]) && !isBlockBoundary(mdLines[j])) {
+            continuation.push(mdLines[j].trim());
+            j++;
+          }
+          if (continuation.length) text = [text, ...continuation].filter(Boolean).join(' ');
           const startsLabeledItem = /^\*\*[^*]+:\*\*/.test(text);
           if (startsLabeledItem) activeParentLevel = null;
           const inferredLevel = explicitLevel === 0 && !startsLabeledItem && activeParentLevel != null
@@ -6162,13 +6177,15 @@ function AcademiaTopicView({
             opensChildren,
           });
           if (opensChildren) activeParentLevel = inferredLevel;
-          i++;
+          i = j;
         }
         elements.push(
-          <div key={`ul-${i}`} className={`space-y-1 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
+          <div key={`ul-${i}`} className={`space-y-1.5 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
             {items.map((item, ii) => (
               <div key={ii} className="flex items-start gap-3" style={{marginLeft:`${item.level * 1.35}rem`}}>
-                <span className={`mt-[0.62rem] flex-shrink-0 rounded-full ${item.level===0?'w-1.5 h-1.5 bg-current':'w-1 h-1 border border-current opacity-70'}`}/>
+                <span className="w-3.5 h-[1.625rem] flex flex-shrink-0 items-center justify-center">
+                  <span className={`rounded-full ${item.level===0?'w-1.5 h-1.5 bg-current':'w-1 h-1 border border-current opacity-70'}`}/>
+                </span>
                 <span className="min-w-0 leading-relaxed">{parseLessonText(item.text)}</span>
               </div>
             ))}
