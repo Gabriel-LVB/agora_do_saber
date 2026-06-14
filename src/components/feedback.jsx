@@ -42,7 +42,7 @@ export const ToastContainer = ({ toasts, onRemove }) => {
     <React.Fragment>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
       <div
-        className="fixed bottom-4 right-4 sm:bottom-auto sm:top-20 z-[500] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)]"
+        className="fixed top-20 right-4 z-[500] flex flex-col gap-2 max-w-sm w-[calc(100vw-2rem)]"
         role="status"
         aria-live="polite"
       >
@@ -78,7 +78,7 @@ export const BackToTopButton = ({ darkMode }) => (
   <IconButton
     label="Voltar ao topo"
     onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-    className={`fixed bottom-16 right-4 sm:bottom-5 sm:right-5 z-30 h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${darkMode?'bg-gray-800 border-gray-700 text-yellow-400 hover:bg-gray-700':'bg-white border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}
+    className={`fixed bottom-24 right-4 sm:bottom-5 sm:right-5 z-30 h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${darkMode?'bg-gray-800 border-gray-700 text-yellow-400 hover:bg-gray-700':'bg-white border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}
   >
     <ChevronUpIcon className="w-5 h-5"/>
   </IconButton>

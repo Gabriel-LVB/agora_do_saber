@@ -4625,6 +4625,45 @@ const LessonPreferenceSelector = ({ value, onChange, options, darkMode }) => {
   );
 };
 
+const HomeMottoEditor = ({ initialValue, darkMode, onSave }) => {
+  const [draft, setDraft] = useState(initialValue || DEFAULT_HOME_MOTTO);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(initialValue || DEFAULT_HOME_MOTTO);
+  }, [initialValue]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className={`rounded-xl border p-4 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
+      <label className="block text-xs font-bold uppercase mb-2 opacity-50">Frase principal</label>
+      <textarea
+        value={draft}
+        maxLength={180}
+        rows={3}
+        onChange={e=>setDraft(e.target.value)}
+        placeholder={DEFAULT_HOME_MOTTO}
+        className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
+      />
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[10px] opacity-40">{draft.length}/180</span>
+        <button type="button" onClick={save} disabled={saving || !draft.trim()}
+          className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-bold">
+          {saving?'Publicando...':'Publicar frase'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const LESSON_FORMAT_OPTIONS = [
   { k:'outline', label:'Tópicos de revisão', desc:'Estrutura escaneável, semelhante a Pathoma e First Aid' },
   { k:'narrative', label:'Aula em parágrafos', desc:'Explicação contínua, conectando as ideias passo a passo' },
@@ -4807,21 +4846,24 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       </div>}
 	      {!(question.isFlashcard && flashcardLarge)&&<>
           {questionText.caseContext&&(
-            <section className={`mb-5 overflow-hidden rounded-xl border ${darkMode?'border-gray-600 bg-gray-900/55':'border-gray-200 bg-gray-50'}`}>
-              <div className={`border-b px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'border-gray-700 text-yellow-400':'border-gray-200 text-yellow-700'}`}>
-                Caso clínico
+            <section className={`mb-5 rounded-r-xl border-l-[3px] px-4 py-4 ${darkMode?'border-yellow-600 bg-gray-900/45':'border-yellow-600 bg-amber-50/70'}`}>
+              <div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-yellow-400':'text-yellow-800'}`}>
+                Caso-base
               </div>
-              <div className={`select-text px-4 py-4 text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`} style={{userSelect:'text'}}>
+              <div className={`select-text text-[15px] md:text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`} style={{userSelect:'text'}}>
                 {parseHtmlTextChat(questionText.caseContext)}
               </div>
             </section>
           )}
-          <div
-            className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg mb-6 leading-relaxed ${questionText.caseContext?'font-semibold':''}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
-            style={{userSelect:'text'}}
-          >
-            {parseHtmlTextChat(questionText.statement)}
-          </div>
+          <section className={questionText.caseContext ? 'mb-6' : ''}>
+            {questionText.caseContext&&<div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-gray-500':'text-gray-400'}`}>Pergunta</div>}
+            <div
+              className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg ${questionText.caseContext?'font-semibold leading-relaxed':'mb-6 leading-relaxed'}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
+              style={{userSelect:'text'}}
+            >
+              {parseHtmlTextChat(questionText.statement)}
+            </div>
+          </section>
         </>}
 
 	      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
@@ -6446,7 +6488,6 @@ export default function QuestionBankApp() {
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(()=>readStorageJson('qb_dark', false));
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
-  const [headerVisible, setHeaderVisible] = useState(true); // hide on scroll down
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(()=>readStorageJson('agora_sidebar_collapsed', false));
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
@@ -8055,15 +8096,17 @@ export default function QuestionBankApp() {
   }, [appBackRouteKey]); // eslint-disable-line
   useEffect(()=>{
     let lastY = window.scrollY;
-    let lastTouchY = null;
+    let accumulatedDelta = 0;
     const scrollPositions = new WeakMap();
     const updateNavigationVisibility = (delta, y = window.scrollY) => {
-      if (delta > 4 && y > 72) {
-        setHeaderVisible(false);
+      if (Math.sign(delta) !== Math.sign(accumulatedDelta)) accumulatedDelta = 0;
+      accumulatedDelta += delta;
+      if (accumulatedDelta > 28 && y > 96) {
         setBottomNavVisible(false);
-      } else if (delta < -4 || y < 32) {
-        setHeaderVisible(true);
+        accumulatedDelta = 0;
+      } else if (accumulatedDelta < -20 || y < 40) {
         setBottomNavVisible(true);
+        accumulatedDelta = 0;
       }
     };
     const onScroll = () => {
@@ -8079,29 +8122,21 @@ export default function QuestionBankApp() {
       updateNavigationVisibility(y - previousY, Math.max(y, 73));
       scrollPositions.set(target, y);
     };
-    const onTouchStart = event => {
-      lastTouchY = event.touches?.[0]?.clientY ?? null;
-    };
-    const onTouchMove = event => {
-      const touchY = event.touches?.[0]?.clientY;
-      if (lastTouchY === null || touchY === undefined) return;
-      updateNavigationVisibility(lastTouchY - touchY, Math.max(window.scrollY, 73));
-      lastTouchY = touchY;
-    };
-    const onWheel = event => updateNavigationVisibility(event.deltaY, Math.max(window.scrollY, 73));
     window.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('scroll', onAnyScroll, { passive: true, capture: true });
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('wheel', onWheel, { passive: true });
     return () => {
       window.removeEventListener('scroll', onScroll);
       document.removeEventListener('scroll', onAnyScroll, true);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('wheel', onWheel);
     };
   }, []);
+
+  useEffect(() => {
+    setBottomNavVisible(!(menuOpen || mobileNavOpen));
+  }, [menuOpen, mobileNavOpen]);
+
+  useEffect(() => {
+    setBottomNavVisible(true);
+  }, [view]);
 
   // Exam timer
   useEffect(()=>{
@@ -9273,8 +9308,10 @@ export default function QuestionBankApp() {
     try {
       await setDoc(doc(db, 'config', 'site_ui'), next, { merge:true });
       addToast('Frase do pórtico atualizada para todos.', 'success', 2500);
+      return true;
     } catch(e) {
       addToast('Não foi possível salvar a frase do pórtico.', 'error', 3500);
+      return false;
     }
   };
 
@@ -13806,18 +13843,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
       `}</style>
         {/* Navegação lateral do desktop */}
-        <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-72 flex-col border-r transition-transform duration-200 ${desktopSidebarCollapsed?'-translate-x-full':'translate-x-0'} ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+        <aside
+          className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-72 flex-col border-r transition-transform duration-200 ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}
+          style={{transform:desktopSidebarCollapsed?'translateX(-100%)':'translateX(0)'}}
+        >
           <div className={`relative flex items-center border-b gap-3 px-5 py-5 ${darkMode?'border-gray-800':'border-gray-100'}`}>
             <button type="button" onClick={()=>setView('library')} title="Ir para o início"
               className="min-w-0 flex flex-1 items-center gap-3 text-left">
               <span className="flex h-12 w-12 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-6 h-6"/></span>
               <span className="min-w-0">
-                <strong className={`block font-serif text-xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
-                <span className="block text-[9px] font-bold uppercase tracking-[0.14em] mt-1 opacity-55">Lux in Tenebris</span>
+                <strong className={`block font-serif text-2xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
+                <span className="block text-[8px] font-bold uppercase tracking-[0.13em] mt-0.5 opacity-50">Lux in Tenebris</span>
               </span>
             </button>
-            <button type="button" onClick={toggleDesktopSidebar} title="Ocultar menu" aria-label="Ocultar menu"
-              className={`absolute -right-3 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full border flex items-center justify-center shadow-sm transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
+            <button type="button" onClick={e=>{e.stopPropagation();toggleDesktopSidebar();}} title="Ocultar menu" aria-label="Ocultar menu"
+              className={`absolute right-2 top-1/2 z-10 -translate-y-1/2 h-8 w-8 rounded-lg border flex items-center justify-center shadow-sm transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
               <ChevronLeft className="w-3.5 h-3.5"/>
             </button>
           </div>
@@ -13880,14 +13920,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
 
 	      {/* Header mobile */}
-	      <header className={`${hdr} lg:hidden relative top-0 z-30 border-b`}>
+	      <header className={`${hdr} lg:hidden relative top-0 ${menuOpen?'z-[60]':'z-30'} border-b`}>
 	        <div className="max-w-6xl mx-auto flex items-center justify-between px-3 py-2.5 md:px-4 md:py-2.5">
 	          {/* Logo */}
 	          <div className="flex items-center gap-2.5 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
 	            <div className="flex h-9 w-9 rounded-lg items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-5 h-5"/></div>
 	            <div className="min-w-0">
-	              <h1 className={`font-serif font-bold text-xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
-	              <p className={`block text-[8px] font-bold uppercase tracking-[0.12em] mt-1 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
+	              <h1 className={`font-serif font-bold text-2xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
+	              <p className={`block text-[7px] font-bold uppercase tracking-[0.11em] mt-0.5 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
 	            </div>
 	          </div>
 
@@ -18596,24 +18636,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <p className={`text-xs mb-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-500'}`}>
                   Esta frase aparece na tela inicial de todos os usuários.
                 </p>
-                <div className={`rounded-xl border p-4 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
-                  <label className="block text-xs font-bold uppercase mb-2 opacity-50">Frase principal</label>
-                  <textarea
-                    value={siteConfig.homeMotto || ''}
-                    maxLength={180}
-                    rows={3}
-                    onChange={e=>setSiteConfig(p=>({...p,homeMotto:e.target.value}))}
-                    placeholder={DEFAULT_HOME_MOTTO}
-                    className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
-                  />
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-[10px] opacity-40">{String(siteConfig.homeMotto || '').length}/180</span>
-                    <button type="button" onClick={()=>saveSiteConfig({homeMotto:siteConfig.homeMotto})}
-                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold">
-                      Publicar frase
-                    </button>
-                  </div>
-                </div>
+                <HomeMottoEditor
+                  initialValue={siteConfig.homeMotto}
+                  darkMode={darkMode}
+                  onSave={homeMotto=>saveSiteConfig({homeMotto})}
+                />
               </SettingsSection>
             )}
             <SettingsSection id="gemini-thinking" title="Modo Gemini" icon={<Sparkles className="w-4 h-4"/>}>
@@ -19361,7 +19388,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </main>
 
       {['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
-      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff',transform:bottomNavVisible?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 260ms ease'}} aria-label="Navegação principal">
+      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff',transform:bottomNavVisible&&!menuOpen&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 220ms ease'}} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
