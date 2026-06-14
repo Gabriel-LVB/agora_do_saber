@@ -3737,7 +3737,7 @@ const QuestionView = ({
                     <MoreIcon className="w-4 h-4"/>
                   </button>
                   {headerActionsOpen&&(
-                    <div className={`absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                    <div className={`mobile-safe-action-menu absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                       {actionMenuItems.map(item=>(
                         <button
                           key={item.label}
@@ -3768,7 +3768,7 @@ const QuestionView = ({
                   <MoreIcon className="w-5 h-5"/>
                 </button>
                 {headerActionsOpen&&(
-                  <div className={`absolute right-0 top-11 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                  <div className={`mobile-safe-action-menu absolute right-0 top-11 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                     {actionMenuItems.map(item=>(
                       <button
                         key={item.label}
@@ -11584,7 +11584,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       return;
     }
     if(!checkKey())return;setIsBusy(true);setStudyPlanMultiplier(1);
-    const s = {...settingsRef.current, adminStudyMap:isAdmin && !!settingsRef.current.adminStudyMap};
+    const s = {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap};
     const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const orderedKeys = getTwoAttemptGeminiKeys();
     const chunks = buildAcademiaMaterialChunks(materialText, uploadedFiles);
@@ -11645,7 +11645,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
-    const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, {...settingsRef.current, adminStudyMap:isAdmin && !!settingsRef.current.adminStudyMap});
+    const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap});
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false;
     let lastErr = null;
@@ -11665,7 +11665,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setIsBusy(false);
   };
   const finalizeSub = async () => {
-    const useStudyMap = isAdmin && !!settingsRef.current.adminStudyMap;
+    const useStudyMap = !!settingsRef.current.adminStudyMap;
     const parsedTopics = useStudyMap ? parseStudyMapSyllabus(syllabus) : parseSyllabusTopics(syllabus);
     if (!parsedTopics.length) {
       setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
@@ -12154,7 +12154,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!checkKey()) return;
     setIsBusy(true);
     setAcademiaStudyPlanMultiplier(1);
-    const s = {...settingsRef.current, adminStudyMap:isAdmin && !!settingsRef.current.adminStudyMap};
+    const s = {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap};
     const sys = buildAcademiaSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const chunks = buildAcademiaMaterialChunks(academiaMaterialText, academiaUploadedFiles);
     if (chunks.length > 1) {
@@ -12217,7 +12217,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const reviseAcademiaSyllabus = async () => {
     if (!academiaSyllabusFB.trim() || !checkKey()) return;
     setIsBusy(true);
-    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, {...settingsRef.current, source: 'academia', adminStudyMap:isAdmin && !!settingsRef.current.adminStudyMap});
+    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, {...settingsRef.current, source: 'academia', adminStudyMap:!!settingsRef.current.adminStudyMap});
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false;
     let lastErr = null;
@@ -12239,7 +12239,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   const finalizeAcademia = async () => {
-    const useStudyMap = isAdmin && !!settingsRef.current.adminStudyMap;
+    const useStudyMap = !!settingsRef.current.adminStudyMap;
     const parsedTopics = useStudyMap ? parseStudyMapSyllabus(academiaSyllabus) : parseSyllabusTopics(academiaSyllabus);
     if (!parsedTopics.length) {
       setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
@@ -13782,6 +13782,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           .agora-shell .mobile-progress-row > div {
             min-width: 2.5rem;
           }
+          .agora-shell .mobile-safe-action-menu {
+            position: fixed !important;
+            inset: auto .75rem calc(5.75rem + env(safe-area-inset-bottom)) .75rem !important;
+            width: auto !important;
+            min-width: 0 !important;
+            max-height: min(22rem, calc(100dvh - 8rem)) !important;
+            overflow-y: auto !important;
+            z-index: 70 !important;
+          }
         }
         @media (max-width: 380px) {
           .agora-shell .mobile-title-lg {
@@ -13998,7 +14007,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <button key={card.key} onClick={card.action} className={`app-card group text-left rounded-xl flex items-center gap-3 md:gap-4 transition-all p-3 min-h-[76px] md:p-5 md:min-h-[104px]`}>
                       <div className={`h-10 w-10 md:h-12 md:w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${accent} group-hover:scale-[1.03] transition-transform`}>{card.icon}</div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-base md:font-serif md:text-xl font-bold text-yellow-600 mobile-wrap sm:truncate leading-tight">{card.title}</h3>
+                        <h3 className="text-lg md:font-serif md:text-2xl font-bold text-yellow-600 mobile-wrap sm:truncate leading-tight">{card.title}</h3>
                         <p className={`hidden md:block ${compact?'text-xs':'text-sm'} mt-1 line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</p>
                         <p className={`md:hidden text-[11px] mt-1 truncate ${darkMode?'text-gray-500':'text-gray-500'}`}>{card.meta}</p>
                       </div>
@@ -14108,7 +14117,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   <MoreIcon className="w-4 h-4"/>
                 </button>
                 {libraryActionMenu===id&&(
-                  <div className={`absolute right-0 top-9 z-40 min-w-40 rounded-xl border p-1 shadow-xl ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  <div className={`mobile-safe-action-menu absolute right-0 top-9 z-40 min-w-40 rounded-xl border p-1 shadow-xl ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                     {actions.map((a,i)=>(
                       <button key={`${a.label}-${i}`} onClick={e=>{e.stopPropagation();setLibraryActionMenu(null);a.fn();}} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm font-bold ${a.danger?(darkMode?'text-red-300 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
                         {a.icon}
@@ -14508,7 +14517,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                              <MoreIcon className="w-5 h-5"/>
 	                            </button>
 	                            {libraryActionMenu===id&&(
-	                              <div className={`absolute right-0 top-12 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+	                              <div className={`mobile-safe-action-menu absolute right-0 top-12 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
 	                                <button
 	                                  onClick={()=>{setLibraryActionMenu(null);clearAcademiaFixationAnswersForTargets(getAcademiaFolderFixationTargets(activeFolder));}}
 	                                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold transition-colors ${darkMode?'text-red-300 hover:bg-red-900/20':'text-red-600 hover:bg-red-50'}`}>
@@ -14623,7 +14632,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 		                        <MoreIcon className="w-5 h-5"/>
 		                      </button>
 		                      {bulkActionMenu===`subject-actions-${activeSubject.id}`&&(
-		                        <div className={`absolute right-0 top-12 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+		                        <div className={`mobile-safe-action-menu absolute right-0 top-12 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
 		                          {subjectActionItems.map(item=>(
 		                            <button
 		                              key={item.label}
@@ -14659,7 +14668,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           <ChevronDown className="w-4 h-4 opacity-60"/>
                         </button>
                         {bulkActionMenu===activeSubject.id&&(
-                          <div className={`absolute right-0 top-11 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                          <div className={`mobile-safe-action-menu absolute right-0 top-11 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                             {actions.map(item=>(
                               <button key={item.mode}
                                 onClick={()=>openBulkGenerateModal(activeSubject, item.mode)}
@@ -14696,7 +14705,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           <ChevronDown className="w-4 h-4 opacity-60"/>
                         </button>
                         {bulkActionMenu===activeSubject.id&&(
-                          <div className={`absolute right-0 top-11 z-50 w-72 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                          <div className={`mobile-safe-action-menu absolute right-0 top-11 z-50 w-72 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                             {actions.map((item, i)=> item.divider ? (
                               <div key={`div-${i}`} className={`my-1 border-t ${darkMode?'border-gray-700':'border-gray-100'}`}/>
                             ) : (
@@ -14758,7 +14767,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 })()}
               </div>
             </div>
-            {isAdmin&&(activeSubject.topics||[]).length>0&&(activeSubject.topics||[]).every(topic=>
+            {(activeSubject.topics||[]).length>0&&(activeSubject.topics||[]).every(topic=>
               Array.isArray(topic.subtopicPlans)
               &&topic.subtopicPlans.length>0
               &&topic.subtopicPlans.length===(topic.subtopics||[]).length
@@ -14813,7 +14822,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                             <MoreIcon className="w-4 h-4"/>
                           </button>
                           {bulkActionMenu===topicActionMenuId&&(
-                            <div className={`absolute right-0 top-9 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                            <div className={`mobile-safe-action-menu absolute right-0 top-9 z-50 w-64 rounded-xl border shadow-xl overflow-hidden ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
 	                              {isAcademiaTopic && fixTotal > 0 && <button
                                 onClick={e=>{
                                   e.stopPropagation();
@@ -15089,7 +15098,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
                     </div>
                   </button>
-                  {isAdmin&&<button type="button" onClick={()=>{
+                  <button type="button" onClick={()=>{
                     const enabled = !settings.adminStudyMap;
                     const ns={...settings,adminStudyMap:enabled,...(enabled?{autoMode:true,qPerSubAuto:false}:{})};
                     setSettings(ns);saveSettings(ns);
@@ -15097,14 +15106,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <div className="flex items-start gap-3">
                       <Landmark className={`w-5 h-5 mt-0.5 flex-shrink-0 ${settings.adminStudyMap?'text-yellow-500':'opacity-40'}`}/>
                       <div>
-                        <p className={`text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado</p>
+                        <p className={`flex flex-wrap items-center gap-2 text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado <span className={`rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Experimental</span></p>
                         <p className="text-xs opacity-50 mt-0.5">Organiza objetivos verificáveis e sugere quantas questões revisar em cada um.</p>
                       </div>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 flex-shrink-0 ${settings.adminStudyMap?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
                       <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminStudyMap?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
                     </div>
-                  </button>}
+                  </button>
 
                   <div className={`grid grid-cols-2 gap-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
                     {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:30}].map(f=>(
@@ -15214,7 +15223,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura Gerada</h2>
                 <p className={`text-sm rounded-xl border p-4 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200 text-gray-700'}`}>Revise os tópicos abaixo. Você pode pedir ajustes antes de confirmar; o assunto só será adicionado ao acervo ao clicar em <strong>Confirmar e salvar</strong>.</p>
-                {isAdmin&&settings.adminStudyMap
+                {settings.adminStudyMap
                   ? <StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode} multiplier={studyPlanMultiplier} onMultiplierChange={setStudyPlanMultiplier}/>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{syllabus}</div>}
                 <div className="relative">
@@ -15330,7 +15339,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
                     </div>
                   </button>
-                  {isAdmin&&<button type="button" onClick={()=>{
+                  <button type="button" onClick={()=>{
                     const enabled = !settings.adminStudyMap;
                     const ns={...settings,adminStudyMap:enabled,...(enabled?{autoMode:true,qPerSubAuto:false}:{})};
                     setSettings(ns);saveSettings(ns);
@@ -15338,14 +15347,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <div className="flex items-start gap-3">
                       <Landmark className={`w-5 h-5 mt-0.5 flex-shrink-0 ${settings.adminStudyMap?'text-yellow-500':'opacity-40'}`}/>
                       <div>
-                        <p className={`text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado</p>
+                        <p className={`flex flex-wrap items-center gap-2 text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado <span className={`rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Experimental</span></p>
                         <p className="text-xs opacity-50 mt-0.5">Organiza objetivos verificáveis e sugere quantas questões revisar em cada um.</p>
                       </div>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 flex-shrink-0 ${settings.adminStudyMap?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
                       <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminStudyMap?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
                     </div>
-                  </button>}
+                  </button>
                   <div className={`grid grid-cols-2 gap-3 mt-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
                     {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:2,mx:15}].map(f=>(
                       <div key={f.k}>
@@ -15455,7 +15464,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <p className={`text-sm rounded-xl p-3 ${darkMode?'bg-blue-900/20 text-blue-300 border border-blue-800/30':'bg-blue-50 text-blue-800 border border-blue-200'}`}>
                   ✅ Revise os tópicos e subtópicos. Eles viram seções da aula; as questões de fixação serão geradas para a aula como um todo, evitando repetir o mesmo eixo de cobrança entre subtópicos próximos.
                 </p>
-                {isAdmin&&settings.adminStudyMap
+                {settings.adminStudyMap
                   ? <StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode} multiplier={academiaStudyPlanMultiplier} onMultiplierChange={setAcademiaStudyPlanMultiplier}/>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>}
                 <div className="relative">
@@ -18110,7 +18119,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                 <MoreIcon className="w-4 h-4"/>
                               </button>
                               {blockActionMenu===blockId&&(
-                                <div className={`absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                                <div className={`mobile-safe-action-menu absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                                   {cardActions.map(item=>(
                                     <button
                                       key={item.label}
