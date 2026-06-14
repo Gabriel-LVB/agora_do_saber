@@ -1995,16 +1995,36 @@ const renderQuickLesson = (lesson = '', darkMode = false) => {
       i++;
       continue;
     }
-    if (/^\s*[-•]\s/.test(raw)) {
+    if (/^\s*[-•](?:\s+|$)/.test(raw)) {
       const items = [];
-      while (i < lines.length && /^\s*[-•]\s/.test(lines[i] || '')) {
-        items.push((lines[i] || '').replace(/^\s*[-•]\s/, '').trim());
-        i++;
+      const isListLine = (value = '') => /^\s*[-•](?:\s+|$)/.test(value);
+      const isBoundary = (value = '') => {
+        const trimmed = value.trim();
+        return !trimmed || /^#{2,4}\s+/.test(trimmed);
+      };
+      while (i < lines.length && isListLine(lines[i] || '')) {
+        const match = (lines[i] || '').match(/^\s*[-•](?:\s+(.*)|\s*)$/);
+        let itemText = (match?.[1] || '').trim();
+        const continuation = [];
+        let j = i + 1;
+        while (j < lines.length && !isListLine(lines[j] || '') && !isBoundary(lines[j] || '')) {
+          continuation.push((lines[j] || '').trim());
+          j++;
+        }
+        items.push([itemText, ...continuation].filter(Boolean).join(' '));
+        i = j;
       }
       elements.push(
-        <ul key={`qul-${i}`} className={`list-disc ml-5 space-y-1.5 my-3 text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`}>
-          {items.map((item, idx) => <li key={idx}>{parseHtmlText(item)}</li>)}
-        </ul>
+        <div key={`qul-${i}`} className={`space-y-1.5 my-3 text-base ${darkMode?'text-gray-200':'text-gray-800'}`}>
+          {items.map((item, idx) => (
+            <div key={idx} className="flex items-start gap-3">
+              <span className="flex flex-shrink-0 items-center justify-center" style={{width:'0.875rem', height:'1.625rem'}}>
+                <span className="rounded-full bg-current" style={{width:'0.4375rem', height:'0.4375rem'}}/>
+              </span>
+              <span className="min-w-0 leading-relaxed">{parseHtmlText(item)}</span>
+            </div>
+          ))}
+        </div>
       );
       continue;
     }
@@ -2172,12 +2192,45 @@ const renderRichText = (text, multiline = false) => {
     return <React.Fragment>{renderTokens(tokenize(text), 'r')}</React.Fragment>;
   }
   const lines = text.split('\n');
-  return lines.map((line, li) => (
-    <React.Fragment key={li}>
-      {renderTokens(tokenize(line), `l${li}`)}
-      {li < lines.length - 1 && <br/>}
-    </React.Fragment>
-  ));
+  const isBulletLine = (value = '') => /^\s*[-*•](?:\s+|$)/.test(value);
+  const isRichTextBoundary = (value = '') => {
+    const trimmed = value.trim();
+    return !trimmed || /^#{1,6}\s+/.test(trimmed);
+  };
+  const rendered = [];
+  let li = 0;
+  while (li < lines.length) {
+    const line = lines[li] || '';
+    if (isBulletLine(line)) {
+      const match = line.match(/^\s*[-*•](?:\s+(.*)|\s*)$/);
+      let itemText = (match?.[1] || '').trim();
+      const continuation = [];
+      let j = li + 1;
+      while (j < lines.length && !isBulletLine(lines[j] || '') && !isRichTextBoundary(lines[j] || '')) {
+        continuation.push((lines[j] || '').trim());
+        j++;
+      }
+      itemText = [itemText, ...continuation].filter(Boolean).join(' ');
+      rendered.push(
+        <span key={`bullet-${li}`} className="flex items-start gap-3 my-1">
+          <span className="flex flex-shrink-0 items-center justify-center" style={{width:'0.875rem', height:'1.625rem'}}>
+            <span className="rounded-full bg-current" style={{width:'0.4375rem', height:'0.4375rem'}}/>
+          </span>
+          <span className="min-w-0 leading-relaxed">{renderTokens(tokenize(itemText), `b${li}`)}</span>
+        </span>
+      );
+      li = j;
+      continue;
+    }
+    rendered.push(
+      <React.Fragment key={`line-${li}`}>
+        {renderTokens(tokenize(line), `l${li}`)}
+        {li < lines.length - 1 && <br/>}
+      </React.Fragment>
+    );
+    li++;
+  }
+  return rendered;
 };
 
 // Aliases para compatibilidade
@@ -6180,11 +6233,14 @@ function AcademiaTopicView({
           i = j;
         }
         elements.push(
-          <div key={`ul-${i}`} className={`space-y-1.5 my-2 text-base ${darkMode?'text-gray-300':'text-gray-700'}`}>
+          <div key={`ul-${i}`} className={`space-y-1.5 my-2 text-base ${darkMode?'text-gray-200':'text-gray-800'}`}>
             {items.map((item, ii) => (
               <div key={ii} className="flex items-start gap-3" style={{marginLeft:`${item.level * 1.35}rem`}}>
-                <span className="w-3.5 h-[1.625rem] flex flex-shrink-0 items-center justify-center">
-                  <span className={`rounded-full ${item.level===0?'w-1.5 h-1.5 bg-current':'w-1 h-1 border border-current opacity-70'}`}/>
+                <span className="flex flex-shrink-0 items-center justify-center" style={{width:'0.875rem', height:'1.625rem'}}>
+                  <span
+                    className={`rounded-full ${item.level===0?'bg-current':'border border-current opacity-70'}`}
+                    style={item.level===0 ? {width:'0.4375rem', height:'0.4375rem'} : {width:'0.3125rem', height:'0.3125rem'}}
+                  />
                 </span>
                 <span className="min-w-0 leading-relaxed">{parseLessonText(item.text)}</span>
               </div>
