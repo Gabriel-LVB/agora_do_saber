@@ -13847,42 +13847,38 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-72 flex-col border-r transition-transform duration-200 ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}
           style={{transform:desktopSidebarCollapsed?'translateX(-100%)':'translateX(0)'}}
         >
-          <div className={`relative flex items-center border-b gap-3 px-5 py-5 ${darkMode?'border-gray-800':'border-gray-100'}`}>
+          <div className={`flex items-center border-b px-4 py-4 ${darkMode?'border-gray-800':'border-gray-100'}`}>
             <button type="button" onClick={()=>setView('library')} title="Ir para o início"
-              className="min-w-0 flex flex-1 items-center gap-3 text-left">
-              <span className="flex h-12 w-12 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-6 h-6"/></span>
+              className="min-w-0 flex flex-1 items-center gap-2.5 text-left">
+              <span className="flex h-10 w-10 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-5 h-5"/></span>
               <span className="min-w-0">
-                <strong className={`block font-serif text-2xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
-                <span className="block text-[8px] font-bold uppercase tracking-[0.13em] mt-0.5 opacity-50">Lux in Tenebris</span>
+                <strong className={`block font-serif text-xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
+                <span className="block text-[7px] font-bold uppercase tracking-[0.12em] mt-0.5 opacity-50">Lux in Tenebris</span>
               </span>
-            </button>
-            <button type="button" onClick={e=>{e.stopPropagation();toggleDesktopSidebar();}} title="Ocultar menu" aria-label="Ocultar menu"
-              className={`absolute right-2 top-1/2 z-10 -translate-y-1/2 h-8 w-8 rounded-lg border flex items-center justify-center shadow-sm transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
-              <ChevronLeft className="w-3.5 h-3.5"/>
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-5">
+          <div className="flex-1 overflow-y-auto px-4 py-4">
             <p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Navegação</p>
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
-                homeCanUseAcademia ? {label:'Academia', desc:'Aulas personalizadas', icon:<AcademiaIcon className="w-5 h-5"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
+                homeCanUseAcademia ? {label:'Academia', desc:'Aulas e questões', icon:<AcademiaIcon className="w-5 h-5"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
                 {label:'Oráculo', desc:'Bancos de questões', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
-                homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Videoaulas e cronograma', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
+                homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Aulas e mais', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
               ].filter(Boolean).map(item=>(
                 <button key={item.label} type="button" onClick={item.action}
-                  className={`w-full flex items-center rounded-xl gap-3 px-3 py-3 text-left transition-colors ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
-                  <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${item.active?(darkMode?'bg-yellow-900/40':'bg-yellow-100'):(darkMode?'bg-gray-800':'bg-gray-100')}`}>{item.icon}</span>
+                  className={`w-full flex items-center rounded-xl gap-3 px-3 py-2.5 text-left transition-colors ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                  <span className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${item.active?(darkMode?'bg-yellow-900/40':'bg-yellow-100'):(darkMode?'bg-gray-800':'bg-gray-100')}`}>{item.icon}</span>
                   <span className="min-w-0">
                     <strong className="block text-sm leading-tight">{item.label}</strong>
-                    <span className="block text-[10px] mt-1 opacity-45">{item.desc}</span>
+                    <span className="block text-[10px] mt-0.5 opacity-45">{item.desc}</span>
                   </span>
                 </button>
               ))}
             </nav>
 
-            <p className="px-3 mt-7 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>
+            <p className="px-3 mt-5 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>
             <div className="space-y-1">
               {[
                 canUseAdvancedFeatures ? {label:'Centelha', icon:<Flame className="w-5 h-5"/>, action:()=>openViewWithReturn('quick'), active:view==='quick'} : null,
@@ -13891,7 +13887,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {label:'Favoritos', icon:<Heart className="w-5 h-5"/>, action:()=>setView('favorites'), active:view==='favorites'},
               ].filter(Boolean).map(item=>(
                 <button key={item.label} type="button" onClick={item.action}
-                  className={`relative w-full flex items-center rounded-xl gap-3 px-4 py-2.5 text-left text-sm font-bold transition-colors ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
+                  className={`relative w-full flex items-center rounded-xl gap-3 px-4 py-2 text-left text-sm font-bold transition-colors ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
                   {item.icon}<span className="flex-1">{item.label}</span>
                   {(item.badge||0)>0&&<span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-center text-[10px] ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{item.badge}</span>}
                 </button>
@@ -13899,25 +13895,25 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             </div>
           </div>
 
-          <div className={`border-t p-3 ${darkMode?'border-gray-800':'border-gray-100'}`}>
+          <div className={`border-t p-2 flex items-center gap-1.5 ${darkMode?'border-gray-800':'border-gray-100'}`}>
             <button type="button" onClick={openSettings}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${view==='settings'?'text-yellow-500':''} ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
-              <span className={`h-10 w-10 rounded-full border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-gray-50'}`}><UserIcon className="w-4 h-4"/></span>
-              <span className="min-w-0 flex-1"><strong className="block text-xs truncate">{username}</strong><span className="block text-[10px] opacity-45">{isAdmin?'Administrador':'Estudante'} · Configurações</span></span>
+              className={`min-w-0 flex-1 flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors ${view==='settings'?'text-yellow-500':''} ${darkMode?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
+              <span className={`h-8 w-8 rounded-full border flex items-center justify-center flex-shrink-0 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-gray-50'}`}><UserIcon className="w-3.5 h-3.5"/></span>
+              <span className="min-w-0 flex-1"><strong className="block text-xs truncate">{username}</strong><span className="block text-[9px] opacity-45">{isAdmin?'Administrador':'Estudante'}</span></span>
               <ChevronRight className="w-4 h-4 opacity-35"/>
             </button>
             <button type="button" onClick={()=>setDarkMode(!darkMode)} title={darkMode?'Usar tema claro':'Usar tema escuro'}
-              className={`mt-1 w-full h-9 rounded-lg flex items-center gap-3 px-4 text-xs font-bold opacity-60 ${darkMode?'hover:bg-gray-800 hover:opacity-100':'hover:bg-gray-50 hover:opacity-100'}`}>
-              {darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}<span>{darkMode?'Tema claro':'Tema escuro'}</span>
+              aria-label={darkMode?'Usar tema claro':'Usar tema escuro'}
+              className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 ${darkMode?'hover:bg-gray-800 hover:opacity-100':'hover:bg-gray-50 hover:opacity-100'}`}>
+              {darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}
             </button>
           </div>
         </aside>
-        {desktopSidebarCollapsed&&(
-          <button type="button" onClick={toggleDesktopSidebar} title="Mostrar menu" aria-label="Mostrar menu"
-            className={`hidden lg:flex fixed left-0 top-1/2 -translate-y-1/2 z-40 h-14 w-7 rounded-r-xl border border-l-0 items-center justify-center shadow-sm transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
-            <ChevronRight className="w-4 h-4"/>
-          </button>
-        )}
+        <button type="button" onClick={toggleDesktopSidebar} title={desktopSidebarCollapsed?'Mostrar menu':'Ocultar menu'} aria-label={desktopSidebarCollapsed?'Mostrar menu':'Ocultar menu'}
+          style={{top:'calc(50% - 1.375rem)', left:desktopSidebarCollapsed?'0':'calc(var(--desktop-sidebar-width) - .75rem)'}}
+          className={`hidden lg:flex fixed z-50 h-11 w-6 items-center justify-center border shadow-sm transition-all duration-200 ${desktopSidebarCollapsed?'rounded-r-lg border-l-0':'rounded-full'} ${darkMode?'bg-gray-900 border-gray-700 text-gray-400 hover:text-yellow-400':'bg-white border-gray-200 text-gray-500 hover:text-yellow-700'}`}>
+          {desktopSidebarCollapsed?<ChevronRight className="w-3.5 h-3.5"/>:<ChevronLeft className="w-3.5 h-3.5"/>}
+        </button>
 
 	      {/* Header mobile */}
 	      <header className={`${hdr} lg:hidden relative top-0 ${menuOpen?'z-[60]':'z-30'} border-b`}>
