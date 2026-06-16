@@ -14244,7 +14244,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         <section className="app-hero rounded-2xl px-4 py-4 md:px-6 md:py-5">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8">
                             <div className="min-w-0">
-                              <p className={`text-[8px] font-bold uppercase tracking-[0.16em] mb-1.5 ${darkMode?'text-gray-500':'text-gray-500'}`}>Pórtico da Academia do Gabigol</p>
+                              <p className={`text-[8px] font-bold uppercase tracking-[0.16em] mb-1.5 ${darkMode?'text-gray-500':'text-gray-500'}`}>Feito por: Gabriel Barbosa</p>
                               <h2 className="font-serif text-xl md:text-3xl font-bold leading-tight text-yellow-600">“{siteConfig.homeMotto || DEFAULT_HOME_MOTTO}”</h2>
                             </div>
                             {homeCanUseAdvancedFeatures&&(
