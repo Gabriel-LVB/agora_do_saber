@@ -8387,7 +8387,7 @@ export default function QuestionBankApp() {
       setAllowedEmails(normalizedCourse);
       setSiteOnlyAllowedEmails(normalizedSiteOnly);
       setSiteConfig(globalSiteConfig);
-      recordAccessLog(u, accessDecision);
+      // recordAccessLog(u, accessDecision); // EMERGÊNCIA PROVA: desliga access_logs
       if (u && (u.isAnonymous || !normalizedGlobal.includes(String(u.email || '').toLowerCase()))) {
         setUser(u);
         setUsername(null);
@@ -8402,6 +8402,7 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     if (!user || user.isAnonymous || !user.email) return;
+      return; // EMERGÊNCIA PROVA: desliga user_devices para economizar Firebase
     const storageKey = 'agora_device_id';
     let deviceId = readStorageText(storageKey, '');
     if (!deviceId) {
