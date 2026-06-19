@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import {
   SYLLABUS_LIMITS,
   buildOracleQuestionPrompt,
@@ -123,6 +123,47 @@ const MAX_MATERIAL_CHARS = 180000;
 const MATERIAL_CHUNK_CHARS = 170000;
 const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
 const ACCESS_DENIED_MESSAGE = 'Você não tem permissão para acessar este site.';
+const FIRESTORE_CACHE_KEYS = {
+  videoaulas: 'agora_videoaulas_shared_v2',
+  videoaulasTouchedAt: 'agora_videoaulas_shared_v2_touched_at',
+  siteConfig: 'agora_site_config_cache_v1',
+  accessConfig: 'agora_access_config_cache_v1',
+};
+const VIDEOAULAS_CATALOG_DOC = 'videoaulas_catalog';
+const VIDEOAULAS_CATALOG_VERSION = 1;
+const FIRESTORE_CACHE_TTL = {
+  videoaulas: 1000 * 60 * 60 * 6,
+  watched: 1000 * 60 * 10,
+  config: 1000 * 60 * 5,
+  library: 1000 * 60 * 60,
+  vqBlocks: 1000 * 60 * 30,
+  reviewQueue: 1000 * 60 * 30,
+};
+const ADMIN_ACCESS_LOG_LIMIT = 40;
+const ADMIN_DEVICE_LIMIT = 80;
+const FIRESTORE_PRESENCE_ENABLED = false;
+
+const readTimedCache = (key, maxAgeMs, fallback = null) => {
+  const cached = readStorageJson(key, null);
+  if (!cached || typeof cached !== 'object' || !('value' in cached)) {
+    return { value:fallback, fresh:false };
+  }
+  const savedAt = Number(cached.savedAt) || 0;
+  return {
+    value:cached.value ?? fallback,
+    fresh:!!savedAt && Date.now() - savedAt < maxAgeMs,
+  };
+};
+const writeTimedCache = (key, value) => writeStorageJson(key, { value, savedAt:Date.now() });
+const isCacheFresh = (key, maxAgeMs) => {
+  const savedAt = Number(readStorageText(key, '0')) || 0;
+  return !!savedAt && Date.now() - savedAt < maxAgeMs;
+};
+const touchCache = (key) => writeStorageText(key, String(Date.now()));
+const userLibraryCacheKey = (uid) => `agora_library_${uid}_cache_v2`;
+const userWatchedTouchedKey = (uid) => `agora_watched_${uid}_touched_at`;
+const userVqBlocksCacheKey = (uid) => `agora_vq_blocks_${uid}_cache_v1`;
+const userReviewQueueCacheKey = (uid) => `agora_vq_review_${uid}_cache_v1`;
 const normalizeEmailList = (emails = []) => Array.from(new Set((Array.isArray(emails) ? emails : [])
   .map(e => String(e || '').trim().toLowerCase())
   .filter(Boolean)));
@@ -6761,6 +6802,9 @@ export default function QuestionBankApp() {
   const [accessLogs, setAccessLogs] = useState([]);
   const [accessLogsLoading, setAccessLogsLoading] = useState(false);
   const accessLogSessionRef = useRef(new Set());
+  const persistSignedLibraryCache = (items) => {
+    if (user && !user.isAnonymous) writeTimedCache(userLibraryCacheKey(user.uid), sortLibraryItems(items || []));
+  };
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const courseAllowedEmails = normalizeEmailList([ADMIN_EMAIL, ...(allowedEmails || [])]);
   const siteOnlyAccessEmails = normalizeEmailList(siteOnlyAllowedEmails || []).filter(email => !courseAllowedEmails.includes(email));
@@ -6931,6 +6975,14 @@ export default function QuestionBankApp() {
     reviewQueueRef.current = reviewQueue;
   }, [reviewQueue]);
 
+  const persistReviewQueueCache = (queue) => {
+    if (user && !user.isAnonymous) writeTimedCache(userReviewQueueCacheKey(user.uid), queue || {});
+  };
+
+  const persistVqBlocksCache = (blocks) => {
+    if (user && !user.isAnonymous) writeTimedCache(userVqBlocksCacheKey(user.uid), blocks || {});
+  };
+
   const captureReturnTarget = () => ({
     view,
     libFilter,
@@ -6997,17 +7049,19 @@ export default function QuestionBankApp() {
     if (!user || user.isAnonymous || !canSeeVideoaulas || videoaulasLoadedRef.current) return;
 
     // Tentar cache do localStorage primeiro (evita loading na abertura)
-    const cacheKey = `agora_videoaulas_${user.uid}`;
+    const cacheKey = FIRESTORE_CACHE_KEYS.videoaulas;
     const watchedKey = `agora_watched_${user.uid}`;
+    const watchedTouchedKey = userWatchedTouchedKey(user.uid);
     try {
-      const cached = localStorage.getItem(cacheKey);
-      const cachedWatched = localStorage.getItem(watchedKey);
+      const cached = readStorageJson(cacheKey, null);
+      const cachedWatched = readStorageJson(watchedKey, null);
       if (cached) {
-        setVideoaulasData(JSON.parse(cached));
-        if (cachedWatched) setWatchedAulas(JSON.parse(cachedWatched));
+        setVideoaulasData(cached);
+        if (cachedWatched) setWatchedAulas(cachedWatched);
         videoaulasLoadedRef.current = true;
-        // Recarrega em background silenciosamente para atualizar cache
-        refreshVideoaulasInBackground(user, cacheKey, watchedKey);
+        const lessonsFresh = isCacheFresh(FIRESTORE_CACHE_KEYS.videoaulasTouchedAt, FIRESTORE_CACHE_TTL.videoaulas);
+        const watchedFresh = isCacheFresh(watchedTouchedKey, FIRESTORE_CACHE_TTL.watched);
+        if (!lessonsFresh || !watchedFresh) refreshVideoaulasInBackground(user, cacheKey, watchedKey);
         return;
       }
     } catch(e) {}
@@ -7023,49 +7077,91 @@ export default function QuestionBankApp() {
     if (!user) { videoaulasLoadedRef.current = false; }
   }, [user]);
 
-  const refreshVideoaulasInBackground = async (u, cacheKey, watchedKey, showLoading=false) => {
+  const buildVideoaulasCatalogFromDocs = (docs = []) => {
+    const built = {};
+    docs.forEach(entry => {
+      const id = entry.id;
+      const data = typeof entry.data === 'function' ? entry.data() : entry.data || entry;
+      const subj  = data.subject;
+      const topic = data.topic;
+      const isBonus = !!data.is_bonus;
+      if (!subj || !topic) return;
+      if (!built[subj]) built[subj] = {};
+      if (!built[subj][topic]) built[subj][topic] = { 'Aulas Principais': [], 'Bônus': [] };
+      const aula = {
+        doc_id:            id || data.doc_id || data.id || '',
+        title:             data.title,
+        embed_url:         data.embed_url,
+        bunny_id:          data.bunny_id,
+        duration_seconds:  data.duration_seconds  || 0,
+        duration_formatted:data.duration_formatted || '',
+        description:       data.description || data.ai_catalog?.description || '',
+        ai_catalog:        data.ai_catalog || null,
+      };
+      if (isBonus) built[subj][topic]['Bônus'].push(aula);
+      else         built[subj][topic]['Aulas Principais'].push(aula);
+    });
+    Object.values(built).forEach(topics =>
+      Object.values(topics).forEach(cats =>
+        Object.values(cats).forEach(arr =>
+          arr.sort((a,b) => a.title.localeCompare(b.title, 'pt'))
+        )
+      )
+    );
+    return built;
+  };
+
+  const applyVideoaulasCatalog = (catalog, cacheKey) => {
+    const safeCatalog = catalog && typeof catalog === 'object' ? catalog : {};
+    setVideoaulasData(safeCatalog);
+    writeStorageJson(cacheKey, safeCatalog);
+    touchCache(FIRESTORE_CACHE_KEYS.videoaulasTouchedAt);
+  };
+
+  const publishVideoaulasCatalog = async (catalog) => {
+    if (!isAdmin || !catalog || typeof catalog !== 'object') return false;
     try {
-      const snap = await getDocs(collection(db, 'lessons'));
-      if (!snap.empty) {
-        const built = {};
-        snap.forEach(d => {
-          const data = d.data();
-          const subj  = data.subject;
-          const topic = data.topic;
-          const isBonus = !!data.is_bonus;
-          if (!subj || !topic) return;
-          if (!built[subj]) built[subj] = {};
-          if (!built[subj][topic]) built[subj][topic] = { 'Aulas Principais': [], 'Bônus': [] };
-          const aula = {
-            doc_id:            d.id,
-            title:             data.title,
-            embed_url:         data.embed_url,
-            bunny_id:          data.bunny_id,
-            duration_seconds:  data.duration_seconds  || 0,
-            duration_formatted:data.duration_formatted || '',
-            description:       data.description || data.ai_catalog?.description || '',
-            ai_catalog:        data.ai_catalog || null,
-          };
-          if (isBonus) built[subj][topic]['Bônus'].push(aula);
-          else         built[subj][topic]['Aulas Principais'].push(aula);
-        });
-        Object.values(built).forEach(topics =>
-          Object.values(topics).forEach(cats =>
-            Object.values(cats).forEach(arr =>
-              arr.sort((a,b) => a.title.localeCompare(b.title, 'pt'))
-            )
-          )
-        );
-        setVideoaulasData(built);
-        try { localStorage.setItem(cacheKey, JSON.stringify(built)); } catch(e) {}
+      await setDoc(doc(db, 'config', VIDEOAULAS_CATALOG_DOC), {
+        version:VIDEOAULAS_CATALOG_VERSION,
+        catalog:cleanFirestoreData(catalog),
+        updatedAt:Date.now(),
+      }, { merge:false });
+      return true;
+    } catch(e) {
+      console.warn('Videoaulas catalog publish skipped:', e?.code || e?.message || e);
+      return false;
+    }
+  };
+
+  const loadPublishedVideoaulasCatalog = async () => {
+    try {
+      const snap = await getDoc(doc(db, 'config', VIDEOAULAS_CATALOG_DOC));
+      if (!snap.exists()) return null;
+      const data = snap.data() || {};
+      if (data.version !== VIDEOAULAS_CATALOG_VERSION || !data.catalog || typeof data.catalog !== 'object') return null;
+      return data.catalog;
+    } catch(e) {
+      return null;
+    }
+  };
+
+  const refreshVideoaulasInBackground = async (u, cacheKey, watchedKey, showLoading=false, forceLessons=false) => {
+    try {
+      const publishedCatalog = forceLessons ? null : await loadPublishedVideoaulasCatalog();
+      if (publishedCatalog) {
+        applyVideoaulasCatalog(publishedCatalog, cacheKey);
       } else {
-        setVideoaulasData({});
+        const snap = await getDocs(collection(db, 'lessons'));
+        const built = !snap.empty ? buildVideoaulasCatalogFromDocs(snap.docs) : {};
+        applyVideoaulasCatalog(built, cacheKey);
+        publishVideoaulasCatalog(built);
       }
       const ps = await getDoc(doc(db, 'users', u.uid, 'videoaulas_progress', 'watched'));
       if (ps.exists()) {
         const w = ps.data() || {};
         setWatchedAulas(w);
-        try { localStorage.setItem(watchedKey, JSON.stringify(w)); } catch(e) {}
+        writeStorageJson(watchedKey, w);
+        touchCache(userWatchedTouchedKey(u.uid));
       }
     } catch(e) { console.error(e); if (showLoading) setVideoaulasData({}); }
     finally { if (showLoading) setVideoaulasLoading(false); }
@@ -7075,7 +7171,7 @@ export default function QuestionBankApp() {
     if (!user || user.isAnonymous || !canSeeVideoaulas || !coursePlanLessonOrder.length || !videoaulasData) return;
     const hasDocIds = flattenCourseLessons(videoaulasData).some(lesson => lesson.aula?.doc_id);
     if (hasDocIds) return;
-    refreshVideoaulasInBackground(user, `agora_videoaulas_${user.uid}`, `agora_watched_${user.uid}`, false);
+    refreshVideoaulasInBackground(user, FIRESTORE_CACHE_KEYS.videoaulas, `agora_watched_${user.uid}`, false);
   }, [user, canSeeVideoaulas, coursePlanLessonOrder.length, videoaulasData]); // eslint-disable-line
 
   const markAulaWatched = async (bunnyId, aula = null) => {
@@ -7086,7 +7182,10 @@ export default function QuestionBankApp() {
     setWatchedAulas(u);
     addToast(already ? 'Aula desmarcada como assistida.' : 'Aula marcada como assistida.', already ? 'info' : 'success', 2500);
     // Atualizar cache local imediatamente
-    if (user) try { localStorage.setItem(`agora_watched_${user.uid}`, JSON.stringify(u)); } catch(e) {}
+    if (user) {
+      writeStorageJson(`agora_watched_${user.uid}`, u);
+      touchCache(userWatchedTouchedKey(user.uid));
+    }
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
     } catch(e) {
@@ -7096,6 +7195,10 @@ export default function QuestionBankApp() {
 
   const resetWatchedProgress = async () => {
     setWatchedAulas({});
+    if (user) {
+      writeStorageJson(`agora_watched_${user.uid}`, {});
+      touchCache(userWatchedTouchedKey(user.uid));
+    }
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
     } catch(e) {}
@@ -7323,6 +7426,13 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!user || user.isAnonymous || reviewLoaded) return;
     setReviewLoaded(true);
+    const cacheKey = userReviewQueueCacheKey(user.uid);
+    const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.reviewQueue, null);
+    if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
+      reviewQueueRef.current = cached.value;
+      setReviewQueue(cached.value);
+      if (cached.fresh) return;
+    }
     (async () => {
       try {
         const snap = await getDocs(collection(db, 'users', user.uid, 'vq_review'));
@@ -7330,6 +7440,7 @@ export default function QuestionBankApp() {
         snap.forEach(d => { loaded[d.id] = d.data(); });
         reviewQueueRef.current = loaded;
         setReviewQueue(loaded);
+        writeTimedCache(cacheKey, loaded);
       } catch(e) {}
     })();
   }, [user]); // eslint-disable-line
@@ -7508,6 +7619,7 @@ export default function QuestionBankApp() {
     );
     reviewQueueRef.current = compacted;
     setReviewQueue(compacted);
+    persistReviewQueueCache(compacted);
     if (!user || user.isAnonymous) return;
     for (const [aulaId, data] of changedAulaEntries) {
       await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data).catch(console.error);
@@ -7925,13 +8037,22 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!user || user.isAnonymous || vqBlocksLoadedRef.current) return;
     vqBlocksLoadedRef.current = true;
+    const cacheKey = userVqBlocksCacheKey(user.uid);
+    const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.vqBlocks, null);
+    if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
+      vqBlocksRef.current = cached.value;
+      setVqBlocks(cached.value);
+      if (cached.fresh) return;
+    }
     (async () => {
       setVqLoading(true);
       try {
         const snap = await getDocs(collection(db, 'users', user.uid, 'vq_blocks'));
         const loaded = {};
         snap.forEach(d => { loaded[d.id] = d.data(); });
+        vqBlocksRef.current = loaded;
         setVqBlocks(loaded);
+        writeTimedCache(cacheKey, loaded);
       } catch(e) { console.error('vqBlocks load error:', e); }
       finally { setVqLoading(false); }
     })();
@@ -7949,18 +8070,21 @@ export default function QuestionBankApp() {
       // 1. Clear watched status
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
       setWatchedAulas({});
-      localStorage.removeItem(`agora_watched_${user.uid}`);
+      writeStorageJson(`agora_watched_${user.uid}`, {});
+      touchCache(userWatchedTouchedKey(user.uid));
 
       // 2. Delete all vq_blocks docs
       const blocksSnap = await getDocs(collection(db,'users',user.uid,'vq_blocks'));
       await Promise.all(blocksSnap.docs.map(d => deleteDoc(d.ref)));
       setVqBlocks({});
+      persistVqBlocksCache({});
 
       // 3. Delete all vq_review docs
       const reviewSnap = await getDocs(collection(db,'users',user.uid,'vq_review'));
       await Promise.all(reviewSnap.docs.map(d => deleteDoc(d.ref)));
       reviewQueueRef.current = {};
       setReviewQueue({});
+      persistReviewQueueCache({});
 
       setResetCourseModal(false);
       setResetCourseInput('');
@@ -7976,6 +8100,7 @@ export default function QuestionBankApp() {
     const updated = { ...(vqBlocksRef.current || {}), [aulaId]: data };
     vqBlocksRef.current = updated;
     setVqBlocks(updated);
+    persistVqBlocksCache(updated);
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'vq_blocks', aulaId), data);
     } catch(e) {}
@@ -8282,12 +8407,16 @@ export default function QuestionBankApp() {
     accessLogSessionRef.current.add(sessionKey);
 
     const now = Date.now();
+    const today = getTodayKey();
     const safeUid = String(uid).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'unknown';
+    const dailyKey = `${today}_${status}_${safeUid}`;
+    const localLogKey = `agora_access_log_${dailyKey}`;
+    if (readStorageText(localLogKey, '')) return;
     const screenSize = typeof window !== 'undefined' && window.screen
       ? `${window.screen.width}x${window.screen.height}`
       : '';
     try {
-      await setDoc(doc(db, 'access_logs', `${now}_${safeUid}`), {
+      await setDoc(doc(db, 'access_logs', dailyKey), {
         uid:authUser.uid || '',
         email,
         displayName:authUser.displayName || '',
@@ -8297,13 +8426,16 @@ export default function QuestionBankApp() {
         canSeeCourse:!!decision?.course,
         siteOnly:!!decision?.siteOnly,
         createdAt:now,
+        lastSeenAt:now,
+        logDate:today,
         path:typeof window !== 'undefined' ? window.location.href : '',
         userAgent:typeof navigator !== 'undefined' ? String(navigator.userAgent || '').slice(0, 500) : '',
         platform:typeof navigator !== 'undefined' ? navigator.platform || '' : '',
         language:typeof navigator !== 'undefined' ? navigator.language || '' : '',
         timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || '',
         screen:screenSize,
-      });
+      }, { merge:true });
+      writeStorageText(localLogKey, String(now));
     } catch(e) {
       console.warn('Access log write skipped:', e?.code || e?.message || e);
     }
@@ -8358,26 +8490,46 @@ export default function QuestionBankApp() {
       let courseEmails = [ADMIN_EMAIL];
       let siteOnlyEmails = [];
       let globalSiteConfig = { homeMotto:DEFAULT_HOME_MOTTO };
+      const cachedSiteConfig = readTimedCache(FIRESTORE_CACHE_KEYS.siteConfig, FIRESTORE_CACHE_TTL.config, null);
+      if (cachedSiteConfig.value && typeof cachedSiteConfig.value === 'object') {
+        globalSiteConfig = {
+          ...globalSiteConfig,
+          ...cachedSiteConfig.value,
+          homeMotto:String(cachedSiteConfig.value.homeMotto || DEFAULT_HOME_MOTTO).trim() || DEFAULT_HOME_MOTTO,
+        };
+      }
       try {
-        const siteConfigSnap = await getDoc(doc(db, 'config', 'site_ui'));
-        if (siteConfigSnap.exists()) {
-          const data = siteConfigSnap.data() || {};
-          globalSiteConfig = {
-            ...globalSiteConfig,
-            ...data,
-            homeMotto:String(data.homeMotto || DEFAULT_HOME_MOTTO).trim() || DEFAULT_HOME_MOTTO,
-          };
+        if (!cachedSiteConfig.fresh) {
+          const siteConfigSnap = await getDoc(doc(db, 'config', 'site_ui'));
+          if (siteConfigSnap.exists()) {
+            const data = siteConfigSnap.data() || {};
+            globalSiteConfig = {
+              ...globalSiteConfig,
+              ...data,
+              homeMotto:String(data.homeMotto || DEFAULT_HOME_MOTTO).trim() || DEFAULT_HOME_MOTTO,
+            };
+            writeTimedCache(FIRESTORE_CACHE_KEYS.siteConfig, globalSiteConfig);
+          }
         }
       } catch(e) {}
+      const cachedAccessConfig = readTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, FIRESTORE_CACHE_TTL.config, null);
+      if (cachedAccessConfig.value && typeof cachedAccessConfig.value === 'object') {
+        courseEmails = cachedAccessConfig.value.courseEmails || [ADMIN_EMAIL];
+        siteOnlyEmails = cachedAccessConfig.value.siteOnlyEmails || [];
+      }
       try {
-        const accessSnap = await getDoc(doc(db, 'config', 'access_whitelist'));
-        if (accessSnap.exists()) {
-          const data = accessSnap.data() || {};
-          courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
-          siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
-        } else {
-          const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
-          courseEmails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
+        if (!cachedAccessConfig.fresh) {
+          const accessSnap = await getDoc(doc(db, 'config', 'access_whitelist'));
+          if (accessSnap.exists()) {
+            const data = accessSnap.data() || {};
+            courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
+            siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
+          } else {
+            const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
+            courseEmails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
+            siteOnlyEmails = [];
+          }
+          writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails, siteOnlyEmails });
         }
       } catch(e) { courseEmails = [ADMIN_EMAIL]; siteOnlyEmails = []; }
       const normalizedCourse = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
@@ -8401,8 +8553,7 @@ export default function QuestionBankApp() {
   },[]);
 
   useEffect(() => {
-    if (!user || user.isAnonymous || !user.email) return;
-      return; // EMERGÊNCIA PROVA: desliga user_devices para economizar Firebase
+    if (!user || user.isAnonymous || !user.email || !FIRESTORE_PRESENCE_ENABLED) return;
     const storageKey = 'agora_device_id';
     let deviceId = readStorageText(storageKey, '');
     if (!deviceId) {
@@ -8453,7 +8604,8 @@ export default function QuestionBankApp() {
       setUserDevices([]);
       return;
     }
-    const unsub = onSnapshot(collection(db, 'user_devices'), (snap) => {
+    const devicesQuery = query(collection(db, 'user_devices'), orderBy('lastSeenAt', 'desc'), limit(ADMIN_DEVICE_LIMIT));
+    const unsub = onSnapshot(devicesQuery, (snap) => {
       setUserDevices(snap.docs.map(d => ({ id:d.id, ...d.data() })));
     }, () => setUserDevices([]));
     return () => unsub();
@@ -8466,11 +8618,12 @@ export default function QuestionBankApp() {
       return;
     }
     setAccessLogsLoading(true);
-    const unsub = onSnapshot(collection(db, 'access_logs'), (snap) => {
+    const logsQuery = query(collection(db, 'access_logs'), orderBy('createdAt', 'desc'), limit(ADMIN_ACCESS_LOG_LIMIT));
+    const unsub = onSnapshot(logsQuery, (snap) => {
       const rows = snap.docs
         .map(d => ({ id:d.id, ...d.data() }))
         .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-        .slice(0, 40);
+        .slice(0, ADMIN_ACCESS_LOG_LIMIT);
       setAccessLogs(rows);
       setAccessLogsLoading(false);
     }, (e) => {
@@ -8489,12 +8642,29 @@ export default function QuestionBankApp() {
       try{const s=localStorage.getItem(`qb_lib_${username}`);setLibrary(s?sortLibraryItems(JSON.parse(s)):defFolder);}catch(e){setLibrary(defFolder);}
       return;
     }
-    const libRef=collection(db,'users',user.uid,'library');
-    const u1=onSnapshot(libRef,(snap)=>{
-      const d=sortLibraryItems(snap.docs.map(x=>x.data()));
-      setLibrary(d.length?d:defFolder);
-    });
-    return ()=>u1();
+    let cancelled = false;
+    const cacheKey = userLibraryCacheKey(user.uid);
+    const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.library, null);
+    if (Array.isArray(cached.value)) {
+      const d = sortLibraryItems(cached.value);
+      libraryRef.current = d.length ? d : defFolder;
+      setLibrary(libraryRef.current);
+      if (cached.fresh) return;
+    }
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db,'users',user.uid,'library'));
+        if (cancelled) return;
+        const d = sortLibraryItems(snap.docs.map(x=>x.data()));
+        const next = d.length ? d : defFolder;
+        libraryRef.current = next;
+        setLibrary(next);
+        writeTimedCache(cacheKey, d);
+      } catch(e) {
+        if (!cached.value && !cancelled) setLibrary(defFolder);
+      }
+    })();
+    return () => { cancelled = true; };
   },[user,username]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -8609,6 +8779,7 @@ export default function QuestionBankApp() {
     const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
     libraryRef.current = nextLibrary;
     setLibrary(p=>p.map(x=>x.id===cleanSubject.id?cleanSubject:x));
+    persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',cleanSubject.id.toString()),cleanSubject).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
@@ -8622,6 +8793,7 @@ export default function QuestionBankApp() {
     const nextLibrary = sortLibraryItems(currentLibrary.map(item=>changed.get(item.id)||item));
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
+    persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) {
       for (const item of cleanItems) {
         await setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error);
@@ -8659,8 +8831,10 @@ export default function QuestionBankApp() {
       const maxOrder = siblings.reduce((max,item)=>Math.max(max, Number(item.sortOrder)||0), 0);
       ns = { ...ns, sortOrder:maxOrder+1 };
     }
-    libraryRef.current = sortLibraryItems([ns, ...libraryRef.current.filter(x=>x.id!==ns.id)]);
+    const nextLibrary = sortLibraryItems([ns, ...libraryRef.current.filter(x=>x.id!==ns.id)]);
+    libraryRef.current = nextLibrary;
     setLibrary(p=>sortLibraryItems([ns,...p.filter(x=>x.id!==ns.id)]));
+    persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',ns.id.toString()),ns).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([ns,...library]));
     if (ns.source === 'academia' || hasAcademiaOriginTopic(ns)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
@@ -8671,6 +8845,7 @@ export default function QuestionBankApp() {
     const nextLibrary = libraryRef.current.filter(s=>s.id!==id);
     libraryRef.current = nextLibrary;
     setLibrary(p=>p.filter(s=>s.id!==id));
+    persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(removed ? [removed] : [], []);
@@ -9066,6 +9241,7 @@ export default function QuestionBankApp() {
       const nextLibrary = sortLibraryItems(items);
       libraryRef.current = nextLibrary;
       setLibrary(nextLibrary);
+      persistSignedLibraryCache(nextLibrary);
       if(user&&!user.isAnonymous) {
         for (const item of changed.values()) {
           await setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error);
@@ -9365,6 +9541,7 @@ export default function QuestionBankApp() {
     const nextLibrary = library.filter(item => !idsToDelete.has(item.id));
     libraryRef.current = nextLibrary;
     setLibrary(nextLibrary);
+    persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) {
       for (const id of idsToDelete) {
         await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
@@ -9426,6 +9603,7 @@ export default function QuestionBankApp() {
       updatedAt:Date.now(),
     };
     setSiteConfig(next);
+    writeTimedCache(FIRESTORE_CACHE_KEYS.siteConfig, next);
     try {
       await setDoc(doc(db, 'config', 'site_ui'), next, { merge:true });
       addToast('Frase do pórtico atualizada para todos.', 'success', 2500);
@@ -10651,7 +10829,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       updateToast(toastId, `Catálogo finalizado: ${ok} aula${ok!==1?'s':''} analisada${ok!==1?'s':''}, ${fail} erro${fail!==1?'s':''}.`, fail ? 'info' : 'success');
       setTimeout(() => removeToast(toastId), 12000);
       if (user && !user.isAnonymous) {
-        refreshVideoaulasInBackground(user, `agora_videoaulas_${user.uid}`, `agora_watched_${user.uid}`, false);
+        refreshVideoaulasInBackground(user, FIRESTORE_CACHE_KEYS.videoaulas, `agora_watched_${user.uid}`, false, true);
       }
       refreshCourseCatalogStats();
     } catch(e) {
@@ -10953,7 +11131,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             };
             const updated = {...cur, blocks:updBlocks};
             if(user&&!user.isAnonymous) setDoc(doc(db,'users',user.uid,'vq_blocks',aulaId), updated).catch(()=>{});
-            return {...prev, [aulaId]: updated};
+            const next = {...prev, [aulaId]: updated};
+            vqBlocksRef.current = next;
+            persistVqBlocksCache(next);
+            return next;
           });
           await rotateKey();
           done++;
@@ -10967,7 +11148,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {...(cur.blocks||{}), [blockId]:{...block,generating:false}};
-            return {...prev, [aulaId]:{...cur,blocks:updBlocks}};
+            const next = {...prev, [aulaId]:{...cur,blocks:updBlocks}};
+            vqBlocksRef.current = next;
+            persistVqBlocksCache(next);
+            return next;
           });
           return;
         }
@@ -12168,6 +12352,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const siteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !course.includes(email));
     setAllowedEmails(course);
     setSiteOnlyAllowedEmails(siteOnly);
+    writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails:course, siteOnlyEmails:siteOnly });
     try {
       await setDoc(doc(db,'config','access_whitelist'),{courseEmails:course,siteOnlyEmails:siteOnly,updatedAt:Date.now()});
       await setDoc(doc(db,'config','videoaulas_whitelist'),{emails:course});
