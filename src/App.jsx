@@ -10,6 +10,7 @@ import {
   buildExternalPrompt,
   buildVqSyllabusPrompt,
   buildVqBlockPrompt,
+  buildSharedLibraryClinicalPrompt,
   buildTypeInst,
   buildAcademiaSyllabusPrompt,
   buildAcademiaLessonPrompt,
@@ -408,6 +409,41 @@ ${plans.map((plan, index) => `${index + 1}. ${plan.title} — EXATAMENTE ${plan.
 REGRA CRÍTICA: respeite a quantidade individual de CADA objetivo, inclusive quando for apenas 1. Cada questão deve medir uma cobrança distinta e contribuir diretamente para o objetivo indicado. Não crie paráfrases para completar quantidade. Total: EXATAMENTE ${total} questões.`;
 };
 
+const ADMIN_ORACLE_QUESTION_CHUNK_TARGET = 15;
+const buildFixedQuestionPlans = (subtopics = [], qPerSub = 1) => subtopics
+  .filter(Boolean)
+  .map(title => ({
+    title,
+    questions:Math.max(1, Math.min(30, Number(qPerSub) || 1)),
+    objective:`Dominar ${title}`,
+  }));
+const buildQuestionPlansFromCounts = (subtopics = [], counts = []) => subtopics.reduce((plans, title, index) => {
+  if (!title) return plans;
+  plans.push({
+    title,
+    index,
+    questions:Math.max(1, Math.min(30, Number(counts[index]) || 1)),
+    objective:`Dominar ${title}`,
+  });
+  return plans;
+}, []);
+const chunkQuestionPlansByTarget = (plans = [], target = ADMIN_ORACLE_QUESTION_CHUNK_TARGET) => {
+  const chunks = [];
+  let current = [];
+  let count = 0;
+  plans.forEach(plan => {
+    current.push(plan);
+    count += Math.max(1, Number(plan.questions) || 1);
+    if (count >= target) {
+      chunks.push(current);
+      current = [];
+      count = 0;
+    }
+  });
+  if (current.length) chunks.push(current);
+  return chunks;
+};
+
 const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
 const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---|\n[ \t]*##|\n[ \t]*(?:(?:\*\*)?[ \t]*)?Quest[aã]o|$/i;
 
@@ -441,16 +477,20 @@ const cleanQuestionExplanation = (explanation = '') => {
   return exp;
 };
 
+const cleanClinicalCaseContext = (context = '') => String(context || '')
+  .replace(/^\s*Caso(?:-base|\s+cl[íi]nico)?\s*\d+\s*[—–:\-]\s*/i, '')
+  .trim();
+
 const splitQuestionCase = (question = {}) => {
   const explicitCase = String(question.caseContext || '').trim();
   const explicitStatement = String(question.statement || '').trim();
-  if (explicitCase) return { caseContext:explicitCase, statement:explicitStatement };
+  if (explicitCase) return { caseContext:cleanClinicalCaseContext(explicitCase), statement:explicitStatement };
 
   const raw = explicitStatement.replace(/\r\n/g, '\n');
   if (!/^\s*Caso\s+\d+\b/i.test(raw)) return { caseContext:'', statement:raw };
   const parts = raw.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
   if (parts.length < 2) return { caseContext:'', statement:raw };
-  return { caseContext:parts[0], statement:parts.slice(1).join('\n\n') };
+  return { caseContext:cleanClinicalCaseContext(parts[0]), statement:parts.slice(1).join('\n\n') };
 };
 
 const extractStructuredQuestionText = (rawStatement = '') => {
@@ -2111,6 +2151,19 @@ const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) =>
   return { questions:allQuestions, summary:parseData(text).summary || '' };
 };
 
+const renumberClinicalCases = (questions = []) => {
+  const caseNumbers = new Map();
+  let nextCase = 1;
+  return questions.map(question => {
+    const raw = String(question.caseContext || '').trim();
+    if (!raw) return question;
+    const vignette = raw.replace(/^Caso\s+\d+\s*[—–:-]\s*/i, '').trim() || raw;
+    const key = normalizeTextKey(vignette);
+    if (!caseNumbers.has(key)) caseNumbers.set(key, nextCase++);
+    return { ...question, caseContext:`Caso ${caseNumbers.get(key)} — ${vignette}` };
+  });
+};
+
 const questionsToGenerationText = (questions = []) => questions.map((q, index) => {
   if (q.isCloze) {
     return `## Cloze ${index + 1}
@@ -2383,14 +2436,23 @@ const sortLibraryItems = (items) => [...items].sort((a,b)=>{
 });
 
 // Short display name for a topic key: "GIN 6 - IST" → "Ist"
+const capitalizeDisplayLabel = (value = '') => {
+  const raw = String(value || '').trim();
+  const text = /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(raw) && raw === raw.toLocaleUpperCase('pt-BR')
+    ? raw.toLocaleLowerCase('pt-BR')
+    : raw;
+  const index = text.search(/[A-Za-zÀ-ÖØ-öø-ÿ]/);
+  return index < 0 ? text : `${text.slice(0,index)}${text.charAt(index).toUpperCase()}${text.slice(index+1)}`;
+};
+
 const shortTopicName = (key) => {
   const clean = key.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i, '').trim();
-  const t = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+  const t = capitalizeDisplayLabel(clean);
   return t.length > 32 ? t.substring(0, 31) + '…' : (t || key);
 };
 
 const courseLessonDisplayTitle = (aula = {}) =>
-  cleanCourseOrgLabel(aula.display_title || aula.ai_catalog?.cleanTitle || cleanAulaTitle(aula.title || ''));
+  capitalizeDisplayLabel(cleanCourseOrgLabel(aula.display_title || aula.ai_catalog?.cleanTitle || cleanAulaTitle(aula.title || '')));
 
 const flattenCourseLessons = (raw) => {
   const data = parseVideoaulasData(raw || {});
@@ -2524,6 +2586,15 @@ const COURSE_CATALOG_QUOTA_STORM_THRESHOLD = 12;
 const DEFAULT_COURSE_CATALOG_DELAY_SECONDS = 2;
 const COURSE_CATALOG_KEY_STATS_STORAGE = 'agora_course_catalog_key_stats_v1';
 const COURSE_CATALOG_ADMIN_ENABLED = false;
+const SHARED_LIBRARY_COLLECTION = 'shared_library';
+const SHARED_LIBRARY_CONFIG_DOC = 'shared_library_automation';
+const SHARED_LIBRARY_PROGRESS_COLLECTION = 'shared_library_progress';
+const SHARED_LIBRARY_QUESTION_BATCH_SIZE = 15;
+const SHARED_LIBRARY_SUMMARY_VERSION = 2;
+const SHARED_LIBRARY_CLINICAL_VERSION = 3;
+const supportsSharedLibraryClinicalVersion = value => Number(value) >= 2;
+const SHARED_LIBRARY_STAGE_ORDER = ['summary','direct','clinical'];
+const SHARED_LIBRARY_STAGE_LABELS = { summary:'Sumários', direct:'Questões diretas', clinical:'Questões clínicas' };
 const COURSE_ORG_SOURCE_MODE = 'firestore-subject-manual-corrections-v3';
 const COURSE_SCHEDULE_DEFAULT_WEEKS = 24;
 const COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE = 2;
@@ -3134,6 +3205,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false);
   const [geminiThinkingEnabled, setGeminiThinkingEnabled] = useState(!!savedSettings.geminiThinkingEnabled);
   const [auditQuestions, setAuditQuestions] = useState(!!savedSettings.auditQuestions);
+  const [adminChunkedQuestions, setAdminChunkedQuestions] = useState(!!savedSettings.adminChunkedQuestions);
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -3189,7 +3261,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     : `${fullBlocks > 0 ? `${fullBlocks} bloco(s) de ${effectivePerBlock} + ` : ''}1 bloco de ${lastBlock} = ${totalQ} no total`;
 
   // Salva preferências atuais e fecha — chamado em qualquer forma de fechar
-  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode, geminiThinkingEnabled, auditQuestions });
+  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode, geminiThinkingEnabled, auditQuestions, adminChunkedQuestions });
 
   return (
     <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={handleClose}>
@@ -3316,16 +3388,28 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </div>
 
           {isAdmin&&(
-            <button onClick={()=>setAuditQuestions(!auditQuestions)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${auditQuestions?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-              <div>
-                <p className={`text-sm font-bold ${auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar questão inútil, corrigir pistas e cobrir lacunas.</p>
-              </div>
-              <div style={{width:40,height:24,borderRadius:12,padding:2,background:auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-              </div>
-            </button>
+            <>
+              <button onClick={()=>setAdminChunkedQuestions(!adminChunkedQuestions)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${adminChunkedQuestions?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                <div>
+                  <p className={`text-sm font-bold ${adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                  <p className="text-xs opacity-50 mt-0.5">Limita o sumário a cerca de 15 questões por bloco antes de gerar a aula.</p>
+                </div>
+                <div style={{width:40,height:24,borderRadius:12,padding:2,background:adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                  <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                </div>
+              </button>
+              <button onClick={()=>setAuditQuestions(!auditQuestions)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${auditQuestions?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                <div>
+                  <p className={`text-sm font-bold ${auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                  <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar questão inútil, corrigir pistas e cobrir lacunas.</p>
+                </div>
+                <div style={{width:40,height:24,borderRadius:12,padding:2,background:auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                  <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                </div>
+              </button>
+            </>
           )}
 
           {isReset&&(
@@ -3342,7 +3426,26 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
           </button>
           <button
             disabled={loading || metaLoading}
-            onClick={()=>onConfirm({totalQ, numBlocks, qPerBlock, numAlternatives:numAlts, extraPrompt, lessonMeta, questionStyle, autoMode, questionTypes, geminiThinkingEnabled, auditQuestions, syllabusMaxPerBlock:isAdmin?ADMIN_COURSE_TOPIC_QUESTION_MAX:undefined, adminMinuteRule:isAdmin, adminFullCoverage:isAdmin})}
+            onClick={()=>{
+              const effectivePerBlock = adminChunkedQuestions ? Math.min(qPerBlock, ADMIN_ORACLE_QUESTION_CHUNK_TARGET) : qPerBlock;
+              onConfirm({
+                totalQ,
+                numBlocks:adminChunkedQuestions ? Math.ceil(totalQ / Math.max(1, effectivePerBlock)) : numBlocks,
+                qPerBlock:effectivePerBlock,
+                numAlternatives:numAlts,
+                extraPrompt,
+                lessonMeta,
+                questionStyle,
+                autoMode,
+                questionTypes,
+                geminiThinkingEnabled,
+                auditQuestions,
+                adminChunkedQuestions,
+                syllabusMaxPerBlock:isAdmin?(adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : ADMIN_COURSE_TOPIC_QUESTION_MAX):undefined,
+                adminMinuteRule:isAdmin,
+                adminFullCoverage:isAdmin,
+              });
+            }}
             className="flex-[2] px-5 py-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-base"
           >
             {loading
@@ -3394,6 +3497,8 @@ const QuestionView = ({
   numAlternatives=5,
   geminiThinkingEnabled=false,
   onGeminiThinkingChange=null,
+  adminChunkedQuestionsEnabled=false,
+  onAdminChunkedQuestionsChange=null,
   auditQuestionsEnabled=false,
   onAuditQuestionsChange=null,
   onAddToReview=null,
@@ -4002,6 +4107,18 @@ const QuestionView = ({
                 darkMode={dm}
               />
             </div>
+          )}
+          {onAdminChunkedQuestionsChange&&(
+            <button type="button" onClick={()=>onAdminChunkedQuestionsChange(!adminChunkedQuestionsEnabled)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${adminChunkedQuestionsEnabled?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-900':'border-gray-200 bg-white')}`}>
+              <div>
+                <p className={`text-sm font-bold ${adminChunkedQuestionsEnabled?'text-yellow-500':''}`}>Geração em lotes</p>
+                <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests de cerca de 15 questões, sem quebrar subtópico no meio.</p>
+              </div>
+              <div style={{width:40,height:24,borderRadius:12,padding:2,background:adminChunkedQuestionsEnabled?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:adminChunkedQuestionsEnabled?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+              </div>
+            </button>
           )}
           {onAuditQuestionsChange&&(
             <button type="button" onClick={()=>onAuditQuestionsChange(!auditQuestionsEnabled)}
@@ -4965,17 +5082,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       </div>}
 	      {!(question.isFlashcard && flashcardLarge)&&<>
           {questionText.caseContext&&(
-            <section className={`mb-6 w-full border-y py-4 ${darkMode?'border-gray-700':'border-gray-200'}`}>
-              <div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-yellow-400':'text-yellow-800'}`}>
-                Caso clínico
+            <section className={`mb-6 w-full rounded-xl border px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-yellow-700/50 bg-yellow-950/20 shadow-[inset_3px_0_0_#ca8a04]':'border-yellow-200 bg-yellow-50/70 shadow-[inset_3px_0_0_#ca8a04]'}`}>
+              <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
+                <BrainIcon className="h-4 w-4"/>Cenário clínico
               </div>
-              <div className={`select-text text-[15px] md:text-base leading-relaxed ${darkMode?'text-gray-300':'text-gray-700'}`} style={{userSelect:'text'}}>
+              <div className={`select-text text-base font-medium leading-7 md:text-[17px] ${darkMode?'text-gray-100':'text-gray-900'}`} style={{userSelect:'text'}}>
                 {parseHtmlTextChat(questionText.caseContext)}
               </div>
             </section>
           )}
           <section className={questionText.caseContext ? 'mb-6' : ''}>
-            {questionText.caseContext&&<div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-gray-500':'text-gray-400'}`}>Pergunta</div>}
+            {questionText.caseContext&&<div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-yellow-400':'text-yellow-700'}`}>Decisão</div>}
             <div
               className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg font-normal ${questionText.caseContext?'leading-relaxed':'mb-6 leading-relaxed'}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
               style={{userSelect:'text'}}
@@ -6167,7 +6284,7 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
 
 // ═══════════════════════════════════════════════════════════════════════════════
 const DEFAULT_HOME_MOTTO = 'Não são admitidos ignorantes em medicina.';
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,adminChunkedQuestions:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,sharedLibraryDelaySeconds:2,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -6708,6 +6825,7 @@ export default function QuestionBankApp() {
     numAlternatives:5,
     geminiThinkingEnabled:false,
     auditQuestions:false,
+    adminChunkedQuestions:false,
   });
   const [editingSub, setEditingSub]   = useState(null);
   const [editingSubName, setEditingSubName] = useState('');
@@ -6878,7 +6996,20 @@ export default function QuestionBankApp() {
   const academiaOracleMigratedRef = useRef(false);
   const [vqActiveBlock, setVqActiveBlock] = useState(null);
   const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
+  const [vqQuestionParity, setVqQuestionParity] = useState('all'); // all | odd | even
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
+
+  // Biblioteca compartilhada — conteúdo global, progresso individual.
+  const [sharedLibraryItems, setSharedLibraryItems] = useState([]);
+  const [sharedLibraryLoading, setSharedLibraryLoading] = useState(false);
+  const [sharedLibraryTab, setSharedLibraryTab] = useState('direct');
+  const [sharedLibrarySubject, setSharedLibrarySubject] = useState('all');
+  const [sharedLibrarySearch, setSharedLibrarySearch] = useState('');
+  const [sharedLibraryActiveItemId, setSharedLibraryActiveItemId] = useState(null);
+  const [sharedLibraryProgress, setSharedLibraryProgress] = useState({});
+  const [sharedLibraryConfig, setSharedLibraryConfig] = useState({ subjectOrder:[], enabledSubjects:null });
+  const [sharedLibraryRun, setSharedLibraryRun] = useState({ running:false, paused:false, stopping:false, stage:null, current:0, total:0, logs:[] });
+  const sharedLibraryControlRef = useRef({ paused:false, stop:false });
 
   useEffect(() => {
     vqBlocksRef.current = vqBlocks;
@@ -6941,6 +7072,7 @@ export default function QuestionBankApp() {
     view,
     activeSubjectId,
     activeTopicId,
+    sharedLibraryActiveItemId,
     activeAulaScrollId,
     vqAulaScrollId,
     vqActiveBlockView?.blockId,
@@ -6958,6 +7090,10 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!isAdmin && cursoTab === 'plano') setCursoTab('cronograma');
   }, [isAdmin, cursoTab]);
+
+  useEffect(() => {
+    if (!isAdmin && view === 'shared-library') setView('library');
+  }, [isAdmin, view]);
 
   useEffect(() => {
     if (!academiaExtraModal) return;
@@ -6983,6 +7119,57 @@ export default function QuestionBankApp() {
     if (user && !user.isAnonymous) writeTimedCache(userVqBlocksCacheKey(user.uid), blocks || {});
   };
 
+  const refreshSharedLibrary = useCallback(async () => {
+    if (!user || user.isAnonymous) return;
+    setSharedLibraryLoading(true);
+    try {
+      const [contentSnap, progressSnap, configSnap] = await Promise.all([
+        getDocs(collection(db, SHARED_LIBRARY_COLLECTION)),
+        getDocs(collection(db, 'users', user.uid, SHARED_LIBRARY_PROGRESS_COLLECTION)),
+        isAdmin ? getDoc(doc(db, 'config', SHARED_LIBRARY_CONFIG_DOC)) : Promise.resolve(null),
+      ]);
+      const items = [];
+      contentSnap.forEach(entry => {
+        const data = entry.data() || {};
+        if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
+      });
+      setSharedLibraryItems(items);
+      const progress = {};
+      progressSnap.forEach(entry => { progress[entry.id] = entry.data() || {}; });
+      setSharedLibraryProgress(progress);
+      if (configSnap?.exists()) {
+        const saved = configSnap.data() || {};
+        setSharedLibraryConfig(p => ({ ...p, ...saved }));
+      }
+    } catch(e) {
+      console.error('Shared library load failed:', e);
+      addToast('Não consegui carregar a Biblioteca compartilhada.', 'error', 4500);
+    } finally {
+      setSharedLibraryLoading(false);
+    }
+  }, [user?.uid, isAdmin]); // eslint-disable-line
+
+  useEffect(() => {
+    if (!user || user.isAnonymous) {
+      setSharedLibraryItems([]);
+      setSharedLibraryProgress({});
+      return;
+    }
+    refreshSharedLibrary();
+  }, [refreshSharedLibrary, user?.uid]);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous) return undefined;
+    return onSnapshot(collection(db, SHARED_LIBRARY_COLLECTION), snapshot => {
+      const items = [];
+      snapshot.forEach(entry => {
+        const data = entry.data() || {};
+        if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
+      });
+      setSharedLibraryItems(items);
+    }, error => console.warn('Shared library realtime sync failed:', error?.code || error?.message || error));
+  }, [user?.uid, isAdmin]);
+
   const captureReturnTarget = () => ({
     view,
     libFilter,
@@ -6998,6 +7185,7 @@ export default function QuestionBankApp() {
     vqAula,
     vqActiveBlock,
     vqActiveBlockView,
+    vqQuestionParity,
     cursoTab,
     quickStudyTab,
   });
@@ -7023,6 +7211,7 @@ export default function QuestionBankApp() {
     setVqAula(target.vqAula || null);
     setVqActiveBlock(target.vqActiveBlock || null);
     setVqActiveBlockView(target.vqActiveBlockView || null);
+    setVqQuestionParity(target.vqQuestionParity || 'all');
     setCursoTab(target.cursoTab || 'videoaulas');
     setQuickStudyTab(target.quickStudyTab || 'lesson');
     setView(target.view || fallback);
@@ -8141,6 +8330,64 @@ export default function QuestionBankApp() {
     return false;
   };
 
+  // Usuários do curso recebem as baterias publicadas pelo admin sem precisar gerar cópias.
+  // Respostas continuam no documento pessoal de vq_blocks quando o aluno interage.
+  useEffect(() => {
+    if (!canSeeVideoaulas || !sharedLibraryItems.length || !videoaulasData) return;
+    const lessons = flattenCourseLessons(videoaulasData);
+    const byLessonId = new Map(lessons.map(lesson => [String(lesson.id), lesson]));
+    setVqBlocks(previous => {
+      let changed = false;
+      const next = { ...previous };
+      sharedLibraryItems.forEach(item => {
+        const lesson = byLessonId.get(String(item.lessonId));
+        if (!lesson) return;
+        const key = aulaDocId(lesson.aula);
+        const current = previous[key];
+        const directComplete = !item.directPartial && !!item.directCompletedAt && item.directSummaryVersion === item.summaryVersion;
+        const clinicalComplete = !item.clinicalPartial
+          && !!item.clinicalCompletedAt
+          && supportsSharedLibraryClinicalVersion(item.clinicalGenerationVersion)
+          && item.clinicalSummaryVersion === item.summaryVersion;
+        const publishKey = `${directComplete ? item.directCompletedAt : 'direct-pending'}|${clinicalComplete ? item.clinicalCompletedAt : 'clinical-pending'}`;
+        if (current?.meta?.source === 'shared-library' && current.meta?.sharedLibraryPublishKey === publishKey) return;
+        const directQuestions = directComplete ? (item.directQuestions || []) : [];
+        const clinicalQuestions = clinicalComplete ? (item.clinicalQuestions || []) : [];
+        if (!directQuestions.length && !clinicalQuestions.length) return;
+        const previousAnswers = Object.values(current?.blocks || {}).reduce((answers, block) => ({ ...answers, ...(block?.answers || {}) }), {});
+        const questions = [...directQuestions, ...clinicalQuestions];
+        next[key] = {
+          meta:{
+            totalQuestions:questions.length,
+            numBlocks:1,
+            aulaTitle:item.title,
+            subject:item.subject,
+            topic:item.topic,
+            source:'shared-library',
+            readOnly:true,
+            sharedLibraryItemId:item.id,
+            sharedLibraryUpdatedAt:item.updatedAt,
+            sharedLibraryPublishKey:publishKey,
+            createdAt:item.summaryCompletedAt || item.updatedAt,
+          },
+          blocks:{
+            library_questions:{
+              title:'Fixação e aplicação clínica',
+              subtopics:(item.summaryBlocks || []).flatMap(block=>block.subtopics || []),
+              questions,
+              answers:previousAnswers,
+              generating:false,
+            },
+          },
+        };
+        changed = true;
+      });
+      if (!changed) return previous;
+      vqBlocksRef.current = next;
+      return next;
+    });
+  }, [canSeeVideoaulas, sharedLibraryItems, videoaulasData, vqLoading]); // eslint-disable-line
+
 
 
   useEffect(()=>{
@@ -8179,6 +8426,7 @@ export default function QuestionBankApp() {
     activeFolderId || 'root',
     activeSubjectId || '',
     activeTopicId || '',
+    sharedLibraryActiveItemId || '',
     quickStudyTab,
     cursoTab,
     vqSubject || '',
@@ -8274,6 +8522,11 @@ export default function QuestionBankApp() {
       if (view === 'academia-creator') { setAcademiaCreatorStep(1); setAcademiaSetupStep('content'); setView('library'); return true; }
       if (view === 'paste') { setView('sub-library'); return true; }
       if (view === 'favorites') { setView('library'); return true; }
+      if (view === 'shared-library') {
+        if (sharedLibraryActiveItemId) setSharedLibraryActiveItemId(null);
+        else setView('library');
+        return true;
+      }
       if (view === 'settings') { restoreReturnTarget('library'); return true; }
       if (view === 'spaced-review') { restoreReturnTarget('library'); return true; }
       if (view === 'curso') { setView('library'); return true; }
@@ -10087,6 +10340,379 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     return [...byValue.values()];
   };
 
+  const addSharedLibraryLog = (type, msg) => {
+    const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    setSharedLibraryRun(p => ({ ...p, logs:[{ id:Date.now()+Math.random(), type, msg, time }, ...p.logs].slice(0, 120) }));
+  };
+
+  const parseSharedLibrarySummary = (text = '') => {
+    const blocks = [];
+    const regex = /##\s*Bloco\s*(\d+)[:\s]*([^\n]*)\n([\s\S]*?)(?=##\s*Bloco|$)/gi;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const subtopics = match[3].split('\n')
+        .map(line => line.replace(/^[\s\-*•\d.)]+/, '').trim())
+        .filter(line => line.length > 3);
+      blocks.push({ title:match[2].trim() || `Bloco ${match[1]}`, subtopics });
+    }
+    if (!blocks.length) {
+      const subtopics = text.split('\n')
+        .map(line => line.replace(/^[\s\-*•\d.)#]+/, '').trim())
+        .filter(line => line.length > 3);
+      if (subtopics.length) blocks.push({ title:'Conteúdo essencial', subtopics });
+    }
+    return blocks;
+  };
+
+  const sharedLibraryDocIdForLesson = (lesson = {}) => String(lesson.docId || lesson.id || lesson.aula?.title || '')
+    .replace(/\//g, '-')
+    .replace(/[^a-zA-Z0-9À-ÿ_.-]+/g, '_')
+    .slice(0, 180);
+
+  const saveSharedLibraryItem = async (id, patch) => {
+    if (!isAdmin) throw new Error('Apenas o administrador pode publicar na Biblioteca.');
+    const current = sharedLibraryItems.find(item => item.id === id) || {};
+    const next = cleanFirestoreData({ ...current, ...patch, id:undefined, updatedAt:Date.now() });
+    await setDoc(doc(db, SHARED_LIBRARY_COLLECTION, id), next, { merge:true });
+    setSharedLibraryItems(items => {
+      const index = items.findIndex(item => item.id === id);
+      if (index < 0) return [...items, { ...next, id }];
+      return items.map((item, i) => i === index ? { ...item, ...next, id } : item);
+    });
+    return { ...current, ...next, id };
+  };
+
+  const waitForSharedLibraryControl = async () => {
+    while (sharedLibraryControlRef.current.paused && !sharedLibraryControlRef.current.stop) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    return !sharedLibraryControlRef.current.stop;
+  };
+
+  const callSharedLibraryGemini = async ({ prompt, system, keys, cursorRef, maxTokens=32768 }) => {
+    let lastError = null;
+    for (let attempt = 0; attempt < keys.length; attempt++) {
+      if (!await waitForSharedLibraryControl()) throw new Error('LIBRARY_STOPPED');
+      const index = cursorRef.current % keys.length;
+      const key = keys[index];
+      cursorRef.current = (index + 1) % keys.length;
+      try {
+        const result = await callGemini(prompt, system, key.value, [], {
+          thinkingBudget:getGeminiThinkingBudget(!!settingsRef.current.geminiThinkingEnabled),
+          maxTokens,
+        });
+        addSharedLibraryLog('success', `Chave ${key.fingerprint || index + 1} concluiu o request.`);
+        return result;
+      } catch(e) {
+        lastError = e;
+        addSharedLibraryLog('warning', `Chave ${key.fingerprint || index + 1} falhou: ${ERROR_CONFIGS[e?.message]?.title || e?.message || 'erro'}.`);
+        if (!shouldTryNextGeminiKey(e)) break;
+      }
+    }
+    throw lastError || new Error('CONNECTION_ERROR');
+  };
+
+  const getSharedLibraryTargets = () => {
+    const lessons = flattenCourseLessons(videoaulasData || {});
+    const allSubjects = [...new Set(lessons.map(lesson => lesson.subject).filter(Boolean))];
+    const enabled = Array.isArray(sharedLibraryConfig.enabledSubjects) ? sharedLibraryConfig.enabledSubjects : allSubjects;
+    const order = sharedLibraryConfig.subjectOrder?.length ? sharedLibraryConfig.subjectOrder : sortSubjects(allSubjects);
+    const rank = new Map(order.map((subject, index) => [subject, index]));
+    return lessons
+      .filter(lesson => enabled.includes(lesson.subject))
+      .sort((a,b) => (rank.get(a.subject) ?? 9999) - (rank.get(b.subject) ?? 9999)
+        || a.subject.localeCompare(b.subject, 'pt')
+        || a.topic.localeCompare(b.topic, 'pt')
+        || a.index - b.index);
+  };
+
+  const saveSharedLibraryConfig = async (next) => {
+    setSharedLibraryConfig(next);
+    if (!isAdmin) return;
+    await setDoc(doc(db, 'config', SHARED_LIBRARY_CONFIG_DOC), cleanFirestoreData({ ...next, updatedAt:Date.now() }), { merge:true });
+  };
+
+  const pauseSharedLibraryAutomation = () => {
+    sharedLibraryControlRef.current.paused = true;
+    setSharedLibraryRun(p => ({ ...p, paused:true }));
+    addSharedLibraryLog('info', 'Fila pausada após o request atual.');
+  };
+  const resumeSharedLibraryAutomation = () => {
+    sharedLibraryControlRef.current.paused = false;
+    setSharedLibraryRun(p => ({ ...p, paused:false }));
+    addSharedLibraryLog('info', 'Fila retomada.');
+  };
+  const stopSharedLibraryAutomation = () => {
+    sharedLibraryControlRef.current.stop = true;
+    sharedLibraryControlRef.current.paused = false;
+    setSharedLibraryRun(p => ({ ...p, stopping:true, paused:false }));
+  };
+
+  const startSharedLibraryAutomation = async () => {
+    if (!isAdmin || sharedLibraryRun.running) return;
+    const targets = getSharedLibraryTargets();
+    if (!targets.length) {
+      addToast('Nenhuma aula encontrada nas matérias selecionadas.', 'error', 4000);
+      return;
+    }
+    const keys = await collectLikelySiteGeminiKeys();
+    if (!keys.length) {
+      addToast('Nenhuma chave Gemini válida foi encontrada.', 'error', 4500);
+      return;
+    }
+    const contentById = new Map(sharedLibraryItems.map(item => [item.id, item]));
+    const saveRunItem = async (id, current, patch) => {
+      await saveSharedLibraryItem(id, patch);
+      const next = { ...(current || {}), ...patch, id, updatedAt:Date.now() };
+      contentById.set(id, next);
+      return next;
+    };
+    sharedLibraryControlRef.current = { paused:false, stop:false };
+    const cursorRef = { current:0 };
+    setSharedLibraryRun({ running:true, paused:false, stopping:false, stage:'summary', current:0, total:targets.length, logs:[] });
+    addSharedLibraryLog('info', `${targets.length} aulas · ${keys.length} chaves · lotes de ${SHARED_LIBRARY_QUESTION_BATCH_SIZE}.`);
+
+    try {
+      let completedLessons = 0;
+      for (const lesson of targets) {
+        if (sharedLibraryControlRef.current.stop) break;
+        const id = sharedLibraryDocIdForLesson(lesson);
+        let existing = contentById.get(id) || {};
+        const base = {
+          lessonId:lesson.id,
+          sourceLessonId:lesson.docId,
+          subject:lesson.subject,
+          topic:lesson.topicTitle || lesson.topic,
+          title:lesson.title,
+          description:lesson.aula?.description || '',
+          durationSeconds:lesson.durationSeconds || 0,
+          source:'course-transcript',
+          published:true,
+        };
+        let lessonFailed = false;
+        addSharedLibraryLog('info', `Aula ${completedLessons + 1}/${targets.length}: ${lesson.title}.`);
+        for (const stage of SHARED_LIBRARY_STAGE_ORDER) {
+          if (!await waitForSharedLibraryControl()) break;
+          setSharedLibraryRun(p => ({ ...p, stage, current:completedLessons, total:targets.length }));
+          let lessonUsedApi = false;
+          try {
+            if (stage === 'summary') {
+              if (existing.summaryText && existing.summaryBlocks?.length && existing.summaryVersion === SHARED_LIBRARY_SUMMARY_VERSION) {
+                addSharedLibraryLog('info', `${lesson.title}: sumário já pronto.`);
+              } else {
+                lessonUsedApi = true;
+                const lessonData = await fetchTranscript(lesson.aula);
+                const transcript = lessonData?.transcript || '';
+                if (!transcript.trim()) throw new Error('Transcrição não encontrada');
+                const system = buildVqSyllabusPrompt(lesson.aula, 0, 0, transcript, '', {
+                  fullCoverage:true,
+                  openStructure:true,
+                  fullTranscript:true,
+                });
+                const summaryText = await callSharedLibraryGemini({ prompt:'Crie o sumário didático completo desta aula.', system, keys, cursorRef });
+                const summaryBlocks = parseSharedLibrarySummary(summaryText);
+                if (!summaryBlocks.length) throw new Error('Sumário sem tópicos reconhecíveis');
+                existing = await saveRunItem(id, existing, {
+                  ...base,
+                  summaryText,
+                  summaryBlocks,
+                  summaryVersion:SHARED_LIBRARY_SUMMARY_VERSION,
+                  summaryCompletedAt:Date.now(),
+                  directQuestions:(existing.directQuestions || []).length === summaryBlocks.flatMap(block=>block.subtopics || []).length && !existing.directPartial ? existing.directQuestions : [],
+                  directPartial:false,
+                  directBatchIndex:-1,
+                  directSummaryVersion:(existing.directQuestions || []).length === summaryBlocks.flatMap(block=>block.subtopics || []).length && !existing.directPartial ? SHARED_LIBRARY_SUMMARY_VERSION : existing.directSummaryVersion,
+                  directCompletedAt:(existing.directQuestions || []).length === summaryBlocks.flatMap(block=>block.subtopics || []).length && !existing.directPartial ? existing.directCompletedAt : null,
+                  clinicalQuestions:[],
+                  clinicalPartial:false,
+                  clinicalBatchIndex:-1,
+                  clinicalTopicIndex:-1,
+                  clinicalGenerationVersion:0,
+                });
+                addSharedLibraryLog('success', `${lesson.title}: sumário salvo.`);
+              }
+            } else if (stage === 'direct') {
+              let fresh = contentById.get(id) || existing;
+              const blocks = fresh.summaryBlocks?.length ? fresh.summaryBlocks : parseSharedLibrarySummary(fresh.summaryText || '');
+              const expectedDirectQuestions = blocks.flatMap(block => block.subtopics || []).length;
+              const directIds = new Set((fresh.directQuestions || []).map(question=>String(question.id)));
+              const directIsComplete = expectedDirectQuestions > 0
+                && (fresh.directQuestions || []).length === expectedDirectQuestions
+                && directIds.size === expectedDirectQuestions
+                && !fresh.directPartial
+                && fresh.directSummaryVersion === fresh.summaryVersion;
+              if (directIsComplete) {
+                addSharedLibraryLog('info', `${lesson.title}: diretas conferidas (${expectedDirectQuestions}/${expectedDirectQuestions}).`);
+              } else {
+                lessonUsedApi = true;
+                const lessonData = await fetchTranscript(lesson.aula);
+                const transcript = lessonData?.transcript || '';
+                if (!transcript.trim()) throw new Error('Transcrição não encontrada');
+                const subtopics = blocks.flatMap(block => block.subtopics || []);
+                if (!subtopics.length) throw new Error('Gere o sumário antes das questões');
+                const batches = [];
+                for (let i = 0; i < subtopics.length; i += SHARED_LIBRARY_QUESTION_BATCH_SIZE) batches.push(subtopics.slice(i, i + SHARED_LIBRARY_QUESTION_BATCH_SIZE));
+                const generated = fresh.directPartial ? [...(fresh.directQuestions || [])] : [];
+                const firstBatch = fresh.directPartial ? Math.max(0, Number(fresh.directBatchIndex) + 1 || 0) : 0;
+                for (let batchIndex = firstBatch; batchIndex < batches.length; batchIndex++) {
+                  if (!await waitForSharedLibraryControl()) break;
+                  const batch = batches[batchIndex];
+                  const meta = withAdminQuestionPromptSettings({
+                    questionStyle:'direct',
+                    questionTypes:['direct'],
+                    numAlternatives:settingsRef.current.numAlternatives || 5,
+                    explanationLength:settingsRef.current.explanationLength || 'complete',
+                  });
+                  const alts = meta.numAlternatives === 4 ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]' : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+                  let batchQuestions = [];
+                  let remainingSubtopics = [...batch];
+                  const validationAttempts = Math.max(3, Math.min(8, keys.length * 2));
+                  for (let qualityAttempt = 0; qualityAttempt < validationAttempts && remainingSubtopics.length; qualityAttempt++) {
+                    const segmentBlock = { title:`${lesson.title} — lote ${batchIndex + 1}, continuação ${qualityAttempt + 1}`, subtopics:remainingSubtopics };
+                    const system = buildVqBlockPrompt(segmentBlock, meta, remainingSubtopics, transcript, alts);
+                    const raw = await callSharedLibraryGemini({
+                      prompt:`Gere somente esta parte do lote ${batchIndex + 1}/${batches.length}. Entregue exatamente ${remainingSubtopics.length} questões diretas: uma para cada subtópico listado, na mesma ordem. Não repita questões de partes anteriores.`,
+                      system,
+                      keys,
+                      cursorRef,
+                      maxTokens:32768,
+                    });
+                    const parsed = parseGeneratedQuestionsByTypes(raw, `${id}_direct_${batchIndex}_part_${qualityAttempt}`, ['direct']);
+                    const accepted = parsed.questions.slice(0, remainingSubtopics.length);
+                    if (!accepted.length) {
+                      addSharedLibraryLog('warning', `${lesson.title}: lote ${batchIndex + 1} não devolveu questões legíveis; tentando a mesma parte novamente.`);
+                      continue;
+                    }
+                    batchQuestions.push(...accepted);
+                    remainingSubtopics = remainingSubtopics.slice(accepted.length);
+                    if (remainingSubtopics.length) {
+                      addSharedLibraryLog('info', `${lesson.title}: lote ${batchIndex + 1} preservou ${batchQuestions.length}/${batch.length}; faltam ${remainingSubtopics.length}.`);
+                    }
+                  }
+                  if (remainingSubtopics.length || batchQuestions.length !== batch.length) throw new Error(`Lote ${batchIndex + 1} ficou incompleto (${batchQuestions.length}/${batch.length})`);
+                  generated.push(...batchQuestions);
+                  fresh = await saveRunItem(id, fresh, { ...base, directQuestions:generated, directPartial:true, directBatchIndex:batchIndex });
+                }
+                if (sharedLibraryControlRef.current.stop) break;
+                existing = await saveRunItem(id, fresh, { ...base, directQuestions:generated, directPartial:false, directBatchIndex:-1, directSummaryVersion:fresh.summaryVersion || SHARED_LIBRARY_SUMMARY_VERSION, directCompletedAt:Date.now() });
+                addSharedLibraryLog('success', `${lesson.title}: ${generated.length} questões diretas salvas.`);
+              }
+            } else if (stage === 'clinical') {
+              let fresh = contentById.get(id) || existing;
+              const clinicalIsCurrent = !fresh.clinicalPartial
+                && supportsSharedLibraryClinicalVersion(fresh.clinicalGenerationVersion)
+                && fresh.clinicalSummaryVersion === fresh.summaryVersion
+                && !!fresh.clinicalCompletedAt;
+              if (clinicalIsCurrent) {
+                addSharedLibraryLog('info', `${lesson.title}: clínicas integradoras já prontas.`);
+              } else {
+                lessonUsedApi = true;
+                const blocks = fresh.summaryBlocks?.length ? fresh.summaryBlocks : parseSharedLibrarySummary(fresh.summaryText || '');
+                if (!blocks.length) throw new Error('Gere o sumário antes das questões clínicas');
+                const resumingCurrent = fresh.clinicalPartial && supportsSharedLibraryClinicalVersion(fresh.clinicalGenerationVersion);
+                if (!resumingCurrent) {
+                  fresh = await saveRunItem(id, fresh, {
+                    ...base,
+                    clinicalQuestions:[],
+                    clinicalPartial:true,
+                    clinicalTopicIndex:-1,
+                    clinicalGenerationVersion:SHARED_LIBRARY_CLINICAL_VERSION,
+                    clinicalCompletedAt:null,
+                  });
+                  addSharedLibraryLog('info', `${lesson.title}: clínicas antigas removidas; iniciando a prova integradora.`);
+                }
+                const lessonData = await fetchTranscript(lesson.aula);
+                const transcript = lessonData?.transcript || '';
+                if (!transcript.trim()) throw new Error('Transcrição não encontrada');
+                const generated = resumingCurrent ? renumberClinicalCases(fresh.clinicalQuestions || []) : [];
+                const firstTopic = resumingCurrent ? Math.max(0, Number(fresh.clinicalTopicIndex) + 1 || 0) : 0;
+                const alts = (settingsRef.current.numAlternatives || 5) === 4
+                  ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]'
+                  : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+                for (let topicIndex = firstTopic; topicIndex < blocks.length; topicIndex++) {
+                  if (!await waitForSharedLibraryControl()) break;
+                  const focusBlock = blocks[topicIndex];
+                  const system = buildSharedLibraryClinicalPrompt({ lessonTitle:lesson.title, focusBlock, allBlocks:blocks, transcript, alts });
+                  const raw = await callSharedLibraryGemini({
+                    prompt:`Crie a prova clínica integradora do tópico "${focusBlock.title}". Use o menor conjunto de questões que realmente exija raciocínio.`,
+                    system,
+                    keys,
+                    cursorRef,
+                  });
+                  if (!/SEM_QUESTOES_CLINICAS/i.test(raw)) {
+                    const parsed = parseGeneratedQuestionsByTypes(raw, `${id}_clinical_topic_${topicIndex}`, ['direct']);
+                    if (!parsed.questions.length) throw new Error(`O tópico ${topicIndex + 1} não retornou questões clínicas legíveis`);
+                    generated.push(...parsed.questions);
+                    generated.splice(0, generated.length, ...renumberClinicalCases(generated));
+                  } else {
+                    addSharedLibraryLog('info', `${lesson.title}: tópico "${focusBlock.title}" não exigia questão clínica própria.`);
+                  }
+                  fresh = await saveRunItem(id, fresh, {
+                    ...base,
+                    clinicalQuestions:generated,
+                    clinicalPartial:true,
+                    clinicalTopicIndex:topicIndex,
+                    clinicalGenerationVersion:SHARED_LIBRARY_CLINICAL_VERSION,
+                  });
+                }
+                if (sharedLibraryControlRef.current.stop) break;
+                existing = await saveRunItem(id, fresh, {
+                  ...base,
+                  clinicalQuestions:generated,
+                  clinicalPartial:false,
+                  clinicalTopicIndex:-1,
+                  clinicalGenerationVersion:SHARED_LIBRARY_CLINICAL_VERSION,
+                  clinicalSummaryVersion:fresh.summaryVersion || SHARED_LIBRARY_SUMMARY_VERSION,
+                  clinicalCompletedAt:Date.now(),
+                });
+                addSharedLibraryLog('success', `${lesson.title}: prova clínica integradora salva com ${generated.length} questões.`);
+              }
+            }
+          } catch(e) {
+            if (e?.message === 'LIBRARY_STOPPED') break;
+            addSharedLibraryLog('error', `${lesson.title}: ${e?.message || 'erro desconhecido'}.`);
+            lessonFailed = true;
+            break;
+          }
+          const delay = Math.max(0, Math.min(120, Number(settingsRef.current.sharedLibraryDelaySeconds) || 0)) * 1000;
+          if (lessonUsedApi && delay && !sharedLibraryControlRef.current.stop) await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        if (sharedLibraryControlRef.current.stop) break;
+        completedLessons++;
+        setSharedLibraryRun(p => ({ ...p, current:completedLessons, total:targets.length }));
+        addSharedLibraryLog(lessonFailed ? 'warning' : 'success', lessonFailed
+          ? `${lesson.title}: aula incompleta; será retomada na próxima execução.`
+          : `${lesson.title}: sumário, diretas e clínicas conferidos.`);
+      }
+    } finally {
+      const stopped = sharedLibraryControlRef.current.stop;
+      sharedLibraryControlRef.current = { paused:false, stop:false };
+      setSharedLibraryRun(p => ({ ...p, running:false, paused:false, stopping:false }));
+      await refreshSharedLibrary();
+      addSharedLibraryLog(stopped ? 'warning' : 'success', stopped ? 'Fila interrompida com o progresso preservado.' : 'Biblioteca atualizada com sucesso.');
+    }
+  };
+
+  const saveSharedLibraryAnswer = async (itemId, questionId, letter) => {
+    if (!user || user.isAnonymous || !itemId || !questionId) return;
+    const current = sharedLibraryProgress[itemId] || {};
+    const answers = { ...(current.answers || {}), [questionId]:letter };
+    const next = { ...current, answers, updatedAt:Date.now() };
+    setSharedLibraryProgress(progress => ({ ...progress, [itemId]:next }));
+    try {
+      await setDoc(doc(db, 'users', user.uid, SHARED_LIBRARY_PROGRESS_COLLECTION, itemId), cleanFirestoreData(next), { merge:true });
+    } catch(e) {
+      addToast('A resposta ficou salva neste dispositivo, mas ainda não sincronizou.', 'warning', 3500);
+    }
+  };
+
+  const resetSharedLibraryAnswers = async (itemId) => {
+    if (!user || user.isAnonymous || !itemId) return;
+    const next = { ...(sharedLibraryProgress[itemId] || {}), answers:{}, updatedAt:Date.now() };
+    setSharedLibraryProgress(progress => ({ ...progress, [itemId]:next }));
+    await setDoc(doc(db, 'users', user.uid, SHARED_LIBRARY_PROGRESS_COLLECTION, itemId), cleanFirestoreData(next), { merge:true }).catch(()=>{});
+  };
+
   const readCourseCatalogKeyStats = () => {
     const raw = readStorageJson(COURSE_CATALOG_KEY_STATS_STORAGE, {});
     return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -10910,6 +11536,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     adminQuestionExplanations:true,
     geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
     auditQuestions:!!settingsRef.current.auditQuestions,
+    adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions,
     regenReason:'',
     mode,
   });
@@ -10955,7 +11582,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!checkKey()) return;
     const s = settingsRef.current;
     const durationSecs = aula.duration_seconds || 0;
-    const plan = getCourseVqQuestionPlan({ durationSecs, suggestedQ:10, isAdmin, maxPerBlock:30 });
+    const maxPerBlock = isAdmin && s.adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : 30;
+    const plan = getCourseVqQuestionPlan({ durationSecs, suggestedQ:10, isAdmin, maxPerBlock });
     const { totalQ, qPerBlock, numBlocks } = plan;
     const aulaId = aulaDocId(aula);
 
@@ -10968,8 +11596,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      questionTypes: filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
       geminiThinkingEnabled: !!s.geminiThinkingEnabled,
       auditQuestions: !!s.auditQuestions,
+      adminChunkedQuestions: !!s.adminChunkedQuestions,
       autoMode: s.autoMode !== false,
-      syllabusMaxPerBlock: isAdmin ? ADMIN_COURSE_TOPIC_QUESTION_MAX : undefined,
+      syllabusMaxPerBlock: isAdmin ? maxPerBlock : undefined,
       adminMinuteRule: isAdmin,
       adminFullCoverage: isAdmin,
       extraPrompt: '',
@@ -10980,11 +11609,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   // Busca transcrição do Firestore (coleção lessons, id = título da aula)
   const fetchTranscript = async (aula) => {
     try {
-      // O ID do doc é o título exato, com barras substituídas por hífen
-      const docId = (aula.title||'').replace(/\//g,'-');
-      const snap = await getDoc(doc(db,'lessons',docId));
-      if (snap.exists()) return snap.data();
-      // fallback: busca pelo bunny_id se não achar pelo título
+      const candidates = [...new Set([
+        aula?.doc_id,
+        (aula?.title || '').replace(/\//g, '-'),
+        aula?.bunny_id,
+      ].filter(Boolean).map(String))];
+      for (const docId of candidates) {
+        const snap = await getDoc(doc(db, 'lessons', docId));
+        if (snap.exists()) return snap.data();
+      }
       return null;
     } catch(e) { return null; }
   };
@@ -11078,7 +11711,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         qPerBlock,
         numAlternatives, aulaTitle: aula.title,
         subject: cfg.subject||'', topic: cfg.topic||'',
-        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions, fullCoverage:isAdmin && !!cfg.adminFullCoverage, createdAt: Date.now(),
+        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions, adminChunkedQuestions:!!cfg.adminChunkedQuestions, fullCoverage:isAdmin && !!cfg.adminFullCoverage, createdAt: Date.now(),
       },
       blocks: blocksForFirestore,
     };
@@ -11569,6 +12202,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       numAlternatives:settingsRef.current.numAlternatives || 5,
       geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
       auditQuestions:!!settingsRef.current.auditQuestions,
+      adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions,
     });
     setRegenModal(true);
   };
@@ -11652,9 +12286,22 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const flashcardOnly = isOnlyMemoryCardType(topicTypes);
     const studyPlan = flashcardOnly ? [] : getTopicStudyPlan(clearedTopic, subtopicsArr);
     const hasStudyPlan = studyPlan.length > 0;
+    const fixedPlans = (!flashcardOnly && !qPerSubAuto && !hasStudyPlan && subtopicsArr.length > 0)
+      ? buildFixedQuestionPlans(subtopicsArr, qPerSub)
+      : [];
+    const chunkablePlans = hasStudyPlan ? studyPlan : fixedPlans;
     const total = hasStudyPlan
       ? studyPlan.reduce((sum, plan) => sum + plan.questions, 0)
       : promptSubtopicCount * qPerSub;
+    const shouldChunkQuestions = !!isAdmin
+      && !!generationSettings.adminChunkedQuestions
+      && !flashcardOnly
+      && !qPerSubAuto
+      && chunkablePlans.length > 0
+      && total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
+    const questionPlanChunks = shouldChunkQuestions
+      ? chunkQuestionPlansByTarget(chunkablePlans)
+      : [];
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
       : hasStudyPlan
@@ -11691,64 +12338,101 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const previousQuestions = hasRegenerationInstruction(regenInstruction)
       ? summarizeQuestionsForPrompt(originalTopic.questions || [])
       : '';
-    const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
-      + matInst + subtopicsBlock
-      + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
-      + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
-      + altSuffix;
-
-    const orderedKeys = getTwoAttemptGeminiKeys();
-    let lastErr = null;
-    for (const { k } of orderedKeys) {
-      try {
-        const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, PROMPT, k, (acc,qc)=>onProgress?.(qc), [], { ...getGeminiOptions(s), maxTokens:20000 });
-        const parsed = parseGeneratedQuestionsByTypes(full, `${subject.id}_${clearedTopic.id}`, types);
-        const expectedCount = !flashcardOnly && (hasStudyPlan || !qPerSubAuto) ? total : 0;
-        const completedQuestions = await completeGeneratedQuestionSet({
-          questions:parsed.questions,
-          expectedCount,
-          namespace:`${subject.id}_${clearedTopic.id}_missing`,
-          settings:s,
-          subjectTitle:subject.title,
-          topicTitle:clearedTopic.title,
-          subtopics:subtopicsArr,
-          sourceMaterials:cleared.sourceMaterials || '',
-          onProgress,
-        });
-        const audited = await auditGeneratedQuestions({
-          questions:completedQuestions,
-          namespace:`${subject.id}_${clearedTopic.id}_audited`,
-          settings:s,
-          subjectTitle:subject.title,
-          topicTitle:clearedTopic.title,
-          subtopics:subtopicsArr,
-          sourceMaterials:cleared.sourceMaterials || '',
-          onProgress:msg=>onProgress?.(msg),
-        });
-        const allQuestions = expectedCount && audited.questions.length < expectedCount
-          ? completedQuestions
-          : expectedCount
-            ? audited.questions.slice(0, expectedCount)
-            : audited.questions;
-        const summary = audited.summary || parsed.summary;
-        const questionAudit = audited.audited ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
-        const updatedSubject = {
-          ...cleared,
-          topics: cleared.topics.map(t => t.id === clearedTopic.id
-            ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes, questionAudit }
-            : t
-          )
-        };
-        await updateSubject(updatedSubject);
-        await rotateKey();
-        return { subject:updatedSubject, questionCount:allQuestions.length };
-      } catch(e) {
-        lastErr = e;
-        await rotateKey();
-        break;
+    const buildChunkPrompt = ({ plans = null, generatedSoFar = [], chunkIndex = 0, chunkTotal = 1 } = {}) => {
+      const usingChunk = Array.isArray(plans) && plans.length > 0;
+      const chunkExpected = usingChunk ? plans.reduce((sum, plan) => sum + plan.questions, 0) : total;
+      const chunkSettings = usingChunk ? { ...s, numSubtopics:plans.length, qPerSub:1, qPerSubAuto:false } : s;
+      const chunkBlock = usingChunk
+        ? `${buildStudyPlanQuestionBlock(plans)}\n\nREGRA DE LOTE: este é o lote ${chunkIndex + 1}/${chunkTotal}. Gere APENAS os objetivos listados neste lote, sem antecipar subtópicos de outros lotes.`
+        : subtopicsBlock;
+      const chunkSuffix = usingChunk
+        ? (hasClosed
+          ? `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+          : `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`)
+        : altSuffix;
+      const generatedBlock = generatedSoFar.length
+        ? `\n\nQUESTÕES JÁ GERADAS NESTA RODADA (não copie e não recrie estes focos):\n${summarizeQuestionsForPrompt(generatedSoFar).substring(0, 8000)}`
+        : '';
+      return {
+        prompt:buildOracleQuestionPrompt(chunkSettings, getFocusInst(cleared.focusAreas||[]), chunkSettings.autoMode||false)
+          + matInst + chunkBlock
+          + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
+          + generatedBlock
+          + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
+          + chunkSuffix,
+        settings:chunkSettings,
+        expectedCount:usingChunk ? chunkExpected : (!flashcardOnly && (hasStudyPlan || !qPerSubAuto) ? total : 0),
+        subtopics:usingChunk ? plans.map(plan => plan.title) : subtopicsArr,
+      };
+    };
+    const runPrompt = async ({ prompt, settings: runSettings, expectedCount, subtopics, namespaceSuffix = '' }) => {
+      let lastErr = null;
+      for (const { k } of getTwoAttemptGeminiKeys()) {
+        try {
+          const full = await callGeminiStream(`Invoque: ${clearedTopic.title} — ${subject.title}`, prompt, k, (acc,qc)=>onProgress?.(qc), [], { ...getGeminiOptions(runSettings), maxTokens:20000 });
+          const parsed = parseGeneratedQuestionsByTypes(full, `${subject.id}_${clearedTopic.id}${namespaceSuffix}`, types);
+          const completedQuestions = await completeGeneratedQuestionSet({
+            questions:parsed.questions,
+            expectedCount,
+            namespace:`${subject.id}_${clearedTopic.id}${namespaceSuffix}_missing`,
+            settings:runSettings,
+            subjectTitle:subject.title,
+            topicTitle:clearedTopic.title,
+            subtopics,
+            sourceMaterials:cleared.sourceMaterials || '',
+            onProgress,
+          });
+          const audited = await auditGeneratedQuestions({
+            questions:completedQuestions,
+            namespace:`${subject.id}_${clearedTopic.id}${namespaceSuffix}_audited`,
+            settings:runSettings,
+            subjectTitle:subject.title,
+            topicTitle:clearedTopic.title,
+            subtopics,
+            sourceMaterials:cleared.sourceMaterials || '',
+            onProgress:msg=>onProgress?.(msg),
+          });
+          const questions = expectedCount && audited.questions.length < expectedCount
+            ? completedQuestions
+            : expectedCount
+              ? audited.questions.slice(0, expectedCount)
+              : audited.questions;
+          await rotateKey();
+          return { questions, summary:audited.summary || parsed.summary || '', audited:!!audited.audited };
+        } catch(e) {
+          lastErr = e;
+          await rotateKey();
+          break;
+        }
       }
+      throw lastErr || new Error('CONNECTION_ERROR');
+    };
+
+    const generatedResults = [];
+    if (shouldChunkQuestions) {
+      for (let chunkIndex = 0; chunkIndex < questionPlanChunks.length; chunkIndex += 1) {
+        const plans = questionPlanChunks[chunkIndex];
+        const chunkExpected = plans.reduce((sum, plan) => sum + plan.questions, 0);
+        onProgress?.(`Gerando lote ${chunkIndex + 1}/${questionPlanChunks.length} (${chunkExpected} questões)...`);
+        const built = buildChunkPrompt({ plans, generatedSoFar:generatedResults.flatMap(result => result.questions), chunkIndex, chunkTotal:questionPlanChunks.length });
+        generatedResults.push(await runPrompt({ ...built, namespaceSuffix:`_chunk${chunkIndex + 1}` }));
+      }
+    } else {
+      generatedResults.push(await runPrompt(buildChunkPrompt()));
     }
-    throw lastErr || new Error('CONNECTION_ERROR');
+
+    const allQuestions = generatedResults.flatMap(result => result.questions);
+    const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
+    const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
+    const updatedSubject = {
+      ...cleared,
+      topics: cleared.topics.map(t => t.id === clearedTopic.id
+        ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes, questionAudit }
+        : t
+      )
+    };
+    await updateSubject(updatedSubject);
+    return { subject:updatedSubject, questionCount:allQuestions.length };
   };
 
   // Generate questions (streaming)
@@ -11783,9 +12467,22 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const flashcardOnly = isOnlyMemoryCardType(topicTypes);
     const studyPlan = flashcardOnly ? [] : getTopicStudyPlan(topic, subtopicsArr);
     const hasStudyPlan = studyPlan.length > 0;
+    const fixedPlans = (!flashcardOnly && !qPerSubAuto && !hasStudyPlan && subtopicsArr.length > 0)
+      ? buildFixedQuestionPlans(subtopicsArr, qPerSub)
+      : [];
+    const chunkablePlans = hasStudyPlan ? studyPlan : fixedPlans;
     const total = hasStudyPlan
       ? studyPlan.reduce((sum, plan) => sum + plan.questions, 0)
       : promptSubtopicCount * qPerSub;
+    const shouldChunkQuestions = !!isAdmin
+      && !!generationSettings.adminChunkedQuestions
+      && !flashcardOnly
+      && !qPerSubAuto
+      && chunkablePlans.length > 0
+      && total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
+    const questionPlanChunks = shouldChunkQuestions
+      ? chunkQuestionPlansByTarget(chunkablePlans)
+      : [];
     const subtopicsBlock = flashcardOnly
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
       : hasStudyPlan
@@ -11827,54 +12524,96 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? summarizeQuestionsForPrompt(sourceTopic.questions || [])
       : '';
 
-    const PROMPT = buildOracleQuestionPrompt(s, getFocusInst(cleared.focusAreas||[]), s.autoMode||false)
-      + matInst + subtopicsBlock
-      + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
-      + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
-      + altSuffix;
-
-    const orderedKeys = getTwoAttemptGeminiKeys();
-    let err=null, ok=false;
-    for (const {k} of orderedKeys) {
-      try {
-        const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,PROMPT,k,(acc,qc)=>setStreamCount(qc), [], { ...getGeminiOptions(s), maxTokens:20000 });
-        const parsed = parseGeneratedQuestionsByTypes(full, `${activeSubject.id}_${topicId}`, types);
-        const expectedCount = !flashcardOnly && (hasStudyPlan || !qPerSubAuto) ? total : 0;
-        const completedQuestions = await completeGeneratedQuestionSet({
-          questions:parsed.questions,
-          expectedCount,
-          namespace:`${activeSubject.id}_${topicId}_missing`,
-          settings:s,
-          subjectTitle:activeSubject.title,
-          topicTitle:topic.title,
-          subtopics:subtopicsArr,
-          sourceMaterials:cleared.sourceMaterials || '',
-          onProgress:msg=>setLoadingMsg(typeof msg === 'string' ? msg : loadingMsg),
-        });
-        const audited = await auditGeneratedQuestions({
-          questions:completedQuestions,
-          namespace:`${activeSubject.id}_${topicId}_audited`,
-          settings:s,
-          subjectTitle:activeSubject.title,
-          topicTitle:topic.title,
-          subtopics:subtopicsArr,
-          sourceMaterials:cleared.sourceMaterials || '',
-        });
-        const allQuestions = expectedCount && audited.questions.length < expectedCount
-          ? completedQuestions
-          : expectedCount
-            ? audited.questions.slice(0, expectedCount)
-            : audited.questions;
-        const summary = audited.summary || parsed.summary;
-        const questionAudit = audited.audited ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
-        await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)});
-        await rotateKey();
-        ok=true; break;
-      } catch(e) {
-        err=e;
-        await rotateKey();
-        break;
+    const buildChunkPrompt = ({ plans = null, generatedSoFar = [], chunkIndex = 0, chunkTotal = 1 } = {}) => {
+      const usingChunk = Array.isArray(plans) && plans.length > 0;
+      const chunkExpected = usingChunk ? plans.reduce((sum, plan) => sum + plan.questions, 0) : total;
+      const chunkSettings = usingChunk ? { ...s, numSubtopics:plans.length, qPerSub:1, qPerSubAuto:false } : s;
+      const chunkBlock = usingChunk
+        ? `${buildStudyPlanQuestionBlock(plans)}\n\nREGRA DE LOTE: este é o lote ${chunkIndex + 1}/${chunkTotal}. Gere APENAS os objetivos listados neste lote, sem antecipar subtópicos de outros lotes.`
+        : subtopicsBlock;
+      const chunkSuffix = usingChunk
+        ? (hasClosed
+          ? `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+          : `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`)
+        : altSuffix;
+      const generatedBlock = generatedSoFar.length
+        ? `\n\nQUESTÕES JÁ GERADAS NESTA RODADA (não copie e não recrie estes focos):\n${summarizeQuestionsForPrompt(generatedSoFar).substring(0, 8000)}`
+        : '';
+      return {
+        prompt:buildOracleQuestionPrompt(chunkSettings, getFocusInst(cleared.focusAreas||[]), chunkSettings.autoMode||false)
+          + matInst + chunkBlock
+          + (previousQuestions ? `\n\nQUESTÕES ANTERIORES DESTE BLOCO (não copie; cubra lacunas relevantes que ainda não foram perguntadas e melhore distratores/foco):\n${previousQuestions.substring(0, 8000)}` : '')
+          + generatedBlock
+          + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
+          + chunkSuffix,
+        settings:chunkSettings,
+        expectedCount:usingChunk ? chunkExpected : (!flashcardOnly && (hasStudyPlan || !qPerSubAuto) ? total : 0),
+        subtopics:usingChunk ? plans.map(plan => plan.title) : subtopicsArr,
+      };
+    };
+    const runPrompt = async ({ prompt, settings: runSettings, expectedCount, subtopics, namespaceSuffix = '' }) => {
+      let lastErr = null;
+      for (const {k} of getTwoAttemptGeminiKeys()) {
+        try {
+          const full=await callGeminiStream(`Invoque: ${topic.title} — ${activeSubject.title}`,prompt,k,(acc,qc)=>setStreamCount(qc), [], { ...getGeminiOptions(runSettings), maxTokens:20000 });
+          const parsed = parseGeneratedQuestionsByTypes(full, `${activeSubject.id}_${topicId}${namespaceSuffix}`, types);
+          const completedQuestions = await completeGeneratedQuestionSet({
+            questions:parsed.questions,
+            expectedCount,
+            namespace:`${activeSubject.id}_${topicId}${namespaceSuffix}_missing`,
+            settings:runSettings,
+            subjectTitle:activeSubject.title,
+            topicTitle:topic.title,
+            subtopics,
+            sourceMaterials:cleared.sourceMaterials || '',
+            onProgress:msg=>setLoadingMsg(typeof msg === 'string' ? msg : loadingMsg),
+          });
+          const audited = await auditGeneratedQuestions({
+            questions:completedQuestions,
+            namespace:`${activeSubject.id}_${topicId}${namespaceSuffix}_audited`,
+            settings:runSettings,
+            subjectTitle:activeSubject.title,
+            topicTitle:topic.title,
+            subtopics,
+            sourceMaterials:cleared.sourceMaterials || '',
+          });
+          const questions = expectedCount && audited.questions.length < expectedCount
+            ? completedQuestions
+            : expectedCount
+              ? audited.questions.slice(0, expectedCount)
+              : audited.questions;
+          await rotateKey();
+          return { questions, summary:audited.summary || parsed.summary || '', audited:!!audited.audited };
+        } catch(e) {
+          lastErr = e;
+          await rotateKey();
+          break;
+        }
       }
+      throw lastErr || new Error('CONNECTION_ERROR');
+    };
+
+    let err=null, ok=false;
+    try {
+      const generatedResults = [];
+      if (shouldChunkQuestions) {
+        for (let chunkIndex = 0; chunkIndex < questionPlanChunks.length; chunkIndex += 1) {
+          const plans = questionPlanChunks[chunkIndex];
+          const chunkExpected = plans.reduce((sum, plan) => sum + plan.questions, 0);
+          setLoadingMsg(`Gerando lote ${chunkIndex + 1}/${questionPlanChunks.length} (${chunkExpected} questões)...`);
+          const built = buildChunkPrompt({ plans, generatedSoFar:generatedResults.flatMap(result => result.questions), chunkIndex, chunkTotal:questionPlanChunks.length });
+          generatedResults.push(await runPrompt({ ...built, namespaceSuffix:`_chunk${chunkIndex + 1}` }));
+        }
+      } else {
+        generatedResults.push(await runPrompt(buildChunkPrompt()));
+      }
+      const allQuestions = generatedResults.flatMap(result => result.questions);
+      const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
+      const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
+      await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)});
+      ok=true;
+    } catch(e) {
+      err=e;
     }
     clearInterval(mi_int);setLoadingMsg('');setStreamCount(0);
     if(!ok) showApiError(err?.message||'CONNECTION_ERROR');
@@ -12679,51 +13418,81 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
       // Requisição B: questões de fixação da aula como um todo
       onProgress?.('Gerando questões de fixação...');
-	      const fixPrompt = buildAcademiaFixationPrompt(
-	        subtopics,
-	        topic.title,
-	        s,
-	        lessonText,
-	        fixationPlan,
-	        previousFixationQuestions
-	      );
-      let fixText = '';
-      const orderedKeys2 = getOrderedKeys();
-      for (const { k } of orderedKeys2) {
-        try {
-          fixText = await callGemini(fixPrompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
-          await rotateKey();
-          break;
-        } catch (e) {
-          await rotateKey();
-          if (generationMode === 'questions') throw e;
-          // Questões falharam mas temos a aula — continua sem questões
-          break;
-        }
-      }
-
-      // Parsear as questões de fixação; se falhar, preserva a aula e segue sem questões.
       fixQuestions = [];
-      if (fixText) {
-        try {
-          fixQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}`, s.questionTypes || ['direct']).questions;
-          const audited = await auditGeneratedQuestions({
-            questions:fixQuestions,
-            namespace:`acfix_${topic.id}_${Date.now()}_audited`,
-            settings:s,
-            subjectTitle:subject.title,
-            topicTitle:topic.title,
-            subtopics,
-            sourceMaterials:[material, lessonText].filter(Boolean).join('\n\n'),
-            onProgress,
-          });
-          fixQuestions = audited.questions;
-        } catch(e) {
-          if (generationMode === 'questions') throw e;
-          onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
+      const fixationPlans = buildQuestionPlansFromCounts(subtopics, fixationPlan);
+      const totalFixationQuestions = fixationPlans.reduce((sum, plan) => sum + plan.questions, 0);
+      const shouldChunkFixation = !!isAdmin
+        && !!s.adminChunkedQuestions
+        && !isOnlyMemoryCardType(s.questionTypes || ['direct'])
+        && totalFixationQuestions > ADMIN_ORACLE_QUESTION_CHUNK_TARGET
+        && fixationPlans.length > 0;
+      const fixationChunks = shouldChunkFixation ? chunkQuestionPlansByTarget(fixationPlans) : [fixationPlans];
+      const generatedByGlobalSubtopic = Object.fromEntries(fixationPlan.map((_, i) => [i, []]));
+      const runFixationChunk = async (plans, chunkIndex) => {
+        const chunkSubtopics = plans.map(plan => plan.title);
+        const chunkPlan = plans.map(plan => plan.questions);
+        const generatedSoFar = Object.values(generatedByGlobalSubtopic).flat();
+        const generatedBlock = generatedSoFar.length
+          ? `\n\nQUESTÕES JÁ GERADAS NESTA RODADA (não copie e não recrie estes focos):\n${summarizeQuestionsForPrompt(generatedSoFar).substring(0, 8000)}`
+          : '';
+        const prompt = buildAcademiaFixationPrompt(
+          chunkSubtopics,
+          topic.title,
+          s,
+          lessonText,
+          chunkPlan,
+          [previousFixationQuestions, generatedBlock].filter(Boolean).join('\n\n')
+        ) + (shouldChunkFixation ? `\n\nREGRA DE LOTE: este é o lote ${chunkIndex + 1}/${fixationChunks.length}. Gere APENAS os subtópicos listados neste lote, sem antecipar subtópicos de outros lotes.` : '');
+
+        const orderedKeys2 = getOrderedKeys();
+        let fixText = '';
+        for (const { k } of orderedKeys2) {
+          try {
+            fixText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
+            await rotateKey();
+            break;
+          } catch (e) {
+            await rotateKey();
+            throw e;
+          }
         }
+        if (!fixText) throw new Error('CONNECTION_ERROR');
+        const parsedQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, s.questionTypes || ['direct']).questions;
+        if (!parsedQuestions.length) throw new Error('NO_QUESTIONS_GENERATED');
+        const audited = await auditGeneratedQuestions({
+          questions:parsedQuestions,
+          namespace:`acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}_audited`,
+          settings:s,
+          subjectTitle:subject.title,
+          topicTitle:topic.title,
+          subtopics:chunkSubtopics,
+          sourceMaterials:[material, lessonText].filter(Boolean).join('\n\n'),
+          onProgress,
+        });
+        const chunkDistributed = distributeAcademiaFixQuestions(audited.questions, chunkPlan);
+        plans.forEach((plan, localIndex) => {
+          const globalIndex = Number.isInteger(plan.index) ? plan.index : subtopics.indexOf(plan.title);
+          generatedByGlobalSubtopic[globalIndex] = [
+            ...(generatedByGlobalSubtopic[globalIndex] || []),
+            ...(chunkDistributed[localIndex] || []),
+          ];
+        });
+      };
+      try {
+        for (let chunkIndex = 0; chunkIndex < fixationChunks.length; chunkIndex += 1) {
+          const plans = fixationChunks[chunkIndex];
+          const expected = plans.reduce((sum, plan) => sum + plan.questions, 0);
+          if (shouldChunkFixation) onProgress?.(`Gerando lote ${chunkIndex + 1}/${fixationChunks.length} (${expected} questões)...`);
+          await runFixationChunk(plans, chunkIndex);
+        }
+        fixationBySubtopic = generatedByGlobalSubtopic;
+        fixQuestions = Object.values(fixationBySubtopic).flat();
+      } catch(e) {
+        if (generationMode === 'questions') throw e;
+        onProgress?.('Questões de fixação vieram malformadas; salvando a aula sem elas.');
+        fixationBySubtopic = {};
+        fixQuestions = [];
       }
-      fixationBySubtopic = distributeAcademiaFixQuestions(fixQuestions, fixationPlan);
     }
 
     // Salvar no tópico
@@ -12837,6 +13606,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       numAlternatives:bulkConfig.numAlternatives,
       geminiThinkingEnabled:!!bulkConfig.geminiThinkingEnabled,
       auditQuestions:['audit','auditMissing'].includes(mode) ? true : !!bulkConfig.auditQuestions,
+      adminChunkedQuestions:!!bulkConfig.adminChunkedQuestions,
       regenReason:bulkConfig.regenReason || '',
     };
 
@@ -12946,33 +13716,56 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      const questionPlan = mappedStudyPlan.length
 	        ? mappedStudyPlan.map(plan => plan.questions)
 	        : buildAcademiaFixationPlan(subtopics, topic.lessonSections || {});
-	      const prompt = buildAcademiaExtraBatteryPrompt(topic.title, subtopics, s, lessonText, previousQuestions, questionPlan);
-    const orderedKeys = getOrderedKeys();
-    let extraText = '';
-    for (const { k } of orderedKeys) {
-      try {
-        extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
-        await rotateKey();
-        break;
-      } catch (e) {
-        await rotateKey();
-        throw e;
+    const extraPlans = buildQuestionPlansFromCounts(subtopics, questionPlan);
+    const totalExtraQuestions = extraPlans.reduce((sum, plan) => sum + plan.questions, 0);
+    const shouldChunkExtra = !!isAdmin
+      && !!s.adminChunkedQuestions
+      && !isOnlyMemoryCardType(s.questionTypes || ['direct'])
+      && totalExtraQuestions > ADMIN_ORACLE_QUESTION_CHUNK_TARGET
+      && extraPlans.length > 0;
+    const extraChunks = shouldChunkExtra ? chunkQuestionPlansByTarget(extraPlans) : [extraPlans];
+    let extraQuestions = [];
+    for (let chunkIndex = 0; chunkIndex < extraChunks.length; chunkIndex += 1) {
+      const plans = extraChunks[chunkIndex];
+      const chunkSubtopics = plans.map(plan => plan.title);
+      const chunkPlan = plans.map(plan => plan.questions);
+      const generatedBlock = extraQuestions.length
+        ? `\n\nQUESTÕES JÁ GERADAS NESTA RODADA (não copie e não recrie estes focos):\n${summarizeQuestionsForPrompt(extraQuestions).substring(0, 8000)}`
+        : '';
+      const prompt = buildAcademiaExtraBatteryPrompt(
+        topic.title,
+        chunkSubtopics,
+        s,
+        lessonText,
+        [previousQuestions, generatedBlock].filter(Boolean).join('\n\n'),
+        chunkPlan
+      ) + (shouldChunkExtra ? `\n\nREGRA DE LOTE: este é o lote ${chunkIndex + 1}/${extraChunks.length}. Gere APENAS os subtópicos listados neste lote, sem antecipar subtópicos de outros lotes.` : '');
+      const orderedKeys = getOrderedKeys();
+      let extraText = '';
+      for (const { k } of orderedKeys) {
+        try {
+          extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
+          await rotateKey();
+          break;
+        } catch (e) {
+          await rotateKey();
+          throw e;
+        }
       }
+      const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, s.questionTypes || ['direct']);
+      if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
+      const audited = await auditGeneratedQuestions({
+        questions:parsed.questions,
+        namespace:`extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}_audited`,
+        settings:s,
+        subjectTitle:subject.title,
+        topicTitle:`${topic.title} — bateria extra`,
+        subtopics:chunkSubtopics,
+        sourceMaterials:lessonText,
+      });
+      extraQuestions = [...extraQuestions, ...audited.questions];
     }
-
-    const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}`, s.questionTypes || ['direct']);
-    let extraQuestions = parsed.questions;
     if (!extraQuestions.length) throw new Error('NO_QUESTIONS_GENERATED');
-    const audited = await auditGeneratedQuestions({
-      questions:extraQuestions,
-      namespace:`extra_${topic.id}_${Date.now()}_audited`,
-      settings:s,
-      subjectTitle:subject.title,
-      topicTitle:`${topic.title} — bateria extra`,
-      subtopics,
-      sourceMaterials:lessonText,
-    });
-    extraQuestions = audited.questions;
 
     const extraId = `eb_${Date.now()}`;
     const extraTitle = `Bateria ${(topic.extraBattery||[]).length + 1}`;
@@ -13157,17 +13950,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         errorReviewPerQuestion:cfg.errorReviewPerQuestion,
         geminiThinkingEnabled:!!cfg.geminiThinkingEnabled,
         auditQuestions:!!cfg.auditQuestions,
+        adminChunkedQuestions:!!cfg.adminChunkedQuestions,
       });
-      if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled || settingsRef.current.auditQuestions !== s.auditQuestions) {
-        saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled, auditQuestions:s.auditQuestions});
+      if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled || settingsRef.current.auditQuestions !== s.auditQuestions || settingsRef.current.adminChunkedQuestions !== s.adminChunkedQuestions) {
+        saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled, auditQuestions:s.auditQuestions, adminChunkedQuestions:s.adminChunkedQuestions});
       }
       const sourceQuestions = errorReviewModal.questions || [];
       const questionType = (s.questionTypes || ['direct'])[0];
       const isFlashcardReview = isMemoryCardType(questionType);
       const perError = Math.max(1, Math.min(10, Number(s.errorReviewPerQuestion) || 2));
+      const maxGeneratedPerRequest = s.adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : ERROR_REVIEW_MAX_GENERATED_PER_REQUEST;
       const maxSourcePerRequest = isFlashcardReview
         ? 12
-        : Math.max(1, Math.floor(ERROR_REVIEW_MAX_GENERATED_PER_REQUEST / perError));
+        : Math.max(1, Math.floor(maxGeneratedPerRequest / perError));
       const chunks = [];
       for (let i = 0; i < sourceQuestions.length; i += maxSourcePerRequest) {
         chunks.push(sourceQuestions.slice(i, i + maxSourcePerRequest));
@@ -14222,15 +15017,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             padding: 0;
           }
           .agora-shell main.desktop-shell-content.course-workspace-shell > .course-workspace {
-            width: 100%;
-            max-width: none;
-            margin: 0;
+            width: min(100%, calc(100vw - 18rem));
+            max-width: calc(100vw - 18rem);
+            margin-left: auto;
+            margin-right: auto;
           }
-          .agora-shell .course-workspace,
-          .agora-shell .course-workspace-nav,
-          .agora-shell .course-workspace-main {
+          .agora-shell .course-workspace {
             height: 100dvh;
             min-height: 100dvh;
+          }
+          .agora-shell .course-workspace-nav,
+          .agora-shell .course-workspace-main {
+            height: calc(100dvh - 2rem);
+            min-height: 0;
           }
         }
         .modal-scroll,
@@ -14280,6 +15079,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
+                isAdmin ? {label:'Biblioteca', desc:'Acervo pronto para estudar', icon:<BookOpen className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
                 homeCanUseAcademia ? {label:'Academia', desc:'Aulas e questões', icon:<AcademiaIcon className="w-5 h-5"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
                 {label:'Oráculo', desc:'Bancos de questões', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
                 homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Aulas e mais', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
@@ -14390,16 +15190,170 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
       </header>
 
-      <main className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-16 lg:pb-0':view==='curso'?'pb-16 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-16 md:py-7 lg:py-10 lg:pb-10'}`}>
+	      <main className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-16 lg:pb-0':view==='curso'?'pb-16 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-16 md:py-7 lg:py-10 lg:pb-10'}`}>
+
+          {/* ── BIBLIOTECA COMPARTILHADA ── */}
+          {view==='shared-library'&&isAdmin&&(()=>{
+            const tabs = [
+              { id:'direct', label:'Questões', icon:<CheckCircle2 className="w-4 h-4"/> },
+              { id:'summary', label:'Aulas', icon:<BookOpen className="w-4 h-4"/> },
+              { id:'flashcards', label:'Flashcards', icon:<RepeatIcon className="w-4 h-4"/>, disabled:true },
+            ];
+            const itemQuestions = item => {
+              const clinicalReady = !item.clinicalPartial
+                && !!item.clinicalCompletedAt
+                && supportsSharedLibraryClinicalVersion(item.clinicalGenerationVersion)
+                && item.clinicalSummaryVersion === item.summaryVersion;
+              return [...(item.directQuestions || []), ...(clinicalReady ? (item.clinicalQuestions || []) : [])];
+            };
+            const courseSubjects = sortSubjects([...new Set(flattenCourseLessons(videoaulasData || {}).map(lesson=>lesson.subject).filter(Boolean))]);
+            const subjectOrder = sharedLibraryConfig.subjectOrder?.length
+              ? [...sharedLibraryConfig.subjectOrder, ...courseSubjects.filter(subject=>!sharedLibraryConfig.subjectOrder.includes(subject))]
+              : courseSubjects;
+            const enabledSubjects = Array.isArray(sharedLibraryConfig.enabledSubjects) ? sharedLibraryConfig.enabledSubjects : courseSubjects;
+            const moveSubject = async (subject, direction) => {
+              const index = subjectOrder.indexOf(subject);
+              const target = index + direction;
+              if (index < 0 || target < 0 || target >= subjectOrder.length) return;
+              const nextOrder = [...subjectOrder];
+              [nextOrder[index], nextOrder[target]] = [nextOrder[target], nextOrder[index]];
+              await saveSharedLibraryConfig({ ...sharedLibraryConfig, subjectOrder:nextOrder, enabledSubjects });
+            };
+            const availableItems = sharedLibraryItems.filter(item => {
+              const hasContent = sharedLibraryTab === 'summary'
+                ? !!item.summaryText
+                : sharedLibraryTab === 'direct'
+                  ? itemQuestions(item).length > 0
+                    : false;
+              const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
+              const needle = normalizeTextKey(sharedLibrarySearch);
+              const matchesSearch = !needle || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(needle);
+              return hasContent && matchesSubject && matchesSearch;
+            }).sort((a,b) => (subjectOrder.indexOf(a.subject) - subjectOrder.indexOf(b.subject)) || String(a.title).localeCompare(String(b.title),'pt'));
+            const activeItem = sharedLibraryItems.find(item => item.id === sharedLibraryActiveItemId);
+            if (activeItem) {
+              if (sharedLibraryTab === 'summary') return (
+                <div className="desktop-content-limit">
+                  <button onClick={()=>setSharedLibraryActiveItemId(null)} className={`flex items-center gap-2 mb-5 font-bold ${darkMode?'text-gray-400':'text-gray-600'}`}><ArrowLeft className="w-4 h-4"/>Biblioteca</button>
+                  <article className={`rounded-2xl border p-5 md:p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                    <p className="text-xs font-bold uppercase tracking-wider text-yellow-600">{activeItem.subject} · {activeItem.topic}</p>
+                    <h2 className="font-serif text-2xl md:text-3xl font-bold mt-2 mb-6">{activeItem.title}</h2>
+                    <div className="prose-like leading-relaxed">{renderRichText(activeItem.summaryText || '', true)}</div>
+                  </article>
+                </div>
+              );
+              const questions = itemQuestions(activeItem);
+              return <QuestionView
+                title={activeItem.title}
+                onBack={()=>setSharedLibraryActiveItemId(null)}
+                backLabel="Biblioteca"
+                questions={questions}
+                answers={sharedLibraryProgress[activeItem.id]?.answers || {}}
+                favorites={[]}
+                onAnswer={(questionId, letter)=>saveSharedLibraryAnswer(activeItem.id, questionId, letter)}
+                onToggleFavorite={()=>{}}
+                onReset={()=>resetSharedLibraryAnswers(activeItem.id)}
+                darkMode={darkMode}
+                apiKey={getKey()}
+                oracleLength={settings.oracleLength || 'medium'}
+                onCall={callWithRotation}
+                onOpenAnswer={question=>setOpenAnswerModal({question,isEssay:question.isEssay})}
+                displayMode={settings.questionDisplayMode || 'list'}
+                adminQuestionExplanations={isAdmin}
+              />;
+            }
+            return (
+              <div className="desktop-content-limit space-y-5">
+                <section className={`rounded-2xl border p-5 md:p-7 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Acervo compartilhado</p>
+                      <h2 className="font-serif text-3xl font-bold mt-1">Biblioteca</h2>
+                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Aulas e questões prontas para estudar. O conteúdo é comum a todos; suas respostas e seu progresso continuam pessoais.</p>
+                    </div>
+                    <button onClick={refreshSharedLibrary} disabled={sharedLibraryLoading} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>
+                      {sharedLibraryLoading?<Spinner className="w-4 h-4"/>:<RotateCcw className="w-4 h-4"/>}Atualizar
+                    </button>
+                  </div>
+                </section>
+
+                <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  {tabs.map(tab=><button key={tab.id} disabled={tab.disabled} onClick={()=>{setSharedLibraryTab(tab.id);setSharedLibraryActiveItemId(null);}}
+                    className={`relative flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold ${tab.disabled?'opacity-35 cursor-not-allowed':sharedLibraryTab===tab.id?(darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(darkMode?'text-gray-400':'text-gray-600')}`}>
+                    {tab.icon}<span>{tab.label}</span>{tab.disabled&&<span className="absolute -top-1 -right-1 text-[7px] px-1 rounded bg-gray-600 text-white">em breve</span>}
+                  </button>)}
+                </div>
+
+                {isAdmin&&(
+                  <details className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                    <summary className="cursor-pointer font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4"/>Automação da Biblioteca</summary>
+                    <div className="mt-5 grid lg:grid-cols-[1fr_1.1fr] gap-5">
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div><p className="font-bold text-sm">Ordem das matérias</p><p className="text-xs opacity-50">Desmarque o que não deve entrar nesta rodada.</p></div>
+                        </div>
+                        <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+                          {subjectOrder.map((subject,index)=><div key={subject} className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                            <input type="checkbox" checked={enabledSubjects.includes(subject)} onChange={async e=>{
+                              const nextEnabled = e.target.checked ? [...new Set([...enabledSubjects,subject])] : enabledSubjects.filter(value=>value!==subject);
+                              await saveSharedLibraryConfig({ ...sharedLibraryConfig, subjectOrder, enabledSubjects:nextEnabled });
+                            }}/>
+                            <span className="flex-1 text-sm font-bold">{index+1}. {subject}</span>
+                            <button onClick={()=>moveSubject(subject,-1)} disabled={index===0} className="p-1 disabled:opacity-20"><ChevronUp className="w-4 h-4"/></button>
+                            <button onClick={()=>moveSubject(subject,1)} disabled={index===subjectOrder.length-1} className="p-1 disabled:opacity-20"><ChevronDown className="w-4 h-4"/></button>
+                          </div>)}
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <label className="block text-xs font-bold">Pausa entre aulas (s)<input type="number" min="0" max="120" value={settings.sharedLibraryDelaySeconds || 0} disabled={sharedLibraryRun.running} onChange={e=>{const next={...settings,sharedLibraryDelaySeconds:Number(e.target.value)};setSettings(next);saveSettings(next);}} className={`mt-1 w-full rounded-lg border px-3 py-2 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-300'}`}/></label>
+                        <div className={`rounded-xl border p-3 text-xs ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
+                          Ordem por aula: <strong>sumário completo → uma direta por subtópico → provas clínicas integradoras por tópico → próxima aula</strong>. As clínicas selecionam apenas o que exige raciocínio e podem conectar subtópicos distantes. Flashcards e baterias extras ficam para uma próxima etapa.
+                        </div>
+                        {!sharedLibraryRun.running?<button onClick={startSharedLibraryAutomation} disabled={sharedLibraryLoading} className="w-full rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white py-3 font-bold flex items-center justify-center gap-2"><PlayIcon className="w-4 h-4"/>Iniciar / continuar automação</button>:<div className="grid grid-cols-2 gap-2">
+                          <button onClick={sharedLibraryRun.paused?resumeSharedLibraryAutomation:pauseSharedLibraryAutomation} className={`rounded-xl border py-2.5 font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>{sharedLibraryRun.paused?'Continuar':'Pausar'}</button>
+                          <button onClick={stopSharedLibraryAutomation} disabled={sharedLibraryRun.stopping} className="rounded-xl border border-red-400 text-red-500 py-2.5 font-bold">{sharedLibraryRun.stopping?'Parando...':'Parar'}</button>
+                        </div>}
+                        <div className="flex items-center justify-between text-xs"><span>{SHARED_LIBRARY_STAGE_LABELS[sharedLibraryRun.stage] || 'Parada'}</span><span>{sharedLibraryRun.current}/{sharedLibraryRun.total}</span></div>
+                        <div className={`h-2 rounded-full overflow-hidden ${darkMode?'bg-gray-700':'bg-gray-200'}`}><div className="h-full bg-yellow-600" style={{width:`${sharedLibraryRun.total?Math.round(sharedLibraryRun.current/sharedLibraryRun.total*100):0}%`}}/></div>
+                        <div className={`max-h-56 overflow-y-auto rounded-xl border p-2 space-y-1 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
+                          {!sharedLibraryRun.logs.length&&<p className="text-xs opacity-40 p-2">Os eventos da fila aparecerão aqui.</p>}
+                          {sharedLibraryRun.logs.map(log=><p key={log.id} className={`text-xs ${log.type==='error'?'text-red-500':log.type==='success'?'text-green-500':log.type==='warning'?'text-yellow-500':'opacity-60'}`}><span className="opacity-50">{log.time}</span> {log.msg}</p>)}
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+                )}
+
+                <div className="grid md:grid-cols-[220px_1fr] gap-4">
+                  <div className="space-y-2">
+                    <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar aula..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
+                    <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=><option key={subject} value={subject}>{subject}</option>)}</select>
+                  </div>
+                  <div className="space-y-2">
+                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há conteúdo nesta seção" description={isAdmin?'Use a automação acima para publicar as primeiras aulas.':'O acervo está sendo preparado pelo professor.'}/>:availableItems.map(item=>{
+                      const questions = itemQuestions(item);
+                      const answered = Object.keys(sharedLibraryProgress[item.id]?.answers || {}).filter(id=>questions.some(q=>String(q.id)===String(id))).length;
+                      return <button key={item.id} onClick={()=>setSharedLibraryActiveItemId(item.id)} className={`w-full rounded-xl border p-4 text-left flex items-center gap-3 transition-colors ${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'}`}>
+                        <span className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-gray-900 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>{sharedLibraryTab==='summary'?<BookOpen className="w-5 h-5"/>:<CheckCircle2 className="w-5 h-5"/>}</span>
+                        <span className="min-w-0 flex-1"><strong className="block truncate">{item.title}</strong><span className="block text-xs opacity-50 mt-0.5 truncate">{item.subject} · {item.topic}{sharedLibraryTab!=='summary'?` · ${questions.length} questões${answered?` · ${answered} respondidas`:''}`:''}</span></span>
+                        <ChevronRight className="w-4 h-4 opacity-35"/>
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
 	          (()=>{
+			    const sharedLibraryCard = isAdmin ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Aulas, questões de fixação e casos clínicos prontos para estudar.', meta:`${sharedLibraryItems.length} aulas`, action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
 			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aprenda um assunto com aula personalizada e questões de fixação.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
 			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', meta:'curso', action:()=>setView('curso')} : null;
 			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Oráculo', desc:'Ferramenta complementar para criar e revisar bancos de questões.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
 			    const externalCard = {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', meta:`${sourceSubjects('external').length} assuntos · ${sourceFolders('external').length} pastas`, action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}};
-			    const studyCards = [academiaCard, cursoCard].filter(Boolean);
+			    const studyCards = [sharedLibraryCard, academiaCard, cursoCard].filter(Boolean);
 			    const archiveCards = [geminiCard, externalCard].filter(Boolean);
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
@@ -15333,6 +16287,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 setSettings(ns);
                 saveSettings(ns);
               }}
+              adminChunkedQuestionsEnabled={!!settings.adminChunkedQuestions}
+              onAdminChunkedQuestionsChange={isAdmin ? (enabled=>{
+                const ns = {...settingsRef.current, adminChunkedQuestions:enabled};
+                setSettings(ns);
+                saveSettings(ns);
+              }) : null}
               auditQuestionsEnabled={!!settings.auditQuestions}
               onAuditQuestionsChange={isAdmin ? (enabled=>{
                 const ns = {...settingsRef.current, auditQuestions:enabled};
@@ -15605,16 +16565,28 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
 
                 {isAdmin&&(
-                  <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
+                  <>
+                    <button type="button" onClick={()=>{const ns={...settings,adminChunkedQuestions:!settings.adminChunkedQuestions};setSettings(ns);saveSettings(ns);}}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                      <div>
+                        <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                        <p className="text-xs opacity-50 mt-0.5">Divide planos grandes em requests de cerca de 15 questões, sem quebrar subtópico no meio.</p>
+                      </div>
+                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                      </div>
+                    </button>
+                    <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                      <div>
+                        <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                        <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
+                      </div>
+                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                      </div>
+                    </button>
+                  </>
                 )}
                   </div>
                 </details>
@@ -15844,16 +16816,28 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 </div>
 
                 {isAdmin&&(
-                  <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                      <p className="text-xs opacity-50 mt-0.5">Segundo request nas questões de fixação para revisar qualidade e utilidade.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
+                  <>
+                    <button type="button" onClick={()=>{const ns={...settings,adminChunkedQuestions:!settings.adminChunkedQuestions};setSettings(ns);saveSettings(ns);}}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                      <div>
+                        <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                        <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em vários requests de cerca de 15 questões.</p>
+                      </div>
+                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                      </div>
+                    </button>
+                    <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                      <div>
+                        <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                        <p className="text-xs opacity-50 mt-0.5">Segundo request nas questões de fixação para revisar qualidade e utilidade.</p>
+                      </div>
+                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                      </div>
+                    </button>
+                  </>
                 )}
                   </div>
                 </details>
@@ -16529,7 +17513,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                 {pct===100?<CheckIcon className="w-5 h-5"/>:`${pct}%`}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold truncate">{subj}</p>
+                                <p className="font-bold truncate">{capitalizeDisplayLabel(subj)}</p>
                                 <div className={`flex items-center gap-2 mt-1`}>
                                   <div className={`flex-1 h-1 rounded-full overflow-hidden ${dm?'bg-gray-700':'bg-gray-100'}`} style={{maxWidth:'120px'}}>
                                     <div className={`h-full rounded-full ${pct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${pct}%`}}/>
@@ -16608,7 +17592,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
                               <FolderIcon className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold">{subj}</p>
+                                <p className="font-bold">{capitalizeDisplayLabel(subj)}</p>
                                 <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
                                   {allAulas.length} aulas{subjQs>0?` · ${subjQs} questões`:''}</p>
                               </div>
@@ -17115,7 +18099,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                                    {step.done?<CheckIcon className="w-4 h-4"/>:<PlayIcon className="w-4 h-4"/>}
 	                                  </div>
 	                                  <div className="min-w-0 flex-1">
-	                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${dm?'text-gray-600':'text-gray-400'}`}>{item.subject}</p>
+	                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${dm?'text-gray-600':'text-gray-400'}`}>{capitalizeDisplayLabel(item.subject)}</p>
 	                                    <p className="font-bold truncate mt-0.5">{step.detail}</p>
 	                                    {step.subdetail&&<p className={`text-xs mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{step.subdetail}</p>}
 	                                  </div>
@@ -17149,7 +18133,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                   <div className="flex items-center gap-2">
                                     <span className={`h-6 w-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${item.pct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700')}`}>{item.pct===100?'✓':idx+1}</span>
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-sm font-bold truncate">{item.subject}</p>
+                                      <p className="text-sm font-bold truncate">{capitalizeDisplayLabel(item.subject)}</p>
                                       <p className={`text-[10px] ${dm?'text-gray-500':'text-gray-500'}`}>{item.completed}/{item.total} concluídas · {item.watched} assistidas</p>
                                     </div>
                                     <button onClick={()=>moveSubject(idx,-1)} disabled={idx===0} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↑</button>
@@ -17407,7 +18391,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                             className={`rounded-2xl border p-4 text-left transition-all disabled:opacity-50 ${dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-700':'bg-gray-50 border-gray-100 hover:border-yellow-300'}`}>
                             <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Próxima aula</p>
                             <h3 className="text-xl font-serif font-bold text-yellow-600 mt-2">{nextScheduleLesson?.title || 'Nenhuma aula pendente'}</h3>
-                            <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-500'}`}>{nextScheduleLesson ? `${nextScheduleLesson.subject} · ${shortTopicName(nextScheduleLesson.topic)}` : 'Tudo certo por aqui.'}</p>
+                            <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-500'}`}>{nextScheduleLesson ? `${capitalizeDisplayLabel(nextScheduleLesson.subject)} · ${shortTopicName(nextScheduleLesson.topic)}` : 'Tudo certo por aqui.'}</p>
                             {nextScheduleLesson&&<p className={`text-xs font-bold mt-4 ${dm?'text-yellow-300':'text-yellow-700'}`}>Abrir aula</p>}
                           </button>
                         </div>
@@ -17518,7 +18502,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                       <div className="flex items-center gap-2">
                                         <span className={`h-6 w-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>{idx + 1}</span>
                                         <div className="min-w-0 flex-1">
-                                          <p className="text-sm font-bold truncate">{subject}</p>
+                                          <p className="text-sm font-bold truncate">{capitalizeDisplayLabel(subject)}</p>
                                           <p className={`text-[10px] ${dm?'text-gray-500':'text-gray-500'}`}>{total} aula{total!==1?'s':''}</p>
                                         </div>
                                         <button onClick={()=>moveSubject(idx,-1)} disabled={idx===0} className={`px-1.5 py-1 rounded text-xs disabled:opacity-20 ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-100'}`}>↑</button>
@@ -17568,7 +18552,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                         </span>
                                         <div className="min-w-0">
                                           <p className="text-sm font-bold truncate">{lesson.title}</p>
-                                          <p className={`text-[11px] mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{lesson.subject} · {shortTopicName(lesson.topic)}</p>
+                                          <p className={`text-[11px] mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{capitalizeDisplayLabel(lesson.subject)} · {shortTopicName(lesson.topic)}</p>
                                         </div>
                                       </div>
                                     </div>
@@ -17678,19 +18662,39 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	          const effQuestionTotal = effQuestionBlocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
 	          const effQuestionAnswered = effQuestionBlocks.reduce((sum, block) => sum + Object.keys(block.answers || {}).length, 0);
 	          const effWatched = !!watchedAulas[getAulaId(effAula)];
+	          const effQuestionComplete = effQuestionTotal > 0 && effQuestionAnswered >= effQuestionTotal;
 	          const effQuestionActionLabel = effQuestionTotal === 0
 	            ? 'Gerar questões de fixação'
 	            : effQuestionAnswered < effQuestionTotal
 	              ? `Responder questões (${effQuestionAnswered}/${effQuestionTotal})`
 	              : 'Rever questões';
-	          const effQuestionNeedsAction = effQuestionTotal === 0 || effQuestionAnswered < effQuestionTotal;
-	          const effNextStepLabel = !effWatched
-	            ? 'Assista a aula e marque como assistida'
-	            : effQuestionTotal === 0
-	              ? 'Agora faça as questões de fixação'
-	              : effQuestionAnswered < effQuestionTotal
-	                ? 'Continue as questões de fixação'
-	                : 'Aula em dia';
+	          const openEffAulaQuestions = (parity = 'all') => {
+	            setVqQuestionParity(parity);
+	            if (aulaHasVqData(effAula)) {
+	              const availableBlocks = Object.entries(Array.isArray(effQuestionData?.blocks) ? {} : (effQuestionData?.blocks || {}))
+	                .filter(([, block])=>(block?.questions || []).length > 0);
+	              setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);
+	              setVqActiveBlockView(availableBlocks.length===1 ? {blockId:availableBlocks[0][0],showWrong:false} : null);
+	              setView('videoquestions');
+	            } else {
+	              gerarQuestoesDireto(effAula, effSubject, effTopic);
+	            }
+	          };
+	          const downloadEffTranscript = async () => {
+	            try {
+	              const lessonData = await fetchTranscript(effAula);
+	              const transcript = lessonData?.transcript || '';
+	              if (!transcript) { addToast('Transcrição não disponível para esta aula.', 'info', 3500); return; }
+	              const title = courseLessonDisplayTitle(effAula);
+	              const blob = new Blob([`${title}\n${'='.repeat(title.length)}\n\n${transcript}`], {type:'text/plain;charset=utf-8'});
+	              const anchor = document.createElement('a');
+	              anchor.href = URL.createObjectURL(blob);
+	              anchor.download = `${title.substring(0,60).replace(/[^a-zA-Z0-9\s\-]/g,'')}.txt`;
+	              anchor.click();
+	              URL.revokeObjectURL(anchor.href);
+	              addToast('Transcrição exportada.', 'success', 2500);
+	            } catch(e) { addToast('Erro ao exportar transcrição.', 'error', 3500); }
+	          };
 
           // Helper para setar tópico+cat ao mesmo tempo
           const setTopicCat = (subject, topic, cat) => {
@@ -17700,10 +18704,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           };
 
           return (
-            <div className={`course-workspace flex w-full overflow-hidden ${dm?'bg-gray-900':'bg-gray-950'}`} style={{minHeight:'calc(100dvh - 62px)'}}>
+            <div className={`course-workspace flex w-full overflow-hidden md:gap-4 md:py-4 md:pr-4 md:pl-8 ${dm?'bg-gray-950':'bg-gray-100'}`} style={{minHeight:'calc(100dvh - 62px)'}}>
 
               {/* ══ SIDEBAR ══ */}
-              <div className={`course-workspace-nav w-60 xl:w-64 flex-shrink-0 border-r ${sideBg} ${sideBorder} hidden md:flex flex-col`} style={{height:'calc(100dvh - 62px)'}}>
+              <div className={`course-workspace-nav w-72 xl:w-80 flex-shrink-0 overflow-hidden rounded-2xl border shadow-sm ${sideBg} ${sideBorder} hidden md:flex flex-col`}>
                 <div className={`px-4 py-3 border-b ${sideBorder} flex-shrink-0`}>
                   <div className="flex items-center gap-2 mb-2">
                     <button onClick={()=>setView('library')} className={`p-1 rounded ${dm?'hover:bg-gray-700 text-gray-500':'hover:bg-gray-100 text-gray-400'}`}><ArrowLeft className="w-4 h-4"/></button>
@@ -17730,7 +18734,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         <button onClick={()=>{setExpandedSubjectsVid(p=>({...p,[subject]:!isExp}));setActiveSubjectVid(subject);}}
                           className={`w-full flex items-center justify-between px-3 py-2.5 text-left ${dm?'hover:bg-gray-700/60':'hover:bg-gray-50'}`}>
                           <div className="min-w-0 flex-1">
-                            <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{subject}</p>
+	                                  <p className={`text-xs font-bold truncate ${effSubject===subject?'text-yellow-500':''}`}>{capitalizeDisplayLabel(subject)}</p>
                             <p className={`text-[10px] mt-0.5 ${textMuted}`}>{sW}/{sAulas.length}{sDuration?` · ${sDuration}`:''}</p>
                           </div>
                           {isExp?<ChevronDown className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>:<ChevronRight className="w-3 h-3 opacity-30 ml-1 flex-shrink-0"/>}
@@ -17829,14 +18833,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
 
               {/* ══ MAIN ══ */}
-              <div ref={videoMainScrollRef} className="course-workspace-main min-w-0 flex-1 overflow-y-auto" style={{height:'calc(100dvh - 62px)'}}>
+              <div ref={videoMainScrollRef} className={`course-workspace-main h-[calc(100dvh-62px)] min-w-0 flex-1 overflow-y-auto md:rounded-2xl md:border md:shadow-sm ${dm?'bg-gray-900 md:border-gray-800':'bg-white md:border-gray-200'}`}>
                 {/* Mobile back bar */}
                 <div className={`flex items-center gap-2 px-3 py-2.5 md:hidden border-b flex-shrink-0 ${sideBorder} ${dm?'bg-gray-800':'bg-white'}`}>
                   <button onClick={()=>setView('library')} className={`p-1.5 rounded-lg ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
                   <span className="text-sm font-bold text-yellow-600 flex-1 truncate">
                     {effAula ? courseLessonDisplayTitle(effAula) : 'Videoaulas'}
                   </span>
-                  {effAula&&<span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500'}`}>{effIdx+1}/{effAulas.length}</span>}
+                  {effAula?.duration_formatted&&<span className={`flex-shrink-0 text-xs font-bold ${dm?'text-gray-400':'text-gray-500'}`}>{effAula.duration_formatted}</span>}
                 </div>
 
                 {!effAula ? (
@@ -17846,8 +18850,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   </div>
                 ) : (
                   <div>
+                    <div className="mx-auto w-full max-w-5xl px-3 pt-4 md:px-6 md:pt-6">
+                      <div className="mb-4 hidden min-w-0 md:block">
+                        <p className={`truncate text-xs font-semibold ${textMuted}`} title={`${capitalizeDisplayLabel(effSubject)} — ${shortTopicName(effTopic||'')}`}>
+                          {capitalizeDisplayLabel(effSubject)} <span className="mx-1.5 opacity-35">/</span> {shortTopicName(effTopic||'')}
+                        </p>
+                        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-6">
+                          <h2 className={`min-w-0 truncate font-serif text-2xl font-bold ${dm?'text-gray-100':'text-gray-900'}`} title={courseLessonDisplayTitle(effAula)}>{courseLessonDisplayTitle(effAula)}</h2>
+                          <div className="flex flex-shrink-0 items-center gap-2">
+                            <span className={`flex items-center gap-1.5 text-sm font-bold ${dm?'text-gray-300':'text-gray-600'}`}><Clock className="h-4 w-4 text-yellow-600"/>{effAula.duration_formatted || 'Duração não informada'}</span>
+                            {isAdmin&&<button onClick={downloadEffTranscript} title="Baixar transcrição" aria-label="Baixar transcrição" className={`flex h-8 w-8 items-center justify-center rounded-lg opacity-35 transition-opacity hover:opacity-100 ${dm?'hover:bg-gray-800 text-gray-300':'hover:bg-gray-100 text-gray-600'}`}><DownloadIcon className="h-4 w-4"/></button>}
+                          </div>
+                        </div>
+                      </div>
                     {/* Player */}
-                    <div className="relative w-full bg-black" style={{aspectRatio:'16/9',maxHeight:'70vh'}}>
+                    <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{aspectRatio:'16/9',maxHeight:'62vh'}}>
                       {isDemo ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center" style={{background:'#0d0d0d'}}>
                           <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 border-2 ${dm?'border-yellow-600 bg-yellow-900/30':'border-yellow-500 bg-yellow-50'}`}>
@@ -17878,8 +18895,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       ) : effAula?.embed_url ? (
                         <iframe
                           ref={videoFrameRef}
-                          key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??44}`}
-                          src={`${effAula.embed_url}${effAula.embed_url.includes('?')?'&':'?'}t=${videoSeek??44}`}
+                          key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??45}`}
+                          src={`${effAula.embed_url}${effAula.embed_url.includes('?')?'&':'?'}t=${videoSeek??45}`}
                           className="absolute inset-0 w-full h-full"
                           id="bunny-player"
                           style={{border:'none'}}
@@ -17891,6 +18908,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           <p className="text-white opacity-40 text-sm">Vídeo não disponível</p>
                         </div>
                       )}
+                    </div>
                     </div>
 
                     <div className={`${dm?'bg-gray-900':'bg-white'}`}>
@@ -17920,43 +18938,32 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         <button onClick={()=>setMobileNavOpen(true)}
                           className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-left ${dm?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}>
                           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/></svg>
-                          <span className="flex-1 truncate">{effSubject} — {shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
+                          <span className="flex-1 truncate">{capitalizeDisplayLabel(effSubject)} — {shortTopicName(effTopic||'')} {effCat==='bonus'?'⭐':''}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="opacity-40 flex-shrink-0"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
                         {effDescription&&<p className={`px-1 text-xs leading-relaxed ${dm?'text-gray-500':'text-gray-500'}`}>{effDescription}</p>}
-
-	                        {/* Botões principais em linha — fluxo: assistir → questões */}
-	                        <div className="flex gap-2">
-	                          {/* Marcar assistida */}
+	                        <div className="grid grid-cols-[auto_1fr] gap-2">
 	                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
-	                            className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm flex-shrink-0 transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white active:bg-green-600':('border '+(dm?'border-green-700 text-green-400 active:bg-green-900/20':'border-green-400 text-green-700 active:bg-green-50'))}`}>
-	                            <CheckIcon className="w-4 h-4"/>
-	                            {watchedAulas[getAulaId(effAula)]?'✓':'Assistida'}
+	                            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effWatched?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-700 bg-gray-800 text-gray-300 active:bg-gray-700':'border-gray-200 bg-white text-gray-700 active:bg-gray-50')}`}>
+	                            <CheckIcon className="w-4 h-4"/>{effWatched?'Assistida':'Marcar assistida'}
 	                          </button>
-
-	                          {/* Questões + config */}
-	                          <div className={`flex flex-1 rounded-xl overflow-hidden border ${aulaHasVqData(effAula)?(dm?'border-green-700':'border-green-500'):(dm?'border-yellow-700':'border-yellow-500')}`}>
-                            <button
-                              onClick={()=>{
-                                if(aulaHasVqData(effAula)){
-                                  setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
-                                } else {
-                                  gerarQuestoesDireto(effAula, effSubject, effTopic);
-                                }
-                              }}
-		                              className={`flex items-center justify-center gap-2 flex-1 py-3.5 font-bold text-sm transition-all ${effWatched&&effQuestionNeedsAction?'bg-yellow-600 text-white active:bg-yellow-700':aulaHasVqData(effAula)?(dm?'bg-green-900/20 text-green-400 active:bg-green-900/40':'bg-green-50 text-green-700 active:bg-green-100'):(dm?'bg-yellow-900/20 text-yellow-400 active:bg-yellow-900/40':'bg-yellow-50 text-yellow-700 active:bg-yellow-100')}`}>
-	                              <GraduationCap className="w-4 h-4"/>
-	                              {effQuestionActionLabel}
-	                            </button>
-                            {!aulaHasVqData(effAula)&&(
-                              <button
-                                onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
-                                className={`flex items-center justify-center px-3.5 border-l transition-all ${dm?'border-yellow-700/50 text-yellow-600 active:bg-yellow-900/30':'border-yellow-300 text-yellow-600 active:bg-yellow-50'}`}>
-                                <SettingsIcon className="w-4 h-4"/>
-                              </button>
-	                            )}
-	                          </div>
+	                          <button onClick={()=>openEffAulaQuestions('all')}
+	                            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-600 bg-gray-800 text-gray-100 active:bg-gray-700':'border-gray-300 bg-white text-gray-800 active:bg-gray-50')}`}>
+	                            <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
+	                          </button>
 	                        </div>
+	                        {effQuestionTotal>1&&(
+	                          <div className="grid grid-cols-2 gap-2 pl-[7.25rem]">
+	                            <button onClick={()=>openEffAulaQuestions('odd')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${dm?'border-gray-700 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-600'}`}>Fazer ímpares</button>
+	                            <button onClick={()=>openEffAulaQuestions('even')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${dm?'border-gray-700 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-600'}`}>Fazer pares</button>
+	                          </div>
+	                        )}
+	                        {!aulaHasVqData(effAula)&&isAdmin&&(
+	                          <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
+	                            className={`ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-50'}`}>
+	                            <SettingsIcon className="w-3.5 h-3.5"/>Personalizar geração
+	                          </button>
+	                        )}
                       </div>
 
                       {/* MOBILE: scrollable aula list */}
@@ -18006,7 +19013,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                     <button onClick={()=>setExpandedSubjectsVid(p=>({...p,[subj]:!isExpS}))}
                                       className={`w-full flex items-center justify-between px-4 py-3 text-left ${dm?'hover:bg-gray-700':'hover:bg-gray-50'}`}>
                                       <div className="flex-1 min-w-0">
-                                        <p className={`text-sm font-bold truncate ${subj===effSubject?'text-yellow-500':''}`}>{subj}</p>
+                                        <p className={`text-sm font-bold truncate ${subj===effSubject?'text-yellow-500':''}`}>{capitalizeDisplayLabel(subj)}</p>
                                         <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
                                           {sW}/{sAulas.length} assistidas{sDuration?` · ${sDuration}`:''}
                                         </p>
@@ -18049,67 +19056,33 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       )}
 
 	                      {/* DESKTOP info block */}
-	                      <div className="hidden md:block px-6 lg:px-8 py-5">
-	                        <div className={`rounded-2xl border p-5 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-200 bg-gray-50'}`}>
+	                      <div className="mx-auto hidden w-full max-w-5xl px-6 py-5 md:block">
+	                        <div className={`rounded-2xl border p-6 shadow-sm ${dm?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
 	                          <div className="flex items-start justify-between gap-6">
 	                            <div className="min-w-0 flex-1">
-	                              <p className={`text-xs mb-2 flex items-center gap-1.5 flex-wrap ${textMuted}`}>
-	                                <span>{effSubject}</span>
-	                                <ChevronRight className="w-3 h-3 opacity-40"/>
-	                                <span>{shortTopicName(effTopic||'')}</span>
-	                              </p>
-		                              <h2 className={`text-2xl font-serif font-bold leading-tight ${dm?'text-white':'text-gray-900'}`}>{courseLessonDisplayTitle(effAula)}</h2>
-		                              {effDescription&&<p className={`text-sm mt-3 leading-relaxed max-w-3xl ${dm?'text-gray-400':'text-gray-600'}`}>{effDescription}</p>}
-		                              <div className={`mt-4 rounded-xl border px-4 py-3 ${effWatched?(dm?'border-green-800/50 bg-green-900/10':'border-green-200 bg-green-50'):(dm?'border-yellow-800/50 bg-yellow-900/10':'border-yellow-200 bg-yellow-50')}`}>
-		                                <p className={`text-xs font-bold uppercase tracking-widest ${effWatched?(dm?'text-green-400':'text-green-700'):(dm?'text-yellow-400':'text-yellow-700')}`}>Próximo passo</p>
-		                                <p className={`text-sm font-bold mt-1 ${dm?'text-gray-200':'text-gray-800'}`}>{effNextStepLabel}</p>
-		                              </div>
-		                              <div className="flex items-center gap-2 mt-4">
-	                                {effAula.duration_formatted&&(
-	                                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-600 border border-gray-200'}`}>⏱ {effAula.duration_formatted}</span>
-	                                )}
-	                                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-600 border border-gray-200'}`}>Aula {effIdx+1} de {effAulas.length}</span>
-	                              </div>
+	                              <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${textMuted}`}>Sobre esta aula</p>
+		                              <p className={`mt-2 max-w-3xl text-sm leading-relaxed ${dm?'text-gray-300':'text-gray-600'}`}>{effDescription || 'Assista ao conteúdo e use as questões para consolidar os pontos centrais da aula.'}</p>
 		                            </div>
-		                            <div className="flex flex-col gap-2 w-56 flex-shrink-0">
+		                            <div className="w-64 flex-shrink-0 space-y-2">
 		                              <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
-		                                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all ${watchedAulas[getAulaId(effAula)]?'bg-green-500 text-white':('border '+(dm?'border-green-700 text-green-400 hover:bg-green-900/20':'border-green-400 bg-white text-green-700 hover:bg-green-50'))}`}>
+		                                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all ${effWatched?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700':'border-gray-200 bg-white text-gray-700 hover:bg-gray-50')}`}>
 		                                <CheckIcon className="w-4 h-4"/>
-		                                {watchedAulas[getAulaId(effAula)]?'Assistida':'Marcar assistida'}
+		                                {effWatched?'Assistida':'Marcar assistida'}
 		                              </button>
-		                              <button onClick={()=>{
-		                                if(aulaHasVqData(effAula)){
-		                                  setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');
-	                                } else {
-	                                  gerarQuestoesDireto(effAula, effSubject, effTopic);
-	                                }
-		                              }} className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border ${effWatched&&effQuestionNeedsAction?'border-yellow-600 bg-yellow-600 text-white hover:bg-yellow-700':aulaHasVqData(effAula)?(dm?'border-green-700 bg-green-900/15 text-green-400 hover:bg-green-900/30':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-yellow-700 bg-yellow-900/15 text-yellow-400 hover:bg-yellow-900/30':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')}`}>
-			                                <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
-			                              </button>
-		                              <div className="grid grid-cols-2 gap-2">
+		                              <button onClick={()=>openEffAulaQuestions('all')} className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm transition-all border ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300 hover:bg-green-900/35':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700':'border-gray-300 bg-white text-gray-800 hover:bg-gray-50')}`}>
+		                                <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
+		                              </button>
+		                              {effQuestionTotal>1&&<div className="grid grid-cols-2 gap-2">
+		                                <button onClick={()=>openEffAulaQuestions('odd')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-600 hover:border-yellow-400'}`}>Ímpares</button>
+		                                <button onClick={()=>openEffAulaQuestions('even')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-600 hover:border-yellow-400'}`}>Pares</button>
+		                              </div>}
 	                                {!aulaHasVqData(effAula)&&(
 	                                  <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
 	                                    title="Configurações das questões"
-	                                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-200':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`}>
+	                                    className={`flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-200':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`}>
 	                                    <SettingsIcon className="w-4 h-4"/>Config.
 	                                  </button>
 	                                )}
-	                                <button onClick={async()=>{
-	                                  try {
-	                                    const docId=effAula.doc_id || (effAula.title||'').replace(/\//g,'-');
-	                                    const snap=await getDoc(doc(db,'lessons',docId));
-	                                    const transcript=snap.exists()?snap.data().transcript:'';
-	                                    if(!transcript){addToast('Transcrição não disponível para esta aula.', 'info', 3500);return;}
-	                                    const title = courseLessonDisplayTitle(effAula);
-	                                    const blob=new Blob([`${title}\n${'='.repeat(title.length)}\n\n${transcript}`],{type:'text/plain;charset=utf-8'});
-	                                    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-	                                    a.download=`${title.substring(0,60).replace(/[^a-zA-Z0-9\s\-]/g,'')}.txt`;a.click();
-	                                    addToast('Transcrição exportada.', 'success', 2500);
-	                                  } catch(e){addToast('Erro ao exportar transcrição.', 'error', 3500);}
-	                                }} className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`} title="Exportar transcrição">
-	                                  <DownloadIcon className="w-4 h-4"/>Transcrição
-	                                </button>
-	                              </div>
 	                            </div>
 	                          </div>
 	                          <div className={`mt-5 pt-4 border-t grid grid-cols-2 gap-3 ${dm?'border-gray-800':'border-gray-200'}`}>
@@ -18204,6 +19177,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               const { blockId, cycleStage } = vqActiveBlockView;
               const block = blocks[blockId] || {};
               const qs      = Array.isArray(block.questions) ? block.questions : [];
+	              const blockQuestionOffset = blockList.slice(0, Math.max(0, blockList.findIndex(([id])=>id===blockId)))
+	                .reduce((sum, [, item])=>sum + (Array.isArray(item.questions) ? item.questions.length : 0), 0);
+	              const parityQuestions = vqQuestionParity === 'all' ? qs : qs.filter((question, index)=>{
+	                const lessonNumber = blockQuestionOffset + index + 1;
+	                return vqQuestionParity === 'odd' ? lessonNumber % 2 === 1 : lessonNumber % 2 === 0;
+	              });
 	              const ans     = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
 	              const blockFavs = Array.isArray(block.favorites) ? block.favorites : [];
 	              const blockNotebook = Array.isArray(block.errorNotebook) ? block.errorNotebook : [];
@@ -18211,8 +19190,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               const currentBlockIndex = blockList.findIndex(([id]) => id === blockId);
               const nextBlockEntry = currentBlockIndex >= 0 ? blockList[currentBlockIndex + 1] : null;
               const nextBlockTitle = nextBlockEntry?.[1]?.title || (nextBlockEntry ? `Bloco ${nextBlockEntry[0].replace('block','')}` : '');
-              const missedQuestions = qs.filter(q => ans[q.id] && !isAnswerCorrect(q, ans[q.id]));
-              const cycleBaseQuestions = cycleStage === 'r3' ? (missedQuestions.length ? missedQuestions : qs) : qs;
+              const missedQuestions = parityQuestions.filter(q => ans[q.id] && !isAnswerCorrect(q, ans[q.id]));
+              const cycleBaseQuestions = cycleStage === 'r3' ? (missedQuestions.length ? missedQuestions : parityQuestions) : parityQuestions;
               const visibleQuestions = cycleStage === 'r10'
                 ? cycleBaseQuestions.map(q => {
                     const correct = (q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || '';
@@ -18229,15 +19208,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   })
                 : cycleStage === 'r3'
                   ? cycleBaseQuestions.map(q => ({...q, id:`${q.id}__cycle_r3`}))
-                  : qs;
-              const visibleAnswers = cycleStage
-                ? Object.fromEntries(Object.entries(ans).filter(([id]) => visibleQuestions.some(q => q.id === id)))
-                : ans;
+                  : parityQuestions;
+              const visibleAnswers = Object.fromEntries(Object.entries(ans).filter(([id]) => visibleQuestions.some(q => q.id === id)));
               const visibleTitle = cycleStage === 'r10'
                 ? `${blockTitle} · Revisão +10`
                 : cycleStage === 'r3'
                   ? `${blockTitle} · Revisão +3`
-                  : blockTitle;
+                  : `${blockTitle}${vqQuestionParity==='odd'?' · Ímpares':vqQuestionParity==='even'?' · Pares':''}`;
               const blockErrorReviews = findErrorNotebookReviewsForSource({
                 subjectTitle:vqAula.title,
                 topicTitle:blockTitle,
@@ -18272,7 +19249,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,errorNotebook:toggleInList(freshNotebook,qId)}}});
               };
               const handleVqReset = async () => {
-                if (cycleStage) {
+                if (cycleStage || vqQuestionParity !== 'all') {
                   const visibleIds = new Set(visibleQuestions.map(q => q.id));
                   const nextAnswers = Object.fromEntries(Object.entries(ans).filter(([id]) => !visibleIds.has(id)));
                   await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:nextAnswers}}});
@@ -18296,7 +19273,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                    showErrorNotebook={canUseAdvancedFeatures}
 	                    onToggleErrorNotebook={handleVqNotebook}
                     onReset={visibleQuestions.length>0?handleVqReset:null}
-                    onRegenerate={!cycleStage&&qs.length>0?()=>generateVqBlock(aulaIdNew,blockId):null}
+                    onRegenerate={!meta.readOnly&&!cycleStage&&qs.length>0?()=>generateVqBlock(aulaIdNew,blockId):null}
                     onExport={visibleQuestions.length>0?()=>setExportModal({topic:{title:`${vqAula.title} — ${visibleTitle}`,questions:visibleQuestions},subject:null}):null}
                     isGenerating={!!block.generating}
                     streamCount={streamCount}
@@ -18339,7 +19316,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     nextUnitLabel={cycleStage ? 'Voltar ao plano' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
                     nextUnitHelper={cycleStage ? 'Continuar o roteiro guiado' : (nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência'))}
                     generateLabel="Gerar Questões"
-                    onGenerate={()=>generateVqBlock(aulaIdNew,blockId)}
+                    onGenerate={meta.readOnly?null:()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}
                   />
                 </div>
@@ -18348,22 +19325,22 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
             // ── LISTA DE BLOCOS DA AULA ──
             return (
-              <div className="max-w-3xl mx-auto">
+              <div className="mx-auto max-w-5xl">
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-2 mb-6 text-sm flex-wrap">
                   <button onClick={()=>{setVqAula(null);setVqActiveBlockView(null);}}
                     className={`font-bold flex items-center gap-1 ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
-                    <ArrowLeft className="w-4 h-4"/>{vqSubject}
+                    <ArrowLeft className="w-4 h-4"/>{capitalizeDisplayLabel(vqSubject)}
                   </button>
                   <span className="opacity-30">/</span>
                   <span className="opacity-50 text-xs truncate max-w-[140px]">{shortTopicName(vqTopic)}</span>
                   <span className="opacity-30">/</span>
-                  <span className={`font-bold truncate max-w-[180px] ${dm?'text-yellow-400':'text-yellow-700'}`}>{vqAula.title}</span>
+                  <span className={`font-bold truncate max-w-[240px] ${dm?'text-yellow-400':'text-yellow-700'}`}>{courseLessonDisplayTitle(vqAula)}</span>
                 </div>
 
 	                <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 pb-6 border-b ${dm?'border-gray-700':'border-gray-200'}`}>
 	                  <div>
-	                    <h2 className="text-2xl font-serif font-bold text-yellow-600">{vqAula.title}</h2>
+	                    <h2 className={`text-3xl font-serif font-bold ${dm?'text-gray-100':'text-gray-900'}`}>{courseLessonDisplayTitle(vqAula)}</h2>
 	                    <div className="flex items-center gap-3 mt-1 flex-wrap">
 	                      {vqAula.duration_formatted&&<p className="text-sm opacity-50">⏱ {vqAula.duration_formatted}</p>}
 	                      {totalLessonQuestions>0&&<p className="text-sm opacity-50">{answeredLessonQuestions}/{totalLessonQuestions} respondidas</p>}
@@ -18382,7 +19359,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       })()}</div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    {hasSetup&&(
+                    {hasSetup&&!meta.readOnly&&(
                       <button onClick={()=>setVqGenModal({aula:vqAula,aulaId:aulaIdNew,suggestedQ,reset:true})}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                         <RotateCcw className="w-4 h-4"/>Regenerar
@@ -18396,6 +19373,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     )}
                   </div>
                 </div>
+
+                {totalLessonQuestions>1&&(
+                  <div className={`mb-6 rounded-2xl border p-2 ${dm?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        {id:'all',label:`Todas (${totalLessonQuestions})`},
+                        {id:'odd',label:`Ímpares (${Math.ceil(totalLessonQuestions/2)})`},
+                        {id:'even',label:`Pares (${Math.floor(totalLessonQuestions/2)})`},
+                      ].map(option=><button key={option.id} onClick={()=>setVqQuestionParity(option.id)}
+                        className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${vqQuestionParity===option.id?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
+                        {option.label}
+                      </button>)}
+                    </div>
+                  </div>
+                )}
 
                 {/* Vazio */}
                 {!hasSetup&&blockList.length===0&&(
@@ -18438,8 +19430,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                      </div>
 	                    )}
 	                    <p className="text-xs font-bold uppercase opacity-40 mb-1">{blockList.length} bloco(s) · {aulaQCount(vqAula)} questões</p>
-                    {blockList.map(([blockId, block])=>{
-                      const qs  = Array.isArray(block.questions) ? block.questions : [];
+                    {blockList.map(([blockId, block], blockIndex)=>{
+                      const allBlockQuestions = Array.isArray(block.questions) ? block.questions : [];
+                      const blockOffset = blockList.slice(0, blockIndex).reduce((sum, [, item])=>sum + (Array.isArray(item.questions) ? item.questions.length : 0), 0);
+                      const qs = vqQuestionParity === 'all' ? allBlockQuestions : allBlockQuestions.filter((question, index)=>{
+                        const lessonNumber = blockOffset + index + 1;
+                        return vqQuestionParity === 'odd' ? lessonNumber % 2 === 1 : lessonNumber % 2 === 0;
+                      });
+                      if (!qs.length && allBlockQuestions.length) return null;
                       const ans = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
                       const answered = Object.keys(ans).length;
                       const correct = qs.filter(q=>isAnswerCorrect(q, ans[q.id])).length;
@@ -18447,6 +19445,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       const allDone = qs.length>0&&answered===qs.length;
                       const hasQs = qs.length>0;
                       const blockNum = blockId.replace('block','');
+                      const isNamedCourseBlock = !/^block\d+$/i.test(blockId);
                       const blockTitle = block.title||`Bloco ${blockNum}`;
                       const blockErrorReviews = findErrorNotebookReviewsForSource({
                         subjectTitle:vqAula.title,
@@ -18466,7 +19465,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         {label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:openBlockBizuario},
                         {label:Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length>0?`Gerenciar revisão (${Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle, questions:qs, answers:ans, notebookIds:Array.isArray(block.errorNotebook)?block.errorNotebook:[], meta:{source:'curso',aulaTitle:vqAula.title,blockTitle}})},
                         blockErrorReviews.length ? {label:blockErrorReviews.length>1?`Abrir revisões geradas (${blockErrorReviews.length})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:()=>openErrorNotebookReviewResult(blockErrorReviews[0])} : null,
-                        {label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:()=>generateVqBlock(aulaIdNew,blockId)},
+                        !meta.readOnly ? {label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:()=>generateVqBlock(aulaIdNew,blockId)} : null,
                         {label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:()=>saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}}), danger:true},
                       ].filter(Boolean) : [];
 
@@ -18490,8 +19489,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                             }}
                             className="w-full p-5 flex items-center gap-4 text-left">
                             {/* Número / progresso — verde SÓ quando tudo respondido */}
-                            <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-bold font-serif text-lg ${allDone?'bg-green-500 text-white':hasQs?(dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                              {allDone?<CheckIcon className="w-6 h-6"/>:blockNum}
+                            <div className={`w-12 h-12 overflow-hidden rounded-xl flex-shrink-0 flex items-center justify-center font-bold font-serif text-lg ${allDone?'bg-green-500 text-white':hasQs?(dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                              {allDone?<CheckIcon className="w-6 h-6"/>:isNamedCourseBlock?<GraduationCap className="h-5 w-5"/>:blockNum}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-bold truncate pr-9">{blockTitle}</p>
@@ -18582,7 +19581,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       <div className="flex items-center gap-3">
                         <FolderIcon className="w-5 h-5 text-yellow-600"/>
                         <div>
-                          <p className="font-bold">{subj}</p>
+                          <p className="font-bold">{capitalizeDisplayLabel(subj)}</p>
                           <p className="text-xs opacity-40 mt-0.5">{totalAulas} aulas{totalQs>0?` • ${totalQs} questões`:''}</p>
                         </div>
                       </div>
@@ -19068,6 +20067,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             </SettingsSection>
             {isAdmin&&(
               <SettingsSection id="question-audit" title="Auditoria" icon={<ShieldAlert className="w-4 h-4"/>}>
+                <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left mb-3 ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white')}`}>
+                  <div>
+                    <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Gerar questões em lotes</p>
+                    <p className="text-xs opacity-50 mt-0.5">Para blocos grandes do Oráculo, manda vários requests menores de cerca de 15 questões.</p>
+                  </div>
+                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                  </div>
+                </button>
                 <button type="button" onClick={()=>saveSettings({...settingsRef.current, auditQuestions:!settings.auditQuestions})}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white')}`}>
                   <div>
@@ -19800,11 +20809,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         )}
       </main>
 
-      {!flashcardFullscreen&&['library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
+      {!flashcardFullscreen&&['library','shared-library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
       <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.55rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff',transform:bottomNavVisible&&!menuOpen&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 220ms ease'}} aria-label="Navegação principal">
         <div className="flex gap-1 max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-4 h-4"/>, active:view==='library', action:()=>setView('library')},
+            isAdmin ? {label:'Biblioteca', icon:<BookOpen className="w-4 h-4"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
             homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-4 h-4"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
             {label:'Oráculo', icon:<Sparkles className="w-4 h-4"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
             homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-4 h-4"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
@@ -19845,7 +20855,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         canCreateFlashcards={canUseAdvancedFeatures}
         onClose={(prefs={})=>{
           // Salvar preferências mesmo ao fechar sem confirmar
-          if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined || prefs.auditQuestions !== undefined) {
+          if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined || prefs.auditQuestions !== undefined || prefs.adminChunkedQuestions !== undefined) {
             const ns = {...settings, ...prefs};
             saveSettings(ns);
           }
@@ -19853,7 +20863,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }}
         onConfirm={(cfg)=>{
           // Salvar preferências para próximas aulas
-          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:filterQuestionTypesForAccess(cfg.questionTypes||visibleQuestionTypes, questionTypeAccess), autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions};
+          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:filterQuestionTypesForAccess(cfg.questionTypes||visibleQuestionTypes, questionTypeAccess), autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions, adminChunkedQuestions:!!cfg.adminChunkedQuestions};
           saveSettings(ns);
           setVqGenModal(null);
           const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
@@ -19897,7 +20907,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             {(()=>{
               const isFlashcardReview = errorReviewQTypes.some(isMemoryCardType);
               const estimatedTotal = errorReviewModal.questions.length * errorReviewPerQuestion;
-              const batchSize = isFlashcardReview ? 12 : Math.max(1, Math.floor(ERROR_REVIEW_MAX_GENERATED_PER_REQUEST / Math.max(1, errorReviewPerQuestion)));
+              const maxGeneratedPerRequest = settings.adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : ERROR_REVIEW_MAX_GENERATED_PER_REQUEST;
+              const batchSize = isFlashcardReview ? 12 : Math.max(1, Math.floor(maxGeneratedPerRequest / Math.max(1, errorReviewPerQuestion)));
               const requestCount = Math.max(1, Math.ceil(errorReviewModal.questions.length / batchSize));
               return (
                 <>
@@ -19961,23 +20972,35 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <GeminiThinkingSelector value={errorReviewThinking} onChange={setErrorReviewThinking} darkMode={darkMode}/>
               </div>
               {isAdmin&&(
-                <button type="button" onClick={()=>setErrorReviewAudit(!errorReviewAudit)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${errorReviewAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                  <div>
-                    <p className={`text-sm font-bold ${errorReviewAudit?'text-yellow-500':''}`}>Auditoria</p>
-                    <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar revisão fraca e melhorar explicações.</p>
-                  </div>
-                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:errorReviewAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:errorReviewAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                  </div>
-                </button>
+                <>
+                  <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                      <p className="text-xs opacity-50 mt-0.5">Reduz o teto de cada request para cerca de 15 questões geradas.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                  <button type="button" onClick={()=>setErrorReviewAudit(!errorReviewAudit)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${errorReviewAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${errorReviewAudit?'text-yellow-500':''}`}>Auditoria</p>
+                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar revisão fraca e melhorar explicações.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:errorReviewAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:errorReviewAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                </>
               )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setErrorReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button
                 disabled={isBusy}
-                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking, auditQuestions:errorReviewAudit})}
+                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking, auditQuestions:errorReviewAudit, adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions})}
                 className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {isBusy?<Spinner className="w-4 h-4 text-white"/>:<Sparkles className="w-4 h-4"/>}
                 {isBusy?'Gerando...':'Gerar revisão'}
@@ -20113,16 +21136,28 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <GeminiThinkingSelector value={academiaRegenThinking} onChange={setAcademiaRegenThinking} darkMode={darkMode}/>
               </div>
               {isAdmin&&(
-                <button type="button" onClick={()=>setAcademiaRegenAudit(!academiaRegenAudit)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaRegenAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                  <div>
-                    <p className={`text-sm font-bold ${academiaRegenAudit?'text-yellow-500':''}`}>Auditoria</p>
-                    <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
-                  </div>
-                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaRegenAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaRegenAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                  </div>
-                </button>
+                <>
+                  <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                      <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em requests menores sem quebrar subtópico.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                  <button type="button" onClick={()=>setAcademiaRegenAudit(!academiaRegenAudit)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaRegenAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${academiaRegenAudit?'text-yellow-500':''}`}>Auditoria</p>
+                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaRegenAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaRegenAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                </>
               )}
             </div>
             <div className="flex gap-3 mt-7">
@@ -20139,6 +21174,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   numAlternatives: academiaRegenQAlts,
                   geminiThinkingEnabled: academiaRegenThinking,
                   auditQuestions: academiaRegenAudit,
+                  adminChunkedQuestions: !!settingsRef.current.adminChunkedQuestions,
                   generationMode: academiaRegenModal.generationMode || 'full',
                 };
                 const { regenReason, generationMode, ...persistedSettings } = regenSettings;
@@ -20191,23 +21227,35 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <GeminiThinkingSelector value={academiaExtraThinking} onChange={setAcademiaExtraThinking} darkMode={darkMode}/>
               </div>
               {isAdmin&&(
-                <button type="button" onClick={()=>setAcademiaExtraAudit(!academiaExtraAudit)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaExtraAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                  <div>
-                    <p className={`text-sm font-bold ${academiaExtraAudit?'text-yellow-500':''}`}>Auditoria</p>
-                    <p className="text-xs opacity-50 mt-0.5">Segundo request para revisar utilidade, pistas e cobertura.</p>
-                  </div>
-                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaExtraAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaExtraAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                  </div>
-                </button>
+                <>
+                  <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                      <p className="text-xs opacity-50 mt-0.5">Divide baterias grandes em requests menores sem quebrar subtópico.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                  <button type="button" onClick={()=>setAcademiaExtraAudit(!academiaExtraAudit)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaExtraAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${academiaExtraAudit?'text-yellow-500':''}`}>Auditoria</p>
+                      <p className="text-xs opacity-50 mt-0.5">Segundo request para revisar utilidade, pistas e cobertura.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaExtraAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaExtraAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                </>
               )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaExtraModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button onClick={()=>{
-                const extraSettings = {...settings, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit};
-                saveSettings({...settingsRef.current, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit});
+                const extraSettings = {...settingsRef.current, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit, adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions};
+                saveSettings({...settingsRef.current, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit, adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions});
                 const {topic,subject} = academiaExtraModal;
                 setAcademiaExtraModal(null);
                 generateAcademiaExtraBattery(topic, subject, extraSettings);
@@ -20298,16 +21346,28 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
 
               {isAdmin&&(
-                <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,auditQuestions:!p.auditQuestions}))}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${oracleRegenConfig.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                  <div>
-                    <p className={`text-sm font-bold ${oracleRegenConfig.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                    <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
-                  </div>
-                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:oracleRegenConfig.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:oracleRegenConfig.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                  </div>
-                </button>
+                <>
+                  <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,adminChunkedQuestions:!p.adminChunkedQuestions}))}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${oracleRegenConfig.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${oracleRegenConfig.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                      <p className="text-xs opacity-50 mt-0.5">Quando passar de 15 questões, divide por subtópicos inteiros em vários requests.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:oracleRegenConfig.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:oracleRegenConfig.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                  <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,auditQuestions:!p.auditQuestions}))}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${oracleRegenConfig.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${oracleRegenConfig.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
+                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
+                    </div>
+                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:oracleRegenConfig.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:oracleRegenConfig.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    </div>
+                  </button>
+                </>
               )}
 
               <div className="flex gap-3 pt-2">
@@ -20318,7 +21378,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     qPerSub:Math.max(1, Math.min(10, parseInt(oracleRegenConfig.qPerSub, 10) || 1)),
                     numAlternatives:Number(oracleRegenConfig.numAlternatives || 5),
                   };
-                  saveSettings({...settingsRef.current, auditQuestions:!!cfg.auditQuestions, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled});
+                  saveSettings({...settingsRef.current, auditQuestions:!!cfg.auditQuestions, adminChunkedQuestions:!!cfg.adminChunkedQuestions, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled});
                   setRegenModal(false);
                   generateBatch(activeTopic.id, regenPrompt, cfg);
                   setRegenPrompt('');
@@ -20687,6 +21747,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                       <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
                     </div>
+                    {isAdmin && showsQuestionConfig && !isAuditBulk && !(cfg.questionTypes || []).some(isMemoryCardType) && (
+                      <button type="button" onClick={()=>updateBulkConfig({adminChunkedQuestions:!cfg.adminChunkedQuestions})}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                        <div>
+                          <p className={`text-sm font-bold ${cfg.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                          <p className="text-xs opacity-50 mt-0.5">Divide fixações e baterias extras grandes em requests menores.</p>
+                        </div>
+                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                        </div>
+                      </button>
+                    )}
                     {isAdmin && !isAuditBulk && (
                       <button type="button" onClick={()=>updateBulkConfig({auditQuestions:!cfg.auditQuestions})}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
@@ -20759,6 +21831,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     )}
                     <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
                     <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
+                    {isAdmin && showsOracleQuestionConfig && !isAuditBulk && !(cfg.questionTypes || []).some(isMemoryCardType) && (
+                      <button type="button" onClick={()=>updateBulkConfig({adminChunkedQuestions:!cfg.adminChunkedQuestions})}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
+                        <div>
+                          <p className={`text-sm font-bold ${cfg.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
+                          <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests menores, mantendo cada subtópico inteiro no mesmo lote.</p>
+                        </div>
+                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
+                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                        </div>
+                      </button>
+                    )}
                     {isAdmin && !isAuditBulk && (
                       <button type="button" onClick={()=>updateBulkConfig({auditQuestions:!cfg.auditQuestions})}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
@@ -20817,6 +21901,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         persist.questionStyle = cfg.questionStyle;
                         persist.questionTypes = cfg.questionTypes;
                         persist.numAlternatives = cfg.numAlternatives;
+                        persist.adminChunkedQuestions = !!cfg.adminChunkedQuestions;
                       }
                       if (showsOracleQuestionConfig) {
                         persist.questionStyle = cfg.questionStyle;
@@ -20824,6 +21909,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         persist.qPerSub = cfg.qPerSub;
                         persist.qPerSubAuto = !!cfg.qPerSubAuto;
                         persist.numAlternatives = cfg.numAlternatives;
+                        persist.adminChunkedQuestions = !!cfg.adminChunkedQuestions;
                       }
                       persist.geminiThinkingEnabled = !!cfg.geminiThinkingEnabled;
                       persist.auditQuestions = !!cfg.auditQuestions;

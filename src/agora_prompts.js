@@ -964,7 +964,14 @@ export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, ex
   const maxPerBlock = Math.max(minPerBlock, Math.min(30, options.maxSubtopicsPerBlock || SYLLABUS_LIMITS.videoaulas.maxSubtopicsPerBlock));
   const idealPerBlock = Math.max(minPerBlock, Math.min(maxPerBlock, qPerBlock || 6));
   const fullCoverage = !!options.fullCoverage;
-  const structureBlock = fullCoverage
+  const structureBlock = options.openStructure
+    ? `ESTRUTURA ABERTA E COMPLETA:
+- Cubra TODA a aula/transcrição, do início ao fim, seguindo a ordem em que o professor apresentou o conteúdo.
+- Você decide livremente quantos blocos e quantos subtópicos são necessários. NÃO existe meta, piso, teto ou quantidade esperada de questões.
+- Um bloco deve apenas agrupar subtópicos de um mesmo eixo temático; crie um novo bloco quando o eixo mudar.
+- Não compacte conteúdos diferentes para reduzir o sumário e não multiplique subtópicos apenas para aumentar volume.
+- Inclua todo conceito com cobrança técnica própria: mecanismos, critérios, classificações, diferenciais, achados, condutas, contraindicações, complicações, exceções e pegadinhas relevantes.`
+    : fullCoverage
     ? `ESTRUTURA OBRIGATÓRIA:
 - Cubra TODA a aula/transcrição, do início ao fim, seguindo a ordem em que o professor apresentou o conteúdo.
 - Crie quantos blocos forem necessários para representar a aula inteira. NÃO há limite total de blocos, subtópicos ou questões por aula.
@@ -982,6 +989,9 @@ ${structureBlock}
 
 REGRAS DOS SUBTÓPICOS:
 - Cada subtópico = 1 conceito médico específico e testável
+- Cada subtópico deve sustentar exatamente uma pergunta direta própria e, depois, uma aplicação clínica própria.
+- O título precisa declarar uma única fronteira de cobrança. Se ele mistura dois conhecimentos que poderiam gerar respostas diferentes, divida-o.
+- Se dois subtópicos produziriam essencialmente a mesma pergunta, funda-os ou reescreva-os para separar claramente as cobranças.
 - Cada subtópico deve ser testável em prova ou útil na vida real, com cobrança técnica real. Não crie subtópico que só gere conselho geral.
 - RUIM: "Introdução", "Generalidades", "Aspectos gerais do tratamento"
 - BOM: "Critérios diagnósticos da Síndrome Nefrótica", "Mecanismo de ação dos IECA na DRC"
@@ -1003,7 +1013,7 @@ FORMATO OBRIGATÓRIO:
 ...
 
 ${transcript
-  ? `TRANSCRIÇÃO DA AULA (use como base para os subtópicos):\n${transcript.substring(0, 25000)}`
+  ? `TRANSCRIÇÃO DA AULA (use como base para os subtópicos):\n${options.fullTranscript ? transcript : transcript.substring(0, 25000)}`
   : `[Sem transcrição disponível — baseie-se no título: "${aula.title}"]`}`;
 };
 
@@ -1040,6 +1050,48 @@ ${transcriptSlice
   : '[Sem transcrição — baseie-se nos subtópicos e no título da aula]'}
 
 ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper ou comentar.` : `Gere TODAS as ${total} questões sem interromper ou comentar.`}`;
+};
+
+// ─── PROMPT: PROVA CLÍNICA INTEGRADORA DA BIBLIOTECA ────────────────────────
+
+export const buildSharedLibraryClinicalPrompt = ({ lessonTitle, focusBlock, allBlocks = [], transcript = '', alts }) => {
+  const focusSubtopics = focusBlock?.subtopics || [];
+  const fullMap = allBlocks.map((block, blockIndex) => `TÓPICO ${blockIndex + 1}: ${block.title}\n${(block.subtopics || []).map(item=>`- ${item}`).join('\n')}`).join('\n\n');
+  return `Você é o examinador final de uma formação médica. Crie o teste clínico de verdade da aula "${lessonTitle}".
+
+TÓPICO-EIXO DESTE REQUEST: ${focusBlock?.title || 'Aplicação clínica'}
+SUBTÓPICOS DO EIXO:
+${focusSubtopics.map(item=>`- ${item}`).join('\n')}
+
+MAPA COMPLETO DA AULA — use livremente conexões com subtópicos não adjacentes:
+${fullMap}
+
+OBJETIVO:
+- Avaliar compreensão, integração e raciocínio clínico; não repetir as perguntas diretas com um enunciado maior.
+- Crie o MENOR conjunto de questões fortes que realmente teste este tópico-eixo. A quantidade é decidida por você e deve ser claramente menor que uma questão por subtópico.
+- Selecione apenas conteúdos que mudem hipótese, interpretação, diagnóstico diferencial, exame, conduta, contraindicação, prognóstico ou resposta diante de uma evolução clínica.
+- Ignore subtópicos inúteis para aplicação clínica, trivia, definições isoladas e detalhes que só permitem decoreba. Se este tópico-eixo não sustentar nenhuma cobrança clínica honesta, responda somente SEM_QUESTOES_CLINICAS.
+- Cada caso deve integrar vários conhecimentos. Você pode combinar subtópicos distantes do mapa completo quando a conexão for clinicamente natural.
+
+CASOS CLÍNICOS:
+- Use casos plausíveis com idade, sexo quando relevante, contexto, tempo de evolução, achados discriminativos e uma decisão real.
+- O aluno deve precisar extrair dados, priorizar hipóteses, comparar caminhos e aplicar mecanismos; reconhecer uma palavra-chave não basta.
+- Prefira sequências progressivas de 2 a 4 questões sobre um mesmo caso quando novas informações mudarem o raciocínio. Use outro caso apenas se ele testar uma competência clínica realmente diferente.
+- Não revele no caso o diagnóstico ou a conduta perguntada.
+- Não transforme "qual é X?" em "um paciente tem X; qual é X?".
+
+ALTERNATIVAS:
+- Todas devem representar hipóteses, exames ou condutas clinicamente plausíveis e qualitativamente diferentes.
+- Proibido criar alternativas que sejam quase a mesma frase, sinônimos, variações cosméticas, doses aleatórias ou uma correta cercada por absurdos.
+- Cada distrator deve corresponder a um erro de raciocínio reconhecível e a explicação deve dizer qual dado do caso o derrota.
+
+FORMATO OBRIGATÓRIO:
+${TEMPLATE_QUESTAO(alts, true, true)}
+
+Use números sequenciais simples. Não informe quantas questões decidiu criar, não explique o processo e não escreva nada fora dos blocos de questões.
+
+TRANSCRIÇÃO COMPLETA DA AULA:
+${transcript}`;
 };
 
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
