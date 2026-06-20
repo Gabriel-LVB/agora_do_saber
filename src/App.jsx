@@ -8310,8 +8310,10 @@ export default function QuestionBankApp() {
     if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
       vqBlocksRef.current = cached.value;
       setVqBlocks(cached.value);
-      if (cached.fresh) return;
     }
+    // O cache serve apenas para abrir a tela sem atraso. Sempre confirme o
+    // progresso no Firestore: outro dispositivo pode ter respondido questões
+    // durante os 30 minutos em que este cache ainda seria considerado fresco.
     (async () => {
       setVqLoading(true);
       try {
@@ -19614,7 +19616,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       });
                       if (!qs.length && allBlockQuestions.length) return null;
                       const ans = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
-                      const answered = Object.keys(ans).length;
+                      const answered = qs.filter(q => Object.prototype.hasOwnProperty.call(ans, q.id)).length;
                       const correct = qs.filter(q=>isAnswerCorrect(q, ans[q.id])).length;
                       const pct = answered>0?Math.round(correct/answered*100):null;
                       const allDone = qs.length>0&&answered===qs.length;
