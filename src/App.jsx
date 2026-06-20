@@ -8519,14 +8519,18 @@ export default function QuestionBankApp() {
   },[darkMode]);
 
   useEffect(() => {
-    const shouldLockPageScroll = view === 'videoaulas';
     const prevBodyOverflow = document.body.style.overflow;
     const prevHtmlOverflow = document.documentElement.style.overflow;
-    if (shouldLockPageScroll) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-    }
+    const desktopViewport = window.matchMedia('(min-width: 768px)');
+    const syncCourseScroll = () => {
+      const shouldLockPageScroll = view === 'videoaulas' && desktopViewport.matches;
+      document.body.style.overflow = shouldLockPageScroll ? 'hidden' : prevBodyOverflow;
+      document.documentElement.style.overflow = shouldLockPageScroll ? 'hidden' : prevHtmlOverflow;
+    };
+    syncCourseScroll();
+    desktopViewport.addEventListener?.('change', syncCourseScroll);
     return () => {
+      desktopViewport.removeEventListener?.('change', syncCourseScroll);
       document.body.style.overflow = prevBodyOverflow;
       document.documentElement.style.overflow = prevHtmlOverflow;
     };
@@ -10566,9 +10570,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setSharedLibraryRun(p => ({ ...p, stopping:true, paused:false }));
   };
 
-  const startSharedLibraryAutomation = async () => {
+  const startSharedLibraryAutomation = async (requestedItemId=null, freshSeed=null) => {
     if (!isAdmin || sharedLibraryRun.running) return;
-    const targets = getSharedLibraryTargets();
+    const onlyItemId = typeof requestedItemId === 'string' ? requestedItemId : null;
+    const targets = getSharedLibraryTargets().filter(lesson => !onlyItemId || sharedLibraryDocIdForLesson(lesson) === onlyItemId);
     if (!targets.length) {
       addToast('Nenhuma aula encontrada nas matérias selecionadas.', 'error', 4000);
       return;
@@ -10579,6 +10584,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       return;
     }
     const contentById = new Map(sharedLibraryItems.map(item => [item.id, item]));
+    if (onlyItemId && freshSeed) contentById.set(onlyItemId, { ...freshSeed, id:onlyItemId });
     const saveRunItem = async (id, current, patch) => {
       await saveSharedLibraryItem(id, patch);
       const next = { ...(current || {}), ...patch, id, updatedAt:Date.now() };
@@ -10627,7 +10633,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   openStructure:true,
                   fullTranscript:true,
                 });
-                const summaryText = await callSharedLibraryGemini({ prompt:'Crie o sumário didático completo desta aula.', system, keys, cursorRef });
+                const summaryText = await callSharedLibraryGemini({ prompt:'Crie o sumário didático completo desta aula, obrigatoriamente em português do Brasil. Não use títulos, termos explicativos ou frases em inglês.', system, keys, cursorRef });
                 const summaryBlocks = parseSharedLibrarySummary(summaryText);
                 if (!summaryBlocks.length) throw new Error('Sumário sem tópicos reconhecíveis');
                 existing = await saveRunItem(id, existing, {
@@ -10697,7 +10703,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     const segmentBlock = { title:`${lesson.title} — lote ${batchNumber}, continuação ${qualityAttempt + 1}`, subtopics:remainingSubtopics };
                     const system = buildVqBlockPrompt(segmentBlock, meta, remainingSubtopics, transcript, alts);
                     const raw = await callSharedLibraryGemini({
-                      prompt:`Gere somente esta parte do lote ${batchNumber}/${totalBatchCount}. Entregue exatamente ${remainingSubtopics.length} questões diretas: uma para cada subtópico listado, na mesma ordem. Não repita questões de partes anteriores.`,
+                      prompt:`Gere somente esta parte do lote ${batchNumber}/${totalBatchCount}. Entregue exatamente ${remainingSubtopics.length} questões diretas: uma para cada subtópico listado, na mesma ordem. Não repita questões de partes anteriores. Escreva enunciados, alternativas e explicações obrigatoriamente em português do Brasil; não produza questões em inglês.`,
                       system,
                       keys,
                       cursorRef,
@@ -10761,7 +10767,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   const focusBlock = blocks[topicIndex];
                   const system = buildSharedLibraryClinicalPrompt({ lessonTitle:lesson.title, focusBlock, allBlocks:blocks, transcript, alts });
                   const raw = await callSharedLibraryGemini({
-                    prompt:`Crie a prova clínica integradora do tópico "${focusBlock.title}". Use o menor conjunto de questões que realmente exija raciocínio.`,
+                    prompt:`Crie a prova clínica integradora do tópico "${focusBlock.title}". Use o menor conjunto de questões que realmente exija raciocínio. Escreva casos, alternativas e explicações obrigatoriamente em português do Brasil; não produza questões em inglês.`,
                     system,
                     keys,
                     cursorRef,
@@ -10817,6 +10823,44 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       setSharedLibraryRun(p => ({ ...p, running:false, paused:false, stopping:false }));
       await refreshSharedLibrary();
       addSharedLibraryLog(stopped ? 'warning' : 'success', stopped ? 'Fila interrompida com o progresso preservado.' : 'Biblioteca atualizada com sucesso.');
+    }
+  };
+
+  const restartSharedLibraryItem = async (item) => {
+    if (!isAdmin || !item?.id) return;
+    if (sharedLibraryRun.running) {
+      addToast('Pare a automação atual antes de recomeçar esta aula.', 'warning', 4500);
+      return;
+    }
+    const confirmed = window.confirm(`Apagar definitivamente o sumário e todas as questões de “${item.title}” e gerar tudo novamente do zero?`);
+    if (!confirmed) return;
+    const resetAt = Date.now();
+    const freshItem = cleanFirestoreData({
+      lessonId:item.lessonId,
+      sourceLessonId:item.sourceLessonId,
+      subject:item.subject,
+      topic:item.topic,
+      title:item.title,
+      description:item.description || '',
+      durationSeconds:item.durationSeconds || 0,
+      source:item.source || 'course-transcript',
+      published:false,
+      resetAt,
+      updatedAt:resetAt,
+    });
+    const toastId = addToast(`Apagando ${item.title}...`, 'loading', 0);
+    try {
+      // Sem merge: remove de verdade sumário, lotes, questões e marcadores antigos.
+      await setDoc(doc(db, SHARED_LIBRARY_COLLECTION, item.id), freshItem);
+      setSharedLibraryItems(items => items.map(current => current.id === item.id ? { ...freshItem, id:item.id } : current));
+      setSharedLibraryActiveItemId(null);
+      updateToast(toastId, `${item.title} apagada. Iniciando geração exclusiva...`, 'success');
+      setTimeout(() => removeToast(toastId), 4500);
+      await startSharedLibraryAutomation(item.id, freshItem);
+    } catch(e) {
+      console.error('shared library restart error:', e);
+      updateToast(toastId, `Não foi possível recomeçar ${item.title}.`, 'error');
+      setTimeout(() => removeToast(toastId), 7000);
     }
   };
 
@@ -15371,7 +15415,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             if (activeItem) {
               if (sharedLibraryTab === 'summary') return (
                 <div className="desktop-content-limit">
-                  <button onClick={()=>setSharedLibraryActiveItemId(null)} className={`flex items-center gap-2 mb-5 font-bold ${darkMode?'text-gray-400':'text-gray-600'}`}><ArrowLeft className="w-4 h-4"/>Biblioteca</button>
+                  <div className="mb-5 flex items-center justify-between gap-3">
+                    <button onClick={()=>setSharedLibraryActiveItemId(null)} className={`flex items-center gap-2 font-bold ${darkMode?'text-gray-400':'text-gray-600'}`}><ArrowLeft className="w-4 h-4"/>Biblioteca</button>
+                    {isAdmin&&<button onClick={()=>restartSharedLibraryItem(activeItem)} disabled={sharedLibraryRun.running} className="inline-flex items-center gap-2 rounded-lg border border-red-500/50 px-3 py-2 text-xs font-bold text-red-500 disabled:opacity-40"><RotateCcw className="w-4 h-4"/>Apagar e gerar novamente</button>}
+                  </div>
                   <article className={`rounded-2xl border p-5 md:p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                     <p className="text-xs font-bold uppercase tracking-wider text-yellow-600">{activeItem.subject} · {activeItem.topic}</p>
                     <h2 className="font-serif text-2xl md:text-3xl font-bold mt-2 mb-6">{activeItem.title}</h2>
@@ -15390,6 +15437,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 onAnswer={(questionId, letter)=>saveSharedLibraryAnswer(activeItem.id, questionId, letter)}
                 onToggleFavorite={()=>{}}
                 onReset={()=>resetSharedLibraryAnswers(activeItem.id)}
+                onRegenerate={isAdmin?()=>restartSharedLibraryItem(activeItem):null}
                 darkMode={darkMode}
                 apiKey={getKey()}
                 oracleLength={settings.oracleLength || 'medium'}
@@ -15485,11 +15533,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
 	          (()=>{
-			    const sharedLibraryCard = isAdmin ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Aulas, questões de fixação e casos clínicos prontos para estudar.', meta:`${sharedLibraryItems.length} aulas`, action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
-			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aprenda um assunto com aula personalizada e questões de fixação.', meta:`${sourceSubjects('academia').length} aulas · ${sourceFolders('academia').length} pastas`, action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
-			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', meta:'curso', action:()=>setView('curso')} : null;
-			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Oráculo', desc:'Ferramenta complementar para criar e revisar bancos de questões.', meta:`${sourceSubjects('gemini').length} assuntos · ${sourceFolders('gemini').length} pastas`, action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
-			    const externalCard = {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', meta:`${sourceSubjects('external').length} assuntos · ${sourceFolders('external').length} pastas`, action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}};
+			    const sharedLibraryCard = isAdmin ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Aulas, questões de fixação e casos clínicos prontos para estudar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
+			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aprenda um assunto com aula personalizada e questões de fixação.', action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
+			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', action:()=>setView('curso')} : null;
+			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Oráculo', desc:'Ferramenta complementar para criar e revisar bancos de questões.', action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
+			    const externalCard = {key:'external', icon:<FolderIcon className="w-5 h-5"/>, title:'Acervo Externo', desc:'Importações, provas e listas coladas.', action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}};
 			    const studyCards = [sharedLibraryCard, academiaCard, cursoCard].filter(Boolean);
 			    const archiveCards = [geminiCard, externalCard].filter(Boolean);
                 const questionGoal = Math.max(1, parseInt(settings.dailyQuestionGoal, 10) || 120);
@@ -15497,14 +15545,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
 	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
                   const renderHomeCard = (card) => (
-                    <button key={card.key} onClick={card.action} className="app-card group min-h-[108px] rounded-xl p-4 text-left flex items-start gap-3 transition-all">
-                      <span className="mt-0.5 flex-shrink-0 text-yellow-600 transition-transform group-hover:scale-105">{card.icon}</span>
+                    <button key={card.key} onClick={card.action} className="app-card group rounded-xl px-3.5 py-3 text-left flex items-center gap-3 transition-all">
+                      <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 text-yellow-600 transition-transform group-hover:scale-105 ${darkMode?'bg-gray-800':'bg-yellow-50'}`}>{card.icon}</span>
                       <span className="min-w-0 flex-1">
-                        <strong className={`block text-base leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}>{card.title}</strong>
-                        <span className={`mt-1 block text-xs leading-relaxed line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</span>
-                        <span className={`mt-2.5 block text-[10px] font-bold uppercase tracking-[0.08em] ${darkMode?'text-gray-500':'text-gray-400'}`}>{card.meta}</span>
+                        <strong className={`block text-sm md:text-[15px] leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}>{card.title}</strong>
+                        <span className={`mt-1 block text-[11px] leading-snug line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</span>
                       </span>
-                      <ChevronRight className="mt-0.5 w-4 h-4 opacity-25 flex-shrink-0 transition-transform group-hover:translate-x-0.5"/>
+                      <ChevronRight className="w-4 h-4 opacity-25 flex-shrink-0 transition-transform group-hover:translate-x-0.5"/>
                     </button>
                   );
 				            return (
@@ -15561,12 +15608,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           </div>
                         )}
 
-                        <section className="space-y-3">
+                        <section className="space-y-4">
                           <div className="px-1">
-                            <h3 className="font-serif font-bold text-xl">Áreas de estudo</h3>
+                            <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] ${darkMode?'text-gray-500':'text-gray-500'}`}>Áreas de estudo</h3>
                             <p className="hidden md:block text-xs opacity-50 mt-1">Todo o seu conteúdo organizado em um único lugar.</p>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {[...studyCards, ...archiveCards].map(renderHomeCard)}
                           </div>
                         </section>
@@ -18832,7 +18879,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           };
 
           return (
-            <div className={`course-workspace flex w-full overflow-hidden md:gap-4 md:py-4 md:pr-4 md:pl-8 ${dm?'bg-gray-950':'bg-gray-100'}`} style={{minHeight:'calc(100dvh - 62px)'}}>
+	            <div className={`course-workspace flex w-full overflow-visible md:overflow-hidden md:gap-4 md:py-4 md:pr-4 md:pl-8 ${dm?'bg-gray-950':'bg-gray-100'}`} style={{minHeight:'calc(100dvh - 62px)'}}>
 
               {/* ══ SIDEBAR ══ */}
               <div className={`course-workspace-nav w-72 xl:w-80 flex-shrink-0 overflow-hidden rounded-2xl border shadow-sm ${sideBg} ${sideBorder} hidden md:flex flex-col`}>
@@ -18961,7 +19008,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
 
               {/* ══ MAIN ══ */}
-              <div ref={videoMainScrollRef} className={`course-workspace-main h-[calc(100dvh-62px)] min-w-0 flex-1 overflow-y-auto md:rounded-2xl md:border md:shadow-sm ${dm?'bg-gray-900 md:border-gray-800':'bg-white md:border-gray-200'}`}>
+              <div ref={videoMainScrollRef} className={`course-workspace-main h-auto min-h-[calc(100dvh-62px)] min-w-0 flex-1 overflow-visible md:h-[calc(100dvh-2rem)] md:min-h-0 md:overflow-y-auto md:rounded-2xl md:border md:shadow-sm ${dm?'bg-gray-900 md:border-gray-800':'bg-white md:border-gray-200'}`}>
                 {/* Mobile back bar */}
                 <div className={`flex items-center gap-2 px-3 py-2.5 md:hidden border-b flex-shrink-0 ${sideBorder} ${dm?'bg-gray-800':'bg-white'}`}>
                   <button onClick={()=>setView('library')} className={`p-1.5 rounded-lg ${dm?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600'}`}><ArrowLeft className="w-4 h-4"/></button>
