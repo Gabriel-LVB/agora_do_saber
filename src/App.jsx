@@ -2464,7 +2464,7 @@ const courseLessonDisplayTitle = (aula = {}) =>
 
 const flattenCourseLessons = (raw) => {
   const data = parseVideoaulasData(raw || {});
-  return sortSubjects(Object.keys(data)).flatMap(subject =>
+  const lessons = sortSubjects(Object.keys(data)).flatMap(subject =>
     Object.entries(data[subject] || {}).flatMap(([topic, cats]) => {
       const groups = [
         { cat:'main', label:'Aulas', items:cats.main || [] },
@@ -2489,6 +2489,9 @@ const flattenCourseLessons = (raw) => {
       }));
     })
   );
+  // Preserva a posição real de cada aula dentro da estrutura do curso. O índice
+  // local reinicia em cada tópico e, portanto, não serve para ordenar uma matéria.
+  return lessons.map((lesson, courseIndex) => ({ ...lesson, courseIndex }));
 };
 
 const applyCourseOrgProposalToVideoData = (raw, proposal) => {
@@ -7105,6 +7108,7 @@ export default function QuestionBankApp() {
   const [sharedLibraryProgress, setSharedLibraryProgress] = useState({});
   const [sharedLibraryConfig, setSharedLibraryConfig] = useState({ subjectOrder:[], enabledSubjects:null });
   const [sharedLibraryRun, setSharedLibraryRun] = useState({ running:false, paused:false, stopping:false, stage:null, current:0, total:0, logs:[] });
+  const [sharedLibraryPurging, setSharedLibraryPurging] = useState(false);
   const sharedLibraryControlRef = useRef({ paused:false, stop:false });
 
   useEffect(() => {
@@ -8460,6 +8464,15 @@ export default function QuestionBankApp() {
     const titleKeyOld = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_ ]/g, '').trim().substring(0, 100);
     if (vqBlocks[titleKeyOld]?.meta?.totalQuestions) return true;
     return false;
+  };
+
+  // Metadados podem sobreviver a uma geração interrompida. Para indicadores de
+  // cobertura, a fonte da verdade são as questões que existem nos blocos.
+  const aulaQuestionCount = (aula) => {
+    const key = aulaVqKey(aula);
+    const blocks = key ? vqBlocks[key]?.blocks : null;
+    if (!blocks) return 0;
+    return blockValues(blocks).reduce((total, block) => total + (Array.isArray(block?.questions) ? block.questions.length : 0), 0);
   };
 
   // Usuários do curso recebem as baterias publicadas pelo admin sem precisar gerar cópias.
@@ -10554,15 +10567,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   const getSharedLibraryTargets = () => {
-    const lessons = flattenCourseLessons(videoaulasData || {});
+    // A Biblioteca precisa usar o mesmo catálogo já organizado que o Portal.
+    // A estrutura bruta mantém várias aulas sob a matéria de origem e produz
+    // contagens diferentes (especialmente após as correções de Gastro/Cardio).
+    const lessons = flattenCourseLessons(appliedVideoaulasData || videoaulasData || {});
     const allSubjects = [...new Set(lessons.map(lesson => lesson.subject).filter(Boolean))];
     const enabled = Array.isArray(sharedLibraryConfig.enabledSubjects) ? sharedLibraryConfig.enabledSubjects : allSubjects;
     const order = sharedLibraryConfig.subjectOrder?.length ? sharedLibraryConfig.subjectOrder : sortSubjects(allSubjects);
-    const rank = new Map(order.map((subject, index) => [subject, index]));
+    const enabledKeys = new Set(enabled.map(normalizeTextKey));
+    const rank = new Map(order.map((subject, index) => [normalizeTextKey(subject), index]));
     return lessons
-      .filter(lesson => enabled.includes(lesson.subject))
-      .sort((a,b) => (rank.get(a.subject) ?? 9999) - (rank.get(b.subject) ?? 9999)
+      .filter(lesson => enabledKeys.has(normalizeTextKey(lesson.subject)))
+      .sort((a,b) => (rank.get(normalizeTextKey(a.subject)) ?? 9999) - (rank.get(normalizeTextKey(b.subject)) ?? 9999)
         || a.subject.localeCompare(b.subject, 'pt')
+        || a.courseIndex - b.courseIndex
         || a.topic.localeCompare(b.topic, 'pt')
         || a.index - b.index);
   };
@@ -10587,6 +10605,61 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     sharedLibraryControlRef.current.stop = true;
     sharedLibraryControlRef.current.paused = false;
     setSharedLibraryRun(p => ({ ...p, stopping:true, paused:false }));
+  };
+
+  const purgeSharedLibrary = async () => {
+    if (!isAdmin || sharedLibraryRun.running || sharedLibraryPurging) return;
+    const confirmation = window.prompt('Esta ação apagará definitivamente todos os sumários, questões e progressos vinculados à Biblioteca atual. Para confirmar, digite APAGAR BIBLIOTECA:');
+    if (String(confirmation || '').trim().toLocaleUpperCase('pt-BR') !== 'APAGAR BIBLIOTECA') {
+      if (confirmation !== null) addToast('Confirmação incorreta. Nada foi apagado.', 'info', 3500);
+      return;
+    }
+    setSharedLibraryPurging(true);
+    const toastId = addToast('Apagando integralmente a Biblioteca antiga...', 'loading', 0);
+    let deletedContent = 0;
+    let deletedProgress = 0;
+    try {
+      const contentSnap = await getDocs(collection(db, SHARED_LIBRARY_COLLECTION));
+      const usersSnap = await getDocs(collection(db, 'users'));
+      // Limpa primeiro os vínculos pessoais para que respostas antigas nunca
+      // reapareçam quando os mesmos IDs de aula forem publicados novamente.
+      for (const userDoc of usersSnap.docs) {
+        const progressSnap = await getDocs(collection(db, 'users', userDoc.id, SHARED_LIBRARY_PROGRESS_COLLECTION));
+        if (progressSnap.docs.length) {
+          await Promise.all(progressSnap.docs.map(entry => deleteDoc(entry.ref)));
+          deletedProgress += progressSnap.docs.length;
+        }
+        const vqSnap = await getDocs(collection(db, 'users', userDoc.id, 'vq_blocks'));
+        const sharedVqDocs = vqSnap.docs.filter(entry => entry.data()?.meta?.source === 'shared-library');
+        if (sharedVqDocs.length) {
+          await Promise.all(sharedVqDocs.flatMap(entry => [
+            deleteDoc(entry.ref),
+            deleteDoc(doc(db, 'users', userDoc.id, 'vq_review', entry.id)).catch(() => {}),
+          ]));
+          deletedProgress += sharedVqDocs.length;
+        }
+      }
+      if (contentSnap.docs.length) await Promise.all(contentSnap.docs.map(entry => deleteDoc(entry.ref)));
+      deletedContent = contentSnap.docs.length;
+      setSharedLibraryItems([]);
+      setSharedLibraryProgress({});
+      setSharedLibraryActiveItemId(null);
+      setVqBlocks(previous => {
+        const next = Object.fromEntries(Object.entries(previous || {}).filter(([, data]) => data?.meta?.source !== 'shared-library'));
+        vqBlocksRef.current = next;
+        persistVqBlocksCache(next);
+        return next;
+      });
+      updateToast(toastId, `Biblioteca apagada: ${deletedContent} aulas e ${deletedProgress} registros de progresso removidos.`, 'success');
+      setTimeout(() => removeToast(toastId), 7000);
+    } catch(e) {
+      console.error('shared library purge error:', e);
+      updateToast(toastId, 'A exclusão foi interrompida. Atualize a Biblioteca e tente novamente.', 'error');
+      setTimeout(() => removeToast(toastId), 8000);
+      await refreshSharedLibrary();
+    } finally {
+      setSharedLibraryPurging(false);
+    }
   };
 
   const startSharedLibraryAutomation = async (requestedItemId=null, freshSeed=null) => {
@@ -14720,10 +14793,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const isPureFlashcardSet = (items = []) => Array.isArray(items) && items.length > 0 && items.every(q => q?.isFlashcard);
   const originalSubjectOptions = sortSubjects((courseCatalogStats.rows || []).map(row => row.subject).filter(Boolean));
   const sortCourseSubjectsForDisplay = (subjects = []) => {
-    if (!canUseCourseOrganization || !effectiveCoursePlanLessonOrder.length || !appliedCourseSubjectOrder.length) return sortSubjects(subjects);
+    if (!canUseCourseOrganization) return sortSubjects(subjects);
+    const availableByKey = new Map(subjects.map(subject => [normalizeTextKey(subject), subject]));
     const seen = new Set();
-    const ordered = appliedCourseSubjectOrder.filter(subject => subjects.includes(subject) && !seen.has(subject) && seen.add(subject));
-    return [...ordered, ...sortSubjects(subjects.filter(subject => !seen.has(subject)))];
+    const ordered = [];
+    // A ordem escolhida pelo usuário no cronograma vem primeiro. A proposta do
+    // curso funciona apenas como fallback para matérias ainda não selecionadas.
+    [...(coursePlanSubjects || []), ...appliedCourseSubjectOrder].forEach(preferred => {
+      const subject = availableByKey.get(normalizeTextKey(preferred));
+      const key = normalizeTextKey(subject);
+      if (!subject || seen.has(key)) return;
+      seen.add(key);
+      ordered.push(subject);
+    });
+    return [...ordered, ...sortSubjects(subjects.filter(subject => !seen.has(normalizeTextKey(subject))))];
   };
   const activeAcademiaOrigin = activeTopic?.origin?.source === 'academia' ? (() => {
     const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
@@ -15485,11 +15568,61 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 ...(clinicalReady ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : []),
               ];
             };
-            const courseSubjects = sortSubjects([...new Set(flattenCourseLessons(videoaulasData || {}).map(lesson=>lesson.subject).filter(Boolean))]);
-            const subjectOrder = sharedLibraryConfig.subjectOrder?.length
-              ? [...sharedLibraryConfig.subjectOrder, ...courseSubjects.filter(subject=>!sharedLibraryConfig.subjectOrder.includes(subject))]
+            // Mesma fonte do Portal: matéria, total e sequência não podem divergir.
+            const sharedCourseLessons = flattenCourseLessons(appliedVideoaulasData || videoaulasData || {});
+            const courseSubjects = sortSubjects([...new Set(sharedCourseLessons.map(lesson=>lesson.subject).filter(Boolean))]);
+            const courseSubjectByKey = new Map(courseSubjects.map(subject => [normalizeTextKey(subject), subject]));
+            const configuredSubjectOrder = (sharedLibraryConfig.subjectOrder || [])
+              .map(subject => courseSubjectByKey.get(normalizeTextKey(subject)))
+              .filter(Boolean);
+            const subjectOrder = configuredSubjectOrder.length
+              ? [...new Set([...configuredSubjectOrder, ...courseSubjects])]
               : courseSubjects;
-            const enabledSubjects = Array.isArray(sharedLibraryConfig.enabledSubjects) ? sharedLibraryConfig.enabledSubjects : courseSubjects;
+            const configuredEnabledKeys = new Set((sharedLibraryConfig.enabledSubjects || courseSubjects).map(normalizeTextKey));
+            const enabledSubjects = courseSubjects.filter(subject => configuredEnabledKeys.has(normalizeTextKey(subject)));
+            const sharedItemByLesson = new Map();
+            sharedLibraryItems.forEach(item => {
+              sharedItemByLesson.set(String(item.id), item);
+              if (item.lessonId) sharedItemByLesson.set(String(item.lessonId), item);
+            });
+            const sharedLessonByItemId = new Map();
+            sharedCourseLessons.forEach(lesson => {
+              sharedLessonByItemId.set(sharedLibraryDocIdForLesson(lesson), lesson);
+              sharedLessonByItemId.set(String(lesson.id), lesson);
+            });
+            // Itens antigos podem ter salvo a matéria bruta. Para exibição e
+            // filtros, projeta os metadados canônicos sem trocar o documento/ID.
+            const displayedSharedLibraryItems = sharedLibraryItems.map(item => {
+              const lesson = sharedLessonByItemId.get(String(item.id)) || sharedLessonByItemId.get(String(item.lessonId));
+              return lesson ? {
+                ...item,
+                subject:lesson.subject,
+                topic:lesson.topicTitle || lesson.topic,
+                title:lesson.title || item.title,
+              } : item;
+            });
+            const isSharedLessonComplete = lesson => {
+              const item = sharedItemByLesson.get(sharedLibraryDocIdForLesson(lesson)) || sharedItemByLesson.get(String(lesson.id));
+              if (!item?.summaryText || !Array.isArray(item.summaryBlocks) || !item.summaryBlocks.length) return false;
+              const expectedDirect = item.summaryBlocks.reduce((total, block) => total + (Array.isArray(block?.subtopics) ? block.subtopics.length : 0), 0);
+              const directIds = new Set((item.directQuestions || []).map(question => String(question?.id || '')).filter(Boolean));
+              const directComplete = expectedDirect > 0
+                && !item.directPartial
+                && !!item.directCompletedAt
+                && item.directSummaryVersion === item.summaryVersion
+                && (item.directQuestions || []).length === expectedDirect
+                && directIds.size === expectedDirect;
+              const clinicalComplete = !item.clinicalPartial
+                && !!item.clinicalCompletedAt
+                && supportsSharedLibraryClinicalVersion(item.clinicalGenerationVersion)
+                && item.clinicalSummaryVersion === item.summaryVersion;
+              return directComplete && clinicalComplete;
+            };
+            const subjectCoverage = new Map(courseSubjects.map(subject => {
+              const lessons = sharedCourseLessons.filter(lesson => normalizeTextKey(lesson.subject) === normalizeTextKey(subject));
+              return [subject, { complete:lessons.filter(isSharedLessonComplete).length, total:lessons.length }];
+            }));
+            const sharedLessonOrder = new Map(sharedCourseLessons.map((lesson, index) => [sharedLibraryDocIdForLesson(lesson), index]));
             const moveSubject = async (subject, direction) => {
               const index = subjectOrder.indexOf(subject);
               const target = index + direction;
@@ -15498,7 +15631,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               [nextOrder[index], nextOrder[target]] = [nextOrder[target], nextOrder[index]];
               await saveSharedLibraryConfig({ ...sharedLibraryConfig, subjectOrder:nextOrder, enabledSubjects });
             };
-            const availableItems = sharedLibraryItems.filter(item => {
+            const availableItems = displayedSharedLibraryItems.filter(item => {
               const hasContent = sharedLibraryTab === 'summary'
                 ? !!item.summaryText
                 : sharedLibraryTab === 'direct'
@@ -15508,8 +15641,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               const needle = normalizeTextKey(sharedLibrarySearch);
               const matchesSearch = !needle || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(needle);
               return hasContent && matchesSubject && matchesSearch;
-            }).sort((a,b) => (subjectOrder.indexOf(a.subject) - subjectOrder.indexOf(b.subject)) || String(a.title).localeCompare(String(b.title),'pt'));
-            const activeItem = sharedLibraryItems.find(item => item.id === sharedLibraryActiveItemId);
+            }).sort((a,b) => (subjectOrder.indexOf(a.subject) - subjectOrder.indexOf(b.subject))
+              || (sharedLessonOrder.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
+              || String(a.title).localeCompare(String(b.title),'pt'));
+            const activeItem = displayedSharedLibraryItems.find(item => item.id === sharedLibraryActiveItemId);
             if (activeItem) {
               if (sharedLibraryTab === 'summary') return (
                 <div className="desktop-content-limit">
@@ -15554,9 +15689,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       <h2 className="font-serif text-3xl font-bold mt-1">Biblioteca</h2>
                       <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Aulas e questões prontas para estudar. O conteúdo é comum a todos; suas respostas e seu progresso continuam pessoais.</p>
                     </div>
-                    <button onClick={refreshSharedLibrary} disabled={sharedLibraryLoading} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>
-                      {sharedLibraryLoading?<Spinner className="w-4 h-4"/>:<RotateCcw className="w-4 h-4"/>}Atualizar
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button onClick={purgeSharedLibrary} disabled={sharedLibraryRun.running||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-red-900/80 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}>
+                        {sharedLibraryPurging?<Spinner className="w-4 h-4"/>:<Trash2 className="w-4 h-4"/>}{sharedLibraryPurging?'Apagando...':'Apagar Biblioteca antiga'}
+                      </button>
+                      <button onClick={refreshSharedLibrary} disabled={sharedLibraryLoading||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>
+                        {sharedLibraryLoading?<Spinner className="w-4 h-4"/>:<RotateCcw className="w-4 h-4"/>}Atualizar
+                      </button>
+                    </div>
                   </div>
                 </section>
 
@@ -15576,15 +15716,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                           <div><p className="font-bold text-sm">Ordem das matérias</p><p className="text-xs opacity-50">Desmarque o que não deve entrar nesta rodada.</p></div>
                         </div>
                         <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
-                          {subjectOrder.map((subject,index)=><div key={subject} className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${darkMode?'border-gray-700':'border-gray-200'}`}>
+                          {subjectOrder.map((subject,index)=>{ const coverage=subjectCoverage.get(subject)||{complete:0,total:0}; return <div key={subject} className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${darkMode?'border-gray-700':'border-gray-200'}`}>
                             <input type="checkbox" checked={enabledSubjects.includes(subject)} onChange={async e=>{
                               const nextEnabled = e.target.checked ? [...new Set([...enabledSubjects,subject])] : enabledSubjects.filter(value=>value!==subject);
                               await saveSharedLibraryConfig({ ...sharedLibraryConfig, subjectOrder, enabledSubjects:nextEnabled });
                             }}/>
-                            <span className="flex-1 text-sm font-bold">{index+1}. {subject}</span>
+                            <span className="min-w-0 flex-1 text-sm font-bold"><span className="block truncate">{index+1}. {subject}</span><span className="block text-[10px] font-medium opacity-50">{coverage.complete}/{coverage.total} aulas completas</span></span>
                             <button onClick={()=>moveSubject(subject,-1)} disabled={index===0} className="p-1 disabled:opacity-20"><ChevronUp className="w-4 h-4"/></button>
                             <button onClick={()=>moveSubject(subject,1)} disabled={index===subjectOrder.length-1} className="p-1 disabled:opacity-20"><ChevronDown className="w-4 h-4"/></button>
-                          </div>)}
+                          </div>})}
                         </div>
                       </div>
                       <div className="space-y-4">
@@ -15592,7 +15732,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         <div className={`rounded-xl border p-3 text-xs ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
                           Ordem por aula: <strong>sumário completo → uma direta por subtópico → provas clínicas integradoras por tópico → próxima aula</strong>. As clínicas selecionam apenas o que exige raciocínio e podem conectar subtópicos distantes. Flashcards e baterias extras ficam para uma próxima etapa.
                         </div>
-                        {!sharedLibraryRun.running?<button onClick={startSharedLibraryAutomation} disabled={sharedLibraryLoading} className="w-full rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white py-3 font-bold flex items-center justify-center gap-2"><PlayIcon className="w-4 h-4"/>Iniciar / continuar automação</button>:<div className="grid grid-cols-2 gap-2">
+                        {!sharedLibraryRun.running?<button onClick={startSharedLibraryAutomation} disabled={sharedLibraryLoading||sharedLibraryPurging} className="w-full rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white py-3 font-bold flex items-center justify-center gap-2"><PlayIcon className="w-4 h-4"/>Iniciar / continuar automação</button>:<div className="grid grid-cols-2 gap-2">
                           <button onClick={sharedLibraryRun.paused?resumeSharedLibraryAutomation:pauseSharedLibraryAutomation} className={`rounded-xl border py-2.5 font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>{sharedLibraryRun.paused?'Continuar':'Pausar'}</button>
                           <button onClick={stopSharedLibraryAutomation} disabled={sharedLibraryRun.stopping} className="rounded-xl border border-red-400 text-red-500 py-2.5 font-bold">{sharedLibraryRun.stopping?'Parando...':'Parar'}</button>
                         </div>}
@@ -15610,7 +15750,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <div className="grid md:grid-cols-[220px_1fr] gap-4">
                   <div className="space-y-2">
                     <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar aula..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
-                    <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=><option key={subject} value={subject}>{subject}</option>)}</select>
+                    <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=>{const coverage=subjectCoverage.get(subject)||{complete:0,total:0};return <option key={subject} value={subject}>{subject} · {coverage.complete}/{coverage.total}</option>;})}</select>
                     {isAdmin&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>
                   <div className="space-y-2">
@@ -17688,9 +17828,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           const courseLessons = flattenCourseLessons(appliedVideoaulasData || {});
           const totalCourseDuration = formatCourseDuration(totalLessonSeconds(courseLessons));
           const courseSubjects = sortCourseSubjectsForDisplay([...new Set(courseLessons.map(lesson => lesson.subject))]);
-          const savedPlanSubjects = courseOrgProposalUsesOriginalSubjects
-            ? coursePlanSubjects.filter(subject => courseSubjects.includes(subject))
-            : [];
+          const courseSubjectByKey = new Map(courseSubjects.map(subject => [normalizeTextKey(subject), subject]));
+          const savedPlanSubjects = coursePlanSubjects.map(subject => courseSubjectByKey.get(normalizeTextKey(subject))).filter(Boolean);
           const effectivePlanSubjects = [
             ...savedPlanSubjects,
             ...courseSubjects.filter(subject => !savedPlanSubjects.includes(subject)),
@@ -17855,9 +17994,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         if (!allAulas.length) return null;
                         const isExpSubj = vqExpandedSubj[subj] ?? false;
                         const subjQs = allAulas.reduce((acc,a)=>{
-                          const d=vqBlocks[aulaVqKey(a)];
-                          return acc+(d?.blocks?blockValues(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
+                          return acc+aulaQuestionCount(a);
                         },0);
+                        const subjReadyAulas = allAulas.filter(aula => aulaQuestionCount(aula) > 0).length;
 
                         return (
                           <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
@@ -17868,7 +18007,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                               <div className="flex-1 min-w-0">
                                 <p className="font-bold">{capitalizeDisplayLabel(subj)}</p>
                                 <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
-                                  {allAulas.length} aulas{subjQs>0?` · ${subjQs} questões`:''}</p>
+                                  {subjReadyAulas}/{allAulas.length} aulas com questões{subjQs>0?` · ${subjQs} questões`:''}</p>
                               </div>
                               {isExpSubj?<ChevronDown className="w-4 h-4 opacity-40 flex-shrink-0"/>:<ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0"/>}
                             </button>
@@ -17881,9 +18020,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                               const topicKey = `q_${subj}_${topic}`;
                               const isExpTopic = vqExpandedTopic[topicKey] ?? false;
                               const topicQs = topicAulas.reduce((acc,a)=>{
-                                const d=vqBlocks[aulaVqKey(a)];
-                                return acc+(d?.blocks?blockValues(d.blocks).reduce((s,b)=>s+(b.questions?.length||0),0):0);
+                                return acc+aulaQuestionCount(a);
                               },0);
+                              const topicReadyAulas = topicAulas.filter(aula => aulaQuestionCount(aula) > 0).length;
 
                               return (
                                 <div key={topic} className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
@@ -17893,7 +18032,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                                     <div className="flex-1 min-w-0">
                                       <p className={`text-sm font-bold truncate ${dm?'text-gray-300':'text-gray-700'}`}>{shortT||topic}</p>
                                       <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
-                                        {topicAulas.length} aulas{topicQs>0?` · ${topicQs} questões`:''}</p>
+                                        {topicReadyAulas}/{topicAulas.length} aulas com questões{topicQs>0?` · ${topicQs} questões`:''}</p>
                                     </div>
                                     {isExpTopic?<ChevronDown className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>}
                                   </button>

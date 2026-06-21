@@ -983,16 +983,21 @@ export const buildVqSyllabusPrompt = (aula, numBlocks, qPerBlock, transcript, ex
 - Entre ${minPerBlock} e ${maxPerBlock} subtópicos por bloco (ideal: ${idealPerBlock})
 - Ordem OBRIGATORIAMENTE didática dentro de cada bloco: conceitos gerais → específicos, mecanismo → clínica → tratamento
 - Nunca coloque um detalhe, exceção ou efeito adverso antes de ter coberto o conceito principal`;
-  return `Você é um especialista em avaliações médicas. Sua tarefa é criar um guia de questões para a aula "${aula.title}".
+  return `Você é um professor de Medicina e editor de material didático. Sua tarefa é criar o sumário completo da aula "${aula.title}".
+
+FINALIDADE DO SUMÁRIO:
+- Servir como mapa fiel da aula para estudo, geração de questões, aulas escritas e futuras apostilas.
+- Ter organização didática suficiente para que cada subtópico possa depois virar uma seção explicativa de uma apostila.
+- Não escreva a apostila agora: entregue apenas a estrutura completa, clara e autossuficiente do conteúdo.
 
 ${structureBlock}
 
 REGRAS DOS SUBTÓPICOS:
-- Cada subtópico = 1 conceito médico específico e testável
-- Cada subtópico deve sustentar exatamente uma pergunta direta própria e, depois, uma aplicação clínica própria.
+- Cada subtópico = 1 conceito médico específico, relevante e com conteúdo próprio.
+- Todo subtópico deve sustentar uma pergunta direta própria ou ter relevância didática real para compreender a aula; na prática, preserve todos os conhecimentos técnicos apresentados e elimine apenas repetições sem conteúdo novo.
 - O título precisa declarar uma única fronteira de cobrança. Se ele mistura dois conhecimentos que poderiam gerar respostas diferentes, divida-o.
 - Se dois subtópicos produziriam essencialmente a mesma pergunta, funda-os ou reescreva-os para separar claramente as cobranças.
-- Cada subtópico deve ser testável em prova ou útil na vida real, com cobrança técnica real. Não crie subtópico que só gere conselho geral.
+- Não classifique, marque ou rotule subtópicos como "cobrável", "relevante", "para apostila" ou qualquer categoria semelhante: todos os itens da estrutura final já devem merecer estar nela.
 - RUIM: "Introdução", "Generalidades", "Aspectos gerais do tratamento"
 - BOM: "Critérios diagnósticos da Síndrome Nefrótica", "Mecanismo de ação dos IECA na DRC"
 - Não repita conceitos entre subtópicos
