@@ -10,6 +10,7 @@ import {
   buildExternalPrompt,
   buildVqSyllabusPrompt,
   buildVqBlockPrompt,
+  buildSharedLibraryDirectPrompt,
   buildSharedLibraryClinicalPrompt,
   buildTypeInst,
   buildAcademiaSyllabusPrompt,
@@ -2164,6 +2165,13 @@ const renumberClinicalCases = (questions = []) => {
   });
 };
 
+const looksLikeClinicalVignette = (question = {}) => {
+  if (String(question.caseContext || '').trim()) return true;
+  const statement = String(question.statement || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(?:caso\s*\d+\s*[-—–:]?\s*)?(?:(?:um|uma)\s+)?(?:paciente|homem|mulher|criança|adolescente|lactente|recém-nascido|gestante)\b/i.test(statement)
+    && /\b(?:apresenta|procura|chega|refere|evolui|foi\s+admitid|há\s+\d+|com\s+queixa|ao\s+exame)\b/i.test(statement);
+};
+
 const questionsToGenerationText = (questions = []) => questions.map((q, index) => {
   if (q.isCloze) {
     return `## Cloze ${index + 1}
@@ -2589,7 +2597,7 @@ const COURSE_CATALOG_ADMIN_ENABLED = false;
 const SHARED_LIBRARY_COLLECTION = 'shared_library';
 const SHARED_LIBRARY_CONFIG_DOC = 'shared_library_automation';
 const SHARED_LIBRARY_PROGRESS_COLLECTION = 'shared_library_progress';
-const SHARED_LIBRARY_QUESTION_BATCH_SIZE = 10;
+const SHARED_LIBRARY_QUESTION_BATCH_SIZE = 15;
 const SHARED_LIBRARY_SUMMARY_VERSION = 2;
 const SHARED_LIBRARY_CLINICAL_VERSION = 3;
 const supportsSharedLibraryClinicalVersion = value => Number(value) >= 2;
@@ -5085,6 +5093,15 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
   const explanation = cleanQuestionExplanation(question.explanation);
   const questionText = splitQuestionCase(question);
+  const questionTypeLabel = question.isCloze
+    ? 'Cloze'
+    : question.isFlashcard
+      ? 'Flashcard'
+      : question.libraryQuestionKind === 'clinical'
+        ? 'Clínica'
+        : question.libraryQuestionKind === 'direct'
+          ? 'Fixação'
+          : 'Questão';
   const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
   const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
@@ -5114,7 +5131,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	    <div className={cardClass}>
 	      {!flashcardLarge&&<div className="flex items-center justify-between mb-4">
 	        <div className="flex items-center gap-2">
-	          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{question.isCloze ? 'Cloze' : question.isFlashcard ? 'Flashcard' : 'Questão'} {index + 1}</span>
+	          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{questionTypeLabel} {index + 1}</span>
 	          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
 	        </div>
         <div className="flex items-center gap-2">
@@ -8467,8 +8484,8 @@ export default function QuestionBankApp() {
         const publishKey = `${directComplete ? item.directCompletedAt : 'direct-pending'}|${clinicalComplete ? item.clinicalCompletedAt : 'clinical-pending'}`;
         const currentQuestionCount = Object.values(current?.blocks || {}).reduce((total, block) => total + (Array.isArray(block?.questions) ? block.questions.length : 0), 0);
         if (currentQuestionCount > 0 && current?.meta?.source === 'shared-library' && current.meta?.sharedLibraryPublishKey === publishKey) return;
-        const directQuestions = directComplete ? (item.directQuestions || []) : [];
-        const clinicalQuestions = clinicalComplete ? (item.clinicalQuestions || []) : [];
+        const directQuestions = directComplete ? (item.directQuestions || []).map(question => ({ ...question, libraryQuestionKind:'direct' })) : [];
+        const clinicalQuestions = clinicalComplete ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : [];
         if (!directQuestions.length && !clinicalQuestions.length) return;
         const previousAnswers = Object.values(current?.blocks || {}).reduce((answers, block) => ({ ...answers, ...(block?.answers || {}) }), {});
         const previousFavorites = Object.values(current?.blocks || {}).flatMap(block => Array.isArray(block?.favorites) ? block.favorites : []);
@@ -10574,8 +10591,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
   const startSharedLibraryAutomation = async (requestedItemId=null, freshSeed=null) => {
     if (!isAdmin || sharedLibraryRun.running) return;
-    const onlyItemId = typeof requestedItemId === 'string' ? requestedItemId : null;
-    const targets = getSharedLibraryTargets().filter(lesson => !onlyItemId || sharedLibraryDocIdForLesson(lesson) === onlyItemId);
+    const requestedIds = Array.isArray(requestedItemId)
+      ? new Set(requestedItemId.map(String))
+      : typeof requestedItemId === 'string'
+        ? new Set([requestedItemId])
+        : null;
+    const targets = getSharedLibraryTargets().filter(lesson => !requestedIds || requestedIds.has(sharedLibraryDocIdForLesson(lesson)));
     if (!targets.length) {
       addToast('Nenhuma aula encontrada nas matérias selecionadas.', 'error', 4000);
       return;
@@ -10586,7 +10607,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       return;
     }
     const contentById = new Map(sharedLibraryItems.map(item => [item.id, item]));
-    if (onlyItemId && freshSeed) contentById.set(onlyItemId, { ...freshSeed, id:onlyItemId });
+    if (requestedIds && freshSeed) {
+      if (requestedIds.size === 1 && !freshSeed.byId) {
+        const [id] = requestedIds;
+        contentById.set(id, { ...freshSeed, id });
+      } else {
+        Object.entries(freshSeed.byId || {}).forEach(([id, seed]) => contentById.set(id, { ...seed, id }));
+      }
+    }
     const saveRunItem = async (id, current, patch) => {
       await saveSharedLibraryItem(id, patch);
       const next = { ...(current || {}), ...patch, id, updatedAt:Date.now() };
@@ -10662,14 +10690,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               const blocks = fresh.summaryBlocks?.length ? fresh.summaryBlocks : parseSharedLibrarySummary(fresh.summaryText || '');
               const expectedDirectQuestions = blocks.flatMap(block => block.subtopics || []).length;
               const directIds = new Set((fresh.directQuestions || []).map(question=>String(question.id)));
+              const directHasClinicalVignettes = (fresh.directQuestions || []).some(looksLikeClinicalVignette);
               const directIsComplete = expectedDirectQuestions > 0
                 && (fresh.directQuestions || []).length === expectedDirectQuestions
                 && directIds.size === expectedDirectQuestions
+                && !directHasClinicalVignettes
                 && !fresh.directPartial
                 && fresh.directSummaryVersion === fresh.summaryVersion;
               if (directIsComplete) {
                 addSharedLibraryLog('info', `${lesson.title}: diretas conferidas (${expectedDirectQuestions}/${expectedDirectQuestions}).`);
               } else {
+                if (directHasClinicalVignettes) addSharedLibraryLog('warning', `${lesson.title}: bateria direta continha vinhetas clínicas e será refeita do zero.`);
                 lessonUsedApi = true;
                 const lessonData = await fetchTranscript(lesson.aula);
                 const transcript = lessonData?.transcript || '';
@@ -10677,8 +10708,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 const subtopics = blocks.flatMap(block => block.subtopics || []);
                 if (!subtopics.length) throw new Error('Gere o sumário antes das questões');
                 const savedUniqueQuestions = [...new Map((fresh.directQuestions || []).map(question=>[String(question.id),question])).values()];
-                const canResumeSavedQuestions = fresh.directPartial
-                  || (savedUniqueQuestions.length < subtopics.length && fresh.directSummaryVersion === fresh.summaryVersion);
+                const canResumeSavedQuestions = !directHasClinicalVignettes && (fresh.directPartial
+                  || (savedUniqueQuestions.length < subtopics.length && fresh.directSummaryVersion === fresh.summaryVersion));
                 const generated = canResumeSavedQuestions ? savedUniqueQuestions.slice(0, subtopics.length) : [];
                 const completedSubtopics = generated.length;
                 const pendingSubtopics = subtopics.slice(completedSubtopics);
@@ -10703,7 +10734,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   const validationAttempts = Math.max(3, Math.min(8, keys.length * 2));
                   for (let qualityAttempt = 0; qualityAttempt < validationAttempts && remainingSubtopics.length; qualityAttempt++) {
                     const segmentBlock = { title:`${lesson.title} — lote ${batchNumber}, continuação ${qualityAttempt + 1}`, subtopics:remainingSubtopics };
-                    const system = buildVqBlockPrompt(segmentBlock, meta, remainingSubtopics, transcript, alts);
+                    const system = buildSharedLibraryDirectPrompt({
+                      lessonTitle:lesson.title,
+                      batchTitle:segmentBlock.title,
+                      subtopics:remainingSubtopics,
+                      transcript,
+                      alts,
+                      meta,
+                    });
                     const raw = await callSharedLibraryGemini({
                       prompt:`Gere somente esta parte do lote ${batchNumber}/${totalBatchCount}. Entregue exatamente ${remainingSubtopics.length} questões diretas: uma para cada subtópico listado, na mesma ordem. Não repita questões de partes anteriores. Escreva enunciados, alternativas e explicações obrigatoriamente em português do Brasil; não produza questões em inglês.`,
                       system,
@@ -10711,8 +10749,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       cursorRef,
                       maxTokens:32768,
                     });
-                    const parsed = parseGeneratedQuestionsByTypes(raw, `${id}_direct_${batchNumber}_part_${qualityAttempt}`, ['direct']);
-                    const accepted = parsed.questions.slice(0, remainingSubtopics.length);
+                    const generationNamespace = fresh.resetAt ? `${id}_reset_${fresh.resetAt}` : id;
+                    const parsed = parseGeneratedQuestionsByTypes(raw, `${generationNamespace}_direct_${batchNumber}_part_${qualityAttempt}`, ['direct']);
+                    const candidates = parsed.questions.slice(0, remainingSubtopics.length);
+                    const firstClinicalIndex = candidates.findIndex(looksLikeClinicalVignette);
+                    const directCandidates = firstClinicalIndex >= 0 ? candidates.slice(0, firstClinicalIndex) : candidates;
+                    const accepted = directCandidates.map(question => ({ ...question, libraryQuestionKind:'direct' }));
+                    if (firstClinicalIndex >= 0) {
+                      addSharedLibraryLog('warning', `${lesson.title}: lote ${batchNumber} tentou inserir caso clínico nas diretas; trecho rejeitado e será gerado novamente.`);
+                    }
                     if (!accepted.length) {
                       addSharedLibraryLog('warning', `${lesson.title}: lote ${batchNumber} não devolveu questões legíveis; tentando a mesma parte novamente.`);
                       continue;
@@ -10775,9 +10820,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     cursorRef,
                   });
                   if (!/SEM_QUESTOES_CLINICAS/i.test(raw)) {
-                    const parsed = parseGeneratedQuestionsByTypes(raw, `${id}_clinical_topic_${topicIndex}`, ['direct']);
+                    const generationNamespace = fresh.resetAt ? `${id}_reset_${fresh.resetAt}` : id;
+                    const parsed = parseGeneratedQuestionsByTypes(raw, `${generationNamespace}_clinical_topic_${topicIndex}`, ['direct']);
                     if (!parsed.questions.length) throw new Error(`O tópico ${topicIndex + 1} não retornou questões clínicas legíveis`);
-                    generated.push(...parsed.questions);
+                    generated.push(...parsed.questions.map(question => ({ ...question, libraryQuestionKind:'clinical' })));
                     generated.splice(0, generated.length, ...renumberClinicalCases(generated));
                   } else {
                     addSharedLibraryLog('info', `${lesson.title}: tópico "${focusBlock.title}" não exigia questão clínica própria.`);
@@ -10862,6 +10908,53 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     } catch(e) {
       console.error('shared library restart error:', e);
       updateToast(toastId, `Não foi possível recomeçar ${item.title}.`, 'error');
+      setTimeout(() => removeToast(toastId), 7000);
+    }
+  };
+
+  const restartSharedLibrarySubjectQuestions = async (subject) => {
+    if (!isAdmin || !subject || subject === 'all') return;
+    if (sharedLibraryRun.running) {
+      addToast('Pare a automação atual antes de regerar esta matéria.', 'warning', 4500);
+      return;
+    }
+    const subjectItems = sharedLibraryItems.filter(item => normalizeTextKey(item.subject) === normalizeTextKey(subject) && item.summaryText && item.summaryBlocks?.length);
+    if (!subjectItems.length) {
+      addToast(`Nenhuma aula com sumário pronta em ${subject}.`, 'warning', 4500);
+      return;
+    }
+    const confirmed = window.confirm(`Apagar todas as questões diretas e clínicas de ${subject} em ${subjectItems.length} aula(s), preservar os sumários e gerar as questões novamente?`);
+    if (!confirmed) return;
+    const toastId = addToast(`Preparando ${subject} para regeração...`, 'loading', 0);
+    try {
+      const byId = {};
+      for (const item of subjectItems) {
+        const resetAt = Date.now();
+        const next = await saveSharedLibraryItem(item.id, {
+          directQuestions:[],
+          directPartial:false,
+          directBatchIndex:-1,
+          directCompletedSubtopics:0,
+          directSummaryVersion:null,
+          directCompletedAt:null,
+          clinicalQuestions:[],
+          clinicalPartial:false,
+          clinicalBatchIndex:-1,
+          clinicalTopicIndex:-1,
+          clinicalGenerationVersion:0,
+          clinicalSummaryVersion:null,
+          clinicalCompletedAt:null,
+          resetAt,
+          published:true,
+        });
+        byId[item.id] = next;
+      }
+      updateToast(toastId, `${subject}: questões apagadas. Iniciando fila exclusiva...`, 'success');
+      setTimeout(() => removeToast(toastId), 4500);
+      await startSharedLibraryAutomation(subjectItems.map(item => item.id), { byId });
+    } catch(e) {
+      console.error('shared library subject restart error:', e);
+      updateToast(toastId, `Não foi possível regerar ${subject}.`, 'error');
       setTimeout(() => removeToast(toastId), 7000);
     }
   };
@@ -15387,7 +15480,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 && !!item.clinicalCompletedAt
                 && supportsSharedLibraryClinicalVersion(item.clinicalGenerationVersion)
                 && item.clinicalSummaryVersion === item.summaryVersion;
-              return [...(item.directQuestions || []), ...(clinicalReady ? (item.clinicalQuestions || []) : [])];
+              return [
+                ...(item.directQuestions || []).map(question => ({ ...question, libraryQuestionKind:'direct' })),
+                ...(clinicalReady ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : []),
+              ];
             };
             const courseSubjects = sortSubjects([...new Set(flattenCourseLessons(videoaulasData || {}).map(lesson=>lesson.subject).filter(Boolean))]);
             const subjectOrder = sharedLibraryConfig.subjectOrder?.length
@@ -15515,6 +15611,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   <div className="space-y-2">
                     <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar aula..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
                     <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=><option key={subject} value={subject}>{subject}</option>)}</select>
+                    {isAdmin&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>
                   <div className="space-y-2">
                     {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há conteúdo nesta seção" description={isAdmin?'Use a automação acima para publicar as primeiras aulas.':'O acervo está sendo preparado pelo professor.'}/>:availableItems.map(item=>{

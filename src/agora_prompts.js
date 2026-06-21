@@ -196,7 +196,7 @@ Explicação: [explicação curta do porquê/como da resposta]
 
 export const STYLE_INST = {
   clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas reais e bem construídas: paciente + contexto + evolução + achados relevantes + ponto de decisão. O caso deve exigir raciocínio clínico, não ser uma pergunta direta fantasiada de caso.',
-  direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo de cobrança estreito, resposta previsível e distratores próximos. A pergunta deve testar mecanismo, critério, classificação, conduta, exceção, comparação ou consequência prática — nunca curiosidade solta.',
+  direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo de cobrança estreito, resposta previsível e distratores próximos. A pergunta deve testar mecanismo, critério, classificação, conduta, exceção, comparação ou consequência prática — nunca curiosidade solta. PROIBIDO usar paciente, história clínica, vinheta, Caso-base, idade/sexo ou cenário narrativo. Pergunte o conceito diretamente; casos clínicos serão gerados em outra etapa.',
   mixed:    `ESTILO: CASOS ENCADEADOS
 Organize a bateria em uma quantidade IDEAL de casos clínicos, escolhida por você conforme a amplitude, densidade e diversidade do conteúdo. Não crie automaticamente um caso por tópico ou subtópico e não force uma quantidade fixa.
 
@@ -1050,6 +1050,36 @@ ${transcriptSlice
   : '[Sem transcrição — baseie-se nos subtópicos e no título da aula]'}
 
 ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper ou comentar.` : `Gere TODAS as ${total} questões sem interromper ou comentar.`}`;
+};
+
+// Prompt exclusivo da bateria de fixação da Biblioteca. Não reutiliza
+// REGRAS_ENUNCIADO porque esse bloco também contém instruções de vinheta clínica.
+export const buildSharedLibraryDirectPrompt = ({ lessonTitle='', batchTitle='', subtopics=[], transcript='', alts='', meta={} }) => {
+  const explanationInst = questionExplanationRules({ ...meta, questionStyle:'direct', questionTypes:['direct'] });
+  return `Você é um examinador de residência médica criando uma bateria de FIXAÇÃO DIRETA sobre a aula "${lessonTitle}".
+
+TIPO ÚNICO: QUESTÕES DIRETAS.
+- Crie exatamente uma questão para cada subtópico, na ordem recebida.
+- Pergunte o conceito de forma objetiva, com alvo estreito e resposta previsível.
+- Teste mecanismo, critério, classificação, comparação, exceção, contraindicação ou consequência prática.
+- PROIBIDO criar paciente, caso, história clínica, vinheta, cenário narrativo, idade, sexo, sintomas, evolução ou achados de exame.
+- PROIBIDO usar os campos "Caso-base" ou "Enunciado" como sequência clínica.
+- Uma questão direta pode cobrar conduta ou diagnóstico, mas deve perguntar o critério/conceito diretamente, sem inventar um paciente.
+- Não transforme a pergunta direta em caso clínico. Os casos serão criados em outra etapa.
+- Escreva tudo obrigatoriamente em português do Brasil.
+
+LOTE: ${batchTitle || 'Fixação'}
+SUBTÓPICOS (${subtopics.length}):
+${subtopics.map((item, index)=>`${index + 1}. ${item}`).join('\n')}
+
+${REGRAS_ALTERNATIVAS}
+${explanationInst}
+${TEMPLATE_QUESTAO(alts, true, false)}
+
+Use números sequenciais simples. Entregue EXATAMENTE ${subtopics.length} questões, sem comentários fora dos blocos.
+
+REFERÊNCIA DA AULA:
+${String(transcript || '').substring(0, 40000)}`;
 };
 
 // ─── PROMPT: PROVA CLÍNICA INTEGRADORA DA BIBLIOTECA ────────────────────────
