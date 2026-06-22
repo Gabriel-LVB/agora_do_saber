@@ -446,7 +446,10 @@ const chunkQuestionPlansByTarget = (plans = [], target = ADMIN_ORACLE_QUESTION_C
 };
 
 const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
-const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---|\n[ \t]*##|\n[ \t]*(?:(?:\*\*)?[ \t]*)?Quest[aã]o|$/i;
+// Um separador só encerra a explicação quando realmente antecede a próxima
+// questão (ou o fim do texto). Listas, subtítulos e divisórias internas da aula
+// não podem amputar a explicação.
+const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---(?=[ \t]*(?:\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$))|\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$/i;
 
 const extractLabeledSection = (text = '', labels = EXPLANATION_LABELS, stopRe = QUESTION_OR_SEPARATOR_RE) => {
   const labelRe = new RegExp(
@@ -513,16 +516,20 @@ const cleanStructuredExplanationPart = (text = '') => String(text || '')
 
 const parseQuestionExplanationParts = (explanation = '') => {
   const raw = String(explanation || '').replace(/\r\n/g, '\n').trim();
-  if (!raw || !/\[\[ALT\s*:[A-E]\]\]/i.test(raw)) {
+  // Aceita pequenas variações comuns do modelo: [[ALT:A]], [[ALT: A]],
+  // [ALT:A] e marcadores envolvidos por negrito.
+  const markerSource = String.raw`\[{1,2}\s*ALT\s*[:\-]?\s*([A-E])\s*\]{1,2}`;
+  const markerTest = new RegExp(markerSource, 'i');
+  if (!raw || !markerTest.test(raw)) {
     return { hasStructured:false, lesson:'', alternatives:{} };
   }
 
-  const firstAlt = raw.search(/\[\[ALT\s*:[A-E]\]\]/i);
+  const firstAlt = raw.search(new RegExp(markerSource, 'i'));
   const beforeAlt = firstAlt >= 0 ? raw.substring(0, firstAlt) : raw;
   const lessonMatch = beforeAlt.match(/(?:^|\n)\s*Aula\s*:\s*([\s\S]*?)(?:\n\s*Alternativas\s*:?\s*$|$)/i);
   const lesson = cleanStructuredExplanationPart(lessonMatch?.[1] || beforeAlt);
   const alternatives = {};
-  const altRe = /\[\[ALT\s*:([A-E])\]\]\s*([\s\S]*?)(?=\n\s*\[\[ALT\s*:[A-E]\]\]|$)/gi;
+  const altRe = new RegExp(`${markerSource}\\s*([\\s\\S]*?)(?=\\n\\s*(?:\\*\\*)?${markerSource}(?:\\*\\*)?|$)`, 'gi');
   let m;
   while ((m = altRe.exec(raw)) !== null) {
     const letter = m[1].toUpperCase();
@@ -1577,7 +1584,14 @@ const createDocxBlob = (bodyXml) => {
 
 const parseData = (text, namespace = '') => {
   const norm = text.replace(/\r\n/g,'\n');
-  const questionStartRe = /(?=(?:^|\n)[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d|(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im;
+  const explicitQuestionStart = /(?:^|\n)[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d/im;
+  // Se o material usa cabeçalhos "Questão N", eles são a única fronteira
+  // confiável. Assim, listas numeradas dentro da explicação deixam de ser
+  // confundidas com novas questões. O formato "1. Enunciado" permanece como
+  // fallback apenas para importações que não possuem nenhum cabeçalho explícito.
+  const questionStartRe = explicitQuestionStart.test(norm)
+    ? /(?=(?:^|\n)[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d)/im
+    : /(?=(?:^|\n)[ \t]*\d{1,3}[ \t]*[).][ \t])/im;
 
   // Legacy summary
   let summary = '';
