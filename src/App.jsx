@@ -15797,6 +15797,194 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
 	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
+                  const buildHomeJourneyState = () => {
+                    if (!isAdmin || !homeCanSeeVideoaulas || !appliedVideoaulasData) return null;
+                    const lessons = flattenCourseLessons(appliedVideoaulasData || {});
+                    if (!lessons.length) return null;
+                    const subjects = sortCourseSubjectsForDisplay([...new Set(lessons.map(lesson => lesson.subject))]);
+                    const subjectByKey = new Map(subjects.map(subject => [normalizeTextKey(subject), subject]));
+                    const savedSubjects = coursePlanSubjects.map(subject => subjectByKey.get(normalizeTextKey(subject))).filter(Boolean);
+                    const orderedSubjects = [...savedSubjects, ...subjects.filter(subject => !savedSubjects.includes(subject))];
+                    const lessonOrderIndex = new Map((effectiveCoursePlanLessonOrder || []).map((id, index) => [String(id), index]));
+                    const lessonWatched = (lesson) => [
+                      lesson.id,
+                      lesson.docId,
+                      getAulaId(lesson.aula),
+                      aulaDocId(lesson.aula),
+                      aulaVqKey(lesson.aula),
+                    ].filter(Boolean).some(id => !!watchedAulas[id]);
+                    const blockEntriesForLesson = (lesson) => {
+                      const data = vqBlocks[aulaDocId(lesson.aula)] || vqBlocks[aulaVqKey(lesson.aula)];
+                      const rawBlocks = data?.blocks || {};
+                      const entries = Array.isArray(rawBlocks)
+                        ? rawBlocks.map((block, index) => [`block${index + 1}`, block])
+                        : Object.entries(rawBlocks);
+                      return entries.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+                    };
+                    const isClinical = (question = {}) => question.libraryQuestionKind === 'clinical' || looksLikeClinicalVignette(question);
+                    const stageMeta = (stage) => {
+                      if (stage === 'direct-odd') return { type:'direct', parity:'odd' };
+                      if (stage === 'direct-even') return { type:'direct', parity:'even' };
+                      if (stage === 'clinical-odd') return { type:'clinical', parity:'odd' };
+                      if (stage === 'clinical-even') return { type:'clinical', parity:'even' };
+                      return null;
+                    };
+                    const statKey = (type, parity, suffix) => `${type}${parity === 'odd' ? 'Odd' : 'Even'}${suffix}`;
+                    const journeyInfo = (lesson) => {
+                      const stats = {
+                        total:0, answered:0, directTotal:0, clinicalTotal:0,
+                        directOddTotal:0, directOddAnswered:0, directEvenTotal:0, directEvenAnswered:0,
+                        clinicalOddTotal:0, clinicalOddAnswered:0, clinicalEvenTotal:0, clinicalEvenAnswered:0,
+                      };
+                      let directIndex = 0;
+                      let clinicalIndex = 0;
+                      blockEntriesForLesson(lesson).forEach(([, block]) => {
+                        const questions = Array.isArray(block.questions) ? block.questions : [];
+                        const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
+                        questions.forEach(question => {
+                          const type = isClinical(question) ? 'clinical' : 'direct';
+                          const index = type === 'clinical' ? ++clinicalIndex : ++directIndex;
+                          const parity = index % 2 === 1 ? 'odd' : 'even';
+                          const answered = Object.prototype.hasOwnProperty.call(answers, question.id);
+                          stats.total += 1;
+                          stats[`${type}Total`] += 1;
+                          stats[statKey(type, parity, 'Total')] += 1;
+                          if (answered) {
+                            stats.answered += 1;
+                            stats[statKey(type, parity, 'Answered')] += 1;
+                          }
+                        });
+                      });
+                      const done = (total, answered) => total > 0 && answered >= total;
+                      const emptyOrDone = (total, answered) => total === 0 || answered >= total;
+                      stats.directOddDone = done(stats.directOddTotal, stats.directOddAnswered);
+                      stats.directEvenDone = emptyOrDone(stats.directEvenTotal, stats.directEvenAnswered);
+                      stats.clinicalOddDone = emptyOrDone(stats.clinicalOddTotal, stats.clinicalOddAnswered);
+                      stats.clinicalEvenDone = emptyOrDone(stats.clinicalEvenTotal, stats.clinicalEvenAnswered);
+                      stats.primaryDone = lessonWatched(lesson) && stats.directOddDone;
+                      stats.journeyDone = stats.primaryDone && stats.directEvenDone && stats.clinicalOddDone && stats.clinicalEvenDone;
+                      return stats;
+                    };
+                    const planRank = (lesson) => {
+                      if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
+                      const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
+                      const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
+                      return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
+                    };
+                    const lessonsBySubject = (subject) => lessons
+                      .filter(lesson => lesson.subject === subject)
+                      .sort((a, b) => {
+                        const byPlan = planRank(a) - planRank(b);
+                        if (byPlan) return byPlan;
+                        return a.title.localeCompare(b.title, 'pt');
+                      });
+                    const subjectSummaries = orderedSubjects.map(subject => {
+                      const subjectLessons = lessonsBySubject(subject);
+                      return {
+                        subject,
+                        lessons:subjectLessons,
+                        total:subjectLessons.length,
+                        watched:subjectLessons.filter(lessonWatched).length,
+                        completed:subjectLessons.filter(lesson => journeyInfo(lesson).journeyDone).length,
+                        primaryCompleted:subjectLessons.filter(lesson => journeyInfo(lesson).primaryDone).length,
+                      };
+                    });
+                    const firstUnfinishedSubject = subjectSummaries.findIndex(item => item.total && item.primaryCompleted < item.total);
+                    const activeLimit = firstUnfinishedSubject >= 0 ? Math.min(subjectSummaries.length, firstUnfinishedSubject + 4) : Infinity;
+                    const activeSubjects = subjectSummaries.filter((_, index) => index < activeLimit);
+                    const firstBlockForStage = (lesson, stage) => {
+                      const meta = stageMeta(stage);
+                      const entries = blockEntriesForLesson(lesson);
+                      if (!entries.length) return null;
+                      if (!meta) return entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
+                      let directIndex = 0;
+                      let clinicalIndex = 0;
+                      let firstStageEntry = null;
+                      for (const entry of entries) {
+                        const [, block] = entry;
+                        const questions = Array.isArray(block.questions) ? block.questions : [];
+                        const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
+                        let hasStage = false;
+                        let hasPending = false;
+                        questions.forEach(question => {
+                          const type = isClinical(question) ? 'clinical' : 'direct';
+                          const index = type === 'clinical' ? ++clinicalIndex : ++directIndex;
+                          const parity = index % 2 === 1 ? 'odd' : 'even';
+                          if (type === meta.type && parity === meta.parity) {
+                            hasStage = true;
+                            if (!Object.prototype.hasOwnProperty.call(answers, question.id)) hasPending = true;
+                          }
+                        });
+                        if (hasStage && !firstStageEntry) firstStageEntry = entry;
+                        if (hasPending) return entry;
+                      }
+                      return firstStageEntry;
+                    };
+                    const openLesson = (lesson) => {
+                      setActiveSubjectVid(lesson.subject);
+                      setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
+                      setActiveAulaAndReset(lesson.aula);
+                      setView('videoaulas');
+                    };
+                    const openQuestions = (lesson, stage = 'direct-odd') => {
+                      setVqSubject(lesson.subject);
+                      setVqTopic(lesson.topic);
+                      setVqAula(lesson.aula);
+                      setVqActiveBlock(null);
+                      setVqQuestionParity('all');
+                      const targetBlock = firstBlockForStage(lesson, stage);
+                      setVqActiveBlockView(targetBlock ? { blockId:targetBlock[0], showWrong:false, fromPlan:true, cycleStage:stage } : null);
+                      if (aulaHasVqData(lesson.aula)) setView('videoquestions');
+                      else setVqGenModal({ aula:lesson.aula, aulaId:aulaDocId(lesson.aula), suggestedQ:15, subject:lesson.subject, topic:lesson.topic, fromConfig:true });
+                    };
+                    const stepForLesson = (lesson) => {
+                      const ji = journeyInfo(lesson);
+                      if (!lessonWatched(lesson)) return { lesson, label:'Assistir aula', tone:'yellow', action:()=>openLesson(lesson) };
+                      if (ji.directTotal === 0) return { lesson, label:'Gerar questões', tone:'blue', action:()=>openQuestions(lesson, 'direct-odd') };
+                      if (!ji.directOddDone) return { lesson, label:'Fazer ímpares', tone:'green', action:()=>openQuestions(lesson, 'direct-odd') };
+                      return { lesson, label:'Próxima aula', tone:'yellow', action:()=>openQuestions(lesson, 'direct-even') };
+                    };
+                    const nextStepForSubject = (item) => {
+                      const completedCutoff = item.lessons.findIndex(lesson => !journeyInfo(lesson).primaryDone);
+                      const completedCount = completedCutoff === -1 ? item.lessons.length : completedCutoff;
+                      const allPrimaryComplete = completedCount === item.lessons.length;
+                      for (let idx = 0; idx < completedCount; idx += 1) {
+                        const lesson = item.lessons[idx];
+                        const ji = journeyInfo(lesson);
+                        const completedAfter = completedCount - idx - 1;
+                        if (ji.directEvenTotal > 0 && !ji.directEvenDone && completedAfter >= 3) {
+                          return { item, lesson, label:'Fazer pares', tone:'red', helper:`${capitalizeDisplayLabel(item.subject)} · após ${completedAfter} aulas`, action:()=>openQuestions(lesson, 'direct-even') };
+                        }
+                        if (ji.directEvenDone && (completedAfter >= 10 || allPrimaryComplete)) {
+                          if (ji.clinicalOddTotal > 0 && !ji.clinicalOddDone) return { item, lesson, label:'Clínicas ímpares', tone:'red', helper:`${capitalizeDisplayLabel(item.subject)} · teste de verdade`, action:()=>openQuestions(lesson, 'clinical-odd') };
+                          if (ji.clinicalEvenTotal > 0 && !ji.clinicalEvenDone) return { item, lesson, label:'Clínicas pares', tone:'red', helper:`${capitalizeDisplayLabel(item.subject)} · segunda metade`, action:()=>openQuestions(lesson, 'clinical-even') };
+                        }
+                      }
+                      const lesson = item.lessons.find(aula => {
+                        const ji = journeyInfo(aula);
+                        return !lessonWatched(aula) || ji.directTotal === 0 || !ji.directOddDone;
+                      });
+                      if (!lesson) return { item, done:true, label:'Matéria em dia', tone:'gray' };
+                      const step = stepForLesson(lesson);
+                      return { ...step, item, helper:`${capitalizeDisplayLabel(item.subject)} · aula ${item.lessons.findIndex(aula => aula.id === lesson.id) + 1}/${item.total}` };
+                    };
+                    const steps = activeSubjects.map((item, index) => ({ item, index, step:nextStepForSubject(item) })).filter(entry => entry.step && !entry.step.done);
+                    const urgent = steps.find(entry => entry.step.tone === 'red');
+                    const balanced = steps.filter(entry => entry.step.tone !== 'red').sort((a, b) => {
+                      const byPrimary = (a.item.primaryCompleted || 0) - (b.item.primaryCompleted || 0);
+                      if (byPrimary) return byPrimary;
+                      const byWatched = (a.item.watched || 0) - (b.item.watched || 0);
+                      if (byWatched) return byWatched;
+                      return a.index - b.index;
+                    })[0];
+                    const selected = urgent || balanced || steps[0] || null;
+                    const total = subjectSummaries.reduce((sum, item) => sum + item.total, 0);
+                    const completed = subjectSummaries.reduce((sum, item) => sum + item.completed, 0);
+                    const primary = subjectSummaries.reduce((sum, item) => sum + item.primaryCompleted, 0);
+                    const watched = subjectSummaries.reduce((sum, item) => sum + item.watched, 0);
+                    return selected ? { ...selected.step, progress:{ total, completed, primary, watched, pct:total ? Math.round(completed / total * 100) : 0 }, activeCount:activeSubjects.length } : null;
+                  };
+                  const homeJourney = buildHomeJourneyState();
                   const renderHomeCard = (card) => (
                     <button key={card.key} onClick={card.action} className="app-card group rounded-xl px-3.5 py-3 text-left flex items-center gap-3 transition-all">
                       <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 text-yellow-600 transition-transform group-hover:scale-105 ${darkMode?'bg-gray-800':'bg-yellow-50'}`}>{card.icon}</span>
@@ -15831,6 +16019,22 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                             )}
                           </div>
                         </section>
+
+                        {homeJourney&&(
+                          <section className={`app-card rounded-xl px-3.5 py-3 flex items-center gap-3`}>
+                            <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 text-yellow-600 ${darkMode?'bg-gray-800':'bg-yellow-50'}`}>
+                              <Award className="w-5 h-5"/>
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-gray-500':'text-gray-400'}`}>Jornada do Herói</p>
+                              <h3 className={`mt-0.5 text-sm md:text-[15px] font-bold truncate ${darkMode?'text-gray-100':'text-gray-900'}`}>{courseLessonDisplayTitle(homeJourney.lesson?.aula || { title:homeJourney.lesson?.title || homeJourney.label })}</h3>
+                              <p className={`mt-0.5 text-xs truncate ${darkMode?'text-gray-400':'text-gray-600'}`}>{homeJourney.helper || 'Próximo passo'} · {homeJourney.label}</p>
+                            </div>
+                            <button onClick={homeJourney.action} className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-lg bg-yellow-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-yellow-700">
+                              Continuar<ChevronRight className="w-3.5 h-3.5"/>
+                            </button>
+                          </section>
+                        )}
 
                         <section className="space-y-3">
                           <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>Ações rápidas</h3>
@@ -18324,6 +18528,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     if (stage === 'clinical-even') return { type:'clinical', parity:'even' };
                     return null;
                   };
+                  const lessonWatched = (lesson) => [
+                    lesson.id,
+                    lesson.docId,
+                    getAulaId(lesson.aula),
+                    aulaDocId(lesson.aula),
+                    aulaVqKey(lesson.aula),
+                  ].filter(Boolean).some(id => !!watchedAulas[id]);
                   const stageKey = (type, parity, suffix) => `${type}${parity === 'odd' ? 'Odd' : 'Even'}${suffix}`;
                   const journeyInfoForLesson = (lesson) => {
                     const blockEntries = blockEntriesForLesson(lesson);
@@ -18367,7 +18578,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     stats.directEvenDone = emptyOrDone(stats.directEvenTotal, stats.directEvenAnswered);
                     stats.clinicalOddDone = emptyOrDone(stats.clinicalOddTotal, stats.clinicalOddAnswered);
                     stats.clinicalEvenDone = emptyOrDone(stats.clinicalEvenTotal, stats.clinicalEvenAnswered);
-                    stats.primaryDone = !!watchedAulas[lesson.id] && stats.directOddDone;
+                    stats.primaryDone = lessonWatched(lesson) && stats.directOddDone;
                     stats.journeyDone = stats.primaryDone && stats.directEvenDone && stats.clinicalOddDone && stats.clinicalEvenDone;
                     return stats;
                   };
@@ -18431,7 +18642,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   };
                   const subjectSummaries = normalizedSubjects.map(subject => {
                     const lessons = lessonsBySubject(subject);
-                    const watched = lessons.filter(lesson => watchedAulas[lesson.id]).length;
+                    const watched = lessons.filter(lessonWatched).length;
                     const completed = lessons.filter(lesson => journeyInfoForLesson(lesson).journeyDone).length;
                     const primaryCompleted = lessons.filter(lesson => journeyInfoForLesson(lesson).primaryDone).length;
                     const questionCount = lessons.reduce((acc, lesson) => acc + questionInfoForLesson(lesson).total, 0);
@@ -18487,7 +18698,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   };
                   const goToLessonStep = (lesson) => {
                     const ji = journeyInfoForLesson(lesson);
-                    if (!watchedAulas[lesson.id]) {
+                    if (!lessonWatched(lesson)) {
                       openLesson(lesson);
                       return;
                     }
@@ -18511,7 +18722,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   };
 	                  const lessonStep = (lesson) => {
 	                    const ji = journeyInfoForLesson(lesson);
-	                    if (!watchedAulas[lesson.id]) return { label:'Assistir aula', tone:'yellow', detail:'marque como assistida ao terminar' };
+	                    if (!lessonWatched(lesson)) return { label:'Assistir aula', tone:'yellow', detail:'marque como assistida ao terminar' };
 	                    if (ji.directTotal === 0) return { label:'Gerar questões', tone:'blue', detail:'fixação ímpar pendente' };
 	                    if (!ji.directOddDone) return { label:'Fazer ímpares', tone:'green', detail:`${ji.directOddAnswered}/${ji.directOddTotal} respondidas` };
 	                    return { label:'Próxima aula', tone:'yellow', detail:'ímpares concluídas' };
@@ -18556,7 +18767,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     }
                     const lesson = item.lessons.find(aula => {
                       const ji = journeyInfoForLesson(aula);
-                      return !watchedAulas[aula.id] || ji.directTotal === 0 || !ji.directOddDone;
+                      return !lessonWatched(aula) || ji.directTotal === 0 || !ji.directOddDone;
                     });
                     if (!lesson) {
                       return {
@@ -18583,6 +18794,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     [next[idx], next[target]] = [next[target], next[idx]];
                     saveCoursePlanPrefs(next, coursePlanLocked);
                   };
+                  const actionableSteps = activeSubjectSummaries
+                    .map((item, index) => ({ item, index, step:nextStepForSubject(item) }))
+                    .filter(entry => entry.step && !entry.step.done);
+                  const urgentJourneyStep = actionableSteps.find(entry => entry.step.tone === 'red');
+                  const balancedJourneyStep = actionableSteps
+                    .filter(entry => entry.step.tone !== 'red')
+                    .sort((a, b) => {
+                      const byPrimary = (a.item.primaryCompleted || 0) - (b.item.primaryCompleted || 0);
+                      if (byPrimary) return byPrimary;
+                      const byWatched = (a.item.watched || 0) - (b.item.watched || 0);
+                      if (byWatched) return byWatched;
+                      return a.index - b.index;
+                    })[0];
+                  const heroJourneyStep = urgentJourneyStep || balancedJourneyStep || actionableSteps[0] || null;
 
                   return (
                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-5">
@@ -18592,7 +18817,24 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                          <h2 className="text-2xl font-serif font-bold text-yellow-600">Próximo ato</h2>
 	                          <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Assista a aula, faça ímpares, deixe as pares para depois de 3 aulas e os casos clínicos para o teste de verdade.</p>
                         </div>
-                        <div className="p-4 space-y-2">
+                        <div className="p-4 space-y-3">
+                          {heroJourneyStep&&(
+                            <button onClick={heroJourneyStep.step.action} className={`app-card group w-full rounded-xl px-3.5 py-3 text-left flex items-center gap-3 transition-all`}>
+                              <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 text-yellow-600 ${dm?'bg-gray-800':'bg-yellow-50'}`}>
+                                <Award className="w-5 h-5"/>
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${dm?'text-gray-500':'text-gray-400'}`}>Continuar</p>
+                                <h3 className={`mt-0.5 text-sm md:text-[15px] font-bold truncate ${dm?'text-gray-100':'text-gray-900'}`}>{heroJourneyStep.step.detail}</h3>
+                                <p className={`mt-0.5 text-xs truncate ${dm?'text-gray-400':'text-gray-600'}`}>
+                                  {capitalizeDisplayLabel(heroJourneyStep.item.subject)} · {heroJourneyStep.step.label}{heroJourneyStep.step.subdetail?` · ${heroJourneyStep.step.subdetail}`:''}
+                                </p>
+                              </div>
+                              <span className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-lg bg-yellow-600 px-3.5 py-2 text-xs font-bold text-white group-hover:bg-yellow-700">
+                                Continuar<ChevronRight className="w-3.5 h-3.5"/>
+                              </span>
+                            </button>
+                          )}
                           {activeSubjectSummaries.map(item=>{
                             const step = nextStepForSubject(item);
                             const color = step.tone === 'green'
