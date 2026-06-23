@@ -7089,6 +7089,7 @@ export default function QuestionBankApp() {
   // Resetar seek ao trocar de aula
   const setActiveAulaAndReset = (aula) => { setActiveAula(aula); setVideoSeek(null); };
   const [watchedAulas, setWatchedAulas] = useState({});  // { bunny_id: true }
+  const watchedAulasRef = useRef({});
   const [expandedSubjectsVid, setExpandedSubjectsVid] = useState({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false); // subject/subtopic picker on mobile
 
@@ -7129,6 +7130,10 @@ export default function QuestionBankApp() {
     vqBlocksRef.current = vqBlocks;
   }, [vqBlocks]);
   const [vqExpandedTopic, setVqExpandedTopic] = useState({});
+
+  useEffect(() => {
+    watchedAulasRef.current = watchedAulas || {};
+  }, [watchedAulas]);
 
   // Portal do Curso — aba ativa e cronograma
   const [cursoTab, setCursoTab]           = useState('videoaulas');
@@ -7360,7 +7365,10 @@ export default function QuestionBankApp() {
       const cachedWatched = readStorageJson(watchedKey, null);
       if (cached) {
         setVideoaulasData(cached);
-        if (cachedWatched) setWatchedAulas(cachedWatched);
+        if (cachedWatched) {
+          watchedAulasRef.current = cachedWatched;
+          setWatchedAulas(cachedWatched);
+        }
         videoaulasLoadedRef.current = true;
         const lessonsFresh = isCacheFresh(FIRESTORE_CACHE_KEYS.videoaulasTouchedAt, FIRESTORE_CACHE_TTL.videoaulas);
         const watchedFresh = isCacheFresh(watchedTouchedKey, FIRESTORE_CACHE_TTL.watched);
@@ -7462,6 +7470,7 @@ export default function QuestionBankApp() {
       const ps = await getDoc(doc(db, 'users', u.uid, 'videoaulas_progress', 'watched'));
       if (ps.exists()) {
         const w = ps.data() || {};
+        watchedAulasRef.current = w;
         setWatchedAulas(w);
         writeStorageJson(watchedKey, w);
         touchCache(userWatchedTouchedKey(u.uid));
@@ -7479,9 +7488,10 @@ export default function QuestionBankApp() {
 
   const markAulaWatched = async (bunnyId, aula = null) => {
     if (!bunnyId) return;
-    const already = !!watchedAulas[bunnyId];
-    const u = { ...watchedAulas };
+    const already = !!watchedAulasRef.current?.[bunnyId];
+    const u = { ...(watchedAulasRef.current || {}) };
     if (already) { delete u[bunnyId]; } else { u[bunnyId] = true; recordLessonInterval(bunnyId, 0, aula?.duration_seconds || 0, true); }
+    watchedAulasRef.current = u;
     setWatchedAulas(u);
     addToast(already ? 'Aula desmarcada como assistida.' : 'Aula marcada como assistida.', already ? 'info' : 'success', 2500);
     // Atualizar cache local imediatamente
@@ -7496,7 +7506,26 @@ export default function QuestionBankApp() {
     }
   };
 
+  const autoMarkAulaWatched = async (bunnyId, aula = null) => {
+    if (!bunnyId || watchedAulasRef.current?.[bunnyId]) return;
+    const u = { ...(watchedAulasRef.current || {}), [bunnyId]:true };
+    watchedAulasRef.current = u;
+    setWatchedAulas(u);
+    recordLessonInterval(bunnyId, 0, aula?.duration_seconds || 0, true);
+    addToast('Aula marcada como assistida automaticamente.', 'success', 2200);
+    if (user) {
+      writeStorageJson(`agora_watched_${user.uid}`, u);
+      touchCache(userWatchedTouchedKey(user.uid));
+    }
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
+    } catch(e) {
+      addToast('Não consegui sincronizar agora, mas salvei no aparelho.', 'info', 3500);
+    }
+  };
+
   const resetWatchedProgress = async () => {
+    watchedAulasRef.current = {};
     setWatchedAulas({});
     if (user) {
       writeStorageJson(`agora_watched_${user.uid}`, {});
@@ -7586,23 +7615,35 @@ export default function QuestionBankApp() {
     if (!canUseAdvancedFeatures || view !== 'videoaulas' || !activeAula) return;
     const aulaId = getAulaId(activeAula);
     if (!aulaId) return;
-    videoWatchRef.current = { aulaId, last:null };
-    const readSeconds = (raw) => {
+    videoWatchRef.current = { aulaId, last:null, autoCompleted:false };
+    const readPlayback = (raw) => {
       const data = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch(e) { return null; } })() : raw;
       if (!data) return null;
       const payload = data.data && typeof data.data === 'object' ? data.data : data;
       const seconds = payload.seconds ?? payload.currentTime ?? payload.time ?? payload.position ?? data.seconds ?? data.currentTime;
+      const duration = payload.duration ?? payload.durationSeconds ?? payload.totalTime ?? payload.totalDuration ?? data.duration ?? data.durationSeconds;
       const n = Number(seconds);
-      return Number.isFinite(n) ? n : null;
+      const d = Number(duration);
+      return Number.isFinite(n) ? { seconds:n, duration:Number.isFinite(d) ? d : null } : null;
     };
     const onMessage = (event) => {
       if (videoFrameRef.current?.contentWindow && event.source !== videoFrameRef.current.contentWindow) return;
-      const seconds = readSeconds(event.data);
-      if (seconds == null) return;
+      const playback = readPlayback(event.data);
+      if (!playback) return;
+      const { seconds } = playback;
       const cur = videoWatchRef.current;
       if (cur.aulaId !== aulaId) return;
       if (cur.last != null && seconds > cur.last) recordLessonInterval(aulaId, cur.last, seconds);
-      videoWatchRef.current = { aulaId, last:seconds };
+      const duration = Number(activeAula.duration_seconds || activeAula.durationSeconds || playback.duration || 0);
+      if (!cur.autoCompleted && duration >= 30 && seconds >= 0) {
+        const closeEnoughToEnd = seconds >= duration * 0.95 || duration - seconds <= 20;
+        if (closeEnoughToEnd && !watchedAulasRef.current?.[aulaId]) {
+          videoWatchRef.current = { aulaId, last:seconds, autoCompleted:true };
+          autoMarkAulaWatched(aulaId, activeAula);
+          return;
+        }
+      }
+      videoWatchRef.current = { aulaId, last:seconds, autoCompleted:cur.autoCompleted || false };
     };
     window.addEventListener('message', onMessage);
     const subscribe = () => {
@@ -7704,6 +7745,7 @@ export default function QuestionBankApp() {
     if (!user || !canSeeVideoaulas) {
       if (user && !canSeeVideoaulas) {
         setVideoaulasData(null);
+        watchedAulasRef.current = {};
         setWatchedAulas({});
         videoaulasLoadedRef.current = false;
       }
@@ -8374,6 +8416,7 @@ export default function QuestionBankApp() {
     try {
       // 1. Clear watched status
       await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
+      watchedAulasRef.current = {};
       setWatchedAulas({});
       writeStorageJson(`agora_watched_${user.uid}`, {});
       touchCache(userWatchedTouchedKey(user.uid));
