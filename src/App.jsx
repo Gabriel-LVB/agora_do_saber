@@ -588,6 +588,8 @@ const isAnswerCorrect = (question, answer) => {
   }
   return answer === getCorrectLetter(question);
 };
+const isFinalObjectiveAnswer = (question, answer) =>
+  !!question && !question.isOpen && !isMemoryCard(question) && answer != null && answer !== '' && answer !== 'SKIPPED';
 
 const sameId = (a, b) => String(a) === String(b);
 const listHasId = (list = [], id) => Array.isArray(list) && list.some(x => sameId(x, id));
@@ -3562,6 +3564,9 @@ const QuestionView = ({
   }, [answers, questionIdsKey]); // eslint-disable-line
 
   const submitAnswer = (qId, letter) => {
+    const q = questions.find(item => sameId(item.id, qId));
+    const currentAnswer = pendingAnswers[qId] ?? answers?.[qId];
+    if (isFinalObjectiveAnswer(q, currentAnswer)) return undefined;
     setPendingAnswers(previous => ({...previous, [qId]:letter}));
     const rollback = () => setPendingAnswers(previous => {
       if (previous[qId] !== letter) return previous;
@@ -5084,16 +5089,25 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
   const [lessonExplanationOpen, setLessonExplanationOpen] = useState(false);
   const [alternativeExplanationsOpen, setAlternativeExplanationsOpen] = useState(false);
+  const answerLockRef = useRef(null);
+  const answerPointerRef = useRef(null);
+  const suppressNextAnswerClickRef = useRef({ letter:null, until:0 });
   useEffect(() => {
     setOptimisticNotebook(isInErrorNotebook);
   }, [isInErrorNotebook, question?.id]);
   useEffect(() => {
+    answerLockRef.current = null;
     setOptimisticAnswer(null);
     setLessonExplanationOpen(false);
     setAlternativeExplanationsOpen(false);
   }, [question?.id]);
   useEffect(() => {
-    if (selectedLetter != null) setOptimisticAnswer(null);
+    if (selectedLetter != null) {
+      answerLockRef.current = selectedLetter;
+      setOptimisticAnswer(null);
+    } else {
+      answerLockRef.current = null;
+    }
   }, [selectedLetter]);
   const persistedAnswer = selectedLetter === '' ? null : selectedLetter;
   const displayedAnswer = persistedAnswer ?? optimisticAnswer;
@@ -5129,11 +5143,56 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     if (result && typeof result.catch === 'function') result.catch(() => setOptimisticNotebook(previous));
   };
   const handleAnswerClick = (letter) => {
+    const canChangeAnswer = revealMode === 'selected';
+    const currentAnswer = persistedAnswer ?? optimisticAnswer ?? answerLockRef.current;
+    if (!canChangeAnswer && currentAnswer != null) return undefined;
+    answerLockRef.current = letter;
     if (showErrorNotebook && !question.isOpen && !isAnswerCorrect(question, letter)) setOptimisticNotebook(true);
     setOptimisticAnswer(letter);
-    const result = onAnswer(letter);
-    if (result && typeof result.catch === 'function') result.catch(() => setOptimisticAnswer(null));
-    return result;
+    try {
+      const result = onAnswer(letter);
+      if (result && typeof result.catch === 'function') {
+        result.catch(() => {
+          if (answerLockRef.current === letter) answerLockRef.current = null;
+          setOptimisticAnswer(null);
+        });
+      }
+      return result;
+    } catch(error) {
+      if (answerLockRef.current === letter) answerLockRef.current = null;
+      setOptimisticAnswer(null);
+      throw error;
+    }
+  };
+  const handleAnswerPointerDown = (letter, event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    answerPointerRef.current = {
+      id:event.pointerId,
+      letter,
+      x:event.clientX,
+      y:event.clientY,
+    };
+  };
+  const clearAnswerPointer = () => {
+    answerPointerRef.current = null;
+  };
+  const handleAnswerPointerUp = (letter, event) => {
+    const start = answerPointerRef.current;
+    answerPointerRef.current = null;
+    if (!start || start.letter !== letter || start.id !== event.pointerId) return;
+    const moved = Math.hypot((event.clientX || 0) - (start.x || 0), (event.clientY || 0) - (start.y || 0));
+    if (moved > 12) return;
+    if (event.cancelable !== false) event.preventDefault();
+    suppressNextAnswerClickRef.current = { letter, until:Date.now() + 700 };
+    handleAnswerClick(letter);
+  };
+  const handleAnswerButtonClick = (letter) => {
+    const suppressed = suppressNextAnswerClickRef.current;
+    if (suppressed.letter === letter && Date.now() < suppressed.until) {
+      suppressNextAnswerClickRef.current = { letter:null, until:0 };
+      return;
+    }
+    handleAnswerClick(letter);
   };
 
   useEffect(() => {
@@ -5275,7 +5334,16 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	            </>
 	          );
           return canClick ? (
-            <button key={opt.letter} type="button" onClick={()=>handleAnswerClick(opt.letter)} className={cls}>
+            <button
+              key={opt.letter}
+              type="button"
+              onPointerDown={event=>handleAnswerPointerDown(opt.letter, event)}
+              onPointerUp={event=>handleAnswerPointerUp(opt.letter, event)}
+              onPointerCancel={clearAnswerPointer}
+              onPointerLeave={clearAnswerPointer}
+              onClick={()=>handleAnswerButtonClick(opt.letter)}
+              className={cls}
+            >
               {content}
             </button>
           ) : (
@@ -6553,9 +6621,11 @@ function AcademiaTopicView({
 
   const handleAnswer = (q, letter) => {
     trackQuestionAnswered?.(`academia:${subject.id}:${topic.id}:${q.id}`);
-    setAcademiaTopicAnswers(p => ({...p, [q.id]: letter}));
     const freshSubj  = (library||[]).find(s => s.id === subject.id) || subject;
     const freshTopic = freshSubj.topics.find(t => t.id === topic.id) || liveTopic;
+    const previousAnswer = (freshTopic.answers || {})[q.id] ?? academiaTopicAnswers[q.id];
+    if (isFinalObjectiveAnswer(q, previousAnswer)) return;
+    setAcademiaTopicAnswers(p => ({...p, [q.id]: letter}));
     const errorNotebook = canUseAcademia && !isAnswerCorrect(q, letter)
       ? addToList(freshTopic.errorNotebook || [], q.id)
       : (freshTopic.errorNotebook || []);
@@ -12290,6 +12360,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const sourceQuestion = question || Object.values(sourceTopic.fixationQuestions || {}).flat()
       .concat((sourceTopic.extraBattery || []).flatMap(b => b.questions || b))
       .find(q => q.id === qId);
+    if (isFinalObjectiveAnswer(sourceQuestion, sourceTopic.answers?.[qId])) return;
     const errorNotebook = canUseAdvancedFeatures && sourceQuestion && !isAnswerCorrect(sourceQuestion, letter)
       ? addToList(sourceTopic.errorNotebook || [], qId)
       : (sourceTopic.errorNotebook || []);
@@ -12339,6 +12410,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const origin = getCustomStudyOrigin(question);
     if (!origin) return null;
     const { sourceSubject, sourceTopic, sourceQuestion, originQId } = origin;
+    if (isFinalObjectiveAnswer(sourceQuestion, sourceTopic.answers?.[originQId])) return null;
     const now = Date.now();
     const selectedText = (question.options || []).find(option => option.letter === letter)?.text;
     const originLetter = (sourceQuestion?.options || []).find(option => option.text === selectedText)?.letter || letter;
@@ -12394,6 +12466,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (activeTopic?.origin?.source === 'shuffledSubject') {
       const q = resolveCustomStudyQuestions(activeTopic).find(x => sameId(x.id, qId));
       if (!q) return;
+      if (isFinalObjectiveAnswer(q, activeTopic.answers?.[qId])) return;
       const isRight = isAnswerCorrect(q, letter);
       setShuffledSubjectTopic(topic => {
         if (!topic) return topic;
@@ -12424,6 +12497,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const freshTopic = freshSubject?.topics?.find(t => t.id === activeTopicId) || activeTopic;
     if (!freshSubject || !freshTopic) return;
     const q = resolveCustomStudyQuestions(freshTopic).find(x=>x.id===qId);
+    if (isFinalObjectiveAnswer(q, freshTopic.answers?.[qId])) return;
     const now = Date.now();
     const sr = { ...(freshTopic.spacedReview || {}) };
     let isRight = false;
@@ -17805,6 +17879,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const freshSubject = (libraryRef.current || library).find(s => s.id === subject.id) || subject;
     const freshTopic = freshSubject?.topics?.find(t => t.id === topic.id) || topic;
     const q = (freshTopic.questions||[]).find(x=>x.id===qId);
+    if (isFinalObjectiveAnswer(q, freshTopic.answers?.[qId])) return;
 	            const errorNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshTopic.errorNotebook||[], qId) : (freshTopic.errorNotebook||[]);
 	            await updateSubject({...freshSubject, topics:freshSubject.topics.map(t2=>t2.id===freshTopic.id?{...t2,answers:{...t2.answers,[qId]:letter},errorNotebook}:t2)});
 	          };
@@ -20076,6 +20151,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
     const q = (Array.isArray(freshBlock.questions) ? freshBlock.questions : qs).find(x => sameId(x.id, qId))
       || visibleQuestions.find(x => sameId(x.id, qId));
+    if (isFinalObjectiveAnswer(q, freshAnswers[qId])) return;
 	                const nextNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshNotebook, qId) : freshNotebook;
 	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,answers:{...freshAnswers,[qId]:letter},errorNotebook:nextNotebook}}});
 	              };
