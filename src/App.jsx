@@ -7620,11 +7620,14 @@ export default function QuestionBankApp() {
       const data = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch(e) { return null; } })() : raw;
       if (!data) return null;
       const payload = data.data && typeof data.data === 'object' ? data.data : data;
+      const eventName = String(payload.event || payload.type || payload.name || data.event || data.type || data.name || '').toLowerCase();
       const seconds = payload.seconds ?? payload.currentTime ?? payload.time ?? payload.position ?? data.seconds ?? data.currentTime;
       const duration = payload.duration ?? payload.durationSeconds ?? payload.totalTime ?? payload.totalDuration ?? data.duration ?? data.durationSeconds;
+      const ended = payload.ended === true || data.ended === true || /\b(ended|finish|finished|complete|completed)\b/.test(eventName);
       const n = Number(seconds);
       const d = Number(duration);
-      return Number.isFinite(n) ? { seconds:n, duration:Number.isFinite(d) ? d : null } : null;
+      if (!Number.isFinite(n) && !ended) return null;
+      return { seconds:Number.isFinite(n) ? n : null, duration:Number.isFinite(d) ? d : null, ended };
     };
     const onMessage = (event) => {
       if (videoFrameRef.current?.contentWindow && event.source !== videoFrameRef.current.contentWindow) return;
@@ -7633,17 +7636,16 @@ export default function QuestionBankApp() {
       const { seconds } = playback;
       const cur = videoWatchRef.current;
       if (cur.aulaId !== aulaId) return;
-      if (cur.last != null && seconds > cur.last) recordLessonInterval(aulaId, cur.last, seconds);
+      if (seconds != null && cur.last != null && seconds > cur.last) recordLessonInterval(aulaId, cur.last, seconds);
       const duration = Number(activeAula.duration_seconds || activeAula.durationSeconds || playback.duration || 0);
-      if (!cur.autoCompleted && duration >= 30 && seconds >= 0) {
-        const closeEnoughToEnd = seconds >= duration * 0.95 || duration - seconds <= 20;
-        if (closeEnoughToEnd && !watchedAulasRef.current?.[aulaId]) {
-          videoWatchRef.current = { aulaId, last:seconds, autoCompleted:true };
-          autoMarkAulaWatched(aulaId, activeAula);
-          return;
-        }
+      const reachedExactEnd = duration >= 30 && seconds != null && seconds >= Math.max(0, duration - 0.75);
+      if (!cur.autoCompleted && (playback.ended || reachedExactEnd) && !watchedAulasRef.current?.[aulaId]) {
+        if (duration > 0 && cur.last != null) recordLessonInterval(aulaId, cur.last, duration, true);
+        videoWatchRef.current = { aulaId, last:seconds ?? (duration || cur.last), autoCompleted:true };
+        autoMarkAulaWatched(aulaId, activeAula);
+        return;
       }
-      videoWatchRef.current = { aulaId, last:seconds, autoCompleted:cur.autoCompleted || false };
+      videoWatchRef.current = { aulaId, last:seconds ?? cur.last, autoCompleted:cur.autoCompleted || false };
     };
     window.addEventListener('message', onMessage);
     const subscribe = () => {
@@ -7651,7 +7653,9 @@ export default function QuestionBankApp() {
       if (!win) return;
       [
         {event:'command', func:'addEventListener', args:['timeupdate']},
+        {event:'command', func:'addEventListener', args:['ended']},
         {context:'player.js', version:'0.0.11', event:'command', func:'addEventListener', args:['timeupdate']},
+        {context:'player.js', version:'0.0.11', event:'command', func:'addEventListener', args:['ended']},
       ].forEach(msg => {
         try { win.postMessage(JSON.stringify(msg), '*'); } catch(e) {}
         try { win.postMessage(msg, '*'); } catch(e) {}
@@ -16013,7 +16017,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     };
                     const steps = activeSubjects.map((item, index) => ({ item, index, step:nextStepForSubject(item) })).filter(entry => entry.step && !entry.step.done);
                     const urgent = steps.find(entry => entry.step.tone === 'red');
+                    const stepRank = (step = {}) => {
+                      if (step.tone === 'red') return 0;
+                      if (['Fazer ímpares', 'Gerar questões'].includes(step.label)) return 1;
+                      if (step.label === 'Assistir aula') return 2;
+                      return 3;
+                    };
                     const balanced = steps.filter(entry => entry.step.tone !== 'red').sort((a, b) => {
+                      const byStep = stepRank(a.step) - stepRank(b.step);
+                      if (byStep) return byStep;
                       const byPrimary = (a.item.primaryCompleted || 0) - (b.item.primaryCompleted || 0);
                       if (byPrimary) return byPrimary;
                       const byWatched = (a.item.watched || 0) - (b.item.watched || 0);
@@ -18841,9 +18853,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     .map((item, index) => ({ item, index, step:nextStepForSubject(item) }))
                     .filter(entry => entry.step && !entry.step.done);
                   const urgentJourneyStep = actionableSteps.find(entry => entry.step.tone === 'red');
+                  const journeyStepRank = (step = {}) => {
+                    if (step.tone === 'red') return 0;
+                    if (['Fazer ímpares', 'Gerar questões'].includes(step.label)) return 1;
+                    if (step.label === 'Assistir aula') return 2;
+                    return 3;
+                  };
                   const balancedJourneyStep = actionableSteps
                     .filter(entry => entry.step.tone !== 'red')
                     .sort((a, b) => {
+                      const byStep = journeyStepRank(a.step) - journeyStepRank(b.step);
+                      if (byStep) return byStep;
                       const byPrimary = (a.item.primaryCompleted || 0) - (b.item.primaryCompleted || 0);
                       if (byPrimary) return byPrimary;
                       const byWatched = (a.item.watched || 0) - (b.item.watched || 0);
