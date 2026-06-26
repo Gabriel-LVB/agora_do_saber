@@ -195,6 +195,7 @@ Explicação: [explicação curta do porquê/como da resposta]
 ---`;
 
 export const STYLE_INST = {
+  hybrid:  'Modo misto: quando o fluxo suportar duas passadas, gere primeiro fixação direta e depois casos clínicos integradores. Em prompts de passada única, trate esta etapa como questões diretas de alto rendimento, sem vinheta clínica.',
   clinical: 'Use EXCLUSIVAMENTE vinhetas clínicas reais e bem construídas: paciente + contexto + evolução + achados relevantes + ponto de decisão. O caso deve exigir raciocínio clínico, não ser uma pergunta direta fantasiada de caso.',
   direct:   'Use EXCLUSIVAMENTE questões diretas de alto rendimento: alvo de cobrança estreito, resposta previsível e distratores próximos. A pergunta deve testar mecanismo, critério, classificação, conduta, exceção, comparação ou consequência prática — nunca curiosidade solta. PROIBIDO usar paciente, história clínica, vinheta, Caso-base, idade/sexo ou cenário narrativo. Pergunte o conceito diretamente; casos clínicos serão gerados em outra etapa.',
   mixed:    `ESTILO: CASOS ENCADEADOS

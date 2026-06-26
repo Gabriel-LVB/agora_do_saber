@@ -130,6 +130,7 @@ const FIRESTORE_CACHE_KEYS = {
   videoaulasTouchedAt: 'agora_videoaulas_shared_v2_touched_at',
   siteConfig: 'agora_site_config_cache_v1',
   accessConfig: 'agora_access_config_cache_v1',
+  adminAccessPanel: 'agora_admin_access_panel_cache_v1',
 };
 const VIDEOAULAS_CATALOG_DOC = 'videoaulas_catalog';
 const VIDEOAULAS_CATALOG_VERSION = 1;
@@ -143,7 +144,10 @@ const FIRESTORE_CACHE_TTL = {
 };
 const ADMIN_ACCESS_LOG_LIMIT = 40;
 const ADMIN_DEVICE_LIMIT = 80;
-const FIRESTORE_PRESENCE_ENABLED = false;
+const FIRESTORE_PRESENCE_ENABLED = true;
+const PRESENCE_WRITE_MIN_INTERVAL_MS = 1000 * 60 * 10;
+const PRESENCE_FINAL_WRITE_MIN_INTERVAL_MS = 1000 * 60;
+const ADMIN_ACCESS_REFRESH_COOLDOWN_MS = 1000 * 15;
 
 const readTimedCache = (key, maxAgeMs, fallback = null) => {
   const cached = readStorageJson(key, null);
@@ -418,6 +422,14 @@ const buildFixedQuestionPlans = (subtopics = [], qPerSub = 1) => subtopics
     questions:Math.max(1, Math.min(30, Number(qPerSub) || 1)),
     objective:`Dominar ${title}`,
   }));
+const buildSyntheticQuestionPlans = (count = 1, qPerSub = 1) => Array.from(
+  { length:Math.max(1, Number(count) || 1) },
+  (_, index) => ({
+    title:`Eixo de cobrança ${index + 1}`,
+    questions:Math.max(1, Math.min(30, Number(qPerSub) || 1)),
+    objective:'Criar uma cobrança relevante e distinta do material-base deste tópico',
+  })
+);
 const buildQuestionPlansFromCounts = (subtopics = [], counts = []) => subtopics.reduce((plans, title, index) => {
   if (!title) return plans;
   plans.push({
@@ -432,17 +444,54 @@ const chunkQuestionPlansByTarget = (plans = [], target = ADMIN_ORACLE_QUESTION_C
   const chunks = [];
   let current = [];
   let count = 0;
-  plans.forEach(plan => {
-    current.push(plan);
-    count += Math.max(1, Number(plan.questions) || 1);
-    if (count >= target) {
-      chunks.push(current);
-      current = [];
-      count = 0;
+  const maxTarget = Math.max(1, Number(target) || ADMIN_ORACLE_QUESTION_CHUNK_TARGET);
+  const splitPlan = (plan = {}) => {
+    const total = Math.max(1, Number(plan.questions) || 1);
+    if (total <= maxTarget) return [{ ...plan, questions:total }];
+    const parts = [];
+    let remaining = total;
+    let part = 1;
+    const totalParts = Math.ceil(total / maxTarget);
+    while (remaining > 0) {
+      const questions = Math.min(maxTarget, remaining);
+      parts.push({
+        ...plan,
+        questions,
+        objective:plan.objective
+          ? `${plan.objective} — lote ${part}/${totalParts}, com cobranças novas e sem repetir os lotes anteriores`
+          : `Dominar ${plan.title || 'o subtópico'} — lote ${part}/${totalParts}, com cobranças novas e sem repetir os lotes anteriores`,
+        chunkPart:part,
+        chunkParts:totalParts,
+      });
+      remaining -= questions;
+      part += 1;
     }
+    return parts;
+  };
+  plans.forEach(plan => {
+    splitPlan(plan).forEach(piece => {
+      const pieceCount = Math.max(1, Number(piece.questions) || 1);
+      if (current.length && count + pieceCount > maxTarget) {
+        chunks.push(current);
+        current = [];
+        count = 0;
+      }
+      current.push(piece);
+      count += pieceCount;
+      if (count >= maxTarget) {
+        chunks.push(current);
+        current = [];
+        count = 0;
+      }
+    });
   });
   if (current.length) chunks.push(current);
   return chunks;
+};
+
+const shouldSplitQuestionRequest = ({ total = 0, plans = [], enabled = false, flashcardOnly = false, autoCount = false } = {}) => {
+  if (flashcardOnly || autoCount || !plans.length) return false;
+  return (enabled || total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET) && total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
 };
 
 const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
@@ -549,7 +598,10 @@ const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze
 const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
 const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
 const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
+const MIXED_QUESTION_STYLE = 'hybrid';
+const isMixedQuestionMode = (style = '') => style === MIXED_QUESTION_STYLE;
 const QUESTION_STYLE_OPTIONS = [
+  { k:'hybrid', label:'Mistas', desc:'Gera diretas sobre os subtópicos e depois casos encadeados como teste clínico.' },
   { k:'mixed', label:'Casos encadeados', desc:'A IA decide quantos casos usar e faz várias questões progressivas sobre cada um.' },
   { k:'clinical', label:'Casos independentes', desc:'Cada questão apresenta uma situação clínica diferente.' },
   { k:'direct', label:'Diretas', desc:'Perguntas objetivas, sem caso clínico.' },
@@ -4181,7 +4233,7 @@ const QuestionView = ({
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${adminChunkedQuestionsEnabled?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-900':'border-gray-200 bg-white')}`}>
               <div>
                 <p className={`text-sm font-bold ${adminChunkedQuestionsEnabled?'text-yellow-500':''}`}>Geração em lotes</p>
-                <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests de cerca de 15 questões, sem quebrar subtópico no meio.</p>
+                <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests de até 15 questões.</p>
               </div>
               <div style={{width:40,height:24,borderRadius:12,padding:2,background:adminChunkedQuestionsEnabled?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
                 <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:adminChunkedQuestionsEnabled?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
@@ -7099,6 +7151,8 @@ export default function QuestionBankApp() {
   const [userDevices, setUserDevices] = useState([]);
   const [accessLogs, setAccessLogs] = useState([]);
   const [accessLogsLoading, setAccessLogsLoading] = useState(false);
+  const [accessAdminLastRefresh, setAccessAdminLastRefresh] = useState(0);
+  const [accessAdminError, setAccessAdminError] = useState('');
   const accessLogSessionRef = useRef(new Set());
   const persistSignedLibraryCache = (items) => {
     if (user && !user.isAnonymous) writeTimedCache(userLibraryCacheKey(user.uid), sortLibraryItems(items || []));
@@ -9077,7 +9131,7 @@ export default function QuestionBankApp() {
       setAllowedEmails(normalizedCourse);
       setSiteOnlyAllowedEmails(normalizedSiteOnly);
       setSiteConfig(globalSiteConfig);
-      // recordAccessLog(u, accessDecision); // EMERGÊNCIA PROVA: desliga access_logs
+      recordAccessLog(u, accessDecision);
       if (u && (u.isAnonymous || !normalizedGlobal.includes(String(u.email || '').toLowerCase()))) {
         setUser(u);
         setUsername(null);
@@ -9105,8 +9159,14 @@ export default function QuestionBankApp() {
       writeStorageText(createdKey, String(createdAt));
     }
     const deviceRef = doc(db, 'user_devices', `${user.uid}_${deviceId}`);
-    const writePresence = async () => {
+    const lastWriteKey = `agora_presence_last_${user.uid}_${deviceId}`;
+    let lastPresenceWrite = Number(readStorageText(lastWriteKey, '')) || 0;
+    const writePresence = async ({ force=false, final=false } = {}) => {
       const now = Date.now();
+      const minInterval = final ? PRESENCE_FINAL_WRITE_MIN_INTERVAL_MS : PRESENCE_WRITE_MIN_INTERVAL_MS;
+      if (!force && now - lastPresenceWrite < minInterval) return;
+      lastPresenceWrite = now;
+      writeStorageText(lastWriteKey, String(now));
       const screenSize = typeof window !== 'undefined' && window.screen
         ? `${window.screen.width}x${window.screen.height}`
         : '';
@@ -9120,56 +9180,78 @@ export default function QuestionBankApp() {
         language:navigator.language || '',
         timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || '',
         screen:screenSize,
+        visibility:typeof document !== 'undefined' ? document.visibilityState || '' : '',
+        path:typeof window !== 'undefined' ? window.location.pathname || '/' : '',
         lastSeenAt:now,
         updatedAt:now,
         createdAt,
       }, { merge:true }).catch(()=>{});
     };
-    writePresence();
-    const interval = setInterval(writePresence, 60000);
-    const onVisibility = () => { if (document.visibilityState === 'visible') writePresence(); };
-    window.addEventListener('focus', writePresence);
+    writePresence({ force:true });
+    const interval = setInterval(() => writePresence(), PRESENCE_WRITE_MIN_INTERVAL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') writePresence();
+      else writePresence({ final:true });
+    };
+    const onPageHide = () => writePresence({ final:true });
+    const onFocus = () => writePresence();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('pagehide', onPageHide);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', writePresence);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pagehide', onPageHide);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [user?.uid, user?.email, username]);
 
-  useEffect(() => {
-    if (!isAdmin) {
-      setUserDevices([]);
-      return;
-    }
-    const devicesQuery = query(collection(db, 'user_devices'), orderBy('lastSeenAt', 'desc'), limit(ADMIN_DEVICE_LIMIT));
-    const unsub = onSnapshot(devicesQuery, (snap) => {
-      setUserDevices(snap.docs.map(d => ({ id:d.id, ...d.data() })));
-    }, () => setUserDevices([]));
-    return () => unsub();
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (!isAdmin) {
-      setAccessLogs([]);
-      setAccessLogsLoading(false);
-      return;
-    }
+  const refreshAdminAccessData = useCallback(async ({ force=false } = {}) => {
+    if (!isAdmin) return;
+    const now = Date.now();
+    if (!force && accessAdminLastRefresh && now - accessAdminLastRefresh < ADMIN_ACCESS_REFRESH_COOLDOWN_MS) return;
     setAccessLogsLoading(true);
-    const logsQuery = query(collection(db, 'access_logs'), orderBy('createdAt', 'desc'), limit(ADMIN_ACCESS_LOG_LIMIT));
-    const unsub = onSnapshot(logsQuery, (snap) => {
-      const rows = snap.docs
+    setAccessAdminError('');
+    try {
+      const [logsSnap, devicesSnap] = await Promise.all([
+        getDocs(query(collection(db, 'access_logs'), orderBy('createdAt', 'desc'), limit(ADMIN_ACCESS_LOG_LIMIT))),
+        getDocs(query(collection(db, 'user_devices'), orderBy('lastSeenAt', 'desc'), limit(ADMIN_DEVICE_LIMIT))),
+      ]);
+      const logs = logsSnap.docs
         .map(d => ({ id:d.id, ...d.data() }))
         .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
         .slice(0, ADMIN_ACCESS_LOG_LIMIT);
-      setAccessLogs(rows);
+      const devices = devicesSnap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .sort((a, b) => Number(b.lastSeenAt || 0) - Number(a.lastSeenAt || 0))
+        .slice(0, ADMIN_DEVICE_LIMIT);
+      setAccessLogs(logs);
+      setUserDevices(devices);
+      setAccessAdminLastRefresh(now);
+      writeTimedCache(FIRESTORE_CACHE_KEYS.adminAccessPanel, { logs, devices, refreshedAt:now });
+    } catch(e) {
+      console.warn('Admin access panel read skipped:', e?.code || e?.message || e);
+      setAccessAdminError(e?.code || e?.message || 'Falha ao atualizar');
+    } finally {
       setAccessLogsLoading(false);
-    }, (e) => {
-      console.warn('Access logs read skipped:', e?.code || e?.message || e);
+    }
+  }, [isAdmin, accessAdminLastRefresh]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setUserDevices([]);
       setAccessLogs([]);
       setAccessLogsLoading(false);
-    });
-    return () => unsub();
+      setAccessAdminError('');
+      setAccessAdminLastRefresh(0);
+      return;
+    }
+    const cached = readTimedCache(FIRESTORE_CACHE_KEYS.adminAccessPanel, 1000 * 60 * 30, null);
+    if (cached.value && typeof cached.value === 'object') {
+      setAccessLogs(Array.isArray(cached.value.logs) ? cached.value.logs : []);
+      setUserDevices(Array.isArray(cached.value.devices) ? cached.value.devices : []);
+      setAccessAdminLastRefresh(Number(cached.value.refreshedAt || 0));
+    }
   }, [isAdmin]);
 
   // Library sync
@@ -12734,6 +12816,87 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
   };
 
+  const generateMixedClinicalQuestionsForTopic = async ({
+    subjectTitle='',
+    topicTitle='',
+    subtopics=[],
+    sourceMaterials='',
+    previousQuestions=[],
+    settings:rawSettings=null,
+    namespace='mixed_clinical',
+    onProgress=null,
+  } = {}) => {
+    const cleanSubtopics = (subtopics || []).filter(Boolean);
+    if (!cleanSubtopics.length) return [];
+    const runSettings = withAdminQuestionPromptSettings({
+      ...(rawSettings || settingsRef.current),
+      questionStyle:'mixed',
+      questionTypes:['direct'],
+    });
+    const na = runSettings.numAlternatives || 5;
+    const alts = na === 4
+      ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]'
+      : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
+    const focusBlocks = chunkQuestionPlansByTarget(
+      cleanSubtopics.map(title => ({ title, questions:1, objective:`Aplicar clinicamente ${title}` })),
+      ADMIN_ORACLE_QUESTION_CHUNK_TARGET
+    ).map((plans, index) => ({
+      title:plans.length === cleanSubtopics.length ? topicTitle : `${topicTitle} — eixo clínico ${index + 1}`,
+      subtopics:plans.map(plan => plan.title),
+    }));
+    const allBlocks = focusBlocks.length ? focusBlocks : [{ title:topicTitle, subtopics:cleanSubtopics }];
+    const previousBlock = previousQuestions?.length
+      ? `\n\nQUESTÕES DIRETAS JÁ GERADAS — NÃO transforme estas perguntas em caso maior; crie raciocínios novos:\n${questionsToGenerationText(previousQuestions).substring(0, 8000)}`
+      : '';
+    const generated = [];
+    for (let blockIndex = 0; blockIndex < allBlocks.length; blockIndex += 1) {
+      const focusBlock = allBlocks[blockIndex];
+      onProgress?.(`Gerando clínicas mistas ${blockIndex + 1}/${allBlocks.length}...`);
+      const system = buildSharedLibraryClinicalPrompt({
+        lessonTitle:[subjectTitle, topicTitle].filter(Boolean).join(' — '),
+        focusBlock,
+        allBlocks,
+        transcript:[sourceMaterials, previousBlock].filter(Boolean).join('\n\n'),
+        alts,
+      });
+      let raw = '';
+      let lastErr = null;
+      for (const { k } of getTwoAttemptGeminiKeys()) {
+        try {
+          raw = await callGemini(
+            `Crie a parte clínica integradora do eixo "${focusBlock.title}". Use o menor conjunto de questões que realmente exija raciocínio clínico. Escreva tudo obrigatoriamente em português do Brasil.`,
+            system,
+            k,
+            [],
+            { ...getGeminiOptions(runSettings), maxTokens:20000 }
+          );
+          await rotateKey();
+          break;
+        } catch(e) {
+          lastErr = e;
+          await rotateKey();
+          if (!shouldTryNextGeminiKey(e)) break;
+        }
+      }
+      if (!raw) throw lastErr || new Error('CONNECTION_ERROR');
+      if (/SEM_QUESTOES_CLINICAS/i.test(raw)) continue;
+      const parsed = parseGeneratedQuestionsByTypes(raw, `${namespace}_clinical_${blockIndex + 1}`, ['direct']).questions;
+      if (!parsed.length) continue;
+      const audited = await auditGeneratedQuestions({
+        questions:parsed,
+        namespace:`${namespace}_clinical_${blockIndex + 1}_audited`,
+        settings:runSettings,
+        subjectTitle,
+        topicTitle:`${topicTitle} — clínicas mistas`,
+        subtopics:focusBlock.subtopics || [],
+        sourceMaterials,
+        onProgress,
+      });
+      generated.push(...audited.questions.map(question => ({ ...question, libraryQuestionKind:'clinical' })));
+    }
+    return renumberClinicalCases(generated);
+  };
+
   const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress, settingsOverride=null } = {}) => {
     const originalTopic = topic || {};
     const regenInstruction = String(addPrompt || '').trim();
@@ -12757,22 +12920,29 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? 2
       : baseQPerSub;
     const topicTypes = settingsOverride?.questionTypes || clearedTopic.questionTypes || generationSettings.questionTypes || ['direct'];
-    const flashcardOnly = isOnlyMemoryCardType(topicTypes);
+    const mixedQuestionMode = isMixedQuestionMode(topicStyle);
+    const promptTopicTypes = topicTypes;
+    const countAutoMode = mixedQuestionMode ? false : qPerSubAuto;
+    const flashcardOnly = isOnlyMemoryCardType(promptTopicTypes);
     const studyPlan = flashcardOnly ? [] : getTopicStudyPlan(clearedTopic, subtopicsArr);
     const hasStudyPlan = studyPlan.length > 0;
-    const fixedPlans = (!flashcardOnly && !qPerSubAuto && !hasStudyPlan && subtopicsArr.length > 0)
-      ? buildFixedQuestionPlans(subtopicsArr, qPerSub)
+    const effectiveQPerSub = mixedQuestionMode ? 1 : qPerSub;
+    const fixedPlans = (!flashcardOnly && !countAutoMode && !hasStudyPlan)
+      ? (subtopicsArr.length > 0
+        ? buildFixedQuestionPlans(subtopicsArr, effectiveQPerSub)
+        : buildSyntheticQuestionPlans(promptSubtopicCount, effectiveQPerSub))
       : [];
     const chunkablePlans = hasStudyPlan ? studyPlan : fixedPlans;
     const total = hasStudyPlan
       ? studyPlan.reduce((sum, plan) => sum + plan.questions, 0)
-      : promptSubtopicCount * qPerSub;
-    const shouldChunkQuestions = !!isAdmin
-      && !!generationSettings.adminChunkedQuestions
-      && !flashcardOnly
-      && !qPerSubAuto
-      && chunkablePlans.length > 0
-      && total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
+      : promptSubtopicCount * effectiveQPerSub;
+    const shouldChunkQuestions = shouldSplitQuestionRequest({
+      total,
+      plans:chunkablePlans,
+      enabled:!!generationSettings.adminChunkedQuestions,
+      flashcardOnly,
+      autoCount:countAutoMode,
+    });
     const questionPlanChunks = shouldChunkQuestions
       ? chunkQuestionPlansByTarget(chunkablePlans)
       : [];
@@ -12780,21 +12950,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
       : hasStudyPlan
         ? buildStudyPlanQuestionBlock(studyPlan)
-      : qPerSubAuto
+      : countAutoMode
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use total fixo, mas também NÃO seja econômico. Para cada subtópico/eixo, gere pelo menos 2 questões independentes e atomize tudo que é relevante, cobrável e ainda não repetido. Referência: 2 a 4 questões por subtópico; use 5 ou 6 quando houver muitos mecanismos, critérios, diferenciais, condutas, complicações ou pegadinhas distintos. Checklist antes de finalizar: definição/ideia central; mecanismo ou fisiopatologia; manifestação/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável. Não crie questão para encher volume, mas não deixe subtópico importante com uma única cobrança.`
       : subtopicsArr.length > 0
-        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
-        : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${effectiveQPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
+        : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${effectiveQPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
     const matInst = cleared.sourceMaterials
       ? `\n\nINSTRUÇÃO PRIORITÁRIA — MATERIAL BASE DO USUÁRIO:\n${cleared.sourceMaterials}\n\nEsta instrução tem PRIORIDADE MÁXIMA. Siga-a à risca antes de qualquer outra consideração.\n`
       : '';
     const s = {
       ...generationSettings,
       numSubtopics: promptSubtopicCount,
-      qPerSub,
-      qPerSubAuto:hasStudyPlan ? false : qPerSubAuto,
-      questionStyle: topicStyle,
-      questionTypes: topicTypes,
+      qPerSub:effectiveQPerSub,
+      qPerSubAuto:hasStudyPlan ? false : countAutoMode,
+      questionStyle: mixedQuestionMode ? 'direct' : topicStyle,
+      questionTypes: promptTopicTypes,
     };
     const na = s.numAlternatives || 5;
     const types = s.questionTypes || ['direct'];
@@ -12804,7 +12974,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas ${memoryCardTypeName(types)} no formato pedido, sem alternativas A/B/C/D.`
       : hasStudyPlan
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões do plano sem interromper e respeite a quantidade individual de cada objetivo.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
-      : qPerSubAuto
+      : countAutoMode
       ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
@@ -12835,7 +13005,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
           + chunkSuffix,
         settings:chunkSettings,
-        expectedCount:usingChunk ? chunkExpected : (!flashcardOnly && (hasStudyPlan || !qPerSubAuto) ? total : 0),
+        expectedCount:usingChunk ? chunkExpected : (!flashcardOnly && (hasStudyPlan || !countAutoMode) ? total : 0),
         subtopics:usingChunk ? plans.map(plan => plan.title) : subtopicsArr,
       };
     };
@@ -12895,7 +13065,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       generatedResults.push(await runPrompt(buildChunkPrompt()));
     }
 
-    const allQuestions = generatedResults.flatMap(result => result.questions);
+    const directQuestions = generatedResults.flatMap(result => result.questions)
+      .map(question => mixedQuestionMode ? { ...question, libraryQuestionKind:'direct' } : question);
+    const clinicalQuestions = mixedQuestionMode
+      ? await generateMixedClinicalQuestionsForTopic({
+        subjectTitle:subject.title,
+        topicTitle:clearedTopic.title,
+        subtopics:subtopicsArr.length ? subtopicsArr : buildSyntheticQuestionPlans(promptSubtopicCount, 1).map(plan => plan.title),
+        sourceMaterials:cleared.sourceMaterials || '',
+        previousQuestions:directQuestions,
+        settings:{ ...generationSettings, numAlternatives:s.numAlternatives, auditQuestions:generationSettings.auditQuestions, geminiThinkingEnabled:generationSettings.geminiThinkingEnabled },
+        namespace:`${subject.id}_${clearedTopic.id}_mixed`,
+        onProgress:msg=>onProgress?.(msg),
+      })
+      : [];
+    const allQuestions = [...directQuestions, ...clinicalQuestions];
     const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
     const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
     const updatedSubject = {
@@ -12938,22 +13122,29 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? 2
       : baseQPerSub;
     const topicTypes = filterQuestionTypesForAccess(settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'], questionTypeAccess);
-    const flashcardOnly = isOnlyMemoryCardType(topicTypes);
+    const mixedQuestionMode = isMixedQuestionMode(topicStyle);
+    const promptTopicTypes = topicTypes;
+    const countAutoMode = mixedQuestionMode ? false : qPerSubAuto;
+    const flashcardOnly = isOnlyMemoryCardType(promptTopicTypes);
     const studyPlan = flashcardOnly ? [] : getTopicStudyPlan(topic, subtopicsArr);
     const hasStudyPlan = studyPlan.length > 0;
-    const fixedPlans = (!flashcardOnly && !qPerSubAuto && !hasStudyPlan && subtopicsArr.length > 0)
-      ? buildFixedQuestionPlans(subtopicsArr, qPerSub)
+    const effectiveQPerSub = mixedQuestionMode ? 1 : qPerSub;
+    const fixedPlans = (!flashcardOnly && !countAutoMode && !hasStudyPlan)
+      ? (subtopicsArr.length > 0
+        ? buildFixedQuestionPlans(subtopicsArr, effectiveQPerSub)
+        : buildSyntheticQuestionPlans(promptSubtopicCount, effectiveQPerSub))
       : [];
     const chunkablePlans = hasStudyPlan ? studyPlan : fixedPlans;
     const total = hasStudyPlan
       ? studyPlan.reduce((sum, plan) => sum + plan.questions, 0)
-      : promptSubtopicCount * qPerSub;
-    const shouldChunkQuestions = !!isAdmin
-      && !!generationSettings.adminChunkedQuestions
-      && !flashcardOnly
-      && !qPerSubAuto
-      && chunkablePlans.length > 0
-      && total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
+      : promptSubtopicCount * effectiveQPerSub;
+    const shouldChunkQuestions = shouldSplitQuestionRequest({
+      total,
+      plans:chunkablePlans,
+      enabled:!!generationSettings.adminChunkedQuestions,
+      flashcardOnly,
+      autoCount:countAutoMode,
+    });
     const questionPlanChunks = shouldChunkQuestions
       ? chunkQuestionPlansByTarget(chunkablePlans)
       : [];
@@ -12961,11 +13152,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra os conceitos essenciais, sem quantidade fixa):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} conceitos relevantes.`}\n\nREGRA CRÍTICA: crie apenas a quantidade ideal de ${memoryCardTypeName(topicTypes)}, sem repetir a mesma ideia.`
       : hasStudyPlan
         ? buildStudyPlanQuestionBlock(studyPlan)
-      : qPerSubAuto
+      : countAutoMode
         ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra TODOS, sem invenções):\n${subtopicsArr.length ? subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n') : `Divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.`}\n\nREGRA CRÍTICA: NÃO use total fixo, mas também NÃO seja econômico. Para cada subtópico/eixo, gere pelo menos 2 questões independentes e atomize tudo que é relevante, cobrável e ainda não repetido. Referência: 2 a 4 questões por subtópico; use 5 ou 6 quando houver muitos mecanismos, critérios, diferenciais, condutas, complicações ou pegadinhas distintos. Checklist antes de finalizar: definição/ideia central; mecanismo ou fisiopatologia; manifestação/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável. Não crie questão para encher volume, mas não deixe subtópico importante com uma única cobrança.`
       : subtopicsArr.length > 0
-        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${qPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
-        : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${qPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
+        ? `\n\nSUBTÓPICOS OBRIGATÓRIOS deste tópico (cubra EXATAMENTE estes, sem invenções):\n${subtopicsArr.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nREGRA CRÍTICA: gere EXATAMENTE ${effectiveQPerSub} questão(ões) para CADA subtópico da lista. NÃO pule subtópicos. NÃO repita subtópicos antes de cobrir todos. Total: EXATAMENTE ${total} questões.`
+        : `\n\nQUANTIDADE OBRIGATÓRIA deste tópico:\n- Gere EXATAMENTE ${total} questões.\n- Como este tópico ainda não tem subtópicos explícitos salvos, divida mentalmente o conteúdo em ${promptSubtopicCount} eixos de cobrança relevantes.\n- Gere EXATAMENTE ${effectiveQPerSub} questão(ões) por eixo.\n- Não gere apenas uma questão. Não pare antes de completar as ${total} questões.`;
 
     // Material base como instrução PRIORITÁRIA — vem antes de tudo no system prompt
     const matInst = cleared.sourceMaterials
@@ -12975,10 +13166,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const s = {
       ...generationSettings,
       numSubtopics: promptSubtopicCount,
-      qPerSub,
-      qPerSubAuto:hasStudyPlan ? false : qPerSubAuto,
-      questionStyle: topicStyle,
-      questionTypes: topicTypes,
+      qPerSub:effectiveQPerSub,
+      qPerSubAuto:hasStudyPlan ? false : countAutoMode,
+      questionStyle: mixedQuestionMode ? 'direct' : topicStyle,
+      questionTypes: promptTopicTypes,
     };
     const na = s.numAlternatives || 5;
     const types = s.questionTypes || ['direct'];
@@ -12989,7 +13180,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas ${memoryCardTypeName(types)} no formato pedido, sem alternativas A/B/C/D.`
       : hasStudyPlan
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões do plano sem interromper e respeite a quantidade individual de cada objetivo.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
-      : qPerSubAuto
+      : countAutoMode
       ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
       ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
@@ -13021,7 +13212,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           + (regenInstruction ? `\n\nFoco adicional: ${regenInstruction}` : '')
           + chunkSuffix,
         settings:chunkSettings,
-        expectedCount:usingChunk ? chunkExpected : (!flashcardOnly && (hasStudyPlan || !qPerSubAuto) ? total : 0),
+        expectedCount:usingChunk ? chunkExpected : (!flashcardOnly && (hasStudyPlan || !countAutoMode) ? total : 0),
         subtopics:usingChunk ? plans.map(plan => plan.title) : subtopicsArr,
       };
     };
@@ -13081,7 +13272,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       } else {
         generatedResults.push(await runPrompt(buildChunkPrompt()));
       }
-      const allQuestions = generatedResults.flatMap(result => result.questions);
+      const directQuestions = generatedResults.flatMap(result => result.questions)
+        .map(question => mixedQuestionMode ? { ...question, libraryQuestionKind:'direct' } : question);
+      const clinicalQuestions = mixedQuestionMode
+        ? await generateMixedClinicalQuestionsForTopic({
+          subjectTitle:activeSubject.title,
+          topicTitle:topic.title,
+          subtopics:subtopicsArr.length ? subtopicsArr : buildSyntheticQuestionPlans(promptSubtopicCount, 1).map(plan => plan.title),
+          sourceMaterials:cleared.sourceMaterials || '',
+          previousQuestions:directQuestions,
+          settings:{ ...generationSettings, numAlternatives:s.numAlternatives, auditQuestions:generationSettings.auditQuestions, geminiThinkingEnabled:generationSettings.geminiThinkingEnabled },
+          namespace:`${activeSubject.id}_${topicId}_mixed`,
+          onProgress:msg=>setLoadingMsg(typeof msg === 'string' ? msg : loadingMsg),
+        })
+        : [];
+      const allQuestions = [...directQuestions, ...clinicalQuestions];
       const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
       const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
       await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)});
@@ -13893,13 +14098,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       // Requisição B: questões de fixação da aula como um todo
       onProgress?.('Gerando questões de fixação...');
       fixQuestions = [];
+      const mixedQuestionMode = isMixedQuestionMode(s.questionStyle || '');
+      const fixationSettings = mixedQuestionMode
+        ? { ...s, questionStyle:'direct', questionTypes:['direct'] }
+        : s;
       const fixationPlans = buildQuestionPlansFromCounts(subtopics, fixationPlan);
       const totalFixationQuestions = fixationPlans.reduce((sum, plan) => sum + plan.questions, 0);
-      const shouldChunkFixation = !!isAdmin
-        && !!s.adminChunkedQuestions
-        && !isOnlyMemoryCardType(s.questionTypes || ['direct'])
-        && totalFixationQuestions > ADMIN_ORACLE_QUESTION_CHUNK_TARGET
-        && fixationPlans.length > 0;
+      const shouldChunkFixation = shouldSplitQuestionRequest({
+        total:totalFixationQuestions,
+        plans:fixationPlans,
+        enabled:!!s.adminChunkedQuestions,
+        flashcardOnly:isOnlyMemoryCardType(fixationSettings.questionTypes || ['direct']),
+      });
       const fixationChunks = shouldChunkFixation ? chunkQuestionPlansByTarget(fixationPlans) : [fixationPlans];
       const generatedByGlobalSubtopic = Object.fromEntries(fixationPlan.map((_, i) => [i, []]));
       const runFixationChunk = async (plans, chunkIndex) => {
@@ -13912,7 +14122,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         const prompt = buildAcademiaFixationPrompt(
           chunkSubtopics,
           topic.title,
-          s,
+          fixationSettings,
           lessonText,
           chunkPlan,
           [previousFixationQuestions, generatedBlock].filter(Boolean).join('\n\n')
@@ -13922,7 +14132,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         let fixText = '';
         for (const { k } of orderedKeys2) {
           try {
-            fixText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
+            fixText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(fixationSettings));
             await rotateKey();
             break;
           } catch (e) {
@@ -13931,12 +14141,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           }
         }
         if (!fixText) throw new Error('CONNECTION_ERROR');
-        const parsedQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, s.questionTypes || ['direct']).questions;
+        const parsedQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, fixationSettings.questionTypes || ['direct']).questions;
         if (!parsedQuestions.length) throw new Error('NO_QUESTIONS_GENERATED');
         const audited = await auditGeneratedQuestions({
           questions:parsedQuestions,
           namespace:`acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}_audited`,
-          settings:s,
+          settings:fixationSettings,
           subjectTitle:subject.title,
           topicTitle:topic.title,
           subtopics:chunkSubtopics,
@@ -13960,6 +14170,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           await runFixationChunk(plans, chunkIndex);
         }
         fixationBySubtopic = generatedByGlobalSubtopic;
+        if (mixedQuestionMode) {
+          const directQuestions = Object.values(fixationBySubtopic).flat().map(question => ({ ...question, libraryQuestionKind:'direct' }));
+          fixationBySubtopic = Object.fromEntries(
+            Object.entries(fixationBySubtopic).map(([key, value]) => [key, (value || []).map(question => ({ ...question, libraryQuestionKind:'direct' }))])
+          );
+          const clinicalQuestions = await generateMixedClinicalQuestionsForTopic({
+            subjectTitle:subject.title,
+            topicTitle:topic.title,
+            subtopics,
+            sourceMaterials:[material, lessonText].filter(Boolean).join('\n\n'),
+            previousQuestions:directQuestions,
+            settings:{ ...s, questionStyle:'mixed', questionTypes:['direct'] },
+            namespace:`acfix_${topic.id}_mixed`,
+            onProgress,
+          });
+          if (clinicalQuestions.length) {
+            const bucket = String(Math.max(0, subtopics.length - 1));
+            fixationBySubtopic[bucket] = [...(fixationBySubtopic[bucket] || []), ...clinicalQuestions];
+          }
+        }
         fixQuestions = Object.values(fixationBySubtopic).flat();
       } catch(e) {
         if (generationMode === 'questions') throw e;
@@ -14192,11 +14422,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        : buildAcademiaFixationPlan(subtopics, topic.lessonSections || {});
     const extraPlans = buildQuestionPlansFromCounts(subtopics, questionPlan);
     const totalExtraQuestions = extraPlans.reduce((sum, plan) => sum + plan.questions, 0);
-    const shouldChunkExtra = !!isAdmin
-      && !!s.adminChunkedQuestions
-      && !isOnlyMemoryCardType(s.questionTypes || ['direct'])
-      && totalExtraQuestions > ADMIN_ORACLE_QUESTION_CHUNK_TARGET
-      && extraPlans.length > 0;
+    const mixedQuestionMode = isMixedQuestionMode(s.questionStyle || '');
+    const extraPromptSettings = mixedQuestionMode
+      ? { ...s, questionStyle:'direct', questionTypes:['direct'] }
+      : s;
+    const shouldChunkExtra = shouldSplitQuestionRequest({
+      total:totalExtraQuestions,
+      plans:extraPlans,
+      enabled:!!s.adminChunkedQuestions,
+      flashcardOnly:isOnlyMemoryCardType(extraPromptSettings.questionTypes || ['direct']),
+    });
     const extraChunks = shouldChunkExtra ? chunkQuestionPlansByTarget(extraPlans) : [extraPlans];
     let extraQuestions = [];
     for (let chunkIndex = 0; chunkIndex < extraChunks.length; chunkIndex += 1) {
@@ -14209,7 +14444,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const prompt = buildAcademiaExtraBatteryPrompt(
         topic.title,
         chunkSubtopics,
-        s,
+        extraPromptSettings,
         lessonText,
         [previousQuestions, generatedBlock].filter(Boolean).join('\n\n'),
         chunkPlan
@@ -14218,7 +14453,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       let extraText = '';
       for (const { k } of orderedKeys) {
         try {
-          extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(s));
+          extraText = await callGemini(prompt, 'Você é examinador de residência médica. Escreva em português.', k, [], getGeminiOptions(extraPromptSettings));
           await rotateKey();
           break;
         } catch (e) {
@@ -14226,18 +14461,30 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           throw e;
         }
       }
-      const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, s.questionTypes || ['direct']);
+      const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, extraPromptSettings.questionTypes || ['direct']);
       if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
       const audited = await auditGeneratedQuestions({
         questions:parsed.questions,
         namespace:`extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}_audited`,
-        settings:s,
+        settings:extraPromptSettings,
         subjectTitle:subject.title,
         topicTitle:`${topic.title} — bateria extra`,
         subtopics:chunkSubtopics,
         sourceMaterials:lessonText,
       });
-      extraQuestions = [...extraQuestions, ...audited.questions];
+      extraQuestions = [...extraQuestions, ...audited.questions.map(question => mixedQuestionMode ? { ...question, libraryQuestionKind:'direct' } : question)];
+    }
+    if (mixedQuestionMode) {
+      const clinicalQuestions = await generateMixedClinicalQuestionsForTopic({
+        subjectTitle:subject.title,
+        topicTitle:`${topic.title} — bateria extra`,
+        subtopics,
+        sourceMaterials:lessonText,
+        previousQuestions:extraQuestions,
+        settings:{ ...s, questionStyle:'mixed', questionTypes:['direct'] },
+        namespace:`extra_${topic.id}_mixed`,
+      });
+      extraQuestions = [...extraQuestions, ...clinicalQuestions];
     }
     if (!extraQuestions.length) throw new Error('NO_QUESTIONS_GENERATED');
 
@@ -17582,7 +17829,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                       <div>
                         <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                        <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em vários requests de cerca de 15 questões.</p>
+                        <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em requests de até 15 questões.</p>
                       </div>
                       <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
                         <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
@@ -21275,6 +21522,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
                   titleClassName="text-yellow-600"
                 >
+                  <div className={`mb-3 rounded-xl border px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Painel manual</p>
+                      <p className="text-[11px] opacity-50 mt-0.5">
+                        {accessAdminLastRefresh
+                          ? `Última atualização: ${new Date(accessAdminLastRefresh).toLocaleString('pt-BR')}`
+                          : 'Clique em atualizar para buscar os dados no Firestore.'}
+                      </p>
+                      {accessAdminError && <p className="text-[11px] text-red-500 mt-1">Erro: {accessAdminError}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={()=>refreshAdminAccessData()}
+                      disabled={accessLogsLoading}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-yellow-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-yellow-700 disabled:opacity-50"
+                    >
+                      {accessLogsLoading ? <Spinner className="w-4 h-4"/> : <RotateCcw className="w-4 h-4"/>}
+                      Atualizar
+                    </button>
+                  </div>
                   <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-950/30':'border-gray-200 bg-white'}`}>
                     <div className={`px-2.5 py-1.5 flex items-center justify-between gap-3 border-b ${darkMode?'border-gray-800 bg-gray-900/50':'border-gray-100 bg-gray-50'}`}>
                       <p className="text-[9px] font-bold uppercase tracking-widest opacity-50">access.log · 40 recentes</p>
@@ -21284,7 +21551,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     </div>
                     <div className="max-h-[28rem] overflow-y-auto p-1.5 space-y-1" style={{overflowAnchor:'none'}}>
                       {!accessLogsLoading && accessLogs.length===0 && (
-                        <p className="text-[10px] opacity-50 italic p-3">Nenhum log encontrado ainda.</p>
+                        <p className="text-[10px] opacity-50 italic p-3">{accessAdminLastRefresh ? 'Nenhum log encontrado ainda.' : 'Dados ainda não carregados nesta sessão.'}</p>
                       )}
                       {accessLogs.map(log => {
                         const identity = log.email || log.uid || 'sem identificação';
@@ -21318,7 +21585,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             })()}
             {isAdmin&&(()=>{
               const now = Date.now();
-              const activeWindow = 3 * 60 * 1000;
+              const activeWindow = 12 * 60 * 1000;
               const recentWindow = 30 * 24 * 60 * 60 * 1000;
               const whitelist = globalAllowedEmails.map(e => e.toLowerCase());
               const devicesByEmail = new Map();
@@ -21352,10 +21619,27 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
                   titleClassName="text-yellow-600"
                 >
+                  <div className={`mb-3 rounded-xl border px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Presença por dispositivo</p>
+                      <p className="text-[11px] opacity-50 mt-0.5">
+                        Atualização manual · {accessAdminLastRefresh ? new Date(accessAdminLastRefresh).toLocaleString('pt-BR') : 'aguardando primeira leitura'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={()=>refreshAdminAccessData()}
+                      disabled={accessLogsLoading}
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold disabled:opacity-50 ${darkMode?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-white'}`}
+                    >
+                      {accessLogsLoading ? <Spinner className="w-4 h-4"/> : <RotateCcw className="w-4 h-4"/>}
+                      Atualizar
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
                       <p className="text-2xl font-serif font-bold text-green-500">{totalActive}</p>
-                      <p className="text-xs font-bold uppercase opacity-50">ativos agora</p>
+                      <p className="text-xs font-bold uppercase opacity-50">ativos ≤12min</p>
                     </div>
                     <div className={`rounded-xl border p-3 ${darkMode?'bg-gray-900 border-gray-700':'bg-gray-50 border-gray-200'}`}>
                       <p className="text-2xl font-serif font-bold text-yellow-600">{totalRecent}</p>
@@ -22063,7 +22347,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                     <div>
                       <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                      <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em requests menores sem quebrar subtópico.</p>
+                      <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em requests de até 15 questões.</p>
                     </div>
                     <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
                       <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
@@ -22674,7 +22958,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                         <div>
                           <p className={`text-sm font-bold ${cfg.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                          <p className="text-xs opacity-50 mt-0.5">Divide fixações e baterias extras grandes em requests menores.</p>
+                          <p className="text-xs opacity-50 mt-0.5">Divide fixações e baterias extras grandes em requests de até 15 questões.</p>
                         </div>
                         <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
                           <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
@@ -22758,7 +23042,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
                         <div>
                           <p className={`text-sm font-bold ${cfg.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                          <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests menores, mantendo cada subtópico inteiro no mesmo lote.</p>
+                          <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests de até 15 questões, inclusive subtópicos muito longos.</p>
                         </div>
                         <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
                           <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
