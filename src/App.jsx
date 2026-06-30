@@ -642,9 +642,100 @@ const isAnswerCorrect = (question, answer) => {
 };
 const isFinalObjectiveAnswer = (question, answer) =>
   !!question && !question.isOpen && !isMemoryCard(question) && answer != null && answer !== '' && answer !== 'SKIPPED';
-
+const hasOwnKey = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+const progressObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const sameId = (a, b) => String(a) === String(b);
 const listHasId = (list = [], id) => Array.isArray(list) && list.some(x => sameId(x, id));
+const sameIdList = (a = [], b = []) => {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((item, index) => sameId(item, b[index]));
+};
+const uniqueIdList = (...lists) => {
+  const out = [];
+  lists.flat().forEach(item => {
+    if (item != null && !listHasId(out, item)) out.push(item);
+  });
+  return out;
+};
+const mergeProgressList = (previous = [], next = [], remote = []) => {
+  const prevList = Array.isArray(previous) ? previous : [];
+  const nextList = Array.isArray(next) ? next : [];
+  const remoteList = Array.isArray(remote) ? remote : [];
+  if (sameIdList(prevList, nextList)) return remoteList.length ? remoteList : nextList;
+  if (prevList.length > 0 && nextList.length === 0) return nextList;
+  const removed = prevList.some(item => !listHasId(nextList, item));
+  return removed ? nextList : uniqueIdList(remoteList, nextList);
+};
+const mergeProgressObject = (previous = {}, next = {}, remote = {}) => {
+  const prevObj = progressObject(previous);
+  const nextObj = progressObject(next);
+  const remoteObj = progressObject(remote);
+  const keys = new Set([...Object.keys(prevObj), ...Object.keys(nextObj)]);
+  const changedKeys = [...keys].filter(key => prevObj[key] !== nextObj[key] || hasOwnKey(prevObj, key) !== hasOwnKey(nextObj, key));
+  if (changedKeys.length === 0) return Object.keys(remoteObj).length ? remoteObj : nextObj;
+  if (Object.keys(prevObj).length > 0 && Object.keys(nextObj).length === 0) return nextObj;
+  const merged = {...remoteObj};
+  changedKeys.forEach(key => {
+    if (hasOwnKey(nextObj, key)) merged[key] = nextObj[key];
+    else delete merged[key];
+  });
+  return merged;
+};
+const mergeAnswerProgress = (previousTopic = {}, nextTopic = {}, remoteTopic = {}) => {
+  const prevAnswers = progressObject(previousTopic.answers);
+  const nextAnswers = progressObject(nextTopic.answers);
+  const remoteAnswers = progressObject(remoteTopic.answers);
+  const keys = new Set([...Object.keys(prevAnswers), ...Object.keys(nextAnswers)]);
+  const changedKeys = [...keys].filter(key => prevAnswers[key] !== nextAnswers[key] || hasOwnKey(prevAnswers, key) !== hasOwnKey(nextAnswers, key));
+  if (changedKeys.length === 0) return Object.keys(remoteAnswers).length ? remoteAnswers : nextAnswers;
+  if (Object.keys(prevAnswers).length > 0 && Object.keys(nextAnswers).length === 0) return nextAnswers;
+  const questions = [...(nextTopic.questions || []), ...(remoteTopic.questions || []), ...(previousTopic.questions || [])];
+  const merged = {...remoteAnswers};
+  changedKeys.forEach(key => {
+    const q = questions.find(item => sameId(item.id, key));
+    if (isFinalObjectiveAnswer(q, remoteAnswers[key])) return;
+    if (hasOwnKey(nextAnswers, key)) merged[key] = nextAnswers[key];
+    else delete merged[key];
+  });
+  return merged;
+};
+const mergeTopicProgress = (previousTopic = {}, nextTopic = {}, remoteTopic = {}) => {
+  if (!remoteTopic || typeof remoteTopic !== 'object') return nextTopic;
+  return {
+    ...nextTopic,
+    answers:mergeAnswerProgress(previousTopic, nextTopic, remoteTopic),
+    favorites:mergeProgressList(previousTopic.favorites, nextTopic.favorites, remoteTopic.favorites),
+    errorNotebook:mergeProgressList(previousTopic.errorNotebook, nextTopic.errorNotebook, remoteTopic.errorNotebook),
+    spacedReview:mergeProgressObject(previousTopic.spacedReview, nextTopic.spacedReview, remoteTopic.spacedReview),
+  };
+};
+const mergeSubjectProgress = (previousSubject = {}, nextSubject = {}, remoteSubject = {}) => {
+  if (!remoteSubject || typeof remoteSubject !== 'object' || !Array.isArray(nextSubject.topics)) return nextSubject;
+  return {
+    ...nextSubject,
+    topics:nextSubject.topics.map(nextTopic => {
+      const previousTopic = (previousSubject.topics || []).find(topic => sameId(topic.id, nextTopic.id)) || {};
+      const remoteTopic = (remoteSubject.topics || []).find(topic => sameId(topic.id, nextTopic.id)) || {};
+      return mergeTopicProgress(previousTopic, nextTopic, remoteTopic);
+    }),
+  };
+};
+const mergeVqBlockProgress = (previousBlock = {}, nextBlock = {}, remoteBlock = {}) => {
+  if (!remoteBlock || typeof remoteBlock !== 'object') return nextBlock;
+  return mergeTopicProgress(previousBlock, nextBlock, remoteBlock);
+};
+const mergeVqProgress = (previousData = {}, nextData = {}, remoteData = {}) => {
+  if (!remoteData || typeof remoteData !== 'object' || !nextData?.blocks || typeof nextData.blocks !== 'object') return nextData;
+  const remoteBlocks = remoteData.blocks || {};
+  const previousBlocks = previousData?.blocks || {};
+  return {
+    ...nextData,
+    blocks:Object.fromEntries(Object.entries(nextData.blocks || {}).map(([id, nextBlock]) => [
+      id,
+      mergeVqBlockProgress(previousBlocks[id] || {}, nextBlock, remoteBlocks[id] || {}),
+    ])),
+  };
+};
 
 const toggleInList = (list = [], id) => {
   const safe = Array.isArray(list) ? list.filter(Boolean) : [];
@@ -5139,6 +5230,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
+  const [pressedAnswer, setPressedAnswer] = useState(null);
   const [lessonExplanationOpen, setLessonExplanationOpen] = useState(false);
   const [alternativeExplanationsOpen, setAlternativeExplanationsOpen] = useState(false);
   const answerLockRef = useRef(null);
@@ -5150,6 +5242,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   useEffect(() => {
     answerLockRef.current = null;
     setOptimisticAnswer(null);
+    setPressedAnswer(null);
     setLessonExplanationOpen(false);
     setAlternativeExplanationsOpen(false);
   }, [question?.id]);
@@ -5218,6 +5311,11 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   };
   const handleAnswerPointerDown = (letter, event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const canChangeAnswer = revealMode === 'selected';
+    const currentAnswer = persistedAnswer ?? optimisticAnswer ?? answerLockRef.current;
+    if (!canChangeAnswer && currentAnswer != null) return;
+    setPressedAnswer(letter);
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch(e) {}
     answerPointerRef.current = {
       id:event.pointerId,
       letter,
@@ -5227,10 +5325,12 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   };
   const clearAnswerPointer = () => {
     answerPointerRef.current = null;
+    setPressedAnswer(null);
   };
   const handleAnswerPointerUp = (letter, event) => {
     const start = answerPointerRef.current;
     answerPointerRef.current = null;
+    setPressedAnswer(null);
     if (!start || start.letter !== letter || start.id !== event.pointerId) return;
     const moved = Math.hypot((event.clientX || 0) - (start.x || 0), (event.clientY || 0) - (start.y || 0));
     if (moved > 12) return;
@@ -5355,12 +5455,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             else cls += 'opacity-55';
           }
 	          const canClick = (!isAnswered && !isSkipped) || revealMode==='selected';
+	          const isPressed = canClick && pressedAnswer === opt.letter;
+	          if (isPressed) cls += darkMode
+	            ? ' ring-2 ring-yellow-400/70 border-yellow-400 bg-yellow-900/30 text-yellow-100 scale-[0.99]'
+	            : ' ring-2 ring-yellow-300 border-yellow-400 bg-yellow-50 text-yellow-900 scale-[0.99]';
 	          // Letter badge color
 	          let letterBadge = darkMode?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600';
 	          if (showResults && !isSkipped && opt.isCorrect) letterBadge = 'bg-green-500 text-white';
 	          else if (showResults && !isSkipped && isSelected) letterBadge = 'bg-red-500 text-white';
 	          else if (showResults && isSkipped && opt.isCorrect) letterBadge = darkMode?'bg-green-800 text-green-300':'bg-green-100 text-green-700';
 	          else if (isSelected && revealMode==='selected') letterBadge = 'bg-blue-500 text-white';
+	          else if (isPressed) letterBadge = 'bg-yellow-500 text-white';
 	          const showOptionExplanation = !!(hasStructuredExplanations && showResults && !isSkipped && (opt.isCorrect || isSelected) && opt.explanation);
 	          const optionExplanationLabel = opt.isCorrect ? 'Certa:' : 'Erro:';
 	          const optionExplanationClass = opt.isCorrect
@@ -8578,27 +8683,44 @@ export default function QuestionBankApp() {
     setVqBlocks(updated);
     persistVqBlocksCache(updated);
     if (user && !user.isAnonymous) {
-      const isPublishedLibraryBlock = data?.meta?.source === 'shared-library';
-      const firestoreData = cleanFirestoreData(isPublishedLibraryBlock ? {
-        meta:{
-          source:'shared-library',
-          readOnly:true,
-          sharedLibraryItemId:data.meta?.sharedLibraryItemId,
-          sharedLibraryPublishKey:data.meta?.sharedLibraryPublishKey,
-          sharedLibraryUpdatedAt:data.meta?.sharedLibraryUpdatedAt,
-        },
-        blocks:Object.fromEntries(Object.entries(data.blocks || {}).map(([id, block]) => [id, {
-          answers:block?.answers || {},
-          favorites:Array.isArray(block?.favorites) ? block.favorites : [],
-          errorNotebook:Array.isArray(block?.errorNotebook) ? block.errorNotebook : [],
-        }])),
-      } : data);
       const write = vqSaveQueueRef.current
         .catch(() => {})
-        .then(() => setDoc(doc(db, 'users', user.uid, 'vq_blocks', String(aulaId)), firestoreData));
+        .then(async () => {
+          const ref = doc(db, 'users', user.uid, 'vq_blocks', String(aulaId));
+          let finalData = data;
+          try {
+            const snap = await getDoc(ref);
+            if (snap.exists()) finalData = mergeVqProgress(previousData || {}, data, snap.data());
+          } catch(e) {
+            console.warn('vqBlock merge skipped:', e?.code || e?.message || e);
+          }
+          if (finalData !== data) {
+            const finalUpdated = { ...(vqBlocksRef.current || {}), [aulaId]: finalData };
+            vqBlocksRef.current = finalUpdated;
+            setVqBlocks(finalUpdated);
+            persistVqBlocksCache(finalUpdated);
+          }
+          const isPublishedLibraryBlock = finalData?.meta?.source === 'shared-library';
+          const firestoreData = cleanFirestoreData(isPublishedLibraryBlock ? {
+            meta:{
+              source:'shared-library',
+              readOnly:true,
+              sharedLibraryItemId:finalData.meta?.sharedLibraryItemId,
+              sharedLibraryPublishKey:finalData.meta?.sharedLibraryPublishKey,
+              sharedLibraryUpdatedAt:finalData.meta?.sharedLibraryUpdatedAt,
+            },
+            blocks:Object.fromEntries(Object.entries(finalData.blocks || {}).map(([id, block]) => [id, {
+              answers:block?.answers || {},
+              favorites:Array.isArray(block?.favorites) ? block.favorites : [],
+              errorNotebook:Array.isArray(block?.errorNotebook) ? block.errorNotebook : [],
+            }])),
+          } : finalData);
+          await setDoc(ref, firestoreData);
+          return finalData;
+        });
       vqSaveQueueRef.current = write;
       try {
-        await write;
+        data = await write;
       } catch(e) {
         console.error('vqBlock save error:', e);
         if (vqBlocksRef.current?.[aulaId] === data) {
@@ -9394,19 +9516,35 @@ export default function QuestionBankApp() {
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
   const updateSubject = async (s) => {
-    const cleanSubject = cleanFirestoreData(pruneEmbeddedSpacedReview(s));
+    let cleanSubject = cleanFirestoreData(pruneEmbeddedSpacedReview(s));
     const previous = libraryRef.current.find(x=>x.id===cleanSubject.id);
     const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
     libraryRef.current = nextLibrary;
     setLibrary(p=>p.map(x=>x.id===cleanSubject.id?cleanSubject:x));
     persistSignedLibraryCache(nextLibrary);
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',cleanSubject.id.toString()),cleanSubject).catch(console.error);
+    if(user&&!user.isAnonymous) {
+      const ref = doc(db,'users',user.uid,'library',cleanSubject.id.toString());
+      try {
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const mergedSubject = cleanFirestoreData(mergeSubjectProgress(previous || {}, cleanSubject, snap.data()));
+          cleanSubject = mergedSubject;
+          const mergedLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
+          libraryRef.current = mergedLibrary;
+          setLibrary(p=>p.map(x=>x.id===cleanSubject.id?cleanSubject:x));
+          persistSignedLibraryCache(mergedLibrary);
+        }
+      } catch(e) {
+        console.warn('subject merge skipped:', e?.code || e?.message || e);
+      }
+      await setDoc(ref, cleanSubject).catch(console.error);
+    }
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
     if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
   const updateLibraryItems = async (items) => {
-    const cleanItems = items.map(item => cleanFirestoreData(pruneEmbeddedSpacedReview(item)));
+    let cleanItems = items.map(item => cleanFirestoreData(pruneEmbeddedSpacedReview(item)));
     const changed = new Map(cleanItems.map(item=>[item.id,item]));
     const currentLibrary = libraryRef.current?.length ? libraryRef.current : library;
     const previousItems = cleanItems.map(item => currentLibrary.find(x => x.id === item.id)).filter(Boolean);
@@ -9415,9 +9553,28 @@ export default function QuestionBankApp() {
     setLibrary(nextLibrary);
     persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) {
+      const mergedItems = [];
       for (const item of cleanItems) {
-        await setDoc(doc(db,'users',user.uid,'library',item.id.toString()),item).catch(console.error);
+        const ref = doc(db,'users',user.uid,'library',item.id.toString());
+        let finalItem = item;
+        try {
+          const snap = await getDoc(ref);
+          if (snap.exists()) {
+            const previousItem = currentLibrary.find(x => x.id === item.id) || {};
+            finalItem = cleanFirestoreData(mergeSubjectProgress(previousItem, item, snap.data()));
+          }
+        } catch(e) {
+          console.warn('library item merge skipped:', e?.code || e?.message || e);
+        }
+        mergedItems.push(finalItem);
+        await setDoc(ref, finalItem).catch(console.error);
       }
+      cleanItems = mergedItems;
+      const merged = new Map(cleanItems.map(item=>[item.id,item]));
+      const mergedLibrary = sortLibraryItems(libraryRef.current.map(item=>merged.get(item.id)||item));
+      libraryRef.current = mergedLibrary;
+      setLibrary(mergedLibrary);
+      persistSignedLibraryCache(mergedLibrary);
     }
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(previousItems, cleanItems);
