@@ -97,6 +97,7 @@ const CalendarCheck=ic('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
 const ImageIcon   = ic('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>');
 const FilterIcon  = ic('<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>');
 const BrainIcon   = ic('<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.44-3.14Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.44-3.14Z"/>');
+const PillIcon    = ic('<path d="m10.5 20.5 10-10a5 5 0 0 0-7.07-7.07l-10 10a5 5 0 0 0 7.07 7.07Z"/><path d="m8.5 8.5 7 7"/>');
 const LayersIcon  = ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>');
 const PlusIcon    = ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
 const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
@@ -7345,7 +7346,7 @@ export default function QuestionBankApp() {
   // Biblioteca compartilhada — conteúdo global, progresso individual.
   const [sharedLibraryItems, setSharedLibraryItems] = useState([]);
   const [sharedLibraryLoading, setSharedLibraryLoading] = useState(false);
-  const [sharedLibraryTab, setSharedLibraryTab] = useState('direct');
+  const [sharedLibraryTab, setSharedLibraryTab] = useState('apostila');
   const [sharedLibrarySubject, setSharedLibrarySubject] = useState('all');
   const [sharedLibrarySearch, setSharedLibrarySearch] = useState('');
   const [sharedLibraryActiveItemId, setSharedLibraryActiveItemId] = useState(null);
@@ -7353,6 +7354,11 @@ export default function QuestionBankApp() {
   const [sharedLibraryConfig, setSharedLibraryConfig] = useState({ subjectOrder:[], enabledSubjects:null });
   const [sharedLibraryRun, setSharedLibraryRun] = useState({ running:false, paused:false, stopping:false, stage:null, current:0, total:0, logs:[] });
   const [sharedLibraryPurging, setSharedLibraryPurging] = useState(false);
+  const [sharedLibraryAudienceMode, setSharedLibraryAudienceMode] = useState('student');
+  const [sharedLibraryRepairing, setSharedLibraryRepairing] = useState(false);
+  const [sharedLibraryGenerationStages, setSharedLibraryGenerationStages] = useState(['summary','direct','clinical']);
+  const [sharedLibraryGenerationSubject, setSharedLibraryGenerationSubject] = useState('all');
+  const [sharedLibraryGenerationLesson, setSharedLibraryGenerationLesson] = useState('all');
   const sharedLibraryControlRef = useRef({ paused:false, stop:false });
 
   useEffect(() => {
@@ -10906,6 +10912,134 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     return { ...current, ...next, id };
   };
 
+  const getSharedLibraryQuestionIssue = (question = {}) => {
+    if (question?.isFlashcard || question?.isCloze || question?.isOpen || question?.isEssay) return '';
+    const statement = String(question.statement || '').trim();
+    const options = Array.isArray(question.options) ? question.options : [];
+    const explanation = String(question.explanation || question.explanationParts?.lesson || '').trim();
+    if (statement.length < 8) return 'enunciado vazio';
+    if (options.length < 4) return 'menos de 4 alternativas';
+    if (!options.some(option => option?.isCorrect)) return 'sem gabarito';
+    if (options.some(option => String(option?.text || '').trim().length < 2)) return 'alternativa vazia';
+    if (explanation.length < 80) return 'explicação geral curta';
+    if (/[,:;]\s*$/.test(explanation) || /\b(?:derivações|inclui|são|porque|pois|como)\s*:\s*$/i.test(explanation)) return 'explicação geral cortada';
+
+    const structuredFromRaw = parseQuestionExplanationParts(question.explanation || '');
+    const alternatives = {
+      ...(question.explanationParts?.alternatives || {}),
+      ...(structuredFromRaw.alternatives || {}),
+    };
+    const hasOptionExplanation = options.some(option => String(option?.explanation || '').trim().length > 10);
+    const hasStructuredMarkers = structuredFromRaw.hasStructured || !!question.explanationParts || /\[{1,2}\s*ALT\s*[:\-]?/i.test(String(question.explanation || ''));
+    const missingOptionExplanations = options.filter(option => {
+      const letter = String(option?.letter || '').toUpperCase();
+      return String(option?.explanation || alternatives[letter] || '').trim().length < 12;
+    }).length;
+    if (hasStructuredMarkers && missingOptionExplanations > 0) return 'análise das alternativas incompleta';
+    if (!hasOptionExplanation && !Object.keys(alternatives).length) return 'sem análise das alternativas';
+    return '';
+  };
+
+  const findSharedLibraryIncompleteQuestions = (item = {}) => {
+    const rows = [];
+    [
+      ['directQuestions', 'fixação'],
+      ['clinicalQuestions', 'clínica'],
+    ].forEach(([field, label]) => {
+      (item[field] || []).forEach((question, index) => {
+        const issue = getSharedLibraryQuestionIssue(question);
+        if (issue) rows.push({ field, label, index, question, issue });
+      });
+    });
+    return rows;
+  };
+
+  const countSharedLibraryIncompleteQuestions = (items = []) =>
+    items.reduce((total, item) => total + findSharedLibraryIncompleteQuestions(item).length, 0);
+
+  const repairSharedLibraryIncompleteQuestions = async (scopeItems = []) => {
+    if (!isAdmin || sharedLibraryRepairing || sharedLibraryRun.running || sharedLibraryPurging) return;
+    if (!checkKey()) return;
+    const targets = (scopeItems || []).map(item => ({ item, issues:findSharedLibraryIncompleteQuestions(item) })).filter(entry => entry.issues.length);
+    if (!targets.length) {
+      addToast('Não encontrei questões incompletas neste recorte.', 'success', 3500);
+      return;
+    }
+    const ok = window.confirm(`Vou revisar ${targets.reduce((total, entry) => total + entry.issues.length, 0)} questão(ões) incompleta(s) no recorte atual e substituir apenas essas questões. Continuar?`);
+    if (!ok) return;
+    setSharedLibraryRepairing(true);
+    const toastId = addToast('Revisando questões incompletas da Biblioteca...', 'loading', 0);
+    let fixed = 0;
+    let skipped = 0;
+    try {
+      for (const { item, issues } of targets) {
+        const subtopics = (item.summaryBlocks || []).flatMap(block => block?.subtopics || []);
+        const sourceMaterials = [
+          item.summaryText ? `SUMÁRIO DA AULA:\n${item.summaryText}` : '',
+          `QUESTÕES COM PROBLEMA:\n${issues.map((row, index) => `${index + 1}. ${row.label} #${row.index + 1}: ${row.issue}`).join('\n')}`,
+        ].filter(Boolean).join('\n\n');
+        updateToast(toastId, `Revisando ${item.title || 'aula'} (${issues.length})...`, 'loading');
+        const auditSettings = withAdminQuestionPromptSettings({
+          ...settingsRef.current,
+          questionTypes:['direct'],
+          questionStyle:'direct',
+          adminQuestionExplanations:true,
+          auditQuestions:true,
+        });
+        const result = await auditGeneratedQuestions({
+          questions:issues.map(row => row.question),
+          namespace:`shared_repair_${item.id}_${Date.now()}`,
+          settings:auditSettings,
+          subjectTitle:item.subject || '',
+          topicTitle:item.title || item.topic || '',
+          subtopics,
+          sourceMaterials,
+          toastId,
+          force:true,
+        });
+        const repaired = result.questions || [];
+        if (repaired.length < issues.length) {
+          skipped += issues.length;
+          addSharedLibraryLog('warning', `${item.title}: revisão devolveu ${repaired.length}/${issues.length}; mantive como estava.`);
+          continue;
+        }
+        const patch = {};
+        const byField = new Map();
+        issues.forEach((row, index) => {
+          const original = row.question || {};
+          const nextQuestion = {
+            ...original,
+            ...(repaired[index] || {}),
+            id:original.id || repaired[index]?.id || `${row.field}_${row.index + 1}`,
+            libraryQuestionKind:original.libraryQuestionKind || (row.field === 'clinicalQuestions' ? 'clinical' : 'direct'),
+          };
+          if (!nextQuestion.caseContext && original.caseContext) nextQuestion.caseContext = original.caseContext;
+          if (!nextQuestion.statement && original.statement) nextQuestion.statement = original.statement;
+          if (!byField.has(row.field)) byField.set(row.field, [...(item[row.field] || [])]);
+          byField.get(row.field)[row.index] = nextQuestion;
+        });
+        byField.forEach((questions, field) => {
+          patch[field] = questions;
+        });
+        patch.questionRepairMeta = {
+          repairedAt:Date.now(),
+          repairedCount:issues.length,
+          reasons:[...new Set(issues.map(row => row.issue))],
+        };
+        await saveSharedLibraryItem(item.id, patch);
+        fixed += issues.length;
+        addSharedLibraryLog('success', `${item.title}: ${issues.length} questão(ões) reparada(s).`);
+      }
+      updateToast(toastId, skipped ? `Revisão terminou: ${fixed} reparadas, ${skipped} mantidas.` : `Revisão terminou: ${fixed} questão(ões) reparada(s).`, skipped ? 'info' : 'success');
+      setTimeout(() => removeToast(toastId), 5000);
+    } catch(e) {
+      updateToast(toastId, `Falha ao revisar questões: ${getBulkErrorText(e)}`, 'error');
+      setTimeout(() => removeToast(toastId), 7000);
+    } finally {
+      setSharedLibraryRepairing(false);
+    }
+  };
+
   const waitForSharedLibraryControl = async () => {
     while (sharedLibraryControlRef.current.paused && !sharedLibraryControlRef.current.stop) {
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -10977,6 +11111,39 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setSharedLibraryRun(p => ({ ...p, stopping:true, paused:false }));
   };
 
+  const startSharedLibraryGuidedGeneration = async () => {
+    if (!isAdmin || sharedLibraryRun.running || sharedLibraryPurging) return;
+    const selectedStages = SHARED_LIBRARY_STAGE_ORDER.filter(stage => sharedLibraryGenerationStages.includes(stage));
+    if (!selectedStages.length) {
+      addToast('Marque pelo menos uma etapa para gerar.', 'warning', 3500);
+      return;
+    }
+    const allTargets = getSharedLibraryTargets();
+    const filtered = allTargets.filter(lesson => {
+      const subjectOk = sharedLibraryGenerationSubject === 'all' || normalizeTextKey(lesson.subject) === normalizeTextKey(sharedLibraryGenerationSubject);
+      const lessonId = sharedLibraryDocIdForLesson(lesson);
+      const lessonOk = sharedLibraryGenerationLesson === 'all' || sharedLibraryGenerationLesson === lessonId;
+      return subjectOk && lessonOk;
+    });
+    if (!filtered.length) {
+      addToast('Escolha uma matéria/aula válida para gerar.', 'warning', 3500);
+      return;
+    }
+    const scopeLabel = sharedLibraryGenerationLesson !== 'all'
+      ? filtered[0]?.title
+      : sharedLibraryGenerationSubject === 'all'
+        ? `${filtered.length} aulas das matérias selecionadas`
+        : `${filtered.length} aulas de ${sharedLibraryGenerationSubject}`;
+    const stageLabel = selectedStages.map(stage => SHARED_LIBRARY_STAGE_LABELS[stage] || stage).join(', ');
+    const confirmed = window.confirm(`Gerar ${stageLabel} para ${scopeLabel}?`);
+    if (!confirmed) return;
+    await startSharedLibraryAutomation(
+      filtered.map(sharedLibraryDocIdForLesson),
+      null,
+      { stages:selectedStages, requireSummary:!selectedStages.includes('summary') && selectedStages.some(stage => stage === 'direct' || stage === 'clinical') }
+    );
+  };
+
   const purgeSharedLibrary = async () => {
     if (!isAdmin || sharedLibraryRun.running || sharedLibraryPurging) return;
     const confirmation = window.prompt('Esta ação apagará definitivamente todos os sumários, questões e progressos vinculados à Biblioteca atual. Para confirmar, digite APAGAR BIBLIOTECA:');
@@ -11032,18 +11199,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
   };
 
-  const startSharedLibraryAutomation = async (requestedItemId=null, freshSeed=null) => {
+  const startSharedLibraryAutomation = async (requestedItemId=null, freshSeed=null, runOptions={}) => {
     if (!isAdmin || sharedLibraryRun.running) return;
     const requestedIds = Array.isArray(requestedItemId)
       ? new Set(requestedItemId.map(String))
       : typeof requestedItemId === 'string'
         ? new Set([requestedItemId])
         : null;
-    const targets = getSharedLibraryTargets().filter(lesson => !requestedIds || requestedIds.has(sharedLibraryDocIdForLesson(lesson)));
-    if (!targets.length) {
-      addToast('Nenhuma aula encontrada nas matérias selecionadas.', 'error', 4000);
-      return;
-    }
     const keys = await collectLikelySiteGeminiKeys();
     if (!keys.length) {
       addToast('Nenhuma chave Gemini válida foi encontrada.', 'error', 4500);
@@ -11058,6 +11220,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         Object.entries(freshSeed.byId || {}).forEach(([id, seed]) => contentById.set(id, { ...seed, id }));
       }
     }
+    const stages = Array.isArray(runOptions.stages) && runOptions.stages.length
+      ? runOptions.stages.filter(stage => SHARED_LIBRARY_STAGE_ORDER.includes(stage))
+      : SHARED_LIBRARY_STAGE_ORDER;
+    let targets = getSharedLibraryTargets().filter(lesson => !requestedIds || requestedIds.has(sharedLibraryDocIdForLesson(lesson)));
+    if (runOptions.requireSummary) {
+      targets = targets.filter(lesson => {
+        const item = contentById.get(sharedLibraryDocIdForLesson(lesson)) || contentById.get(String(lesson.id));
+        return !!(item?.summaryText && item?.summaryBlocks?.length);
+      });
+    }
+    if (!targets.length) {
+      addToast(runOptions.requireSummary ? 'Nenhuma aula com sumário pronto foi encontrada neste recorte.' : 'Nenhuma aula encontrada nas matérias selecionadas.', 'error', 4000);
+      return;
+    }
     const saveRunItem = async (id, current, patch) => {
       await saveSharedLibraryItem(id, patch);
       const next = { ...(current || {}), ...patch, id, updatedAt:Date.now() };
@@ -11066,8 +11242,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     };
     sharedLibraryControlRef.current = { paused:false, stop:false };
     const cursorRef = { current:0 };
-    setSharedLibraryRun({ running:true, paused:false, stopping:false, stage:'summary', current:0, total:targets.length, logs:[] });
-    addSharedLibraryLog('info', `${targets.length} aulas · ${keys.length} chaves · lotes de ${SHARED_LIBRARY_QUESTION_BATCH_SIZE}.`);
+    setSharedLibraryRun({ running:true, paused:false, stopping:false, stage:stages[0] || 'summary', current:0, total:targets.length, logs:[] });
+    addSharedLibraryLog('info', `${targets.length} aulas · ${keys.length} chaves · etapas: ${stages.map(stage => SHARED_LIBRARY_STAGE_LABELS[stage] || stage).join(', ')} · lotes de ${SHARED_LIBRARY_QUESTION_BATCH_SIZE}.`);
 
     try {
       let completedLessons = 0;
@@ -11088,7 +11264,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         };
         let lessonFailed = false;
         addSharedLibraryLog('info', `Aula ${completedLessons + 1}/${targets.length}: ${lesson.title}.`);
-        for (const stage of SHARED_LIBRARY_STAGE_ORDER) {
+        for (const stage of stages) {
           if (!await waitForSharedLibraryControl()) break;
           setSharedLibraryRun(p => ({ ...p, stage, current:completedLessons, total:targets.length }));
           let lessonUsedApi = false;
@@ -11306,7 +11482,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         setSharedLibraryRun(p => ({ ...p, current:completedLessons, total:targets.length }));
         addSharedLibraryLog(lessonFailed ? 'warning' : 'success', lessonFailed
           ? `${lesson.title}: aula incompleta; será retomada na próxima execução.`
-          : `${lesson.title}: sumário, diretas e clínicas conferidos.`);
+          : `${lesson.title}: ${stages.map(stage => SHARED_LIBRARY_STAGE_LABELS[stage] || stage).join(', ')} conferidos.`);
       }
     } finally {
       const stopped = sharedLibraryControlRef.current.stop;
@@ -16092,11 +16268,35 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
           {/* ── BIBLIOTECA COMPARTILHADA ── */}
           {view==='shared-library'&&isAdmin&&(()=>{
+            const showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin';
             const tabs = [
-              { id:'direct', label:'Questões', icon:<CheckCircle2 className="w-4 h-4"/> },
-              { id:'summary', label:'Aulas', icon:<BookOpen className="w-4 h-4"/> },
-              { id:'flashcards', label:'Flashcards', icon:<RepeatIcon className="w-4 h-4"/>, disabled:true },
+              { id:'apostila', label:'Apostila', icon:<BookOpen className="w-4 h-4"/> },
+              { id:'summary', label:'Sumários', icon:<BookOpen className="w-4 h-4"/>, adminOnly:true },
+              { id:'exams', label:'Exames', icon:<FileText className="w-4 h-4"/>, shelf:true },
+              { id:'pharmacology', label:'Farmacologia', icon:<PillIcon className="w-4 h-4"/>, shelf:true },
+              { id:'famed', label:'Famed', icon:<GraduationCap className="w-4 h-4"/>, shelf:true },
             ];
+            const visibleTabs = tabs.filter(tab => !tab.adminOnly || showSharedLibraryAdminTools);
+            const currentSharedLibraryTab = visibleTabs.some(tab => tab.id === sharedLibraryTab)
+              ? sharedLibraryTab
+              : 'apostila';
+            const shelfInfo = {
+              exams:{
+                title:'Exames',
+                description:'Prateleira para treinar interpretação de exames do ciclo clínico, internato, UBS, plantão e residência.',
+                cards:['Radiologia', 'ECG', 'Hemograma', 'Urina, função renal e gasometria'],
+              },
+              pharmacology:{
+                title:'Farmacologia',
+                description:'Classes, medicamentos principais, nomes comerciais, mecanismos, efeitos adversos, indicações, contraindicações e doses úteis.',
+                cards:['Antibióticos', 'Cardiovasculares', 'Endócrino-metabólicos', 'Analgesia e sedação'],
+              },
+              famed:{
+                title:'Famed',
+                description:'Espaço para deixar aulas, slides, resumos antigos e questões da faculdade já prontos antes do semestre começar.',
+                cards:['Slides e aulas', 'Resumos antigos', 'Listas e monitorias', 'Provas antigas'],
+              },
+            };
             const itemQuestions = item => {
               const clinicalReady = !item.clinicalPartial
                 && !!item.clinicalCompletedAt
@@ -16171,11 +16371,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               await saveSharedLibraryConfig({ ...sharedLibraryConfig, subjectOrder:nextOrder, enabledSubjects });
             };
             const availableItems = displayedSharedLibraryItems.filter(item => {
-              const hasContent = sharedLibraryTab === 'summary'
+              const hasContent = currentSharedLibraryTab === 'summary'
                 ? !!item.summaryText
-                : sharedLibraryTab === 'direct'
+                : currentSharedLibraryTab === 'apostila'
                   ? itemQuestions(item).length > 0
-                    : false;
+                  : false;
               const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
               const needle = normalizeTextKey(sharedLibrarySearch);
               const matchesSearch = !needle || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(needle);
@@ -16183,13 +16383,39 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             }).sort((a,b) => (subjectOrder.indexOf(a.subject) - subjectOrder.indexOf(b.subject))
               || (sharedLessonOrder.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
               || String(a.title).localeCompare(String(b.title),'pt'));
+            const repairScopeItems = displayedSharedLibraryItems.filter(item => {
+              const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
+              const needle = normalizeTextKey(sharedLibrarySearch);
+              const matchesSearch = !needle || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(needle);
+              return matchesSubject && matchesSearch;
+            });
+            const incompleteQuestionCount = showSharedLibraryAdminTools ? countSharedLibraryIncompleteQuestions(repairScopeItems) : 0;
+            const generationBaseLessons = getSharedLibraryTargets();
+            const generationLessons = generationBaseLessons
+              .filter(lesson => sharedLibraryGenerationSubject === 'all' || normalizeTextKey(lesson.subject) === normalizeTextKey(sharedLibraryGenerationSubject))
+              .sort((a,b) => (sharedLessonOrder.get(sharedLibraryDocIdForLesson(a)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(sharedLibraryDocIdForLesson(b)) ?? Number.MAX_SAFE_INTEGER)
+                || String(a.title).localeCompare(String(b.title), 'pt'));
+            const sharedLibraryFieldClass = `mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-yellow-600 disabled:bg-gray-800 disabled:text-gray-500':'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-yellow-500 disabled:bg-gray-100 disabled:text-gray-400'}`;
+            const generationStageOptions = [
+              { id:'summary', title:'Sumários internos', desc:'Base para questões e conferência. Prioridade máxima agora.' },
+              { id:'direct', title:'Questões diretas', desc:'Uma por subtópico cobrável, em lotes de 15.' },
+              { id:'clinical', title:'Questões clínicas', desc:'Casos integradores para raciocínio clínico.' },
+              { id:'writtenLesson', title:'Aulas escritas/apostila', desc:'Fica para depois; ainda não vou gastar request nisso.', disabled:true },
+            ];
+            const toggleGenerationStage = (stageId) => {
+              if (sharedLibraryRun.running) return;
+              setSharedLibraryGenerationStages(current => current.includes(stageId)
+                ? current.filter(stage => stage !== stageId)
+                : [...current, stageId]);
+            };
+            const activeShelf = shelfInfo[currentSharedLibraryTab];
             const activeItem = displayedSharedLibraryItems.find(item => item.id === sharedLibraryActiveItemId);
             if (activeItem) {
-              if (sharedLibraryTab === 'summary') return (
+              if (currentSharedLibraryTab === 'summary') return (
                 <div className="desktop-content-limit">
                   <div className="mb-5 flex items-center justify-between gap-3">
                     <button onClick={()=>setSharedLibraryActiveItemId(null)} className={`flex items-center gap-2 font-bold ${darkMode?'text-gray-400':'text-gray-600'}`}><ArrowLeft className="w-4 h-4"/>Biblioteca</button>
-                    {isAdmin&&<button onClick={()=>restartSharedLibraryItem(activeItem)} disabled={sharedLibraryRun.running} className="inline-flex items-center gap-2 rounded-lg border border-red-500/50 px-3 py-2 text-xs font-bold text-red-500 disabled:opacity-40"><RotateCcw className="w-4 h-4"/>Apagar e gerar novamente</button>}
+                    {showSharedLibraryAdminTools&&<button onClick={()=>restartSharedLibraryItem(activeItem)} disabled={sharedLibraryRun.running} className="inline-flex items-center gap-2 rounded-lg border border-red-500/50 px-3 py-2 text-xs font-bold text-red-500 disabled:opacity-40"><RotateCcw className="w-4 h-4"/>Apagar e gerar novamente</button>}
                   </div>
                   <article className={`rounded-2xl border p-5 md:p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                     <p className="text-xs font-bold uppercase tracking-wider text-yellow-600">{activeItem.subject} · {activeItem.topic}</p>
@@ -16209,14 +16435,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 onAnswer={(questionId, letter)=>saveSharedLibraryAnswer(activeItem.id, questionId, letter)}
                 onToggleFavorite={()=>{}}
                 onReset={()=>resetSharedLibraryAnswers(activeItem.id)}
-                onRegenerate={isAdmin?()=>restartSharedLibraryItem(activeItem):null}
+                onRegenerate={showSharedLibraryAdminTools?()=>restartSharedLibraryItem(activeItem):null}
                 darkMode={darkMode}
                 apiKey={getKey()}
                 oracleLength={settings.oracleLength || 'medium'}
                 onCall={callWithRotation}
                 onOpenAnswer={question=>setOpenAnswerModal({question,isEssay:question.isEssay})}
                 displayMode={settings.questionDisplayMode || 'list'}
-                adminQuestionExplanations={isAdmin}
+                adminQuestionExplanations={showSharedLibraryAdminTools}
               />;
             }
             return (
@@ -16226,12 +16452,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Acervo compartilhado</p>
                       <h2 className="font-serif text-3xl font-bold mt-1">Biblioteca</h2>
-                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Aulas e questões prontas para estudar. O conteúdo é comum a todos; suas respostas e seu progresso continuam pessoais.</p>
+                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Aulas, questões e coleções prontas para estudar. O conteúdo é comum a todos; respostas e progresso continuam pessoais.</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <button onClick={purgeSharedLibrary} disabled={sharedLibraryRun.running||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-red-900/80 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}>
+                      {isAdmin&&(
+                        <div className={`inline-flex items-center rounded-xl border p-1 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
+                          {[['student','Prévia aluno'],['admin','Admin']].map(([mode,label])=>(
+                            <button key={mode} onClick={()=>setSharedLibraryAudienceMode(mode)} className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${sharedLibraryAudienceMode===mode?(darkMode?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-800'):(darkMode?'text-gray-400 hover:text-gray-200':'text-gray-600 hover:text-gray-900')}`}>{label}</button>
+                          ))}
+                        </div>
+                      )}
+                      {showSharedLibraryAdminTools&&<button onClick={purgeSharedLibrary} disabled={sharedLibraryRun.running||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-red-900/80 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}>
                         {sharedLibraryPurging?<Spinner className="w-4 h-4"/>:<Trash2 className="w-4 h-4"/>}{sharedLibraryPurging?'Apagando...':'Apagar Biblioteca antiga'}
-                      </button>
+                      </button>}
                       <button onClick={refreshSharedLibrary} disabled={sharedLibraryLoading||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>
                         {sharedLibraryLoading?<Spinner className="w-4 h-4"/>:<RotateCcw className="w-4 h-4"/>}Atualizar
                       </button>
@@ -16239,20 +16472,70 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   </div>
                 </section>
 
-                <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                  {tabs.map(tab=><button key={tab.id} disabled={tab.disabled} onClick={()=>{setSharedLibraryTab(tab.id);setSharedLibraryActiveItemId(null);}}
-                    className={`relative flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold ${tab.disabled?'opacity-35 cursor-not-allowed':sharedLibraryTab===tab.id?(darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(darkMode?'text-gray-400':'text-gray-600')}`}>
+                <div className={`grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  {visibleTabs.map(tab=><button key={tab.id} disabled={tab.disabled} onClick={()=>{setSharedLibraryTab(tab.id);setSharedLibraryActiveItemId(null);}}
+                    className={`relative flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-bold ${tab.disabled?'opacity-35 cursor-not-allowed':currentSharedLibraryTab===tab.id?(darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(darkMode?'text-gray-400':'text-gray-600')}`}>
                     {tab.icon}<span>{tab.label}</span>{tab.disabled&&<span className="absolute -top-1 -right-1 text-[7px] px-1 rounded bg-gray-600 text-white">em breve</span>}
                   </button>)}
                 </div>
 
-                {isAdmin&&(
+                {showSharedLibraryAdminTools&&(
                   <details className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                     <summary className="cursor-pointer font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4"/>Automação da Biblioteca</summary>
-                    <div className="mt-5 grid lg:grid-cols-[1fr_1.1fr] gap-5">
+                    <div className="mt-5 grid lg:grid-cols-[1.05fr_.95fr] gap-5">
+                      <div className="space-y-4">
+                        <div className={`rounded-2xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-gray-50'}`}>
+                          <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Gerar conteúdo do curso</p>
+                          <h3 className="mt-1 font-serif text-xl font-bold">Prioridade: sumários e questões</h3>
+                          <p className={`mt-1 text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>Por enquanto, a automação deve alimentar o Portal do Curso e a Apostila com sumários internos e questões. Aulas escritas completas ficam para bem depois.</p>
+                          <div className="mt-4 grid gap-3">
+                            <div>
+                              <p className="text-xs font-bold">O que gerar</p>
+                              <div className="mt-2 grid gap-2">
+                                {generationStageOptions.map(option => {
+                                  const checked = sharedLibraryGenerationStages.includes(option.id);
+                                  return <button type="button" key={option.id} disabled={sharedLibraryRun.running||option.disabled} onClick={()=>!option.disabled&&toggleGenerationStage(option.id)} className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:opacity-45 ${checked?(darkMode?'border-yellow-700 bg-yellow-950/20':'border-yellow-400 bg-yellow-50'):(darkMode?'border-gray-700 bg-gray-900 hover:border-gray-600':'border-gray-200 bg-white hover:border-gray-300')}`}>
+                                    <span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-md border ${checked?(darkMode?'border-yellow-500 bg-yellow-500 text-gray-950':'border-yellow-500 bg-yellow-500 text-white'):(darkMode?'border-gray-600':'border-gray-300')}`}>{checked&&<CheckIcon className="w-3.5 h-3.5"/>}</span>
+                                    <span className="min-w-0 flex-1">
+                                      <strong className="block text-sm">{option.title}</strong>
+                                      <span className={`mt-0.5 block text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>{option.desc}</span>
+                                    </span>
+                                  </button>;
+                                })}
+                              </div>
+                            </div>
+                            <label className="block text-xs font-bold">Matéria
+                              <select value={sharedLibraryGenerationSubject} disabled={sharedLibraryRun.running} onChange={e=>{setSharedLibraryGenerationSubject(e.target.value);setSharedLibraryGenerationLesson('all');}} className={sharedLibraryFieldClass} style={{colorScheme:darkMode?'dark':'light'}}>
+                                <option value="all">Todas as matérias habilitadas</option>
+                                {subjectOrder.filter(subject=>enabledSubjects.includes(subject)).map(subject=>{const coverage=subjectCoverage.get(subject)||{complete:0,total:0};return <option key={subject} value={subject}>{subject} · {coverage.complete}/{coverage.total}</option>;})}
+                              </select>
+                            </label>
+                            <label className="block text-xs font-bold">Aula específica
+                              <select value={sharedLibraryGenerationLesson} disabled={sharedLibraryRun.running} onChange={e=>setSharedLibraryGenerationLesson(e.target.value)} className={sharedLibraryFieldClass} style={{colorScheme:darkMode?'dark':'light'}}>
+                                <option value="all">Todas as aulas do recorte</option>
+                                {generationLessons.map(lesson=><option key={sharedLibraryDocIdForLesson(lesson)} value={sharedLibraryDocIdForLesson(lesson)}>{lesson.subject} · {lesson.title}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                          {!sharedLibraryRun.running?<button onClick={startSharedLibraryGuidedGeneration} disabled={sharedLibraryLoading||sharedLibraryPurging} className="mt-4 w-full rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white py-3 font-bold flex items-center justify-center gap-2"><PlayIcon className="w-4 h-4"/>Gerar seleção</button>:<div className="mt-4 grid grid-cols-2 gap-2">
+                            <button onClick={sharedLibraryRun.paused?resumeSharedLibraryAutomation:pauseSharedLibraryAutomation} className={`rounded-xl border py-2.5 font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>{sharedLibraryRun.paused?'Continuar':'Pausar'}</button>
+                            <button onClick={stopSharedLibraryAutomation} disabled={sharedLibraryRun.stopping} className="rounded-xl border border-red-400 text-red-500 py-2.5 font-bold">{sharedLibraryRun.stopping?'Parando...':'Parar'}</button>
+                          </div>}
+                        </div>
+                        <label className="block text-xs font-bold">Pausa entre aulas (s)<input type="number" min="0" max="120" value={settings.sharedLibraryDelaySeconds || 0} disabled={sharedLibraryRun.running} onChange={e=>{const next={...settings,sharedLibraryDelaySeconds:Number(e.target.value)};setSettings(next);saveSettings(next);}} className={sharedLibraryFieldClass} style={{colorScheme:darkMode?'dark':'light'}}/></label>
+                        <div className={`rounded-xl border p-3 text-xs ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
+                          Ordem por aula: <strong>sumário completo → uma direta por subtópico → provas clínicas integradoras por tópico → próxima aula</strong>. As clínicas selecionam apenas o que exige raciocínio e podem conectar subtópicos distantes. Sumários são ferramenta interna do admin; o aluno vê aulas e questões.
+                        </div>
+                        <button onClick={()=>repairSharedLibraryIncompleteQuestions(repairScopeItems)} disabled={sharedLibraryRepairing||sharedLibraryRun.running||sharedLibraryPurging||!incompleteQuestionCount} className={`w-full rounded-xl border px-4 py-3 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-45 ${darkMode?'border-yellow-800/70 text-yellow-300 hover:bg-yellow-950/25':'border-yellow-200 text-yellow-800 hover:bg-yellow-50'}`}>
+                          {sharedLibraryRepairing?<Spinner className="w-4 h-4"/>:<ShieldAlert className="w-4 h-4"/>}
+                          Revisar questões incompletas{incompleteQuestionCount?` (${incompleteQuestionCount})`:''}
+                        </button>
+                        <div className="flex items-center justify-between text-xs"><span>{SHARED_LIBRARY_STAGE_LABELS[sharedLibraryRun.stage] || 'Parada'}</span><span>{sharedLibraryRun.current}/{sharedLibraryRun.total}</span></div>
+                        <div className={`h-2 rounded-full overflow-hidden ${darkMode?'bg-gray-700':'bg-gray-200'}`}><div className="h-full bg-yellow-600" style={{width:`${sharedLibraryRun.total?Math.round(sharedLibraryRun.current/sharedLibraryRun.total*100):0}%`}}/></div>
+                      </div>
                       <div>
                         <div className="flex items-center justify-between mb-3">
-                          <div><p className="font-bold text-sm">Ordem das matérias</p><p className="text-xs opacity-50">Desmarque o que não deve entrar nesta rodada.</p></div>
+                          <div><p className="font-bold text-sm">Fila avançada</p><p className="text-xs opacity-50">Define a ordem quando você gera várias matérias.</p></div>
                         </div>
                         <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
                           {subjectOrder.map((subject,index)=>{ const coverage=subjectCoverage.get(subject)||{complete:0,total:0}; return <div key={subject} className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${darkMode?'border-gray-700':'border-gray-200'}`}>
@@ -16265,18 +16548,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                             <button onClick={()=>moveSubject(subject,1)} disabled={index===subjectOrder.length-1} className="p-1 disabled:opacity-20"><ChevronDown className="w-4 h-4"/></button>
                           </div>})}
                         </div>
-                      </div>
-                      <div className="space-y-4">
-                        <label className="block text-xs font-bold">Pausa entre aulas (s)<input type="number" min="0" max="120" value={settings.sharedLibraryDelaySeconds || 0} disabled={sharedLibraryRun.running} onChange={e=>{const next={...settings,sharedLibraryDelaySeconds:Number(e.target.value)};setSettings(next);saveSettings(next);}} className={`mt-1 w-full rounded-lg border px-3 py-2 ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-300'}`}/></label>
-                        <div className={`rounded-xl border p-3 text-xs ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
-                          Ordem por aula: <strong>sumário completo → uma direta por subtópico → provas clínicas integradoras por tópico → próxima aula</strong>. As clínicas selecionam apenas o que exige raciocínio e podem conectar subtópicos distantes. Flashcards e baterias extras ficam para uma próxima etapa.
-                        </div>
-                        {!sharedLibraryRun.running?<button onClick={startSharedLibraryAutomation} disabled={sharedLibraryLoading||sharedLibraryPurging} className="w-full rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white py-3 font-bold flex items-center justify-center gap-2"><PlayIcon className="w-4 h-4"/>Iniciar / continuar automação</button>:<div className="grid grid-cols-2 gap-2">
-                          <button onClick={sharedLibraryRun.paused?resumeSharedLibraryAutomation:pauseSharedLibraryAutomation} className={`rounded-xl border py-2.5 font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>{sharedLibraryRun.paused?'Continuar':'Pausar'}</button>
-                          <button onClick={stopSharedLibraryAutomation} disabled={sharedLibraryRun.stopping} className="rounded-xl border border-red-400 text-red-500 py-2.5 font-bold">{sharedLibraryRun.stopping?'Parando...':'Parar'}</button>
-                        </div>}
-                        <div className="flex items-center justify-between text-xs"><span>{SHARED_LIBRARY_STAGE_LABELS[sharedLibraryRun.stage] || 'Parada'}</span><span>{sharedLibraryRun.current}/{sharedLibraryRun.total}</span></div>
-                        <div className={`h-2 rounded-full overflow-hidden ${darkMode?'bg-gray-700':'bg-gray-200'}`}><div className="h-full bg-yellow-600" style={{width:`${sharedLibraryRun.total?Math.round(sharedLibraryRun.current/sharedLibraryRun.total*100):0}%`}}/></div>
                         <div className={`max-h-56 overflow-y-auto rounded-xl border p-2 space-y-1 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
                           {!sharedLibraryRun.logs.length&&<p className="text-xs opacity-40 p-2">Os eventos da fila aparecerão aqui.</p>}
                           {sharedLibraryRun.logs.map(log=><p key={log.id} className={`text-xs ${log.type==='error'?'text-red-500':log.type==='success'?'text-green-500':log.type==='warning'?'text-yellow-500':'opacity-60'}`}><span className="opacity-50">{log.time}</span> {log.msg}</p>)}
@@ -16288,17 +16559,33 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
                 <div className="grid md:grid-cols-[220px_1fr] gap-4">
                   <div className="space-y-2">
-                    <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar aula..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
+                    <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar conteúdo..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
                     <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=>{const coverage=subjectCoverage.get(subject)||{complete:0,total:0};return <option key={subject} value={subject}>{subject} · {coverage.complete}/{coverage.total}</option>;})}</select>
-                    {isAdmin&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
+                    {showSharedLibraryAdminTools&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>
                   <div className="space-y-2">
-                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há conteúdo nesta seção" description={isAdmin?'Use a automação acima para publicar as primeiras aulas.':'O acervo está sendo preparado pelo professor.'}/>:availableItems.map(item=>{
+                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:activeShelf?(
+                      <div className={`rounded-2xl border p-5 md:p-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                        <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Prateleira pronta</p>
+                        <h3 className="font-serif text-2xl font-bold mt-1">{activeShelf.title}</h3>
+                        <p className={`mt-2 text-sm max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>{activeShelf.description}</p>
+                        <div className="mt-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {activeShelf.cards.map(card => (
+                            <div key={card} className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-gray-50'}`}>
+                              <span className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}><Sparkles className="w-4 h-4"/></span>
+                              <strong className="block text-sm">{card}</strong>
+                              <span className="mt-1 block text-xs opacity-50">Conteúdo em preparação</span>
+                            </div>
+                          ))}
+                        </div>
+                        {showSharedLibraryAdminTools&&<p className="mt-4 text-xs opacity-55">Quando formos criar essa prateleira de verdade, ela deve publicar aulas, questões e materiais internos como entidades separadas — sem chamar sumário de aula.</p>}
+                      </div>
+                    ):availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há conteúdo nesta seção" description={showSharedLibraryAdminTools?'Use a automação acima para publicar as primeiras aulas.':'O acervo está sendo preparado pelo professor.'}/>:availableItems.map(item=>{
                       const questions = itemQuestions(item);
                       const answered = Object.keys(sharedLibraryProgress[item.id]?.answers || {}).filter(id=>questions.some(q=>String(q.id)===String(id))).length;
                       return <button key={item.id} onClick={()=>setSharedLibraryActiveItemId(item.id)} className={`w-full rounded-xl border p-4 text-left flex items-center gap-3 transition-colors ${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'}`}>
-                        <span className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-gray-900 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>{sharedLibraryTab==='summary'?<BookOpen className="w-5 h-5"/>:<CheckCircle2 className="w-5 h-5"/>}</span>
-                        <span className="min-w-0 flex-1"><strong className="block truncate">{item.title}</strong><span className="block text-xs opacity-50 mt-0.5 truncate">{item.subject} · {item.topic}{sharedLibraryTab!=='summary'?` · ${questions.length} questões${answered?` · ${answered} respondidas`:''}`:''}</span></span>
+                        <span className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-gray-900 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>{currentSharedLibraryTab==='summary'?<BookOpen className="w-5 h-5"/>:<CheckCircle2 className="w-5 h-5"/>}</span>
+                        <span className="min-w-0 flex-1"><strong className="block truncate">{item.title}</strong><span className="block text-xs opacity-50 mt-0.5 truncate">{item.subject} · {item.topic}{currentSharedLibraryTab!=='summary'?` · ${questions.length} questões${answered?` · ${answered} respondidas`:''}`:''}</span></span>
                         <ChevronRight className="w-4 h-4 opacity-35"/>
                       </button>;
                     })}
