@@ -1,38 +1,30 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import {
-  SYLLABUS_LIMITS,
-  buildOracleQuestionPrompt,
-  buildOracleSyllabusPrompt,
-  buildOracleSyllabusRevisePrompt,
-  buildExternalPrompt,
-  buildVqSyllabusPrompt,
-  buildVqBlockPrompt,
-  buildSharedLibraryDirectPrompt,
-  buildSharedLibraryClinicalPrompt,
-  buildTypeInst,
-  buildAcademiaSyllabusPrompt,
-  buildAcademiaLessonPrompt,
-  buildAcademiaFixationPrompt,
-  buildAcademiaExtraBatteryPrompt,
-  buildQuestionAuditPrompt,
-} from './agora_prompts.js';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
+import { adminEmail } from './config/environment.js';
+import { cleanFirestoreData } from './lib/firestoreData.js';
+import { deferInteractionWork } from './lib/interaction.js';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
+import { auth, db } from './services/firebase.js';
+import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
+import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
+import { persistReviewQueueChanges } from './services/reviewQueue.js';
+import { resetSharedLibraryAnswersPatch, saveSharedLibraryAnswerPatch } from './services/sharedLibraryProgress.js';
+import { saveUserVqBlockPatch } from './services/vqBlocks.js';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDjdoVMrVg7dlIJLr280-thZkjrpFeChL4",
-  authDomain: "agora-do-saber.firebaseapp.com",
-  projectId: "agora-do-saber",
-  storageBucket: "agora-do-saber.firebasestorage.app",
-  messagingSenderId: "169091563204",
-  appId: "1:169091563204:web:de924d4507acb1649e9391",
+const BizuarioModal = React.lazy(() => import('./features/bizuario/BizuarioModal.jsx'));
+const StudyMapPreview = React.lazy(() => import('./features/study-map/StudyMapPreview.jsx'));
+
+let promptModulePromise = null;
+const loadPromptModule = () => {
+  if (!promptModulePromise) promptModulePromise = import('./agora_prompts.js');
+  return promptModulePromise;
 };
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db   = getFirestore(app);
+const getPromptBuilder = async (name) => {
+  const prompts = await loadPromptModule();
+  return prompts[name];
+};
 
 const getGoogleProvider = () => {
   const provider = new GoogleAuthProvider();
@@ -121,10 +113,30 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 // Order of subjects following the course chronogram
 const SUBJECT_ORDER = ['Nefrologia','Cirurgia','Ginecologia','Preventiva','Obstetricia','Pediatria','Reumatologia','Hematologia','Gastrologia','Hepatologia','Cardiologia','Endocrinologia','Pneumologia','Infectologia','Neurologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'];
+const SYLLABUS_LIMITS = {
+  oracle: {
+    minTopics: 2,
+    targetMaxTopics: 10,
+    minSubtopicsPerTopic: 2,
+    targetMaxSubtopicsPerTopic: 20,
+    targetMaxTotalSubtopics: 120,
+  },
+  academia: {
+    minTopics: 2,
+    targetMaxTopics: 12,
+    minSubtopicsPerTopic: 2,
+    targetMaxSubtopicsPerTopic: 20,
+    targetMaxTotalSubtopics: 140,
+  },
+  videoaulas: {
+    minSubtopicsPerBlock: 4,
+    maxSubtopicsPerBlock: 12,
+  },
+};
 
 const MAX_MATERIAL_CHARS = 180000;
 const MATERIAL_CHUNK_CHARS = 170000;
-const ADMIN_EMAIL = 'gabrielvieiraxc12@gmail.com';
+const ADMIN_EMAIL = adminEmail;
 const ACCESS_DENIED_MESSAGE = 'Você não tem permissão para acessar este site.';
 const FIRESTORE_CACHE_KEYS = {
   videoaulas: 'agora_videoaulas_shared_v2',
@@ -192,15 +204,12 @@ const FLASHCARD_WRONG = 'WRONG';
 const QUICK_SOURCE = 'quick';
 const QUICK_SUBJECT_ID = 'quick-plantao-rapido';
 const QUICK_SUBJECT_TITLE = 'Centelha do Saber';
-const GEMINI_THINKING_BUDGET_OFF = 0;
-const GEMINI_THINKING_BUDGET_DYNAMIC = -1;
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const EXPLANATION_LENGTHS = [
   { k:'essential', label:'Essencial', desc:'Revisão curta, em tópicos, apenas com o que mais importa' },
   { k:'balanced', label:'Equilibrada', desc:'Explica o raciocínio sem aprofundar além do necessário' },
   { k:'complete', label:'Aprofundada', desc:'Cobre contexto, mecanismos, exemplos e detalhes relevantes' },
 ];
-const getGeminiThinkingBudget = (enabled) => enabled ? GEMINI_THINKING_BUDGET_DYNAMIC : GEMINI_THINKING_BUDGET_OFF;
 const buildAcademiaMaterialText = (text = '', files = [], maxChars = MAX_MATERIAL_CHARS) => {
   const sections = [];
   const intro = text.trim();
@@ -748,21 +757,6 @@ const addToList = (list = [], id) => {
   return listHasId(safe, id) ? safe : [...safe, id];
 };
 
-const cleanFirestoreData = (value) => {
-  if (value === undefined) return undefined;
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(item => {
-    const clean = cleanFirestoreData(item);
-    return clean === undefined ? null : clean;
-  });
-  const out = {};
-  Object.entries(value).forEach(([key, item]) => {
-    const clean = cleanFirestoreData(item);
-    if (clean !== undefined) out[key] = clean;
-  });
-  return out;
-};
-
 const getTodayKey = () => new Date().toLocaleDateString('en-CA');
 
 const normalizeIntervals = (intervals = []) => (Array.isArray(intervals) ? intervals : [])
@@ -798,10 +792,11 @@ const isProtectedMirrorRootFolder = (item) =>
 const hasAcademiaOriginTopic = (item) =>
   !isFolderItem(item) && (item.topics || []).some(t => t.origin?.source === 'academia');
 
-const buildErrorNotebookReviewPrompt = ({ subjectTitle='', topicTitle='', questions=[], settings={} }) => {
+const buildErrorNotebookReviewPrompt = async ({ subjectTitle='', topicTitle='', questions=[], settings={} }) => {
   const perError = Math.max(1, Math.min(10, Number(settings.errorReviewPerQuestion) || 2));
   const total = Math.max(1, questions.length * perError);
   const type = (settings.questionTypes || ['direct'])[0] || 'direct';
+  const buildTypeInst = await getPromptBuilder('buildTypeInst');
   const typeInst = buildTypeInst([type]);
   const isFlashcard = isMemoryCardType(type);
   const isCloze = type === 'cloze';
@@ -1239,109 +1234,6 @@ const ORACLE_LENGTH = {
   short:  { label:'⚡ Curta',   inst:'Responda em no máximo 2 frases muito diretas e objetivas.' },
   medium: { label:'📝 Média',   inst:'Responda em 1 parágrafo objetivo e bem estruturado.' },
   long:   { label:'📚 Detalhada', inst:'Responda de forma completa e didática, com exemplos clínicos quando relevante.' },
-};
-
-// ─── API ──────────────────────────────────────────────────────────────────────
-const normalizeGeminiApiKey = (value = '') => String(value || '').trim();
-const getGeminiRequestHeaders = (apiKey) => ({
-  'Content-Type':'application/json',
-  'x-goog-api-key':normalizeGeminiApiKey(apiKey),
-});
-const throwGeminiResponseError = async (response) => {
-  const data = await response.clone().json().catch(() => ({}));
-  const apiError = data?.error || {};
-  const reasons = (apiError.details || []).map(detail => detail?.reason).filter(Boolean);
-  if (
-    [401,403].includes(response.status)
-    || ['UNAUTHENTICATED','PERMISSION_DENIED'].includes(apiError.status)
-    || reasons.includes('API_KEY_INVALID')
-  ) throw new Error("API_KEY_INVALID");
-  if (response.status === 400) throw new Error("REQUEST_INVALID");
-  if (response.status === 404) throw new Error("RESOURCE_NOT_FOUND");
-  if (response.status === 429) throw new Error("QUOTA_EXCEEDED");
-  if ([500,503].includes(response.status)) throw new Error("SERVER_OVERLOADED");
-  throw new Error("CONNECTION_ERROR");
-};
-
-const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={}) => {
-  if (!normalizeGeminiApiKey(apiKey)) throw new Error("API_KEY_MISSING");
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-  const parts = [{text:prompt}];
-  images.forEach(img => parts.push({inline_data:{mime_type:img.mimeType,data:img.base64}}));
-  const payload = {
-    contents:[{parts}],
-    systemInstruction:{parts:[{text:systemPrompt}]},
-    generationConfig: {
-      thinkingConfig: { thinkingBudget: opts.thinkingBudget ?? opts.thinking ?? GEMINI_THINKING_BUDGET_OFF },
-      ...(opts.maxTokens ? {maxOutputTokens: opts.maxTokens} : {}),
-    },
-  };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
-  try {
-    const res = await fetch(url,{method:'POST',headers:getGeminiRequestHeaders(apiKey),body:JSON.stringify(payload),signal:controller.signal});
-    clearTimeout(timeout);
-    if (!res.ok) await throwGeminiResponseError(res);
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('');
-    if (!text) throw new Error("CONNECTION_ERROR");
-    return text;
-  } catch(e) {
-    clearTimeout(timeout);
-    if (e.name === 'AbortError') throw new Error("CONNECTION_ERROR");
-    throw e;
-  }
-};
-
-const callGeminiStream = async (prompt, systemPrompt, apiKey, onProgress, images=[], opts={}) => {
-  if (!normalizeGeminiApiKey(apiKey)) throw new Error("API_KEY_MISSING");
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse';
-  const parts = [{text:prompt}];
-  images.forEach(img => parts.push({inline_data:{mime_type:img.mimeType,data:img.base64}}));
-  const payload = {
-    contents:[{parts}],
-    systemInstruction:{parts:[{text:systemPrompt}]},
-    generationConfig:{
-      thinkingConfig:{ thinkingBudget: opts.thinkingBudget ?? opts.thinking ?? GEMINI_THINKING_BUDGET_OFF },
-      ...(opts.maxTokens ? {maxOutputTokens:opts.maxTokens} : {}),
-    },
-  };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2min timeout para streaming
-  try {
-    const res = await fetch(url,{method:'POST',headers:getGeminiRequestHeaders(apiKey),body:JSON.stringify(payload),signal:controller.signal});
-    if (!res.ok) await throwGeminiResponseError(res);
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let full = '';
-    let pending = '';
-    const consumeLine = (line) => {
-      if (!line.startsWith('data: ') || line.includes('[DONE]')) return;
-      try {
-        const j = JSON.parse(line.slice(6));
-        const t = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-        if (t) {
-          full += t;
-          onProgress?.(full, (full.match(/##\s*(?:Quest[aã]o|Flashcard)\s*\[?\d/gi) || []).length);
-        }
-      } catch(e) {}
-    };
-    while (true) {
-      const {done,value} = await reader.read();
-      if (done) break;
-      pending += dec.decode(value,{stream:true});
-      const lines = pending.split('\n');
-      pending = lines.pop() || '';
-      lines.forEach(consumeLine);
-    }
-    if (pending.trim()) consumeLine(pending.trim());
-    clearTimeout(timeout);
-    return full;
-  } catch(e) {
-    clearTimeout(timeout);
-    if (e.name === 'AbortError') throw new Error("CONNECTION_ERROR");
-    throw e;
-  }
 };
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
@@ -3691,24 +3583,32 @@ const QuestionView = ({
   const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
   const [flashcardFullscreen, setFlashcardFullscreen] = useState(false);
   const [pendingAnswers, setPendingAnswers] = useState({});
-  const questionIdsKey = questions.map(q=>q.id).join('|');
+  const questionIdsKey = useMemo(() => questions.map(q=>q.id).join('|'), [questions]);
+  const questionIdSet = useMemo(() => new Set(questions.map(q => String(q.id))), [questionIdsKey, questions]);
+  const questionById = useMemo(() => {
+    const map = new Map();
+    questions.forEach(question => map.set(String(question.id), question));
+    return map;
+  }, [questionIdsKey, questions]);
+  const favoriteSet = useMemo(() => new Set((favorites || []).map(String)), [favorites]);
+  const errorNotebookSet = useMemo(() => new Set((errorNotebook || []).map(String)), [errorNotebook]);
 
   useEffect(() => {
     setPendingAnswers(previous => {
       let changed = false;
       const next = {...previous};
       Object.entries(previous).forEach(([id, value]) => {
-        if (!questions.some(q => String(q.id) === String(id)) || answers?.[id] === value) {
+        if (!questionIdSet.has(String(id)) || answers?.[id] === value) {
           delete next[id];
           changed = true;
         }
       });
       return changed ? next : previous;
     });
-  }, [answers, questionIdsKey]); // eslint-disable-line
+  }, [answers, questionIdSet]);
 
   const submitAnswer = (qId, letter) => {
-    const q = questions.find(item => sameId(item.id, qId));
+    const q = questionById.get(String(qId));
     const currentAnswer = pendingAnswers[qId] ?? answers?.[qId];
     if (isFinalObjectiveAnswer(q, currentAnswer)) return undefined;
     setPendingAnswers(previous => ({...previous, [qId]:letter}));
@@ -3719,14 +3619,10 @@ const QuestionView = ({
       return next;
     });
     try {
-      const result = onAnswer(qId, letter);
-      if (result && typeof result.then === 'function') {
-        return result.catch(error => {
-          rollback();
-          throw error;
-        });
-      }
-      return result;
+      return deferInteractionWork(() => onAnswer?.(qId, letter)).catch(error => {
+        rollback();
+        throw error;
+      });
     } catch (error) {
       rollback();
       throw error;
@@ -3737,7 +3633,7 @@ const QuestionView = ({
   useEffect(() => {
     if (!questions || questions.length === 0) return;
     const validAns = Object.fromEntries(
-      Object.entries(answers).filter(([id]) => questions.some(q => sameId(q.id, id)))
+      Object.entries(answers).filter(([id]) => questionIdSet.has(String(id)))
     );
     const answeredCount = questions.filter(q => {
       const v = validAns[q.id];
@@ -3762,10 +3658,10 @@ const QuestionView = ({
     return () => clearTimeout(timer);
   }, []); // only on mount
 
-	  const validAnswers = Object.fromEntries(
-	    Object.entries({...answers, ...pendingAnswers}).filter(([id]) => questions.some(q => String(q.id) === String(id)))
-	  );
-	  const allFlashcards = questions.length > 0 && questions.every(q => isMemoryCard(q));
+  const validAnswers = useMemo(() => Object.fromEntries(
+    Object.entries({...answers, ...pendingAnswers}).filter(([id]) => questionIdSet.has(String(id)))
+  ), [answers, pendingAnswers, questionIdSet]);
+  const allFlashcards = useMemo(() => questions.length > 0 && questions.every(q => isMemoryCard(q)), [questionIdsKey, questions]);
 	  const singleMode = (allFlashcards || displayMode === 'single') && questions.length > 0;
 	  const [singleIndex, setSingleIndex] = useState(0);
 	  const currentSingleQuestionIdRef = useRef(null);
@@ -3913,7 +3809,7 @@ const QuestionView = ({
 	    onReset ? { label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:onReset, danger:true } : null,
 	  ].filter(Boolean) : [];
 	  const flashcardEntryKey = (entry) => entry ? `${entry.qid}__${entry.attempt}` : '';
-	  const getFlashcardById = (qid) => questions.find(q => q.id === qid);
+	  const getFlashcardById = (qid) => questionById.get(String(qid));
 	  const activeFlashcardEntry = allFlashcards && singleMode ? flashcardQueue[flashcardCursor] : null;
 	  const currentQuestion = allFlashcards && singleMode
 	    ? (activeFlashcardEntry ? getFlashcardById(activeFlashcardEntry.qid) : null)
@@ -3926,7 +3822,7 @@ const QuestionView = ({
 	  useEffect(() => {
 	    if (resumeAtFirstUnanswered && currentQuestion) currentSingleQuestionIdRef.current = currentQuestion.id;
 	  }, [resumeAtFirstUnanswered, singleIndex]); // eslint-disable-line
-	  const navBtn = (disabled, primary=false) => `inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${disabled
+	  const navBtn = (disabled, primary=false) => `inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-colors ${disabled
 	    ? (dm?'border-gray-800 text-gray-700 bg-gray-900/40 cursor-default':'border-gray-100 text-gray-300 bg-gray-50 cursor-default')
 	    : primary
 	      ? (dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50':'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100')
@@ -3965,7 +3861,7 @@ const QuestionView = ({
 	    setFlashcardEntryAnswers(prev => ({ ...prev, [key]:letter }));
 	    setFlashcardMastered(masteredAfter);
 	    setFlashcardQueue(nextQueue);
-	    Promise.resolve(onAnswer(q.id, letter)).catch(()=>{});
+	    deferInteractionWork(() => onAnswer(q.id, letter)).catch(()=>{});
 
 	    const completedAfter = questions.length > 0 && questions.every(item => masteredAfter[item.id]);
 	    const nextIdx = nextQueue.findIndex((item, idx) => idx > queueIndex && !masteredAfter[item.qid]);
@@ -3993,10 +3889,10 @@ const QuestionView = ({
 	      <QuestionCard question={q} index={i}
 	        selectedLetter={selected}
 	        onAnswer={entry ? (l=> selected ? undefined : handleFlashcardStudyAnswer(q, entry, i, l)) : (l=>submitAnswer(q.id,l))}
-	        darkMode={dm} isFavorite={favorites.includes(q.id)}
+	        darkMode={dm} isFavorite={favoriteSet.has(String(q.id))}
 	        onToggleFavorite={()=>onToggleFavorite(q.id)}
 	        showErrorNotebook={showErrorNotebook}
-	        isInErrorNotebook={listHasId(errorNotebook, q.id)}
+	        isInErrorNotebook={errorNotebookSet.has(String(q.id))}
 	        onToggleErrorNotebook={onToggleErrorNotebook ? ()=>onToggleErrorNotebook(q.id) : undefined}
 	        apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
 	        onOpenAnswer={onOpenAnswer}
@@ -5280,7 +5176,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           ? 'Fixação'
           : 'Questão';
   const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
-  const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-all shadow-sm hover:-translate-y-0.5 active:translate-y-0.5 active:scale-95 active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
+  const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-colors shadow-sm active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
     if (!onToggleErrorNotebook) return;
     const previous = optimisticNotebook;
@@ -5439,7 +5335,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
           const isSelected = effectiveLetter===opt.letter;
-          let cls = `w-full text-left flex flex-col items-stretch px-4 py-3.5 md:px-5 md:py-4 rounded-xl border transition-all focus:outline-none ${darkMode?'border-gray-700':'border-gray-200'} `;
+          let cls = `w-full text-left flex flex-col items-stretch px-4 py-3.5 md:px-5 md:py-4 rounded-xl border transition-colors focus:outline-none ${darkMode?'border-gray-700':'border-gray-200'} `;
           if (!isAnswered && !isSkipped || revealMode==='selected') {
             if (isSelected && revealMode==='selected') cls += darkMode?'bg-blue-900/20 text-blue-100':'bg-blue-50 text-blue-900';
             else cls += darkMode?'bg-gray-900/35 text-gray-200 hover:bg-gray-900/65':'bg-gray-50/50 text-gray-800 hover:bg-yellow-50/30 hover:shadow-sm';
@@ -6093,227 +5989,6 @@ ${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radiu
   );
 };
 
-// ─── INSIGHTS MODAL ───────────────────────────────────────────────────────────
-// cachedText: saved insight string (skip API call if present)
-// onSave: callback(text) — called after generating to persist in DB
-// ─── BIZUÁRIO MODAL ───────────────────────────────────────────────────────────
-// High-yield topic summary (AnKing/First Aid/Mehlman style), cached in topic.bizuario
-const BizuarioModal = ({ topicTitle, subjectTitle, questions=[], subtopics=[], topicContexts=null, apiKey, darkMode, onClose, cachedText, onSave, onRotateKey, geminiOptions={} }) => {
-  const [text, setText] = useState(cachedText || '');
-  const [loading, setLoading] = useState(!cachedText);
-  const [phase, setPhase] = useState(cachedText ? 'done' : 'loading');
-  const wasCached = !!cachedText;
-
-  const generate = async () => {
-    setText(''); setLoading(true); setPhase('loading');
-    try {
-      const sys = `Você é o Oráculo da Ágora do Saber — editor do melhor material de revisão médica do mundo, no estilo AnKing, First Aid e Mehlman. Escreva em português brasileiro. Seja absolutamente denso e high-yield: cada frase deve conter informação cobrada em prova. PROIBIDO fluff, introduções, conclusões ou frases de efeito. Use **negrito** para termos-chave, valores, critérios diagnósticos e mecanismos críticos.`;
-
-      let contextBlock = '';
-
-      if (topicContexts && topicContexts.length > 0) {
-        // Subject-level bizuário — aggregate all topics
-        contextBlock = topicContexts.map(tc => {
-          if (tc.questions.length > 0) {
-            // Has questions — use them
-            const qLines = tc.questions.slice(0, 10).map((q, i) =>
-              `  ${i+1}. ${q.statement.substring(0,100).replace(/\n/g,' ')}...\n     ✓ ${(q.options||[]).find(o=>o.isCorrect)?.text||q.expectedAnswer||''} | ${q.explanation.substring(0,200).replace(/\n/g,' ')}...`
-            ).join('\n');
-            return `TÓPICO: ${tc.title}\n${qLines}`;
-          } else if (tc.subtopics.length > 0) {
-            // No questions — use subtopics list
-            return `TÓPICO: ${tc.title}\n  Subtópicos: ${tc.subtopics.join(', ')}`;
-          }
-          return `TÓPICO: ${tc.title}`;
-        }).join('\n\n');
-      } else if (questions.length > 0) {
-        // Single topic with questions
-        contextBlock = questions.slice(0, 15).map((q, i) =>
-          `${i+1}. ${q.statement.substring(0,120).replace(/\n/g,' ')}...\n   ✓ ${(q.options||[]).find(o=>o.isCorrect)?.text||q.expectedAnswer||''}\n   ${q.explanation.substring(0,300).replace(/\n/g,' ')}...`
-        ).join('\n\n');
-      } else if (subtopics.length > 0) {
-        // Single topic, no questions — use subtopics
-        contextBlock = `Subtópicos do tópico: ${subtopics.join(', ')}`;
-      }
-
-      const scope = topicContexts ? `da pasta "${topicTitle}" (${topicContexts.length} tópicos)` : `do tópico "${topicTitle}"${subjectTitle ? ` (${subjectTitle})` : ''}`;
-      const wordLimit = topicContexts ? 'Máximo 600 palavras, abordando todos os tópicos' : 'Máximo 400 palavras — densidade máxima, zero enrolação';
-
-      // Tenta usar prompt do Firestore
-      let prompt = '';
-      try {
-        const pSnap = await getDoc(doc(db,'config','prompts'));
-        if (pSnap.exists() && pSnap.data().bizuario) {
-          let t = pSnap.data().bizuario;
-          t = t.replaceAll('{{TOPIC_TITLE}}', scope);
-          t = t.replaceAll('{{SUBJECT_CONTEXT}}', subjectTitle?` — ${subjectTitle}`:'');
-          t = t.replaceAll('{{QUESTIONS_CONTEXT}}', contextBlock?`CONTEÚDO BASE:\n${contextBlock}`:'');
-          t = t.replaceAll('{{WORD_LIMIT}}', topicContexts?'600':'400');
-          prompt = t;
-        }
-      } catch(e) {}
-
-      if (!prompt) {
-        prompt = `Crie o BIZUÁRIO ${scope}.\n\n${contextBlock?`CONTEÚDO BASE:\n${contextBlock}\n`:''}\nOBJETIVO: Cola de revisão ultra-rápida — o estudante lê 2 minutos antes da prova.\n\nFORMATO: Parágrafos corridos, densos, sem bullet points. Valores numéricos, critérios, associações clássicas. ${wordLimit}.`;
-      }
-
-      const r = await callGemini(prompt, sys, apiKey, [], geminiOptions);
-      setText(r); setPhase('done');
-      if (onSave) onSave(r);
-    } catch(e) {
-      setText('Não foi possível gerar o bizuário agora. Verifique sua API Key.');
-      setPhase('done');
-    } finally {
-      if (onRotateKey) await onRotateKey();
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { if (!cachedText) generate(); }, []); // eslint-disable-line
-
-  return (
-    <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={onClose}>
-      <div
-        className={`w-full max-w-2xl rounded-2xl border flex flex-col overflow-hidden ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}
-        style={{maxHeight:'calc(100dvh - 6rem)'}}
-        onClick={e=>e.stopPropagation()}
-      >
-        <div className={`flex items-center justify-between p-5 border-b flex-shrink-0 ${darkMode?'border-gray-700':'border-gray-200'}`}>
-          <h3 className="text-lg font-serif font-bold text-yellow-600 flex items-center gap-2">
-            <BrainIcon className="w-5 h-5"/>
-            Bizuário — {topicTitle}
-            {wasCached && !loading && <span className={`text-xs font-normal px-2 py-0.5 rounded-full ml-1 ${darkMode?'bg-green-900/40 text-green-400':'bg-green-100 text-green-700'}`}>✓ salvo</span>}
-          </h3>
-          <div className="flex items-center gap-2">
-            {/* Refazer button */}
-            {phase === 'done' && !loading && (
-              <button onClick={generate} title="Regenerar bizuário" className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${darkMode?'bg-gray-700 hover:bg-gray-600 text-gray-300':'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                Refazer
-              </button>
-            )}
-            <button type="button" aria-label="Fechar" onClick={onClose} className={`p-2 rounded-full font-bold text-lg leading-none transition-colors ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 min-h-0">
-          {loading ? (
-            <div className="flex flex-col items-center py-10">
-              <Spinner className="w-10 h-10 text-yellow-600 mb-4"/>
-              <p className="text-yellow-600 font-serif font-bold">O Oráculo está destilando o bizu...</p>
-              {topicContexts && <p className="text-xs opacity-40 mt-2">{topicContexts.length} tópicos sendo processados</p>}
-            </div>
-          ) : (
-            <div className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>
-              {parseHtmlTextChat(text, darkMode)}
-            </div>
-          )}
-        </div>
-
-        {phase === 'done' && (
-          <div className={`p-4 border-t flex-shrink-0 ${darkMode?'border-gray-700':'border-gray-200'}`}>
-            <button onClick={onClose} className={`w-full py-3 rounded-xl font-bold text-sm ${darkMode?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'}`}>Fechar</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const StudyMapPreview = ({ syllabus, onChange, darkMode, multiplier=1, onMultiplierChange }) => {
-  const topics = parseStudyMapSyllabus(syllabus);
-  const [expanded, setExpanded] = useState({});
-  const multipliedQuestions = questions => Math.max(1, Math.min(30, questions * multiplier));
-  const totalSubtopics = topics.reduce((sum, topic) => sum + topic.subtopics.length, 0);
-  const totalQuestions = topics.reduce((sum, topic) => sum + topic.subtopics.reduce((acc, subtopic) => acc + multipliedQuestions(subtopic.questions), 0), 0);
-  const updateQuestions = (topicIndex, subtopicIndex, delta) => {
-    const next = topics.map((topic, ti) => ({
-      ...topic,
-      subtopics:topic.subtopics.map((subtopic, si) =>
-        ti === topicIndex && si === subtopicIndex
-          ? {...subtopic, questions:Math.max(1, Math.min(30, subtopic.questions + delta))}
-          : subtopic
-      ),
-    }));
-    onChange(formatStudyMapSyllabus(next));
-  };
-  if (!topics.length) {
-    return (
-      <div className={`rounded-xl border overflow-hidden ${darkMode?'border-red-900/60 bg-gray-900/40':'border-red-200 bg-white'}`}>
-        <div className={`px-5 py-4 border-b ${darkMode?'border-red-900/60 bg-red-950/20':'border-red-200 bg-red-50'}`}>
-          <p className="font-bold text-red-500">O plano não conseguiu organizar esta resposta</p>
-          <p className="text-xs opacity-60 mt-1">A resposta original foi preservada abaixo. Solicite uma revisão ou volte e gere novamente.</p>
-        </div>
-        <pre className={`max-h-[52vh] overflow-auto whitespace-pre-wrap p-5 text-xs ${darkMode?'text-gray-300':'text-gray-700'}`}>{syllabus || 'O Gemini devolveu uma resposta vazia.'}</pre>
-      </div>
-    );
-  }
-  return (
-    <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
-      <div className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Plano de estudo guiado</p>
-          <p className="text-sm opacity-60 mt-1">{topics.length} tópicos · {totalSubtopics} objetivos · {totalQuestions} questões planejadas</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase opacity-40">Quantidade</span>
-          <div className={`flex rounded-lg border p-1 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
-            {[1,2,3].map(value=>(
-              <button key={value} type="button" onClick={()=>onMultiplierChange?.(value)}
-                title={`${value === 1 ? 'Usar' : value === 2 ? 'Dobrar' : 'Triplicar'} a quantidade recomendada`}
-                className={`h-7 min-w-[2rem] rounded-md px-2 text-xs font-bold transition-colors ${multiplier===value?'bg-yellow-600 text-white':darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>
-                ×{value}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className={`px-5 py-3 border-b text-xs leading-relaxed ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-yellow-50/40'}`}>
-        <p className="opacity-60">A IA dividiu o assunto em objetivos verificáveis e sugeriu questões suficientes para revisar cada um. Ajuste individualmente ou use o multiplicador antes de salvar.</p>
-      </div>
-      <div className="max-h-[52vh] overflow-y-auto">
-        {topics.map((topic, topicIndex) => {
-          const isOpen = expanded[topicIndex] ?? topicIndex === 0;
-          const topicQuestions = topic.subtopics.reduce((sum, subtopic) => sum + multipliedQuestions(subtopic.questions), 0);
-          return (
-            <section key={`${topic.title}-${topicIndex}`} className={`border-b last:border-b-0 ${darkMode?'border-gray-700':'border-gray-100'}`}>
-              <button type="button" onClick={()=>setExpanded(prev=>({...prev,[topicIndex]:!isOpen}))}
-                className={`w-full px-5 py-4 flex items-center gap-4 text-left ${darkMode?'hover:bg-gray-800':'hover:bg-yellow-50/50'}`}>
-                <span className="w-8 h-8 flex-shrink-0 rounded-lg bg-yellow-600 text-white flex items-center justify-center font-serif font-bold">{topicIndex + 1}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-bold truncate">{topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '')}</span>
-                  <span className="block text-xs opacity-50 mt-0.5">{topic.subtopics.length} objetivos · {topicQuestions} questões</span>
-                </span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${isOpen?'rotate-180':''}`}/>
-              </button>
-              {isOpen&&<div className="px-5 pb-5 space-y-2">
-                {topic.subtopics.map((subtopic, subtopicIndex)=>(
-                  <div key={`${subtopic.title}-${subtopicIndex}`} className={`border-l-2 pl-4 py-2 ${darkMode?'border-gray-600':'border-yellow-400'}`}>
-                    <div className="flex flex-col sm:flex-row items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm">{subtopic.title}</p>
-                        <p className="text-xs opacity-55 mt-1 leading-relaxed">{subtopic.objective || `Dominar ${subtopic.title}`}</p>
-                      </div>
-                      <div className="flex flex-col items-start sm:items-end gap-1 flex-shrink-0">
-                        <span className="text-[10px] uppercase font-bold opacity-40">Questões</span>
-                        <div title="Quantidade de perguntas distintas que serão geradas para este objetivo" className={`flex items-center rounded-lg border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
-                          <button type="button" aria-label="Diminuir questões" onClick={()=>updateQuestions(topicIndex, subtopicIndex, -1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>−</button>
-                          <span className="w-10 text-center text-sm font-bold tabular-nums">{multipliedQuestions(subtopic.questions)}</span>
-                          <button type="button" aria-label="Aumentar questões" onClick={()=>updateQuestions(topicIndex, subtopicIndex, 1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>+</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>}
-            </section>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 const TopicStudyPlanPanel = ({ plans = [], questions = [], answers = {}, darkMode }) => {
   if (!plans.length) return null;
   const [showObjectives, setShowObjectives] = useState(false);
@@ -6501,7 +6176,8 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
   const hasClosedTypes = (cfg.questionTypes || ['direct']).some(t => ['direct','vof','cespe'].includes(t));
   const isMemoryPrompt = (cfg.questionTypes || ['direct']).some(isMemoryCardType);
 
-  const copy = () => {
+  const copy = async () => {
+    const buildExternalPrompt = await getPromptBuilder('buildExternalPrompt');
     const prompt = buildExternalPrompt({...settingsRef.current, ...cfg, adminQuestionExplanations:true});
     navigator.clipboard.writeText(prompt);
     setCopied(true);
@@ -6789,7 +6465,7 @@ function AcademiaTopicView({
       : (freshTopic.errorNotebook || []);
     const updTopic = {...freshTopic, answers: {...(freshTopic.answers||{}), [q.id]: letter}, errorNotebook};
     const updSubj  = {...freshSubj, topics: freshSubj.topics.map(t => t.id===topic.id ? updTopic : t)};
-    updateSubject(updSubj);
+    return deferInteractionWork(() => updateSubject(updSubj));
   };
 
   const handleFavorite = (qId) => {
@@ -7107,6 +6783,8 @@ export default function QuestionBankApp() {
   // ── Library ───────────────────────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const libraryRef = useRef([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryLoadError, setLibraryLoadError] = useState('');
   const academiaMirrorSyncRef = useRef(false);
   const academiaMirrorSyncTimerRef = useRef(null);
   const academiaMirrorSyncPendingRef = useRef(false);
@@ -7276,8 +6954,7 @@ export default function QuestionBankApp() {
   const adminHomeMode = isAdmin ? (settings.adminHomeMode || 'admin') : 'actual';
   const homeShowsAdminTools = isAdmin && adminHomeMode === 'admin';
   const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
-  // A publicação para alunos deve alterar esta regra junto da proteção da view shared-library.
-  const homeCanSeeSharedLibrary = isAdmin;
+  const homeCanSeeSharedLibrary = isAdmin && adminHomeMode !== 'site';
   const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
   const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
 
@@ -7346,6 +7023,7 @@ export default function QuestionBankApp() {
   // Biblioteca compartilhada — conteúdo global, progresso individual.
   const [sharedLibraryItems, setSharedLibraryItems] = useState([]);
   const [sharedLibraryLoading, setSharedLibraryLoading] = useState(false);
+  const [sharedLibraryError, setSharedLibraryError] = useState('');
   const [sharedLibraryTab, setSharedLibraryTab] = useState('apostila');
   const [sharedLibrarySubject, setSharedLibrarySubject] = useState('all');
   const [sharedLibrarySearch, setSharedLibrarySearch] = useState('');
@@ -7446,8 +7124,8 @@ export default function QuestionBankApp() {
   }, [isAdmin, cursoTab]);
 
   useEffect(() => {
-    if (!isAdmin && view === 'shared-library') setView('library');
-  }, [isAdmin, view]);
+    if (!homeCanSeeSharedLibrary && view === 'shared-library') setView('library');
+  }, [homeCanSeeSharedLibrary, view]);
 
   useEffect(() => {
     if (!academiaExtraModal) return;
@@ -7474,8 +7152,15 @@ export default function QuestionBankApp() {
   };
 
   const refreshSharedLibrary = useCallback(async () => {
-    if (!user || user.isAnonymous) return;
+    if (!user || user.isAnonymous || !homeCanSeeSharedLibrary) {
+      setSharedLibraryLoading(false);
+      setSharedLibraryError('');
+      setSharedLibraryItems([]);
+      setSharedLibraryProgress({});
+      return;
+    }
     setSharedLibraryLoading(true);
+    setSharedLibraryError('');
     try {
       const [contentSnap, progressSnap, configSnap] = await Promise.all([
         getDocs(collection(db, SHARED_LIBRARY_COLLECTION)),
@@ -7497,32 +7182,39 @@ export default function QuestionBankApp() {
       }
     } catch(e) {
       console.error('Shared library load failed:', e);
+      setSharedLibraryError(e?.code || e?.message || 'Falha ao carregar biblioteca compartilhada');
       addToast('Não consegui carregar a Biblioteca compartilhada.', 'error', 4500);
     } finally {
       setSharedLibraryLoading(false);
     }
-  }, [user?.uid, isAdmin]); // eslint-disable-line
+  }, [user?.uid, isAdmin, homeCanSeeSharedLibrary]); // eslint-disable-line
 
   useEffect(() => {
-    if (!user || user.isAnonymous) {
+    if (!user || user.isAnonymous || !homeCanSeeSharedLibrary) {
       setSharedLibraryItems([]);
       setSharedLibraryProgress({});
+      setSharedLibraryError('');
+      setSharedLibraryLoading(false);
       return;
     }
     refreshSharedLibrary();
-  }, [refreshSharedLibrary, user?.uid]);
+  }, [refreshSharedLibrary, user?.uid, homeCanSeeSharedLibrary]);
 
   useEffect(() => {
-    if (!user || user.isAnonymous) return undefined;
+    if (!user || user.isAnonymous || !homeCanSeeSharedLibrary) return undefined;
     return onSnapshot(collection(db, SHARED_LIBRARY_COLLECTION), snapshot => {
+      setSharedLibraryError('');
       const items = [];
       snapshot.forEach(entry => {
         const data = entry.data() || {};
         if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
       });
       setSharedLibraryItems(items);
-    }, error => console.warn('Shared library realtime sync failed:', error?.code || error?.message || error));
-  }, [user?.uid, isAdmin]);
+    }, error => {
+      console.warn('Shared library realtime sync failed:', error?.code || error?.message || error);
+      setSharedLibraryError(error?.code || error?.message || 'Falha na sincronizacao em tempo real');
+    });
+  }, [user?.uid, isAdmin, homeCanSeeSharedLibrary]);
 
   const captureReturnTarget = () => ({
     view,
@@ -7735,7 +7427,7 @@ export default function QuestionBankApp() {
       touchCache(userWatchedTouchedKey(user.uid));
     }
     if (user && !user.isAnonymous) try {
-      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
+      await saveWatchedAulas({ userId:user.uid, watched:u });
     } catch(e) {
       addToast('Não consegui sincronizar agora, mas salvei no aparelho.', 'info', 3500);
     }
@@ -7753,7 +7445,7 @@ export default function QuestionBankApp() {
       touchCache(userWatchedTouchedKey(user.uid));
     }
     if (user && !user.isAnonymous) try {
-      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), u);
+      await saveWatchedAulas({ userId:user.uid, watched:u });
     } catch(e) {
       addToast('Não consegui sincronizar agora, mas salvei no aparelho.', 'info', 3500);
     }
@@ -7767,7 +7459,7 @@ export default function QuestionBankApp() {
       touchCache(userWatchedTouchedKey(user.uid));
     }
     if (user && !user.isAnonymous) try {
-      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
+      await saveWatchedAulas({ userId:user.uid, watched:{} });
     } catch(e) {}
   };
 
@@ -7779,8 +7471,8 @@ export default function QuestionBankApp() {
     }
     if (!user || user.isAnonymous) return;
     clearTimeout(dailyStatsSaveTimer.current);
-    const save = () => setDoc(doc(db, 'users', user.uid, 'daily_stats', next.date), next, {merge:false}).catch(()=>{});
-    if (immediate) save();
+    const save = () => saveDailyStats({ userId:user.uid, stats:next }).catch(()=>{});
+    if (immediate) deferInteractionWork(save).catch(()=>{});
     else dailyStatsSaveTimer.current = setTimeout(save, 1200);
   };
 
@@ -8205,11 +7897,14 @@ export default function QuestionBankApp() {
     setReviewQueue(compacted);
     persistReviewQueueCache(compacted);
     if (!user || user.isAnonymous) return;
-    for (const [aulaId, data] of changedAulaEntries) {
-      await setDoc(doc(db, 'users', user.uid, 'vq_review', aulaId), data).catch(console.error);
-    }
-    for (const aulaId of removedAulaIds) {
-      await deleteDoc(doc(db, 'users', user.uid, 'vq_review', aulaId)).catch(console.error);
+    try {
+      await persistReviewQueueChanges({ userId:user.uid, changedEntries:changedAulaEntries, removedAulaIds });
+    } catch(e) {
+      reviewQueueRef.current = previous;
+      setReviewQueue(previous);
+      persistReviewQueueCache(previous);
+      addToast('Não consegui sincronizar a revisão espaçada agora.', 'warning', 4500);
+      console.warn('review queue sync failed:', e?.code || e?.message || e);
     }
   };
 
@@ -8654,7 +8349,7 @@ export default function QuestionBankApp() {
     if (!user || user.isAnonymous) return;
     try {
       // 1. Clear watched status
-      await setDoc(doc(db,'users',user.uid,'videoaulas_progress','watched'), {});
+      await saveWatchedAulas({ userId:user.uid, watched:{} });
       watchedAulasRef.current = {};
       setWatchedAulas({});
       writeStorageJson(`agora_watched_${user.uid}`, {});
@@ -8743,6 +8438,40 @@ export default function QuestionBankApp() {
       }
     }
     await pruneReviewQueueForVqBlockChange(aulaId, previousData, data);
+  };
+
+  const saveVqBlockPatch = async (aulaId, blockId, buildNextBlock, buildRemotePatch) => {
+    const previousData = vqBlocksRef.current?.[aulaId];
+    const currentData = previousData || {};
+    const currentBlocks = Array.isArray(currentData?.blocks) ? {} : (currentData.blocks || {});
+    const previousBlock = currentBlocks[blockId] || {};
+    const nextBlock = buildNextBlock(previousBlock, currentData);
+    const nextData = {
+      ...currentData,
+      blocks:{...currentBlocks, [blockId]:nextBlock},
+    };
+    const updated = { ...(vqBlocksRef.current || {}), [aulaId]:nextData };
+    vqBlocksRef.current = updated;
+    setVqBlocks(updated);
+    persistVqBlocksCache(updated);
+    if (!user || user.isAnonymous) return nextData;
+    try {
+      const remotePatch = buildRemotePatch ? buildRemotePatch(nextBlock, previousBlock) : nextBlock;
+      await saveUserVqBlockPatch({ userId:user.uid, aulaId, blockId, patch:remotePatch });
+      return nextData;
+    } catch(e) {
+      if (vqBlocksRef.current?.[aulaId] === nextData) {
+        const rolledBack = {...(vqBlocksRef.current || {})};
+        if (previousData === undefined) delete rolledBack[aulaId];
+        else rolledBack[aulaId] = previousData;
+        vqBlocksRef.current = rolledBack;
+        setVqBlocks(rolledBack);
+        persistVqBlocksCache(rolledBack);
+      }
+      const errorCode = String(e?.code || '').replace('firestore/', '');
+      addToast(`Não foi possível salvar esta alteração${errorCode ? ` (${errorCode})` : ''}.`, 'error', 7000);
+      throw e;
+    }
   };
 
   // Build stable Firestore document ID — tenta bunny_id primeiro, depois título sanitizado (legacy)
@@ -9386,8 +9115,10 @@ export default function QuestionBankApp() {
   useEffect(()=>{
     if(!user||!username) return;
     const defFolder=[{id:'imported-folder',title:'Pergaminhos Diversos',fullSyllabus:'Questões importadas.',source:'external',topics:[]}];
+    setLibraryLoadError('');
     if(user.isAnonymous){
-      try{const s=localStorage.getItem(`qb_lib_${username}`);setLibrary(s?sortLibraryItems(JSON.parse(s)):defFolder);}catch(e){setLibrary(defFolder);}
+      setLibraryLoading(false);
+      try{const s=localStorage.getItem(`qb_lib_${username}`);setLibrary(s?sortLibraryItems(JSON.parse(s)):defFolder);}catch(e){setLibrary(defFolder);setLibraryLoadError('Falha ao ler biblioteca local.');}
       return;
     }
     let cancelled = false;
@@ -9397,8 +9128,12 @@ export default function QuestionBankApp() {
       const d = sortLibraryItems(cached.value);
       libraryRef.current = d.length ? d : defFolder;
       setLibrary(libraryRef.current);
-      if (cached.fresh) return;
+      if (cached.fresh) {
+        setLibraryLoading(false);
+        return;
+      }
     }
+    setLibraryLoading(true);
     (async () => {
       try {
         const snap = await getDocs(collection(db,'users',user.uid,'library'));
@@ -9407,9 +9142,19 @@ export default function QuestionBankApp() {
         const next = d.length ? d : defFolder;
         libraryRef.current = next;
         setLibrary(next);
+        setLibraryLoadError('');
         writeTimedCache(cacheKey, d);
       } catch(e) {
-        if (!cached.value && !cancelled) setLibrary(defFolder);
+        console.warn('library load failed:', e?.code || e?.message || e);
+        if (!cancelled) {
+          setLibraryLoadError(e?.code || e?.message || 'Falha ao carregar biblioteca');
+          if (!cached.value) {
+            libraryRef.current = defFolder;
+            setLibrary(defFolder);
+          }
+        }
+      } finally {
+        if (!cancelled) setLibraryLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -10452,13 +10197,17 @@ export default function QuestionBankApp() {
     adminQuestionExplanations:true,
   });
 
-  const getPrompt = (forAPI=false, areas=[]) => {
+  const getPrompt = async (forAPI=false, areas=[]) => {
     const s = withAdminQuestionPromptSettings(settingsRef.current);
     const focusBlock = getFocusInst(areas);
+    const buildOracleQuestionPrompt = await getPromptBuilder('buildOracleQuestionPrompt');
     return buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
   };
 
-  const getExternalPrompt = () => buildExternalPrompt(withAdminQuestionPromptSettings(settingsRef.current));
+  const getExternalPrompt = async () => {
+    const buildExternalPrompt = await getPromptBuilder('buildExternalPrompt');
+    return buildExternalPrompt(withAdminQuestionPromptSettings(settingsRef.current));
+  };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleFileUpload = async (e) => {
@@ -10550,6 +10299,7 @@ export default function QuestionBankApp() {
     if (!isAdmin) return { questions, audited:false };
     const effectiveAuditSettings = withAdminQuestionPromptSettings(auditSettings);
     const generatedText = questionsToGenerationText(questions);
+    const buildQuestionAuditPrompt = await getPromptBuilder('buildQuestionAuditPrompt');
     const prompt = buildQuestionAuditPrompt({
       subjectTitle,
       topicTitle,
@@ -10600,6 +10350,7 @@ export default function QuestionBankApp() {
     const missing = target - questions.length;
     onProgress?.(`Completando ${missing} questão${missing!==1?'ões':''} faltante${missing!==1?'s':''}...`);
     const existing = summarizeQuestionsForPrompt(questions).substring(0, 9000);
+    const buildOracleQuestionPrompt = await getPromptBuilder('buildOracleQuestionPrompt');
     const prompt = `${buildOracleQuestionPrompt(generationSettings, '', false)}
 
 TAREFA DE CONTINUAÇÃO:
@@ -11246,6 +10997,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     addSharedLibraryLog('info', `${targets.length} aulas · ${keys.length} chaves · etapas: ${stages.map(stage => SHARED_LIBRARY_STAGE_LABELS[stage] || stage).join(', ')} · lotes de ${SHARED_LIBRARY_QUESTION_BATCH_SIZE}.`);
 
     try {
+      const buildVqSyllabusPrompt = stages.includes('summary') ? await getPromptBuilder('buildVqSyllabusPrompt') : null;
+      const buildSharedLibraryDirectPrompt = stages.includes('direct') ? await getPromptBuilder('buildSharedLibraryDirectPrompt') : null;
+      const buildSharedLibraryClinicalPrompt = stages.includes('clinical') ? await getPromptBuilder('buildSharedLibraryClinicalPrompt') : null;
       let completedLessons = 0;
       for (const lesson of targets) {
         if (sharedLibraryControlRef.current.stop) break;
@@ -11585,17 +11339,24 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const next = { ...current, answers, updatedAt:Date.now() };
     setSharedLibraryProgress(progress => ({ ...progress, [itemId]:next }));
     try {
-      await setDoc(doc(db, 'users', user.uid, SHARED_LIBRARY_PROGRESS_COLLECTION, itemId), cleanFirestoreData(next), { merge:true });
+      await saveSharedLibraryAnswerPatch({ userId:user.uid, itemId, questionId, letter, updatedAt:next.updatedAt });
     } catch(e) {
+      setSharedLibraryProgress(progress => ({ ...progress, [itemId]:current }));
       addToast('A resposta ficou salva neste dispositivo, mas ainda não sincronizou.', 'warning', 3500);
     }
   };
 
   const resetSharedLibraryAnswers = async (itemId) => {
     if (!user || user.isAnonymous || !itemId) return;
-    const next = { ...(sharedLibraryProgress[itemId] || {}), answers:{}, updatedAt:Date.now() };
+    const current = sharedLibraryProgress[itemId] || {};
+    const next = { ...current, answers:{}, updatedAt:Date.now() };
     setSharedLibraryProgress(progress => ({ ...progress, [itemId]:next }));
-    await setDoc(doc(db, 'users', user.uid, SHARED_LIBRARY_PROGRESS_COLLECTION, itemId), cleanFirestoreData(next), { merge:true }).catch(()=>{});
+    try {
+      await resetSharedLibraryAnswersPatch({ userId:user.uid, itemId, updatedAt:next.updatedAt });
+    } catch(e) {
+      setSharedLibraryProgress(progress => ({ ...progress, [itemId]:current }));
+      addToast('Não consegui limpar as respostas da Biblioteca agora.', 'warning', 3500);
+    }
   };
 
   const readCourseCatalogKeyStats = () => {
@@ -12513,6 +12274,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if(!checkKey()) return;
     const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed', questionTypes=['direct'], toastId } = cfg;
     setVqSyllabusLoading(true);
+    const buildVqSyllabusPrompt = await getPromptBuilder('buildVqSyllabusPrompt');
+    const buildVqBlockPrompt = await getPromptBuilder('buildVqBlockPrompt');
 
     // 1. Buscar transcrição
     const lessonData = await fetchTranscript(aula);
@@ -12697,6 +12460,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   // Gera as questões de um bloco específico usando transcrição parcial
   const generateVqBlock = async (aulaId, blockId) => {
     if(!checkKey()) return;
+    const buildVqBlockPrompt = await getPromptBuilder('buildVqBlockPrompt');
     const aulaData = vqBlocks[aulaId];
     if(!aulaData) return;
     const block = aulaData.blocks?.[blockId];
@@ -13182,6 +12946,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? `\n\nQUESTÕES DIRETAS JÁ GERADAS — NÃO transforme estas perguntas em caso maior; crie raciocínios novos:\n${questionsToGenerationText(previousQuestions).substring(0, 8000)}`
       : '';
     const generated = [];
+    const buildSharedLibraryClinicalPrompt = await getPromptBuilder('buildSharedLibraryClinicalPrompt');
     for (let blockIndex = 0; blockIndex < allBlocks.length; blockIndex += 1) {
       const focusBlock = allBlocks[blockIndex];
       onProgress?.(`Gerando clínicas mistas ${blockIndex + 1}/${allBlocks.length}...`);
@@ -13315,6 +13080,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const previousQuestions = hasRegenerationInstruction(regenInstruction)
       ? summarizeQuestionsForPrompt(originalTopic.questions || [])
       : '';
+    const buildOracleQuestionPrompt = await getPromptBuilder('buildOracleQuestionPrompt');
     const buildChunkPrompt = ({ plans = null, generatedSoFar = [], chunkIndex = 0, chunkTotal = 1 } = {}) => {
       const usingChunk = Array.isArray(plans) && plans.length > 0;
       const chunkExpected = usingChunk ? plans.reduce((sum, plan) => sum + plan.questions, 0) : total;
@@ -13521,6 +13287,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const previousQuestions = hasRegenerationInstruction(regenInstruction)
       ? summarizeQuestionsForPrompt(sourceTopic.questions || [])
       : '';
+    const buildOracleQuestionPrompt = await getPromptBuilder('buildOracleQuestionPrompt');
 
     const buildChunkPrompt = ({ plans = null, generatedSoFar = [], chunkIndex = 0, chunkTotal = 1 } = {}) => {
       const usingChunk = Array.isArray(plans) && plans.length > 0;
@@ -13641,6 +13408,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
     if(!checkKey())return;setIsBusy(true);setStudyPlanMultiplier(1);
     const s = {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap};
+    const buildOracleSyllabusPrompt = await getPromptBuilder('buildOracleSyllabusPrompt');
     const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const orderedKeys = getTwoAttemptGeminiKeys();
     const chunks = buildAcademiaMaterialChunks(materialText, uploadedFiles);
@@ -13701,6 +13469,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
+    const buildOracleSyllabusRevisePrompt = await getPromptBuilder('buildOracleSyllabusRevisePrompt');
     const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap});
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false;
@@ -14212,6 +13981,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setIsBusy(true);
     setAcademiaStudyPlanMultiplier(1);
     const s = {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap};
+    const buildAcademiaSyllabusPrompt = await getPromptBuilder('buildAcademiaSyllabusPrompt');
     const sys = buildAcademiaSyllabusPrompt(subjectTitle, s, s.autoMode || false);
     const chunks = buildAcademiaMaterialChunks(academiaMaterialText, academiaUploadedFiles);
     if (chunks.length > 1) {
@@ -14274,6 +14044,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const reviseAcademiaSyllabus = async () => {
     if (!academiaSyllabusFB.trim() || !checkKey()) return;
     setIsBusy(true);
+    const buildOracleSyllabusRevisePrompt = await getPromptBuilder('buildOracleSyllabusRevisePrompt');
     const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, {...settingsRef.current, source: 'academia', adminStudyMap:!!settingsRef.current.adminStudyMap});
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false;
@@ -14368,6 +14139,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
 
     const orderedKeys = getOrderedKeys();
+    const buildAcademiaLessonPrompt = shouldGenerateLesson ? await getPromptBuilder('buildAcademiaLessonPrompt') : null;
+    const buildAcademiaFixationPrompt = shouldGenerateQuestions ? await getPromptBuilder('buildAcademiaFixationPrompt') : null;
 
     // Requisição A: aula em markdown
     let lessonText = Object.values(topic.lessonSections || {}).map(sec => `${sec?.title || ''}\n${sec?.content || ''}`).join('\n\n');
@@ -14767,6 +14540,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     });
     const extraChunks = shouldChunkExtra ? chunkQuestionPlansByTarget(extraPlans) : [extraPlans];
     let extraQuestions = [];
+    const buildAcademiaExtraBatteryPrompt = await getPromptBuilder('buildAcademiaExtraBatteryPrompt');
     for (let chunkIndex = 0; chunkIndex < extraChunks.length; chunkIndex += 1) {
       const plans = extraChunks[chunkIndex];
       const chunkSubtopics = plans.map(plan => plan.title);
@@ -15025,7 +14799,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       let parsedQuestions = [];
       let mergedSummary = '';
       for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-        const prompt = buildErrorNotebookReviewPrompt({
+        const prompt = await buildErrorNotebookReviewPrompt({
           subjectTitle:errorReviewModal.subject?.title || sourceLabelForErrorReview(errorReviewModal.subject, errorReviewModal.sourceLabel),
           topicTitle:errorReviewModal.topic?.title || 'Caderno de erros',
           questions:chunks[chunkIndex],
@@ -16143,7 +15917,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
-                isAdmin ? {label:'Biblioteca', desc:'Acervo pronto', icon:<BookOpen className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
+                homeCanSeeSharedLibrary ? {label:'Biblioteca', desc:'Acervo pronto', icon:<BookOpen className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
                 homeCanUseAcademia ? {label:'Academia', desc:'Aulas e questões', icon:<AcademiaIcon className="w-5 h-5"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
                 {label:'Oráculo', desc:'Bancos de questões', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
                 {label:'Acervo externo', desc:'Importações e provas', icon:<FolderIcon className="w-5 h-5"/>, active:libFilter==='external'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}},
@@ -16267,7 +16041,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      <main className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-24 lg:pb-0':view==='curso'?'pb-24 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-24 md:py-7 lg:py-10 lg:pb-10'}`}>
 
           {/* ── BIBLIOTECA COMPARTILHADA ── */}
-          {view==='shared-library'&&isAdmin&&(()=>{
+          {view==='shared-library'&&homeCanSeeSharedLibrary&&(()=>{
             const showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin';
             const tabs = [
               { id:'apostila', label:'Apostila', icon:<BookOpen className="w-4 h-4"/> },
@@ -16470,6 +16244,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                       </button>
                     </div>
                   </div>
+                  {(sharedLibraryLoading || sharedLibraryError) && (
+                    <div className={`mt-4 rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${sharedLibraryError ? (darkMode?'border-red-900/60 bg-red-950/20 text-red-200':'border-red-200 bg-red-50 text-red-800') : (darkMode?'border-gray-700 bg-gray-900 text-gray-300':'border-gray-200 bg-gray-50 text-gray-700')}`}>
+                      {sharedLibraryLoading ? <Spinner className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-600"/> : <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0"/>}
+                      <span className="min-w-0 flex-1">
+                        {sharedLibraryLoading ? 'Carregando Biblioteca...' : `Nao consegui sincronizar a Biblioteca (${sharedLibraryError}). Confira login, regras do Firestore e conexão.`}
+                      </span>
+                    </div>
+                  )}
                 </section>
 
                 <div className={`grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
@@ -16598,7 +16380,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&(
 	          (()=>{
-			    const sharedLibraryCard = isAdmin ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Aulas, questões de fixação e casos clínicos prontos para estudar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
+			    const sharedLibraryCard = homeCanSeeSharedLibrary ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Aulas, questões de fixação e casos clínicos prontos para estudar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
 			    const academiaCard = homeCanUseAcademia ? {key:'academia', icon:<AcademiaIcon className="w-5 h-5"/>, title:'Academia do Saber', desc:'Aprenda um assunto com aula personalizada e questões de fixação.', action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null;
 			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', action:()=>setView('curso')} : null;
 			    const geminiCard = {key:'gemini', icon:<Landmark className="w-5 h-5"/>, title:'Oráculo', desc:'Ferramenta complementar para criar e revisar bancos de questões.', action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}};
@@ -17317,6 +17099,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         {(libFilter!=='academia'||canUseAcademia)&&<button onClick={primaryAction} className="bg-yellow-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-yellow-700 flex items-center gap-2 text-sm">{primaryIcon}{primaryLabel}</button>}
                       </div>
                   </div>
+                  {(libraryLoading || libraryLoadError) && (
+                    <div className={`mt-4 rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${libraryLoadError ? (darkMode?'border-red-900/60 bg-red-950/20 text-red-200':'border-red-200 bg-red-50 text-red-800') : (darkMode?'border-gray-700 bg-gray-900 text-gray-300':'border-gray-200 bg-gray-50 text-gray-700')}`}>
+                      {libraryLoading ? <Spinner className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-600"/> : <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0"/>}
+                      <span className="min-w-0 flex-1">
+                        {libraryLoading ? 'Sincronizando biblioteca...' : `Nao consegui sincronizar a biblioteca agora (${libraryLoadError}). Mostrei o cache/local quando disponivel.`}
+                      </span>
+                    </div>
+                  )}
                   <div className={`mt-4 pt-4 border-t flex flex-wrap items-center gap-2 ${darkMode?'border-gray-800':'border-gray-100'}`}>
                     <span className="text-[10px] font-bold uppercase tracking-widest opacity-35 mr-1">Estudar e organizar</span>
 	                      {activeFolder&&libFilter==='academia'&&countFolderQuestions(activeFolder)>0&&(()=>{
@@ -18056,7 +17846,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura Gerada</h2>
                 <p className={`text-sm rounded-xl border p-4 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200 text-gray-700'}`}>Revise os tópicos abaixo. Você pode pedir ajustes antes de confirmar; o assunto só será adicionado ao acervo ao clicar em <strong>Confirmar e salvar</strong>.</p>
                 {settings.adminStudyMap
-                  ? <StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode} multiplier={studyPlanMultiplier} onMultiplierChange={setStudyPlanMultiplier}/>
+                  ? <React.Suspense fallback={<LoadingState message="Abrindo plano guiado..."/>}><StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode} multiplier={studyPlanMultiplier} onMultiplierChange={setStudyPlanMultiplier}/></React.Suspense>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{syllabus}</div>}
                 <div className="relative">
                   <textarea value={syllabusFB} onChange={e=>setSyllabusFB(e.target.value)} placeholder="Solicite ajustes..." className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -18309,7 +18099,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   ✅ Revise os tópicos e subtópicos. Eles viram seções da aula; as questões de fixação serão geradas para a aula como um todo, evitando repetir o mesmo eixo de cobrança entre subtópicos próximos.
                 </p>
                 {settings.adminStudyMap
-                  ? <StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode} multiplier={academiaStudyPlanMultiplier} onMultiplierChange={setAcademiaStudyPlanMultiplier}/>
+                  ? <React.Suspense fallback={<LoadingState message="Abrindo plano guiado..."/>}><StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode} multiplier={academiaStudyPlanMultiplier} onMultiplierChange={setAcademiaStudyPlanMultiplier}/></React.Suspense>
                   : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>}
                 <div className="relative">
                   <textarea value={academiaSyllabusFB} onChange={e=>setAcademiaSyllabusFB(e.target.value)} placeholder="Solicite ajustes (ex: adicione mais subtópicos sobre tratamento...)" className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
@@ -18572,7 +18362,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const q = (freshTopic.questions||[]).find(x=>x.id===qId);
     if (isFinalObjectiveAnswer(q, freshTopic.answers?.[qId])) return;
 	            const errorNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshTopic.errorNotebook||[], qId) : (freshTopic.errorNotebook||[]);
-	            await updateSubject({...freshSubject, topics:freshSubject.topics.map(t2=>t2.id===freshTopic.id?{...t2,answers:{...t2.answers,[qId]:letter},errorNotebook}:t2)});
+	            await deferInteractionWork(() => updateSubject({...freshSubject, topics:freshSubject.topics.map(t2=>t2.id===freshTopic.id?{...t2,answers:{...t2.answers,[qId]:letter},errorNotebook}:t2)}));
 	          };
 	          const handleFavUnfavorite = async (subject, topic, qId) => {
     const freshSubject = (libraryRef.current || library).find(s => s.id === subject.id) || subject;
@@ -20839,27 +20629,37 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const freshBlocks = Array.isArray(freshData?.blocks) ? {} : (freshData?.blocks || {});
     const freshBlock = freshBlocks[blockId] || block;
     const freshAnswers = (freshBlock.answers && typeof freshBlock.answers === 'object' && !Array.isArray(freshBlock.answers)) ? freshBlock.answers : {};
-    const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
     const q = (Array.isArray(freshBlock.questions) ? freshBlock.questions : qs).find(x => sameId(x.id, qId))
       || visibleQuestions.find(x => sameId(x.id, qId));
     if (isFinalObjectiveAnswer(q, freshAnswers[qId])) return;
-	                const nextNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(freshNotebook, qId) : freshNotebook;
-	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,answers:{...freshAnswers,[qId]:letter},errorNotebook:nextNotebook}}});
+	                await saveVqBlockPatch(
+	                  aulaIdNew,
+	                  blockId,
+	                  currentBlock => {
+	                    const answers = (currentBlock.answers && typeof currentBlock.answers === 'object' && !Array.isArray(currentBlock.answers)) ? currentBlock.answers : {};
+	                    const notebook = Array.isArray(currentBlock.errorNotebook) ? currentBlock.errorNotebook : [];
+	                    const errorNotebook = canUseAdvancedFeatures && !isAnswerCorrect(q, letter) ? addToList(notebook, qId) : notebook;
+	                    return {...currentBlock, answers:{...answers, [qId]:letter}, errorNotebook};
+	                  },
+	                  nextBlock => ({ answers:{[qId]:letter}, errorNotebook:nextBlock.errorNotebook || [] })
+	                );
 	              };
 	              const handleVqFavorite = async (qId) => {
-    const freshData = vqBlocksRef.current?.[aulaIdNew] || vqBlocksRef.current?.[aulaId] || aulaData;
-    const freshBlocks = Array.isArray(freshData?.blocks) ? {} : (freshData?.blocks || {});
-    const freshBlock = freshBlocks[blockId] || block;
-	                const nf = toggleInList(Array.isArray(freshBlock.favorites) ? freshBlock.favorites : [], qId);
-	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,favorites:nf}}});
+	                await saveVqBlockPatch(
+	                  aulaIdNew,
+	                  blockId,
+	                  currentBlock => ({...currentBlock, favorites:toggleInList(Array.isArray(currentBlock.favorites) ? currentBlock.favorites : [], qId)}),
+	                  nextBlock => ({ favorites:nextBlock.favorites || [] })
+	                );
 	              };
 	              const handleVqNotebook = async (qId) => {
 	                if (!canUseAdvancedFeatures) return;
-    const freshData = vqBlocksRef.current?.[aulaIdNew] || vqBlocksRef.current?.[aulaId] || aulaData;
-    const freshBlocks = Array.isArray(freshData?.blocks) ? {} : (freshData?.blocks || {});
-    const freshBlock = freshBlocks[blockId] || block;
-    const freshNotebook = Array.isArray(freshBlock.errorNotebook) ? freshBlock.errorNotebook : [];
-	                await saveVqBlock(aulaIdNew, {...freshData, blocks:{...freshBlocks,[blockId]:{...freshBlock,errorNotebook:toggleInList(freshNotebook,qId)}}});
+	                await saveVqBlockPatch(
+	                  aulaIdNew,
+	                  blockId,
+	                  currentBlock => ({...currentBlock, errorNotebook:toggleInList(Array.isArray(currentBlock.errorNotebook) ? currentBlock.errorNotebook : [], qId)}),
+	                  nextBlock => ({ errorNotebook:nextBlock.errorNotebook || [] })
+	                );
               };
               const handleVqReset = async () => {
                 if (cycleStage || vqQuestionParity !== 'all') {
@@ -22678,7 +22478,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       {academiaExportModal&&<AcademiaExportModal topic={academiaExportModal.topic} subject={academiaExportModal.subject} onClose={()=>setAcademiaExportModal(null)} darkMode={darkMode}/>}
 
       {/* ── INSIGHTS MODAL ── */}
-      {bizuarioModal&&<BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey} geminiOptions={getGeminiOptions()}/>}
+      {bizuarioModal&&(
+        <React.Suspense fallback={<div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 p-4"><Spinner className="w-10 h-10 text-yellow-600"/></div>}>
+          <BizuarioModal topicTitle={bizuarioModal.topicTitle} subjectTitle={bizuarioModal.subjectTitle} questions={bizuarioModal.questions||[]} subtopics={bizuarioModal.subtopics||[]} topicContexts={bizuarioModal.topicContexts||null} apiKey={getKey()} darkMode={darkMode} onClose={()=>setBizuarioModal(null)} cachedText={bizuarioModal.cachedText} onSave={bizuarioModal.onSave} onRotateKey={rotateKey} geminiOptions={getGeminiOptions()}/>
+        </React.Suspense>
+      )}
 
       {/* ── RESET COURSE MODAL ── */}
       {resetCourseModal&&(
