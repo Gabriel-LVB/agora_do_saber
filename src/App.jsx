@@ -9,9 +9,11 @@ import { deferInteractionWork } from './lib/interaction.js';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
 import { useCourseDerivedState } from './hooks/useCourseDerivedState.js';
 import { useGeminiRuntime } from './hooks/useGeminiRuntime.js';
+import { useSharedLibrarySync } from './hooks/useSharedLibrarySync.js';
 import { auth, db } from './services/firebase.js';
 import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
+import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
 import { resetSharedLibraryAnswersPatch, saveSharedLibraryAnswerPatch } from './services/sharedLibraryProgress.js';
 import { saveUserVqBlockPatch } from './services/vqBlocks.js';
@@ -312,6 +314,16 @@ const readTimedCache = (key, maxAgeMs, fallback = null) => {
   };
 };
 const writeTimedCache = (key, value) => writeStorageJson(key, { value, savedAt:Date.now() });
+const withFirestoreTimeout = (promise, ms = 15000) => Promise.race([
+  promise,
+  new Promise((_, reject) => {
+    setTimeout(() => {
+      const error = new Error('timeout');
+      error.code = 'timeout';
+      reject(error);
+    }, ms);
+  }),
+]);
 const isCacheFresh = (key, maxAgeMs) => {
   const savedAt = Number(readStorageText(key, '0')) || 0;
   return !!savedAt && Date.now() - savedAt < maxAgeMs;
@@ -2673,6 +2685,8 @@ const COURSE_ORG_SOURCE_MODE = 'firestore-subject-manual-corrections-v3';
 const COURSE_SCHEDULE_DEFAULT_WEEKS = 24;
 const COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE = 2;
 const COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE = 6;
+const COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE = 4;
+const COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE = 8;
 const COURSE_SCHEDULE_DEFAULT_ORDER_PRESET = 'systems-flow';
 const COURSE_SCHEDULE_DEFAULT_MIX_PRESET = 'subject-batches';
 const COURSE_SCHEDULE_PRESETS = [
@@ -3654,6 +3668,7 @@ export default function QuestionBankApp() {
   const [activeSubjectId, setActiveSubjectId] = useState(null);
   const [activeTopicId, setActiveTopicId]     = useState(null);
   const [shuffledSubjectTopic, setShuffledSubjectTopic] = useState(null);
+  const [backgroundPrefetchStage, setBackgroundPrefetchStage] = useState(0);
 
   // ── Creator ───────────────────────────────────────────────────────────────
   const [creatorStep, setCreatorStep]   = useState(1);
@@ -3804,7 +3819,6 @@ export default function QuestionBankApp() {
   const homeCanSeeSharedLibrary = isAdmin && adminHomeMode !== 'site';
   const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
   const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
-
   useEffect(() => {
     if (!canSeeVideoaulas && ['curso','videoaulas','videoquestions'].includes(view)) setView('library');
   }, [canSeeVideoaulas, view]);
@@ -3858,6 +3872,14 @@ export default function QuestionBankApp() {
   const [vqSyllabusLoading, setVqSyllabusLoading] = useState(false); // geração do sumário
   const [vqGenModal, setVqGenModal] = useState(null);
   const [toasts, setToasts] = useState([]); // notificações toast
+  const addToast = (msg, type='info', duration=5000, onClick=null) => {
+    const id = Date.now() + Math.random();
+    setToasts(p => [...p, { id, msg, type, onClick }]);
+    if (duration > 0) setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
+    return id;
+  };
+  const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
+  const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
   const [dailyStats, setDailyStats] = useState({date:getTodayKey(),questionKeys:{},lessonIntervals:{}});
   const dailyStatsRef = useRef(dailyStats);
   const dailyStatsSaveTimer = useRef(null);
@@ -3866,25 +3888,55 @@ export default function QuestionBankApp() {
   const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
   const [vqQuestionParity, setVqQuestionParity] = useState('all'); // all | odd | even
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
+  const needsCourseSharedLibraryData = canSeeVideoaulas;
+  const needsSharedLibraryData = (homeCanSeeSharedLibrary && view === 'shared-library') || needsCourseSharedLibraryData;
+  const needsSharedLibraryUiData = homeCanSeeSharedLibrary && view === 'shared-library';
 
   // Biblioteca compartilhada — conteúdo global, progresso individual.
-  const [sharedLibraryItems, setSharedLibraryItems] = useState([]);
-  const [sharedLibraryLoading, setSharedLibraryLoading] = useState(false);
-  const [sharedLibraryError, setSharedLibraryError] = useState('');
-  const [sharedLibraryTab, setSharedLibraryTab] = useState('apostila');
-  const [sharedLibrarySubject, setSharedLibrarySubject] = useState('all');
-  const [sharedLibrarySearch, setSharedLibrarySearch] = useState('');
-  const [sharedLibraryActiveItemId, setSharedLibraryActiveItemId] = useState(null);
-  const [sharedLibraryProgress, setSharedLibraryProgress] = useState({});
-  const [sharedLibraryConfig, setSharedLibraryConfig] = useState({ subjectOrder:[], enabledSubjects:null });
-  const [sharedLibraryRun, setSharedLibraryRun] = useState({ running:false, paused:false, stopping:false, stage:null, current:0, total:0, logs:[] });
-  const [sharedLibraryPurging, setSharedLibraryPurging] = useState(false);
-  const [sharedLibraryAudienceMode, setSharedLibraryAudienceMode] = useState('student');
-  const [sharedLibraryRepairing, setSharedLibraryRepairing] = useState(false);
-  const [sharedLibraryGenerationStages, setSharedLibraryGenerationStages] = useState(['summary','direct','clinical']);
-  const [sharedLibraryGenerationSubject, setSharedLibraryGenerationSubject] = useState('all');
-  const [sharedLibraryGenerationLesson, setSharedLibraryGenerationLesson] = useState('all');
-  const sharedLibraryControlRef = useRef({ paused:false, stop:false });
+  const {
+    refreshSharedLibrary,
+    setSharedLibraryActiveItemId,
+    setSharedLibraryAudienceMode,
+    setSharedLibraryConfig,
+    setSharedLibraryGenerationLesson,
+    setSharedLibraryGenerationStages,
+    setSharedLibraryGenerationSubject,
+    setSharedLibraryItems,
+    setSharedLibraryProgress,
+    setSharedLibraryPurging,
+    setSharedLibraryRepairing,
+    setSharedLibraryRun,
+    setSharedLibrarySearch,
+    setSharedLibrarySubject,
+    setSharedLibraryTab,
+    sharedLibraryActiveItemId,
+    sharedLibraryAudienceMode,
+    sharedLibraryConfig,
+    sharedLibraryControlRef,
+    sharedLibraryError,
+    sharedLibraryGenerationLesson,
+    sharedLibraryGenerationStages,
+    sharedLibraryGenerationSubject,
+    sharedLibraryItems,
+    sharedLibraryLoading,
+    sharedLibraryProgress,
+    sharedLibraryPurging,
+    sharedLibraryRepairing,
+    sharedLibraryRun,
+    sharedLibrarySearch,
+    sharedLibrarySubject,
+    sharedLibraryTab,
+  } = useSharedLibrarySync({
+    addToast,
+    canReadSharedLibrary:needsSharedLibraryData,
+    configDocId:SHARED_LIBRARY_CONFIG_DOC,
+    contentCollection:SHARED_LIBRARY_COLLECTION,
+    isAdmin,
+    loadProgress:needsSharedLibraryUiData,
+    progressCollection:SHARED_LIBRARY_PROGRESS_COLLECTION,
+    showLoadErrors:needsSharedLibraryUiData,
+    user,
+  });
 
   useEffect(() => {
     vqBlocksRef.current = vqBlocks;
@@ -3913,12 +3965,14 @@ export default function QuestionBankApp() {
   const [coursePlanSubjects, setCoursePlanSubjects] = useState([]);
   const [coursePlanLessonOrder, setCoursePlanLessonOrder] = useState([]);
   const [coursePlanLocked, setCoursePlanLocked] = useState(false);
+  const [coursePrefsLoaded, setCoursePrefsLoaded] = useState(false);
   const [courseScheduleWeeks, setCourseScheduleWeeks] = useState(COURSE_SCHEDULE_DEFAULT_WEEKS);
   const [courseScheduleSubjectBatchSize, setCourseScheduleSubjectBatchSize] = useState(COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE);
   const [courseSchedulePreset, setCourseSchedulePreset] = useState(COURSE_SCHEDULE_DEFAULT_ORDER_PRESET);
   const [courseScheduleMixPreset, setCourseScheduleMixPreset] = useState(COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
   const [courseScheduleSubjectsOpen, setCourseScheduleSubjectsOpen] = useState(false);
   const [courseScheduleSettingsOpen, setCourseScheduleSettingsOpen] = useState(false);
+  const [courseCycleSubjectBatchSize, setCourseCycleSubjectBatchSize] = useState(COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE);
   const [courseCycleReviews, setCourseCycleReviews] = useState({});
   const [courseCatalogRun, setCourseCatalogRun] = useState({ running:false, paused:false, stopping:false, current:0, total:0, logs:[] });
   const [courseCatalogStats, setCourseCatalogStats] = useState({ loading:false, rows:[], total:0, pending:0 });
@@ -3967,8 +4021,8 @@ export default function QuestionBankApp() {
   }, [courseCatalogRun.logs.length]);
 
   useEffect(() => {
-    if (!isAdmin && cursoTab === 'plano') setCursoTab('cronograma');
-  }, [isAdmin, cursoTab]);
+    if (cursoTab === 'questoes') setCursoTab('plano');
+  }, [cursoTab]);
 
   useEffect(() => {
     if (!homeCanSeeSharedLibrary && view === 'shared-library') setView('library');
@@ -3997,71 +4051,6 @@ export default function QuestionBankApp() {
   const persistVqBlocksCache = (blocks) => {
     if (user && !user.isAnonymous) writeTimedCache(userVqBlocksCacheKey(user.uid), blocks || {});
   };
-
-  const refreshSharedLibrary = useCallback(async () => {
-    if (!user || user.isAnonymous || !homeCanSeeSharedLibrary) {
-      setSharedLibraryLoading(false);
-      setSharedLibraryError('');
-      setSharedLibraryItems([]);
-      setSharedLibraryProgress({});
-      return;
-    }
-    setSharedLibraryLoading(true);
-    setSharedLibraryError('');
-    try {
-      const [contentSnap, progressSnap, configSnap] = await Promise.all([
-        getDocs(collection(db, SHARED_LIBRARY_COLLECTION)),
-        getDocs(collection(db, 'users', user.uid, SHARED_LIBRARY_PROGRESS_COLLECTION)),
-        isAdmin ? getDoc(doc(db, 'config', SHARED_LIBRARY_CONFIG_DOC)) : Promise.resolve(null),
-      ]);
-      const items = [];
-      contentSnap.forEach(entry => {
-        const data = entry.data() || {};
-        if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
-      });
-      setSharedLibraryItems(items);
-      const progress = {};
-      progressSnap.forEach(entry => { progress[entry.id] = entry.data() || {}; });
-      setSharedLibraryProgress(progress);
-      if (configSnap?.exists()) {
-        const saved = configSnap.data() || {};
-        setSharedLibraryConfig(p => ({ ...p, ...saved }));
-      }
-    } catch(e) {
-      console.error('Shared library load failed:', e);
-      setSharedLibraryError(e?.code || e?.message || 'Falha ao carregar biblioteca compartilhada');
-      addToast('Não consegui carregar a Biblioteca compartilhada.', 'error', 4500);
-    } finally {
-      setSharedLibraryLoading(false);
-    }
-  }, [user?.uid, isAdmin, homeCanSeeSharedLibrary]); // eslint-disable-line
-
-  useEffect(() => {
-    if (!user || user.isAnonymous || !homeCanSeeSharedLibrary) {
-      setSharedLibraryItems([]);
-      setSharedLibraryProgress({});
-      setSharedLibraryError('');
-      setSharedLibraryLoading(false);
-      return;
-    }
-    refreshSharedLibrary();
-  }, [refreshSharedLibrary, user?.uid, homeCanSeeSharedLibrary]);
-
-  useEffect(() => {
-    if (!user || user.isAnonymous || !homeCanSeeSharedLibrary) return undefined;
-    return onSnapshot(collection(db, SHARED_LIBRARY_COLLECTION), snapshot => {
-      setSharedLibraryError('');
-      const items = [];
-      snapshot.forEach(entry => {
-        const data = entry.data() || {};
-        if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
-      });
-      setSharedLibraryItems(items);
-    }, error => {
-      console.warn('Shared library realtime sync failed:', error?.code || error?.message || error);
-      setSharedLibraryError(error?.code || error?.message || 'Falha na sincronizacao em tempo real');
-    });
-  }, [user?.uid, isAdmin, homeCanSeeSharedLibrary]);
 
   const captureReturnTarget = () => ({
     view,
@@ -4125,10 +4114,58 @@ export default function QuestionBankApp() {
     if (items) setReviewSession({ items, index:0, sessionAnswers:{} });
   };
 
-  // Load videoaulas: carrega UMA VEZ no login e usa localStorage como cache entre sessões
+  useEffect(() => {
+    if (!user || user.isAnonymous) {
+      setBackgroundPrefetchStage(0);
+      return undefined;
+    }
+    setBackgroundPrefetchStage(0);
+    const timers = [
+      setTimeout(() => setBackgroundPrefetchStage(stage => Math.max(stage, 1)), 900),
+      setTimeout(() => setBackgroundPrefetchStage(stage => Math.max(stage, 2)), 2200),
+      setTimeout(() => setBackgroundPrefetchStage(stage => Math.max(stage, 3)), 4500),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [user?.uid, user?.isAnonymous]);
+
+  const courseDataViews = ['curso', 'videoaulas', 'videoquestions', 'shared-library'];
+  const foregroundVideoaulasData = canSeeVideoaulas && courseDataViews.includes(view);
+  const needsVideoaulasData = foregroundVideoaulasData || (canSeeVideoaulas && backgroundPrefetchStage >= 2);
+  const needsCourseScheduleData = canSeeVideoaulas && (
+    view === 'curso'
+    || view === 'library'
+    || backgroundPrefetchStage >= 2
+  );
+  const foregroundVqBlocksData = canSeeVideoaulas && (
+    ['curso', 'videoquestions'].includes(view)
+    || !!vqAula
+    || !!vqActiveBlockView
+    || (view === 'spaced-review' && canUseAdvancedFeatures)
+  );
+  const needsVqBlocksData = foregroundVqBlocksData || (canSeeVideoaulas && backgroundPrefetchStage >= 3);
+  const foregroundReviewQueueData = canUseAdvancedFeatures && (
+    ['curso', 'videoquestions', 'spaced-review'].includes(view)
+    || !!srModal
+    || !!reviewSession
+  );
+  const needsReviewQueueData = foregroundReviewQueueData || (canUseAdvancedFeatures && backgroundPrefetchStage >= 2);
+  const foregroundPersonalLibraryData = [
+    'sub-library',
+    'subject',
+    'topic',
+    'academia-topic',
+    'favorites',
+    'exam',
+    'quick',
+    'quick-topic',
+    'spaced-review',
+  ].includes(view) || !!activeSubjectId || !!examSetup || !!activeExam || !!folderReviewModal || !!errorReviewModal;
+  const needsPersonalLibraryData = foregroundPersonalLibraryData || backgroundPrefetchStage >= 1;
+
+  // Load videoaulas sob demanda e usa localStorage como cache entre sessões.
   const videoaulasLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.isAnonymous || !canSeeVideoaulas || videoaulasLoadedRef.current) return;
+    if (!user || user.isAnonymous || !needsVideoaulasData || videoaulasLoadedRef.current) return;
 
     // Tentar cache do localStorage primeiro (evita loading na abertura)
     const cacheKey = FIRESTORE_CACHE_KEYS.videoaulas;
@@ -4153,9 +4190,9 @@ export default function QuestionBankApp() {
 
     // Sem cache — carrega normalmente com loading
     videoaulasLoadedRef.current = true;
-    setVideoaulasLoading(true);
-    refreshVideoaulasInBackground(user, cacheKey, watchedKey, true);
-  }, [user, canSeeVideoaulas]); // eslint-disable-line
+    setVideoaulasLoading(foregroundVideoaulasData);
+    refreshVideoaulasInBackground(user, cacheKey, watchedKey, foregroundVideoaulasData);
+  }, [user, needsVideoaulasData, foregroundVideoaulasData]); // eslint-disable-line
 
   // Resetar ao fazer logout
   useEffect(() => {
@@ -4456,6 +4493,7 @@ export default function QuestionBankApp() {
       if (prefs.startDate) setCronStartDate(prefs.startDate);
       if (Number(prefs.courseScheduleWeeks) > 0) setCourseScheduleWeeks(Math.max(1, Math.min(104, Number(prefs.courseScheduleWeeks))));
       if (Number(prefs.courseScheduleSubjectBatchSize) > 0) setCourseScheduleSubjectBatchSize(Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(prefs.courseScheduleSubjectBatchSize))));
+      if (Number(prefs.courseCycleSubjectBatchSize) > 0) setCourseCycleSubjectBatchSize(Math.max(1, Math.min(COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE, Number(prefs.courseCycleSubjectBatchSize))));
       if (prefs.courseSchedulePreset) setCourseSchedulePreset(String(prefs.courseSchedulePreset));
       if (prefs.courseScheduleMixPreset) setCourseScheduleMixPreset(String(prefs.courseScheduleMixPreset));
       if (prefs.courseCycleReviews && typeof prefs.courseCycleReviews === 'object') setCourseCycleReviews(prefs.courseCycleReviews);
@@ -4473,11 +4511,12 @@ export default function QuestionBankApp() {
     }
   };
 
-  // Load cronograma from Firestore — carrega UMA VEZ no login com cache localStorage
+  // Load cronograma sob demanda com cache localStorage.
   const cronLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.isAnonymous || !canSeeVideoaulas || cronLoadedRef.current) return;
+    if (!user || user.isAnonymous || !needsCourseScheduleData || cronLoadedRef.current) return;
     cronLoadedRef.current = true;
+    setCoursePrefsLoaded(false);
 
     const cacheKey = `agora_cronograma_${user.uid}`;
     try {
@@ -4490,7 +4529,8 @@ export default function QuestionBankApp() {
           const hasUserSubjects = Array.isArray(prefs.coursePlanSubjects) && prefs.coursePlanSubjects.length;
           applyCoursePrefsPayload(prefs);
           await loadGlobalCourseOrganizationPrefs({ includeSubjects:!hasUserSubjects });
-        }).catch(()=>{ loadGlobalCourseOrganizationPrefs(); });
+        }).catch(()=>{ loadGlobalCourseOrganizationPrefs(); })
+          .finally(()=>setCoursePrefsLoaded(true));
         return;
       }
     } catch(e) {}
@@ -4514,9 +4554,9 @@ export default function QuestionBankApp() {
         }
         await loadGlobalCourseOrganizationPrefs({ includeSubjects:!hasUserSubjects });
       } catch(e) { setCronograma([]); }
-      finally { setCronLoading(false); }
+      finally { setCronLoading(false); setCoursePrefsLoaded(true); }
     })();
-  }, [user, canSeeVideoaulas]); // eslint-disable-line
+  }, [user, needsCourseScheduleData]); // eslint-disable-line
 
   // Resetar ao logout
   useEffect(() => {
@@ -4528,6 +4568,7 @@ export default function QuestionBankApp() {
         videoaulasLoadedRef.current = false;
       }
       cronLoadedRef.current = false;
+      setCoursePrefsLoaded(false);
       setCronograma(null);
       setCoursePlanSubjects([]);
       setCoursePlanLessonOrder([]);
@@ -4538,6 +4579,7 @@ export default function QuestionBankApp() {
       setCourseScheduleMixPreset(COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
       setCourseScheduleSubjectsOpen(false);
       setCourseScheduleSettingsOpen(false);
+      setCourseCycleSubjectBatchSize(COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE);
       setCourseCycleReviews({});
       setCourseOrgProposal(null);
       setCourseOrgRun({ running:false, current:0, total:0, logs:[] });
@@ -4545,9 +4587,9 @@ export default function QuestionBankApp() {
     }
   }, [user, canSeeVideoaulas]);
 
-  // Load reviewQueue — carrega uma vez no login
+  // Load reviewQueue sob demanda quando revisão/curso precisam da fila.
   useEffect(() => {
-    if (!user || user.isAnonymous || reviewLoaded) return;
+    if (!user || user.isAnonymous || !needsReviewQueueData || reviewLoaded) return;
     setReviewLoaded(true);
     const cacheKey = userReviewQueueCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.reviewQueue, null);
@@ -4566,7 +4608,7 @@ export default function QuestionBankApp() {
         writeTimedCache(cacheKey, loaded);
       } catch(e) {}
     })();
-  }, [user]); // eslint-disable-line
+  }, [user, needsReviewQueueData]); // eslint-disable-line
 
   useEffect(() => {
     if (!user) { setReviewLoaded(false); reviewQueueRef.current = {}; setReviewQueue({}); }
@@ -4617,6 +4659,18 @@ export default function QuestionBankApp() {
       }, { merge:true });
     } catch(e) {
       addToast('Não consegui sincronizar o cronograma agora, mas mantive na tela.', 'info', 3500);
+    }
+  };
+
+  const saveCourseCyclePrefs = async ({ subjectBatchSize = courseCycleSubjectBatchSize } = {}) => {
+    const cleanSubjectBatchSize = Math.max(1, Math.min(COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE, Number(subjectBatchSize) || COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE));
+    setCourseCycleSubjectBatchSize(cleanSubjectBatchSize);
+    if (user && !user.isAnonymous) try {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
+        courseCycleSubjectBatchSize:cleanSubjectBatchSize,
+      }, { merge:true });
+    } catch(e) {
+      addToast('Não consegui sincronizar o Ciclo de Estudos agora, mas mantive na tela.', 'info', 3500);
     }
   };
 
@@ -4676,7 +4730,7 @@ export default function QuestionBankApp() {
     setCursoTab('plano');
     setView('curso');
     const movedCount = proposal.manualCorrections?.length || 0;
-    addToast(options.auto ? `Lista corrigida manualmente e aplicada (${movedCount} aula${movedCount!==1?'s':''} movida${movedCount!==1?'s':''}).` : 'Proposta corrigida e aplicada à Jornada do Herói.', 'success', 4500);
+    addToast(options.auto ? `Lista corrigida manualmente e aplicada (${movedCount} aula${movedCount!==1?'s':''} movida${movedCount!==1?'s':''}).` : 'Proposta corrigida e aplicada ao Ciclo de Estudos.', 'success', 4500);
   };
 
   useEffect(() => {
@@ -5122,7 +5176,12 @@ export default function QuestionBankApp() {
     const subj = library.find(s => String(s.id) === String(reviewItem.subjectId || reviewItem.item?.subjectId));
     const topic = subj?.topics?.find(t => String(t.id) === String(reviewItem.topicId || reviewItem.item?.topicId));
     if (!subj || !topic) return;
-    await updateSubject({...subj, topics:subj.topics.map(t=>t.id===topic.id?{...t,favorites:toggleInList(t.favorites||[], reviewItem.qId)}:t)});
+    const favorites = toggleInList(topic.favorites || [], reviewItem.qId);
+    await persistLibraryTopicProgressPatches([{
+      subject:{...subj, topics:subj.topics.map(t=>t.id===topic.id?{...t,favorites}:t)},
+      topicId:topic.id,
+      patch:{ favorites },
+    }]);
   };
 
   const getReviewOrigin = (reviewItem) => {
@@ -5153,16 +5212,23 @@ export default function QuestionBankApp() {
       return;
     }
     if (!origin.subj || !origin.topic) return;
-    await updateSubject({...origin.subj, topics:origin.subj.topics.map(t=>t.id===origin.topic.id?{...t,errorNotebook:nextList(t.errorNotebook)}:t)});
+    const errorNotebook = nextList(origin.topic.errorNotebook);
+    await persistLibraryTopicProgressPatches([{
+      subject:{...origin.subj, topics:origin.subj.topics.map(t=>t.id===origin.topic.id?{...t,errorNotebook}:t)},
+      topicId:origin.topic.id,
+      patch:{ errorNotebook },
+    }]);
   };
 
   // Total de revisões pendentes (para badge)
   const dueCount = getDueReviews().length;
-  // Load vqBlocks — carrega UMA VEZ quando o usuário loga, não a cada troca de view
+  // Load vqBlocks — carrega sob demanda quando curso/questoes/revisao precisam.
+  const [vqBlocksLoaded, setVqBlocksLoaded] = useState(false);
   const vqBlocksLoadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.isAnonymous || vqBlocksLoadedRef.current) return;
+    if (!user || user.isAnonymous || !needsVqBlocksData || vqBlocksLoadedRef.current) return;
     vqBlocksLoadedRef.current = true;
+    setVqBlocksLoaded(false);
     const cacheKey = userVqBlocksCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.vqBlocks, null);
     if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
@@ -5182,13 +5248,13 @@ export default function QuestionBankApp() {
         setVqBlocks(loaded);
         writeTimedCache(cacheKey, loaded);
       } catch(e) { console.error('vqBlocks load error:', e); }
-      finally { setVqLoading(false); }
+      finally { setVqLoading(false); setVqBlocksLoaded(true); }
     })();
-  }, [user]); // eslint-disable-line
+  }, [user, needsVqBlocksData]); // eslint-disable-line
 
   // Resetar o cache quando o usuário faz logout
   useEffect(() => {
-    if (!user) { vqBlocksLoadedRef.current = false; setVqBlocks({}); }
+    if (!user) { vqBlocksLoadedRef.current = false; setVqBlocksLoaded(false); setVqBlocks({}); }
   }, [user]);
 
   // Save a single aula's vqBlock data to Firestore
@@ -5960,7 +6026,10 @@ export default function QuestionBankApp() {
 
   // Library sync
   useEffect(()=>{
-    if(!user||!username) return;
+    if(!user||!username) {
+      setLibraryLoading(false);
+      return;
+    }
     const defFolder=[{id:'imported-folder',title:'Pergaminhos Diversos',fullSyllabus:'Questões importadas.',source:'external',topics:[]}];
     setLibraryLoadError('');
     if(user.isAnonymous){
@@ -5975,17 +6044,29 @@ export default function QuestionBankApp() {
       const d = sortLibraryItems(cached.value);
       libraryRef.current = d.length ? d : defFolder;
       setLibrary(libraryRef.current);
-      if (cached.fresh) {
+      if (cached.fresh || !needsPersonalLibraryData) {
         setLibraryLoading(false);
         return;
       }
     }
-    setLibraryLoading(true);
+    if (!needsPersonalLibraryData) {
+      if (!cached.value) {
+        libraryRef.current = defFolder;
+        setLibrary(defFolder);
+      }
+      setLibraryLoading(false);
+      return;
+    }
+    setLibraryLoading(foregroundPersonalLibraryData);
     (async () => {
       try {
-        const snap = await getDocs(collection(db,'users',user.uid,'library'));
+        const [snap, progressSnap] = await Promise.all([
+          withFirestoreTimeout(getDocs(collection(db,'users',user.uid,'library'))),
+          withFirestoreTimeout(getDocs(collection(db,'users',user.uid, LIBRARY_PROGRESS_COLLECTION))),
+        ]);
         if (cancelled) return;
-        const d = sortLibraryItems(snap.docs.map(x=>x.data()));
+        const progressEntries = progressSnap.docs.map(entry => entry.data() || {});
+        const d = sortLibraryItems(applyLibraryProgressEntries(snap.docs.map(x=>x.data()), progressEntries));
         const next = d.length ? d : defFolder;
         libraryRef.current = next;
         setLibrary(next);
@@ -6005,7 +6086,7 @@ export default function QuestionBankApp() {
       }
     })();
     return () => { cancelled = true; };
-  },[user,username]);
+  },[user,username,needsPersonalLibraryData,foregroundPersonalLibraryData]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const activeSubject = library.find(s=>s.id===activeSubjectId);
@@ -6140,6 +6221,82 @@ export default function QuestionBankApp() {
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
     if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+  };
+  const mergeSubjectTopicUpdates = (...subjects) => {
+    const validSubjects = subjects.filter(subject => subject?.id && Array.isArray(subject.topics));
+    if (!validSubjects.length) return null;
+    const first = validSubjects[0];
+    const last = validSubjects[validSubjects.length - 1];
+    const topicsById = new Map();
+    validSubjects.forEach(subject => {
+      (subject.topics || []).forEach(topic => topicsById.set(String(topic.id), topic));
+    });
+    return {
+      ...first,
+      ...last,
+      topics:(first.topics || []).map(topic => topicsById.get(String(topic.id)) || topic),
+    };
+  };
+  const persistLibraryTopicProgressPatches = async (entries = []) => {
+    const cleanEntries = entries
+      .filter(entry => entry?.subject?.id && entry?.topicId && entry?.patch)
+      .map(entry => ({
+        ...entry,
+        subject:cleanFirestoreData(pruneEmbeddedSpacedReview(entry.subject)),
+        patch:cleanFirestoreData(entry.patch),
+      }));
+    if (!cleanEntries.length) return;
+    const changed = new Map();
+    cleanEntries.forEach(entry => {
+      changed.set(entry.subject.id, changed.has(entry.subject.id)
+        ? mergeSubjectTopicUpdates(changed.get(entry.subject.id), entry.subject)
+        : entry.subject);
+    });
+    const normalizedEntries = cleanEntries.map(entry => ({
+      ...entry,
+      subject:changed.get(entry.subject.id) || entry.subject,
+    }));
+    const nextLibrary = sortLibraryItems((libraryRef.current?.length ? libraryRef.current : library).map(item => changed.get(item.id) || item));
+    libraryRef.current = nextLibrary;
+    setLibrary(nextLibrary);
+    persistSignedLibraryCache(nextLibrary);
+    if (user && !user.isAnonymous) {
+      await Promise.all(normalizedEntries.map(entry => saveLibraryTopicProgressPatch({
+        userId:user.uid,
+        subjectId:entry.subject.id,
+        topicId:entry.topicId,
+        patch:entry.patch,
+      }).catch(error => {
+        console.error('library progress patch failed:', error);
+        throw error;
+      })));
+    } else if (user?.isAnonymous) {
+      localStorage.setItem(`qb_lib_${username}`, JSON.stringify(nextLibrary));
+    }
+    if (normalizedEntries.some(entry => entry.subject.source === 'academia' || hasAcademiaOriginTopic(entry.subject))) {
+      scheduleAcademiaOracleMirrorSync(nextLibrary);
+    }
+  };
+  const topicProgressPatchFromSubject = (subject, topicId) => {
+    const topic = (subject?.topics || []).find(item => sameId(item.id, topicId));
+    if (!topic) return {};
+    return {
+      answers:topic.answers || {},
+      favorites:topic.favorites || [],
+      errorNotebook:topic.errorNotebook || [],
+      spacedReview:topic.spacedReview || {},
+    };
+  };
+  const persistLibraryTopicProgressFromSubject = async (subject, topicId, extraPatch = {}) => {
+    if (!subject || !topicId) return;
+    await persistLibraryTopicProgressPatches([{
+      subject,
+      topicId,
+      patch:{
+        ...topicProgressPatchFromSubject(subject, topicId),
+        ...extraPatch,
+      },
+    }]);
   };
   const updateLibraryItems = async (items) => {
     let cleanItems = items.map(item => cleanFirestoreData(pruneEmbeddedSpacedReview(item)));
@@ -6854,7 +7011,7 @@ export default function QuestionBankApp() {
       ));
     }
 
-    const updates = new Map();
+    const progressEntries = [];
     let clearedCount = 0;
     items.forEach(item => {
       if (isFolderItem(item) || item.source !== 'academia') return;
@@ -6870,9 +7027,24 @@ export default function QuestionBankApp() {
         if (!removed) return topic;
         clearedCount += removed;
         changed = true;
-        return { ...topic, answers:nextAnswers };
+        return {
+          ...topic,
+          answers:nextAnswers,
+          spacedReview:Object.fromEntries(Object.entries(topic.spacedReview || {}).filter(([qId]) => !ids.has(String(qId)))),
+        };
       });
-      if (changed) updates.set(item.id, { ...item, topics });
+      if (changed) {
+        const nextSubject = { ...item, topics };
+        (item.topics || []).forEach(topic => {
+          const ids = questionIdsByTarget.get(`${item.id}__${topic.id}`);
+          if (!ids?.size) return;
+          progressEntries.push({
+            subject:nextSubject,
+            topicId:topic.id,
+            patch:topicProgressPatchFromSubject(nextSubject, topic.id),
+          });
+        });
+      }
     });
 
     items.forEach(item => {
@@ -6890,12 +7062,29 @@ export default function QuestionBankApp() {
         const removed = Object.keys(currentAnswers).length - Object.keys(nextAnswers).length;
         if (!removed) return topic;
         changed = true;
-        return { ...topic, answers:nextAnswers };
+        return {
+          ...topic,
+          answers:nextAnswers,
+          spacedReview:Object.fromEntries(Object.entries(topic.spacedReview || {}).filter(([qId]) => !ids.has(String(qId)))),
+        };
       });
-      if (changed) updates.set(item.id, { ...item, topics });
+      if (changed) {
+        const nextSubject = { ...item, topics };
+        (item.topics || []).forEach(topic => {
+          const origin = topic.origin;
+          if (origin?.source !== 'academia' || (origin.kind || 'fixation') !== 'fixation') return;
+          const ids = questionIdsByTarget.get(`${origin.subjectId}__${origin.topicId}`);
+          if (!ids?.size) return;
+          progressEntries.push({
+            subject:nextSubject,
+            topicId:topic.id,
+            patch:topicProgressPatchFromSubject(nextSubject, topic.id),
+          });
+        });
+      }
     });
 
-    if (updates.size) await updateLibraryItems(Array.from(updates.values()));
+    if (progressEntries.length) await persistLibraryTopicProgressPatches(progressEntries);
     addToast(
       clearedCount
         ? `${clearedCount} resposta${clearedCount!==1?'s':''} de fixação limpa${clearedCount!==1?'s':''}.`
@@ -7053,15 +7242,6 @@ export default function QuestionBankApp() {
     for(const f of files){if(!f.type.startsWith('image/'))continue;const b64=await new Promise(r=>{const fr=new FileReader();fr.onload=ev=>r(ev.target.result.split(',')[1]);fr.readAsDataURL(f);});setUploadedImages(p=>[...p,{name:f.name,base64:b64,mimeType:f.type,preview:URL.createObjectURL(f)}]);}
     if(imageInputRef.current) imageInputRef.current.value='';
   };
-
-  const addToast = (msg, type='info', duration=5000, onClick=null) => {
-    const id = Date.now() + Math.random();
-    setToasts(p => [...p, { id, msg, type, onClick }]);
-    if (duration > 0) setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
-    return id;
-  };
-  const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
-  const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
 
   useEffect(() => {
     if (copiedTopicCleanupRef.current || !librarySubjects.length) return;
@@ -9362,10 +9542,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       errorNotebook,
     };
     setAcademiaTopicAnswers(p => ({...p, [qId]:letter}));
-    await updateSubject({
+    const nextSourceSubject = {
       ...sourceSubject,
       topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id) ? updatedTopic : t),
-    });
+    };
+    await persistLibraryTopicProgressPatches([{
+      subject:nextSourceSubject,
+      topicId:sourceTopic.id,
+      patch:{
+        answers:{ [qId]:letter },
+        errorNotebook,
+      },
+    }]);
   };
 
   const syncAcademiaOriginNotebook = async (origin, qId, shouldInclude) => {
@@ -9378,10 +9566,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ? addToList(sourceTopic.errorNotebook || [], qId)
       : (sourceTopic.errorNotebook || []).filter(id => !sameId(id, qId));
     const updatedTopic = {...sourceTopic, errorNotebook:nextNotebook};
-    await updateSubject({
-      ...sourceSubject,
-      topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id) ? updatedTopic : t),
-    });
+    await persistLibraryTopicProgressPatches([{
+      subject:{
+        ...sourceSubject,
+        topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id) ? updatedTopic : t),
+      },
+      topicId:sourceTopic.id,
+      patch:{ errorNotebook:nextNotebook },
+    }]);
   };
 
   const getCustomStudySyncMode = (topic = {}) =>
@@ -9482,7 +9674,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         };
       });
       const nextSourceSubject = await syncCustomStudyOriginAnswer(q, letter, isRight, 'all');
-      if (nextSourceSubject) await updateLibraryItems([nextSourceSubject]);
+      if (nextSourceSubject) await persistLibraryTopicProgressPatches([{
+        subject:nextSourceSubject,
+        topicId:q._originTopicId,
+        patch:topicProgressPatchFromSubject(nextSourceSubject, q._originTopicId),
+      }]);
       return;
     }
     const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
@@ -9498,16 +9694,49 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
     if(canUseAdvancedFeatures && !isRight) sr[qId]={dueDate:now+86400000,interval:1,wrongCount:(sr[qId]?.wrongCount||0)+1};
     else if(canUseAdvancedFeatures && sr[qId]){const ni=Math.min((sr[qId].interval||1)*2,30);sr[qId]={...sr[qId],dueDate:now+ni*86400000,interval:ni};}
+    const nextErrorNotebook = canUseAdvancedFeatures && !isRight ? addToList(freshTopic.errorNotebook || [], qId) : (freshTopic.errorNotebook || []);
     const nextActiveSubject = {...freshSubject,topics:freshSubject.topics.map(t=>{
       if (t.id !== activeTopicId) return t;
-      const errorNotebook = canUseAdvancedFeatures && !isRight ? addToList(t.errorNotebook || [], qId) : (t.errorNotebook || []);
-      return {...t,answers:{...(t.answers||{}),[qId]:letter},spacedReview:sr,errorNotebook};
+      return {...t,answers:{...(t.answers||{}),[qId]:letter},spacedReview:sr,errorNotebook:nextErrorNotebook};
     })};
+    const activeProgressEntry = {
+      subject:nextActiveSubject,
+      topicId:activeTopicId,
+      patch:{
+        answers:{ [qId]:letter },
+        spacedReview:sr,
+        errorNotebook:nextErrorNotebook,
+      },
+    };
     const customSyncMode = getCustomStudySyncMode(freshTopic);
     if (freshTopic.origin?.source === 'customStudy') {
       const nextSourceSubject = await syncCustomStudyOriginAnswer(q, letter, isRight, customSyncMode);
       if (nextSourceSubject) {
-        await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
+        const mergedSubject = sameId(nextActiveSubject.id, nextSourceSubject.id)
+          ? mergeSubjectTopicUpdates(nextActiveSubject, nextSourceSubject)
+          : null;
+        const entries = mergedSubject
+          ? [
+            {
+              subject:mergedSubject,
+              topicId:activeTopicId,
+              patch:topicProgressPatchFromSubject(mergedSubject, activeTopicId),
+            },
+            {
+              subject:mergedSubject,
+              topicId:q._originTopicId,
+              patch:topicProgressPatchFromSubject(mergedSubject, q._originTopicId),
+            },
+          ]
+          : [
+            activeProgressEntry,
+            {
+              subject:nextSourceSubject,
+              topicId:q._originTopicId,
+              patch:topicProgressPatchFromSubject(nextSourceSubject, q._originTopicId),
+            },
+          ];
+        await persistLibraryTopicProgressPatches(entries);
         return;
       }
     }
@@ -9529,11 +9758,32 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             : t),
         };
         setAcademiaTopicAnswers(p => ({...p, [qId]:letter}));
-        await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
+        const mergedSubject = sameId(nextActiveSubject.id, nextSourceSubject.id)
+          ? mergeSubjectTopicUpdates(nextActiveSubject, nextSourceSubject)
+          : null;
+        await persistLibraryTopicProgressPatches(mergedSubject ? [
+          {
+            subject:mergedSubject,
+            topicId:activeTopicId,
+            patch:topicProgressPatchFromSubject(mergedSubject, activeTopicId),
+          },
+          {
+            subject:mergedSubject,
+            topicId:sourceTopic.id,
+            patch:topicProgressPatchFromSubject(mergedSubject, sourceTopic.id),
+          },
+        ] : [
+          activeProgressEntry,
+          {
+            subject:nextSourceSubject,
+            topicId:sourceTopic.id,
+            patch:topicProgressPatchFromSubject(nextSourceSubject, sourceTopic.id),
+          },
+        ]);
         return;
       }
     }
-    await updateSubject(nextActiveSubject);
+    await persistLibraryTopicProgressPatches([activeProgressEntry]);
   };
 
   const handleFavorite = async (qId) => {
@@ -9543,7 +9793,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       if (!q) return;
       setShuffledSubjectTopic(topic => topic ? {...topic, favorites:toggleInList(topic.favorites || [], qId)} : topic);
       const nextSourceSubject = await syncCustomStudyOriginFavorite(q, 'all');
-      if (nextSourceSubject) await updateLibraryItems([nextSourceSubject]);
+      if (nextSourceSubject) await persistLibraryTopicProgressPatches([{
+        subject:nextSourceSubject,
+        topicId:q._originTopicId,
+        patch:{ favorites:topicProgressPatchFromSubject(nextSourceSubject, q._originTopicId).favorites },
+      }]);
       return;
     }
     const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
@@ -9554,8 +9808,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const nextSourceSubject = freshTopic.origin?.source === 'customStudy'
       ? await syncCustomStudyOriginFavorite(q, getCustomStudySyncMode(freshTopic))
       : null;
-    if (nextSourceSubject) await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
-    else await updateSubject(nextActiveSubject);
+    const activeEntry = { subject:nextActiveSubject, topicId:activeTopicId, patch:{ favorites:nf } };
+    if (nextSourceSubject) {
+      const mergedSubject = sameId(nextActiveSubject.id, nextSourceSubject.id)
+        ? mergeSubjectTopicUpdates(nextActiveSubject, nextSourceSubject)
+        : null;
+      await persistLibraryTopicProgressPatches(mergedSubject ? [
+        { subject:mergedSubject, topicId:activeTopicId, patch:{ favorites:topicProgressPatchFromSubject(mergedSubject, activeTopicId).favorites } },
+        { subject:mergedSubject, topicId:q._originTopicId, patch:{ favorites:topicProgressPatchFromSubject(mergedSubject, q._originTopicId).favorites } },
+      ] : [
+        activeEntry,
+        { subject:nextSourceSubject, topicId:q._originTopicId, patch:{ favorites:topicProgressPatchFromSubject(nextSourceSubject, q._originTopicId).favorites } },
+      ]);
+    } else await persistLibraryTopicProgressPatches([activeEntry]);
   };
 
   const handleErrorNotebook = async (qId) => {
@@ -9567,7 +9832,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const shouldInclude = listHasId(nextNotebook, qId);
       setShuffledSubjectTopic(topic => topic ? {...topic, errorNotebook:nextNotebook} : topic);
       const nextSourceSubject = await syncCustomStudyOriginNotebook(q, shouldInclude, 'all');
-      if (nextSourceSubject) await updateLibraryItems([nextSourceSubject]);
+      if (nextSourceSubject) await persistLibraryTopicProgressPatches([{
+        subject:nextSourceSubject,
+        topicId:q._originTopicId,
+        patch:{ errorNotebook:topicProgressPatchFromSubject(nextSourceSubject, q._originTopicId).errorNotebook },
+      }]);
       return;
     }
     const freshSubject = (libraryRef.current || library).find(s => s.id === activeSubjectId) || activeSubject;
@@ -9581,7 +9850,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const q = resolveCustomStudyQuestions(freshTopic).find(x=>x.id===qId);
       const nextSourceSubject = await syncCustomStudyOriginNotebook(q, shouldInclude, getCustomStudySyncMode(freshTopic));
       if (nextSourceSubject) {
-        await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
+        const mergedSubject = sameId(nextActiveSubject.id, nextSourceSubject.id)
+          ? mergeSubjectTopicUpdates(nextActiveSubject, nextSourceSubject)
+          : null;
+        await persistLibraryTopicProgressPatches(mergedSubject ? [
+          { subject:mergedSubject, topicId:activeTopicId, patch:{ errorNotebook:topicProgressPatchFromSubject(mergedSubject, activeTopicId).errorNotebook } },
+          { subject:mergedSubject, topicId:q._originTopicId, patch:{ errorNotebook:topicProgressPatchFromSubject(mergedSubject, q._originTopicId).errorNotebook } },
+        ] : [
+          { subject:nextActiveSubject, topicId:activeTopicId, patch:{ errorNotebook:nextNotebook } },
+          { subject:nextSourceSubject, topicId:q._originTopicId, patch:{ errorNotebook:topicProgressPatchFromSubject(nextSourceSubject, q._originTopicId).errorNotebook } },
+        ]);
         return;
       }
     }
@@ -9597,11 +9875,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           ...sourceSubject,
           topics:sourceSubject.topics.map(t => String(t.id) === String(sourceTopic.id) ? {...sourceTopic, errorNotebook:sourceNotebook} : t),
         };
-        await updateLibraryItems(sameId(nextActiveSubject.id, nextSourceSubject.id) ? [nextSourceSubject] : [nextActiveSubject, nextSourceSubject]);
+        const mergedSubject = sameId(nextActiveSubject.id, nextSourceSubject.id)
+          ? mergeSubjectTopicUpdates(nextActiveSubject, nextSourceSubject)
+          : null;
+        await persistLibraryTopicProgressPatches(mergedSubject ? [
+          { subject:mergedSubject, topicId:activeTopicId, patch:{ errorNotebook:topicProgressPatchFromSubject(mergedSubject, activeTopicId).errorNotebook } },
+          { subject:mergedSubject, topicId:sourceTopic.id, patch:{ errorNotebook:topicProgressPatchFromSubject(mergedSubject, sourceTopic.id).errorNotebook } },
+        ] : [
+          { subject:nextActiveSubject, topicId:activeTopicId, patch:{ errorNotebook:nextNotebook } },
+          { subject:nextSourceSubject, topicId:sourceTopic.id, patch:{ errorNotebook:sourceNotebook } },
+        ]);
         return;
       }
     }
-    await updateSubject(nextActiveSubject);
+    await persistLibraryTopicProgressPatches([{ subject:nextActiveSubject, topicId:activeTopicId, patch:{ errorNotebook:nextNotebook } }]);
   };
 
   // Bug 6: toggle favorite for a question that came from the exam (carries _subjectId, _topicId)
@@ -9610,7 +9897,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const topic = subj.topics.find(t=>t.id===q._topicId); if(!topic) return;
     const favs = topic.favorites||[];
     const nf = favs.includes(q.id) ? favs.filter(f=>f!==q.id) : [...favs,q.id];
-    await updateSubject({...subj, topics:subj.topics.map(t=>t.id===q._topicId?{...t,favorites:nf}:t)});
+    await persistLibraryTopicProgressPatches([{
+      subject:{...subj, topics:subj.topics.map(t=>t.id===q._topicId?{...t,favorites:nf}:t)},
+      topicId:q._topicId,
+      patch:{ favorites:nf },
+    }]);
     // also update the live exam so the heart icon reflects immediately
     setActiveExam(p=>({...p, _favRefresh:Date.now()}));
   };
@@ -9627,7 +9918,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const subj = library.find(s=>s.id===q._subjectId); if(!subj) return;
     const topic = subj.topics.find(t=>t.id===q._topicId); if(!topic) return;
     const errorNotebook = toggleInList(topic.errorNotebook||[], q.id);
-    await updateSubject({...subj, topics:subj.topics.map(t=>t.id===q._topicId?{...t,errorNotebook}:t)});
+    await persistLibraryTopicProgressPatches([{
+      subject:{...subj, topics:subj.topics.map(t=>t.id===q._topicId?{...t,errorNotebook}:t)},
+      topicId:q._topicId,
+      patch:{ errorNotebook },
+    }]);
     setActiveExam(p=>({...p, _notebookRefresh:Date.now()}));
   };
 
@@ -9646,7 +9941,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       }]);
       return;
     }
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},bizuario:null}:t)});
+    const nextSubject = {...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:{},spacedReview:{},bizuario:null}:t)};
+    await persistLibraryTopicProgressFromSubject(nextSubject, activeTopicId, { answers:{}, spacedReview:{}, bizuario:null });
   };
   const resetOnlyWrong = async () => {
     const wrong=(activeTopic.questions||[]).filter(q=>{
@@ -9655,7 +9951,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       return !isAnswerCorrect(q, a);
     }).map(q=>q.id);
     const na=Object.fromEntries(Object.entries(activeTopic.answers||{}).filter(([k])=>!wrong.includes(k)));
-    await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:na}:t)});setShowOnlyWrong(false);
+    const nextSubject = {...activeSubject,topics:activeSubject.topics.map(t=>t.id===activeTopicId?{...t,answers:na}:t)};
+    await persistLibraryTopicProgressFromSubject(nextSubject, activeTopicId, { answers:na });
+    setShowOnlyWrong(false);
   };
 
   const openOracleRegenModal = (topic = activeTopic) => {
@@ -9707,6 +10005,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       topics:(subject.topics || []).map(t => t.id === topic.id ? updatedTopic : t),
     };
     await updateSubject(updatedSubject);
+    await persistLibraryTopicProgressFromSubject(updatedSubject, topic.id, { answers:{}, spacedReview:{}, errorNotebook:updatedTopic.errorNotebook || [], bizuario:null });
     return { subject:updatedSubject, topic:updatedTopic, questionCount:audited.questions.length };
   };
 
@@ -9813,6 +10112,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const regenInstruction = String(addPrompt || '').trim();
     const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{}, questionAudit:null } : t) };
     await updateSubject(cleared);
+    await persistLibraryTopicProgressFromSubject(cleared, topic.id, { answers:{}, spacedReview:{}, errorNotebook:topic.errorNotebook || [], bizuario:null });
     const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
 
     const generationSettings = withAdminQuestionPromptSettings({ ...settingsRef.current, ...(settingsOverride || {}) });
@@ -10002,6 +10302,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       )
     };
     await updateSubject(updatedSubject);
+    await persistLibraryTopicProgressFromSubject(updatedSubject, clearedTopic.id, { answers:{}, spacedReview:{}, errorNotebook:updatedSubject.topics.find(t => t.id === clearedTopic.id)?.errorNotebook || [], bizuario:null });
     return { subject:updatedSubject, questionCount:allQuestions.length };
   };
 
@@ -10014,6 +10315,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const regenInstruction = String(addPrompt || '').trim();
     const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{},questionAudit:null}:t)};
     await updateSubject(cleared);
+    await persistLibraryTopicProgressFromSubject(cleared, topicId, { answers:{}, spacedReview:{}, errorNotebook:sourceTopic.errorNotebook || [], bizuario:null });
     const topic=cleared.topics.find(t=>t.id===topicId);
     const generationSettings = withAdminQuestionPromptSettings({ ...settingsRef.current, ...(settingsOverride || {}) });
 
@@ -10202,7 +10504,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const allQuestions = [...directQuestions, ...clinicalQuestions];
       const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
       const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
-      await updateSubject({...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)});
+      const updatedSubject = {...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)};
+      await updateSubject(updatedSubject);
+      await persistLibraryTopicProgressFromSubject(updatedSubject, topicId, { answers:{}, spacedReview:{}, errorNotebook:updatedSubject.topics.find(t => t.id === topicId)?.errorNotebook || [], bizuario:null });
       ok=true;
     } catch(e) {
       err=e;
@@ -11838,9 +12142,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         if (!subjectUpdate.topicIds.has(topic.id)) subjectUpdate.topicIds.set(topic.id, []);
         subjectUpdate.topicIds.get(topic.id).push(q.id);
       });
-      const clearUpdates = [];
+      const clearEntries = [];
       for (const {subject, topicIds} of clearsBySubject.values()) {
-        clearUpdates.push({
+        const nextSubject = {
           ...subject,
           topics:(subject.topics || []).map(t => {
           const ids = topicIds.get(t.id);
@@ -11852,9 +12156,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             spacedReview:Object.fromEntries(Object.entries(t.spacedReview || {}).filter(([id]) => !clearSet.has(String(id)))),
           };
           }),
-        });
+        };
+        topicIds.forEach((_, topicId) => clearEntries.push({
+          subject:nextSubject,
+          topicId,
+          patch:topicProgressPatchFromSubject(nextSubject, topicId),
+        }));
       }
-      if (clearUpdates.length) await updateLibraryItems(clearUpdates);
+      if (clearEntries.length) await persistLibraryTopicProgressPatches(clearEntries);
     }
     {
       const mirrorClears = new Map();
@@ -11878,9 +12187,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               });
             });
         });
-      const mirrorUpdates = [];
+      const mirrorEntries = [];
       for (const {subject, topicIds} of mirrorClears.values()) {
-        mirrorUpdates.push({
+        const nextSubject = {
           ...subject,
           topics:(subject.topics || []).map(t => {
             const ids = topicIds.get(t.id);
@@ -11892,9 +12201,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               spacedReview:Object.fromEntries(Object.entries(t.spacedReview || {}).filter(([id]) => !clearSet.has(String(id)))),
             };
           }),
-        });
+        };
+        topicIds.forEach((_, topicId) => mirrorEntries.push({
+          subject:nextSubject,
+          topicId,
+          patch:topicProgressPatchFromSubject(nextSubject, topicId),
+        }));
       }
-      if (mirrorUpdates.length) await updateLibraryItems(mirrorUpdates);
+      if (mirrorEntries.length) await persistLibraryTopicProgressPatches(mirrorEntries);
     }
 
     const now = Date.now();
@@ -12219,6 +12533,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     ChevronDown,
     ChevronRight,
     ChevronUp,
+    Clock,
     cleanAulaTitle,
     clearAcademiaFixationAnswersForTargets,
     clearCourseCatalogKeyStats,
@@ -12226,6 +12541,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     Copy,
     countSharedLibraryIncompleteQuestions,
     COURSE_CATALOG_ADMIN_ENABLED,
+    COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE,
+    COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_MIX_PRESET,
     COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_WEEKS,
@@ -12236,6 +12553,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     courseCatalogLogRef,
     courseCatalogRun,
     courseCatalogStats,
+    courseCycleSubjectBatchSize,
     courseLessonDisplayTitle,
     courseOrgProposalUsesOriginalSubjects,
     courseOrgRun,
@@ -12243,6 +12561,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     coursePlanLessonOrder,
     coursePlanLocked,
     coursePlanSubjects,
+    coursePrefsLoaded,
     courseScheduleMixPreset,
     courseSchedulePreset,
     courseScheduleSettingsOpen,
@@ -12348,8 +12667,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     LogOut,
     looksLikeClinicalVignette,
     makeGeminiKeyId,
+    markAulaWatched,
     memoryCardTypeName,
     MessageCircle,
+    mobileNavOpen,
     MoreIcon,
     moveCourseToSiteOnly,
     moveSiteOnlyToCourse,
@@ -12402,11 +12723,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     restoreReturnTarget,
     resumeCourseCatalogAnalysis,
     resumeSharedLibraryAutomation,
+    reviewLoaded,
     reviewQueue,
     reviewSession,
     RotateCcw,
     sameId,
     saveCourseCycleReview,
+    saveCourseCyclePrefs,
     saveCoursePlanPrefs,
     saveCourseSchedulePrefs,
     saveCronStartDate,
@@ -12446,6 +12769,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setLibraryActionMenu,
     setLibraryDrag,
     setLibraryOpenFolders,
+    setMobileNavOpen,
     setNewFolderModal,
     setNewFolderName,
     setNewFolderParentId,
@@ -12506,6 +12830,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     shortTopicName,
     siteConfig,
     siteOnlyAccessEmails,
+    SkipBack,
+    SkipForward,
     sortCourseSubjectsForDisplay,
     sortLibraryItems,
     sortSubjects,
@@ -12537,10 +12863,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     username,
     videoaulasData,
     videoaulasLoading,
+    videoFrameRef,
+    videoMainScrollRef,
+    videoSeek,
     VideoIcon,
     vqActiveBlockView,
     vqAula,
     vqBlocks,
+    vqBlocksLoaded,
     vqBlocksRef,
     vqExpandedSubj,
     vqExpandedTopic,

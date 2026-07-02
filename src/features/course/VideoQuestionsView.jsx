@@ -153,8 +153,8 @@ export default function VideoQuestionsView() {
               const block = blocks[blockId] || {};
               const qs      = Array.isArray(block.questions) ? block.questions : [];
 	              const journeyStage = (() => {
-	                if (cycleStage === 'direct-odd') return { type:'direct', parity:'odd', label:'Fixação · Ímpares' };
-	                if (cycleStage === 'direct-even') return { type:'direct', parity:'even', label:'Fixação · Pares' };
+	                if (cycleStage === 'direct-odd') return { type:'direct', parity:'odd', label:'Fixação · Ímpares diretas' };
+	                if (cycleStage === 'direct-even') return { type:'direct', parity:'even', label:'Fixação · Pares diretas' };
 	                if (cycleStage === 'clinical-odd') return { type:'clinical', parity:'odd', label:'Clínicas · Ímpares' };
 	                if (cycleStage === 'clinical-even') return { type:'clinical', parity:'even', label:'Clínicas · Pares' };
 	                return null;
@@ -192,7 +192,12 @@ export default function VideoQuestionsView() {
               const nextBlockEntry = currentBlockIndex >= 0 ? blockList[currentBlockIndex + 1] : null;
               const nextBlockTitle = nextBlockEntry?.[1]?.title || (nextBlockEntry ? `Bloco ${nextBlockEntry[0].replace('block','')}` : '');
               const missedQuestions = parityQuestions.filter(q => ans[q.id] && !isAnswerCorrect(q, ans[q.id]));
-              const cycleBaseQuestions = cycleStage === 'r3' ? (missedQuestions.length ? missedQuestions : parityQuestions) : parityQuestions;
+              const clinicalReviewQuestions = parityQuestions.filter(question => isClinicalVqQuestion(question));
+              const cycleBaseQuestions = cycleStage === 'r10'
+                ? clinicalReviewQuestions
+                : cycleStage === 'r3'
+                  ? (missedQuestions.length ? missedQuestions : parityQuestions)
+                  : parityQuestions;
               const visibleQuestions = cycleStage === 'r10'
                 ? cycleBaseQuestions.map(q => {
                     const correct = (q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || '';
@@ -277,7 +282,7 @@ export default function VideoQuestionsView() {
                   <QuestionView
                     title={visibleTitle}
                     onBack={backFromCourseQuestions}
-                    backLabel={vqActiveBlockView?.fromPlan ? 'Voltar à Jornada' : 'Voltar à aula'}
+                    backLabel={vqActiveBlockView?.fromPlan ? 'Voltar ao Ciclo' : 'Voltar à aula'}
                     questions={visibleQuestions}
                     answers={visibleAnswers}
 	                    favorites={blockFavs}
@@ -327,7 +332,7 @@ export default function VideoQuestionsView() {
                     onNextUnit={cycleStage
                       ? (()=>{setVqActiveBlockView(null); setCursoTab('plano'); setView('curso');})
                       : (nextBlockEntry ? (()=>setVqActiveBlockView({blockId:nextBlockEntry[0],showWrong:false,fromPlan:vqActiveBlockView?.fromPlan||false})) : (nextCourseLesson ? (()=>openCourseLessonFromVq(nextCourseLesson)) : null))}
-                    nextUnitLabel={cycleStage ? 'Voltar à Jornada' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
+                    nextUnitLabel={cycleStage ? 'Voltar ao Ciclo' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
                     nextUnitHelper={cycleStage ? 'Continuar o roteiro guiado' : (nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência'))}
                     generateLabel="Gerar Questões"
                     onGenerate={meta.readOnly?null:()=>generateVqBlock(aulaIdNew,blockId)}
@@ -433,7 +438,7 @@ export default function VideoQuestionsView() {
 	                          <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
 	                            <button onClick={()=>{setCursoTab('plano');setView('curso');}}
 	                              className={`px-4 py-3 rounded-xl font-bold text-sm border ${dm?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
-	                              Voltar à Jornada
+	                              Voltar ao Ciclo
 	                            </button>
 	                            <button onClick={()=>openCourseLessonFromVq(nextCourseLesson)} disabled={!nextCourseLesson}
 	                              className={`px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-40 ${nextCourseLesson?'bg-yellow-600 hover:bg-yellow-700 text-white':(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400')}`}>

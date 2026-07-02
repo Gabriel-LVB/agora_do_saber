@@ -276,12 +276,26 @@ Implementado nesta primeira rodada:
 - `src/hooks/useGeminiRuntime.js` passou a concentrar runtime do Gemini no cliente: chave ativa, opções de thinking, rotação, ordenação das chaves e chamada com rotação. O `App.jsx` deixou de manter esse pacote como funções inline.
 - Smoke unitário reforçado para exigir esses hooks e bloquear retorno de `getKey`/`callWithRotation` inline no `App.jsx`.
 - Apos os hooks, `npm run check` passou e o bundle principal ficou em 483,00 kB raw / 130,88 kB gzip; JS total ficou em 417,7 KiB gzip, ainda abaixo do budget de 500 KiB raw.
+- Biblioteca compartilhada ganhou `src/hooks/useSharedLibrarySync.js`: estados, refresh, progresso, config e snapshot em tempo real sairam do `App.jsx`, mantendo a regra de nao ler Firestore quando `homeCanSeeSharedLibrary` for falso.
+- Criado `scripts/firestore-rules-smoke.mjs` e incluido em `npm run check` via `npm run test:rules`. O pipeline agora valida regras criticas: dono/admin em `/users`, config escrita so por admin, `shared_library` admin-only e fallback `deny-all`.
+- Gemini ganhou uma ponte de backend opcional em `src/services/gemini.js`: se `VITE_GEMINI_BACKEND_URL` estiver configurado, chamadas nao-stream usam `POST /generate` sem enviar chave do cliente. O contrato ficou documentado em `docs/GEMINI_BACKEND.md`.
+- Apos essas mudanças, `npm run check` passou e o bundle principal ficou em 485,79 kB raw / 131,80 kB gzip; JS total ficou em 418,6 KiB gzip, ainda abaixo do budget.
+- Regras Firestore foram validadas no emulador real com `npm run test:rules:emulator`, usando `@firebase/rules-unit-testing` e `firebase-tools@13.35.1`. O teste cobre dono/admin em `/users`, subcolecoes pessoais como `library` e `library_progress`, `shared_library` admin-only, config, logs e fallback deny-all.
+- Corrigido `isAdmin()` nas regras para checar a existencia do claim `admin` antes de ler `request.auth.token.admin`, eliminando alerta do avaliador oficial do Firebase.
+- Persistencia granular da Biblioteca pessoal/assuntos do Oraculo consolidada com `src/services/libraryProgress.js`. Respostas, favoritos, caderno de erros e revisao espacada por topico passam a ser gravados em `users/{uid}/library_progress/{subjectId}__{topicId}` em vez de regravar o documento grande do assunto para cada clique comum.
+- `App.jsx` agora carrega `library_progress` junto da Biblioteca e aplica os patches por topico via `applyLibraryProgressEntries`, mantendo compatibilidade com dados antigos embutidos no documento do assunto.
+- Fluxos de resposta/favorito/caderno de erros em questoes normais, estudos personalizados, origem Academia, simulados, revisoes da Biblioteca, reset de respostas, reset apenas erradas, limpeza de fixacao da Academia e criacao de estudos personalizados passaram a usar `persistLibraryTopicProgressPatches` nos caminhos de progresso.
+- O overlay granular agora trata `answers` e `spacedReview` como mapas completos do topico quando o patch existe. Isso permite limpar respostas sem que dados antigos do documento grande reaparecam no proximo carregamento.
+- Regeneracao/auditoria de blocos continuam salvando o assunto inteiro porque alteram conteudo estrutural grande, mas tambem limpam o progresso granular do topico para evitar respostas antigas sobre questoes novas.
+- Carregamento em camadas aplicado para dados pesados: a Home renderiza leve e, depois de um pequeno respiro, `backgroundPrefetchStage` aquece Biblioteca pessoal, curso/revisao e questoes do curso em background. Assim a entrada nao bloqueia, mas as abas deixam de cair em loading seco ao primeiro clique.
+- A Biblioteca pessoal deixou de forcar refresh remoto da colecao inteira antes da Home aparecer: se houver cache local, a entrada inicial usa cache; se nao houver, a colecao e aquecida em background logo depois do primeiro render. Isso reduz o carregamento inicial sem arriscar sobrescrever assuntos parciais.
+- Documentacao Gemini atualizada: `VITE_GEMINI_BACKEND_URL` no contrato atual significa backend com chave do site; se o produto continuar usando chaves gratis por usuario, a migracao correta e criar proxy/cofre por usuario antes de remover chaves do cliente.
 
 Ainda pendente:
 
-- Testar regras Firestore em emulador/console antes de publicar.
-- Expandir persistencia granular para outros fluxos alem de `vq_blocks`.
-- Migrar Gemini para backend seguro.
+- Antes do deploy, repetir `npm run test:rules:emulator` no ambiente local/CI e, se possivel, validar tambem pelo console/simulator do Firebase no projeto real.
+- Manter Gemini no modelo atual de chaves gratis por usuario. Nao configurar `VITE_GEMINI_BACKEND_URL` enquanto nao houver decisao explicita de mudar o modelo.
+- Proxima fase de performance de dados: quebrar a propria Biblioteca pessoal em documentos menores por assunto/topico ou criar um indice oficial de metadados. Hoje o progresso esta granular e o refresh inicial foi adiado, mas quando a Biblioteca pessoal precisa abrir sem cache ela ainda busca os documentos completos dos assuntos.
 
 ## Conclusao
 

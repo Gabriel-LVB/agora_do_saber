@@ -13,7 +13,7 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && (
-          request.auth.token.admin == true
+          (request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true)
           || request.auth.token.email == 'gabrielvieiraxc12@gmail.com'
         );
     }
@@ -48,7 +48,7 @@ service cloud.firestore {
     }
 
     match /shared_library/{itemId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (signedIn() && resource.data.published == true);
       allow write: if isAdmin();
     }
 

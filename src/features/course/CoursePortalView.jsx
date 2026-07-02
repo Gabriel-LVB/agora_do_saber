@@ -1,5 +1,6 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import { useCourseHeroJourney } from './useCourseHeroJourney.js';
 
 export default function CoursePortalView() {
   const {
@@ -7,11 +8,8 @@ export default function CoursePortalView() {
     appliedVideoaulasData,
     ArrowLeft,
     aulaDocId,
-    aulaHasVqData,
-    aulaQuestionCount,
     aulaVqKey,
     Award,
-    blockValues,
     BrainIcon,
     CalendarCheck,
     callWithRotation,
@@ -21,7 +19,8 @@ export default function CoursePortalView() {
     CheckIcon,
     ChevronDown,
     ChevronRight,
-    cleanAulaTitle,
+    COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE,
+    COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_MIX_PRESET,
     COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_WEEKS,
@@ -29,6 +28,7 @@ export default function CoursePortalView() {
     COURSE_SCHEDULE_MIX_PRESETS,
     COURSE_SCHEDULE_PRESETS,
     courseLessonDisplayTitle,
+    courseCycleSubjectBatchSize,
     coursePlanLessonOrder,
     coursePlanLocked,
     coursePlanSubjects,
@@ -48,18 +48,15 @@ export default function CoursePortalView() {
     EmptyState,
     extractAulas,
     flattenCourseLessons,
-    FolderIcon,
     formatCourseDuration,
     getAulaId,
     getCurrentWeek,
     getDueReviews,
     getKey,
     getTodayKey,
-    GraduationCap,
     isAdmin,
     isAnswerCorrect,
     isReviewItemFavorite,
-    LayersIcon,
     LoadingState,
     looksLikeClinicalVignette,
     normalizeTextKey,
@@ -70,6 +67,7 @@ export default function CoursePortalView() {
     RepeatIcon,
     reviewSession,
     saveCourseCycleReview,
+    saveCourseCyclePrefs,
     saveCoursePlanPrefs,
     saveCourseSchedulePrefs,
     saveCronStartDate,
@@ -86,31 +84,21 @@ export default function CoursePortalView() {
     settings,
     SettingsIcon,
     setView,
-    setVqActiveBlock,
-    setVqActiveBlockView,
-    setVqAula,
     setVqExpandedSubj,
-    setVqExpandedTopic,
-    setVqGenModal,
-    setVqQuestionParity,
-    setVqSubject,
-    setVqTopic,
     shortTopicName,
     sortCourseSubjectsForDisplay,
-    Sparkles,
     toggleReviewFavorite,
     totalLessonSeconds,
     trackQuestionAnswered,
     updateReviewItem,
     videoaulasLoading,
     VideoIcon,
-    vqBlocks,
     vqExpandedSubj,
-    vqExpandedTopic,
     watchedAulas,
   } = useFeatureContext();
 
           const dm = darkMode;
+          const heroJourney = useCourseHeroJourney({ enabled:true });
           const currentWeek = getCurrentWeek();
           const activeWeek = curWeek ?? currentWeek ?? 1;
           const weekData = cronograma?.find(w=>w.week===activeWeek);
@@ -147,10 +135,9 @@ export default function CoursePortalView() {
 
           const tabs = [
             {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
-            {id:'questoes',   label:'Questões',     icon:<GraduationCap className="w-4 h-4"/>},
+            {id:'plano', label:'Ciclo de Estudos', icon:<Award className="w-4 h-4"/>},
             {id:'revisoes',   label:'Revisões',     icon:<RepeatIcon className="w-4 h-4"/>, badge: dueCount},
             {id:'cronograma', label:'Cronograma', icon:<CalendarCheck className="w-4 h-4"/>},
-            isAdmin ? {id:'plano', label:'Jornada do Herói', icon:<Award className="w-4 h-4"/>} : null,
           ].filter(Boolean);
 
           return (
@@ -165,7 +152,7 @@ export default function CoursePortalView() {
                         <ArrowLeft className="w-3 h-3"/>Início
                       </button>
                       <h1 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Portal do Curso</h1>
-                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Questões · {isAdmin?'Jornada do Herói':'Cronograma'}</p>
+                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Ciclo de Estudos · Cronograma</p>
                     </div>
                     {/* Progresso global */}
                     <div className={`flex-shrink-0 text-right`}>
@@ -173,8 +160,8 @@ export default function CoursePortalView() {
                       <div className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>
                         {totalWatched}/{totalAulas} aulas{totalCourseDuration?` · ${totalCourseDuration}`:''}
                       </div>
-                      {isAdmin&&plannedLessons.length>0
-                        ? <div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Plano {planPct}%</div>
+                      {plannedLessons.length>0
+                        ? <div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Ciclo {planPct}%</div>
                         : currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek} de 46</div>}
                     </div>
                   </div>
@@ -226,7 +213,16 @@ export default function CoursePortalView() {
                         return (
                           <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
                             {/* Assunto header */}
-                            <button onClick={()=>setVqExpandedSubj(p=>({...p,[subj]:!isExp}))}
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={()=>setVqExpandedSubj(p=>({...p,[subj]:!isExp}))}
+                              onKeyDown={(event)=>{
+                                if(event.key==='Enter'||event.key===' '){
+                                  event.preventDefault();
+                                  setVqExpandedSubj(p=>({...p,[subj]:!isExp}));
+                                }
+                              }}
                               className={`w-full flex items-center gap-4 p-4 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
                               <div className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-sm ${pct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-yellow-400':'bg-yellow-100 text-yellow-700')}`}>
                                 {pct===100?<CheckIcon className="w-5 h-5"/>:`${pct}%`}
@@ -249,7 +245,7 @@ export default function CoursePortalView() {
                                 </button>
                                 {isExp?<ChevronDown className="w-4 h-4 opacity-40"/>:<ChevronRight className="w-4 h-4 opacity-40"/>}
                               </div>
-                            </button>
+                            </div>
                             {/* Tópicos expandidos */}
                             {isExp&&(
                               <div className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
@@ -281,99 +277,6 @@ export default function CoursePortalView() {
                           </div>
                         );
                       })}
-                    </div>
-                  );
-                })()}
-
-                {/* ── ABA QUESTÕES ── */}
-                {cursoTab==='questoes'&&(()=>{
-                  if(!appliedVideoaulasData) return <LoadingState darkMode={dm} label="Carregando questões do curso..."/>;
-
-                  const parsedData = parseVideoaulasData(appliedVideoaulasData);
-                  const subjects   = sortCourseSubjectsForDisplay(Object.keys(parsedData));
-
-                  return (
-                    <div className="space-y-2">
-                      {subjects.map(subj => {
-                        const topics   = parsedData[subj] || {};
-                        const allAulas = Object.values(topics).flatMap(t=>[...t.main,...t.bonus]);
-                        if (!allAulas.length) return null;
-                        const isExpSubj = vqExpandedSubj[subj] ?? false;
-                        const subjQs = allAulas.reduce((acc,a)=>{
-                          return acc+aulaQuestionCount(a);
-                        },0);
-                        const subjReadyAulas = allAulas.filter(aula => aulaQuestionCount(aula) > 0).length;
-
-                        return (
-                          <div key={subj} className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                            {/* Assunto */}
-                            <button onClick={()=>setVqExpandedSubj(p=>({...p,[subj]:!isExpSubj}))}
-                              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
-                              <FolderIcon className="w-5 h-5 text-yellow-600 flex-shrink-0"/>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold">{capitalizeDisplayLabel(subj)}</p>
-                                <p className={`text-xs mt-0.5 ${dm?'text-gray-500':'text-gray-400'}`}>
-                                  {subjReadyAulas}/{allAulas.length} aulas com questões{subjQs>0?` · ${subjQs} questões`:''}</p>
-                              </div>
-                              {isExpSubj?<ChevronDown className="w-4 h-4 opacity-40 flex-shrink-0"/>:<ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0"/>}
-                            </button>
-
-                            {/* Tópicos */}
-                            {isExpSubj&&Object.entries(topics).map(([topic, {main,bonus}])=>{
-                              const topicAulas = [...main,...bonus];
-                              if (!topicAulas.length) return null;
-                              const shortT = topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
-                              const topicKey = `q_${subj}_${topic}`;
-                              const isExpTopic = vqExpandedTopic[topicKey] ?? false;
-                              const topicQs = topicAulas.reduce((acc,a)=>{
-                                return acc+aulaQuestionCount(a);
-                              },0);
-                              const topicReadyAulas = topicAulas.filter(aula => aulaQuestionCount(aula) > 0).length;
-
-                              return (
-                                <div key={topic} className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
-                                  <button onClick={()=>setVqExpandedTopic(p=>({...p,[topicKey]:!isExpTopic}))}
-                                    className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${dm?'hover:bg-gray-800':'hover:bg-gray-50'}`}>
-                                    <LayersIcon className="w-4 h-4 text-yellow-600 opacity-70 flex-shrink-0"/>
-                                    <div className="flex-1 min-w-0">
-                                      <p className={`text-sm font-bold truncate ${dm?'text-gray-300':'text-gray-700'}`}>{shortT||topic}</p>
-                                      <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
-                                        {topicReadyAulas}/{topicAulas.length} aulas com questões{topicQs>0?` · ${topicQs} questões`:''}</p>
-                                    </div>
-                                    {isExpTopic?<ChevronDown className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>:<ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>}
-                                  </button>
-
-                                  {/* Aulas */}
-                                  {isExpTopic&&topicAulas.map((aula,ai)=>{
-                                    const key = aulaVqKey(aula);
-                                    const d = vqBlocks[key];
-                                    const qTotal = d?.blocks?blockValues(d.blocks).reduce((a,b)=>a+(b.questions?.length||0),0):0;
-                                    const qAns   = d?.blocks?blockValues(d.blocks).reduce((a,b)=>a+Object.keys(b.answers||{}).length,0):0;
-                                    const qPct   = qTotal>0?Math.round(qAns/qTotal*100):null;
-                                    const hasQ   = qTotal > 0;
-                                    return (
-                                      <button key={ai}
-                                        onClick={()=>{setVqSubject(subj);setVqTopic(topic);setVqAula(aula);setVqActiveBlock(null);setVqActiveBlockView(null);setView('videoquestions');}}
-                                        className={`w-full flex items-center gap-3 px-5 py-3 border-t text-left transition-colors ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
-                                        <div className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${qPct===100?'bg-green-500 text-white':hasQ?(dm?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-800 text-gray-600':'bg-gray-100 text-gray-400')}`}>
-                                          {qPct===100?<CheckIcon className="w-3.5 h-3.5"/>:hasQ?`${qPct}%`:<Sparkles className="w-3 h-3"/>}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className={`text-sm truncate ${dm?'text-gray-300':'text-gray-700'}`}>{courseLessonDisplayTitle(aula)}</p>
-                                          <p className={`text-xs ${dm?'text-gray-600':'text-gray-400'}`}>
-                                            {hasQ?`${qAns}/${qTotal} respondidas · ${Object.keys(d?.blocks||{}).length} bloco(s)`:'Sem questões'}
-                                          </p>
-                                        </div>
-                                        <ChevronRight className="w-3.5 h-3.5 opacity-30 flex-shrink-0"/>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      }).filter(Boolean)}
                     </div>
                   );
                 })()}
@@ -577,391 +480,58 @@ export default function CoursePortalView() {
                   );
                 })()}
 
-                {cursoTab==='plano'&&isAdmin&&(()=>{
-                  if(videoaulasLoading) return <LoadingState darkMode={dm} label="Carregando jornada do curso..."/>;
+                {cursoTab==='plano'&&(()=>{
+                  if(videoaulasLoading || !heroJourney.isReady) return <LoadingState darkMode={dm} label="Carregando ciclo de estudos..."/>;
                   if(!courseLessons.length) return (
                     <EmptyState
                       darkMode={dm}
                       icon={<Award className="w-7 h-7"/>}
                       title="Nenhuma aula carregada"
-                      message="A Jornada do Herói usa as videoaulas reais do portal. Quando elas carregarem, ela monta o próximo passo do estudo."
+                      message="O Ciclo de Estudos usa as videoaulas reais do portal para montar o próximo comando de aula e questões."
                     />
                   );
 
-                  const normalizedSubjects = effectivePlanSubjects;
-                  const dueCourseItems = getDueReviews().filter(item => item.source === 'curso' || vqBlocks[item.aulaId]);
-                  const blockEntriesForLesson = (lesson) => {
-                    const data = vqBlocks[aulaDocId(lesson.aula)] || vqBlocks[aulaVqKey(lesson.aula)];
-                    const rawBlocks = data?.blocks || {};
-                    const entries = Array.isArray(rawBlocks)
-                      ? rawBlocks.map((block, index) => [`block${index + 1}`, block])
-                      : Object.entries(rawBlocks);
-                    return entries.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-                  };
-                  const questionInfoForLesson = (lesson) => {
-                    const blockEntries = blockEntriesForLesson(lesson);
-                    const total = blockEntries.reduce((sum, [, block]) => sum + ((Array.isArray(block.questions) ? block.questions : []).length), 0);
-                    const answered = blockEntries.reduce((sum, [, block]) => {
-                      const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-                      return sum + Object.keys(answers).length;
-                    }, 0);
-                    return { total, answered, blocks:blockEntries.length, blockEntries };
-                  };
-                  const isClinicalCourseQuestion = (question = {}) =>
-                    question.libraryQuestionKind === 'clinical' || looksLikeClinicalVignette(question);
-                  const journeyStageMeta = (stage) => {
-                    if (stage === 'direct-odd') return { type:'direct', parity:'odd' };
-                    if (stage === 'direct-even') return { type:'direct', parity:'even' };
-                    if (stage === 'clinical-odd') return { type:'clinical', parity:'odd' };
-                    if (stage === 'clinical-even') return { type:'clinical', parity:'even' };
-                    return null;
-                  };
-                  const lessonWatched = (lesson) => [
-                    lesson.id,
-                    lesson.docId,
-                    getAulaId(lesson.aula),
-                    aulaDocId(lesson.aula),
-                    aulaVqKey(lesson.aula),
-                  ].filter(Boolean).some(id => !!watchedAulas[id]);
-                  const stageKey = (type, parity, suffix) => `${type}${parity === 'odd' ? 'Odd' : 'Even'}${suffix}`;
-                  const journeyInfoForLesson = (lesson) => {
-                    const blockEntries = blockEntriesForLesson(lesson);
-                    const stats = {
-                      total:0,
-                      answered:0,
-                      directTotal:0,
-                      clinicalTotal:0,
-                      directOddTotal:0,
-                      directOddAnswered:0,
-                      directEvenTotal:0,
-                      directEvenAnswered:0,
-                      clinicalOddTotal:0,
-                      clinicalOddAnswered:0,
-                      clinicalEvenTotal:0,
-                      clinicalEvenAnswered:0,
-                    };
-                    let directIndex = 0;
-                    let clinicalIndex = 0;
-                    blockEntries.forEach(([, block]) => {
-                      const questions = Array.isArray(block.questions) ? block.questions : [];
-                      const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-                      questions.forEach(question => {
-                        const clinical = isClinicalCourseQuestion(question);
-                        const type = clinical ? 'clinical' : 'direct';
-                        const index = clinical ? ++clinicalIndex : ++directIndex;
-                        const parity = index % 2 === 1 ? 'odd' : 'even';
-                        const answered = Object.prototype.hasOwnProperty.call(answers, question.id);
-                        stats.total += 1;
-                        stats[`${type}Total`] += 1;
-                        stats[stageKey(type, parity, 'Total')] += 1;
-                        if (answered) {
-                          stats.answered += 1;
-                          stats[stageKey(type, parity, 'Answered')] += 1;
-                        }
-                      });
-                    });
-                    const done = (total, answered) => total > 0 && answered >= total;
-                    const emptyOrDone = (total, answered) => total === 0 || answered >= total;
-                    stats.directOddDone = done(stats.directOddTotal, stats.directOddAnswered);
-                    stats.directEvenDone = emptyOrDone(stats.directEvenTotal, stats.directEvenAnswered);
-                    stats.clinicalOddDone = emptyOrDone(stats.clinicalOddTotal, stats.clinicalOddAnswered);
-                    stats.clinicalEvenDone = emptyOrDone(stats.clinicalEvenTotal, stats.clinicalEvenAnswered);
-                    stats.primaryDone = lessonWatched(lesson) && stats.directOddDone;
-                    stats.journeyDone = stats.primaryDone && stats.directEvenDone && stats.clinicalOddDone && stats.clinicalEvenDone;
-                    return stats;
-                  };
-                  const firstQuestionBlockForLesson = (lesson, mode = 'pending') => {
-                    const entries = questionInfoForLesson(lesson).blockEntries;
-                    if (!entries.length) return null;
-                    const stage = journeyStageMeta(mode);
-                    if (mode === 'review') return entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
-                    if (stage) {
-                      let directIndex = 0;
-                      let clinicalIndex = 0;
-                      let firstStageEntry = null;
-                      for (const entry of entries) {
-                        const [, block] = entry;
-                        const questions = Array.isArray(block.questions) ? block.questions : [];
-                        const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-                        let hasStageQuestion = false;
-                        let hasPendingStageQuestion = false;
-                        questions.forEach(question => {
-                          const clinical = isClinicalCourseQuestion(question);
-                          const type = clinical ? 'clinical' : 'direct';
-                          const index = clinical ? ++clinicalIndex : ++directIndex;
-                          const parity = index % 2 === 1 ? 'odd' : 'even';
-                          if (type === stage.type && parity === stage.parity) {
-                            hasStageQuestion = true;
-                            if (!Object.prototype.hasOwnProperty.call(answers, question.id)) hasPendingStageQuestion = true;
-                          }
-                        });
-                        if (hasStageQuestion && !firstStageEntry) firstStageEntry = entry;
-                        if (hasPendingStageQuestion) return entry;
-                      }
-                      return firstStageEntry;
-                    }
-                    return entries.find(([, block]) => {
-                      const questions = Array.isArray(block.questions) ? block.questions : [];
-                      const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-                      return questions.length > 0 && Object.keys(answers).length < questions.length;
-                    }) || entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
-                  };
-                  const lessonOrderIndex = new Map((effectiveCoursePlanLessonOrder || []).map((id, index) => [String(id), index]));
-                  const planLessonRank = (lesson) => {
-                    if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
-                    const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
-                    const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
-                    return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
-                  };
-                  const lessonsBySubject = (subject) => courseLessons
-                    .filter(lesson => lesson.subject === subject)
-                    .sort((a, b) => {
-                      const byPlan = planLessonRank(a) - planLessonRank(b);
-                      if (byPlan) return byPlan;
-                      return a.title.localeCompare(b.title, 'pt');
-                    });
-                  const topicsBySubject = (subject) => {
-                    const map = {};
-                    lessonsBySubject(subject).forEach(lesson => {
-                      if (!map[lesson.topic]) map[lesson.topic] = [];
-                      map[lesson.topic].push(lesson);
-                    });
-                    return map;
-                  };
-                  const subjectSummaries = normalizedSubjects.map(subject => {
-                    const lessons = lessonsBySubject(subject);
-                    const watched = lessons.filter(lessonWatched).length;
-                    const completed = lessons.filter(lesson => journeyInfoForLesson(lesson).journeyDone).length;
-                    const primaryCompleted = lessons.filter(lesson => journeyInfoForLesson(lesson).primaryDone).length;
-                    const questionCount = lessons.reduce((acc, lesson) => acc + questionInfoForLesson(lesson).total, 0);
-                    return {
-                      subject,
-                      lessons,
-                      watched,
-                      completed,
-                      primaryCompleted,
-                      total:lessons.length,
-                      topics:Object.keys(topicsBySubject(subject)).length,
-                      pct:lessons.length ? Math.round(completed / lessons.length * 100) : 0,
-                      questions:questionCount,
-                    };
-                  });
-                  const firstUnfinishedSubject = subjectSummaries.findIndex(item => item.total && item.primaryCompleted < item.total);
-                  const unlockedSubjectLimit = firstUnfinishedSubject >= 0
-                    ? Math.min(subjectSummaries.length, firstUnfinishedSubject + 4)
-                    : Infinity;
-                  const activeSubjectSummaries = subjectSummaries.filter((_, index) => index < unlockedSubjectLimit);
-                  const lessonIds = (lesson) => [
-                    lesson.id,
-                    aulaVqKey(lesson.aula),
-                    aulaDocId(lesson.aula),
-                  ].filter(Boolean);
-                  const reviewItemsForLesson = (lesson) => dueCourseItems.filter(item =>
-                    lessonIds(lesson).includes(item.aulaId)
-                    || cleanAulaTitle(item.aulaTitle || '') === lesson.title
-                    || cleanAulaTitle(item.aulaTitle || '') === cleanAulaTitle(lesson.aula.title || '')
+                  const {
+                    activeSubjectSummaries,
+                    cycleSubjectBatchSize,
+                    heroJourneyStep,
+                    moveSubject,
+                    nextStepForSubject,
+                    progress,
+                    subjectSummaries,
+                  } = heroJourney;
+                  const activeSubjectNames = new Set(activeSubjectSummaries.map(item => item.subject));
+                  const cycleSubjectOptions = Array.from(
+                    { length:Math.min(COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE, Math.max(COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE, subjectSummaries.length || COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE)) },
+                    (_, index) => index + 1
                   );
-                  const openLesson = (lesson) => {
-                    setActiveSubjectVid(lesson.subject);
-                    setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
-                    setActiveAulaAndReset(lesson.aula);
-                    setView('videoaulas');
-                  };
-                  const openQuestions = (lesson, mode = 'direct-odd') => {
-                    setVqSubject(lesson.subject);
-                    setVqTopic(lesson.topic);
-                    setVqAula(lesson.aula);
-                    setVqActiveBlock(null);
-                    setVqQuestionParity('all');
-                    const journeyStage = journeyStageMeta(mode) ? mode : null;
-                    const targetBlock = firstQuestionBlockForLesson(lesson, journeyStage || (mode === 'review-r3' || mode === 'review-r10' ? 'review' : 'pending'));
-                    setVqActiveBlockView(targetBlock ? {
-                      blockId:targetBlock[0],
-                      showWrong:false,
-                      fromPlan:true,
-                      cycleStage:journeyStage || (mode === 'review-r3' ? 'r3' : mode === 'review-r10' ? 'r10' : null),
-                    } : null);
-                    if (aulaHasVqData(lesson.aula)) setView('videoquestions');
-                    else setVqGenModal({aula:lesson.aula,aulaId:aulaDocId(lesson.aula),suggestedQ:15,subject:lesson.subject,topic:lesson.topic,fromConfig:true});
-                  };
-                  const goToLessonStep = (lesson) => {
-                    const ji = journeyInfoForLesson(lesson);
-                    if (!lessonWatched(lesson)) {
-                      openLesson(lesson);
-                      return;
-                    }
-                    if (ji.directTotal === 0) {
-                      openQuestions(lesson, 'direct-odd');
-                      return;
-                    }
-                    if (!ji.directOddDone) {
-                      openQuestions(lesson, 'direct-odd');
-                      return;
-                    }
-                    openQuestions(lesson, 'direct-even');
-                  };
-                  const isLessonPrimaryComplete = (lesson) => journeyInfoForLesson(lesson).primaryDone;
-                  const openCycleReview = async (lesson, stage) => {
-                    await saveCourseCycleReview(lesson.id, stage);
-                    openQuestions(lesson, stage === 'r10' ? 'review-r10' : 'review-r3');
-                  };
-                  const reviewSubject = (items) => {
-                    openSpacedReview(items);
-                  };
-	                  const lessonStep = (lesson) => {
-	                    const ji = journeyInfoForLesson(lesson);
-	                    if (!lessonWatched(lesson)) return { label:'Assistir aula', tone:'yellow', detail:'marque como assistida ao terminar' };
-	                    if (ji.directTotal === 0) return { label:'Gerar questões', tone:'blue', detail:'fixação ímpar pendente' };
-	                    if (!ji.directOddDone) return { label:'Fazer ímpares', tone:'green', detail:`${ji.directOddAnswered}/${ji.directOddTotal} respondidas` };
-	                    return { label:'Próxima aula', tone:'yellow', detail:'ímpares concluídas' };
-	                  };
-                  const nextStepForSubject = (item) => {
-                    const completedCutoff = item.lessons.findIndex(lesson => !isLessonPrimaryComplete(lesson));
-                    const completedCount = completedCutoff === -1 ? item.lessons.length : completedCutoff;
-                    const allPrimaryComplete = completedCount === item.lessons.length;
-                    for (let idx = 0; idx < completedCount; idx += 1) {
-                      const lesson = item.lessons[idx];
-                      const ji = journeyInfoForLesson(lesson);
-                      const completedAfter = completedCount - idx - 1;
-                      if (ji.directEvenTotal > 0 && !ji.directEvenDone && completedAfter >= 3) {
-                        return {
-                          label:'Fazer pares',
-                          tone:'red',
-                          detail:lesson.title,
-                          subdetail:`após ${completedAfter} aula${completedAfter!==1?'s':''} da matéria`,
-                          action:()=>openQuestions(lesson, 'direct-even'),
-                        };
-                      }
-                      if (ji.directEvenDone && (completedAfter >= 10 || allPrimaryComplete)) {
-                        if (ji.clinicalOddTotal > 0 && !ji.clinicalOddDone) {
-                          return {
-                            label:'Clínicas ímpares',
-                            tone:'red',
-                            detail:lesson.title,
-                            subdetail:'teste de raciocínio clínico',
-                            action:()=>openQuestions(lesson, 'clinical-odd'),
-                          };
-                        }
-                        if (ji.clinicalEvenTotal > 0 && !ji.clinicalEvenDone) {
-                          return {
-                            label:'Clínicas pares',
-                            tone:'red',
-                            detail:lesson.title,
-                            subdetail:'segunda metade dos casos',
-                            action:()=>openQuestions(lesson, 'clinical-even'),
-                          };
-                        }
-                      }
-                    }
-                    const lesson = item.lessons.find(aula => {
-                      const ji = journeyInfoForLesson(aula);
-                      return !lessonWatched(aula) || ji.directTotal === 0 || !ji.directOddDone;
-                    });
-                    if (!lesson) {
-                      return {
-                        label:'Matéria em dia',
-                        tone:'gray',
-                        detail:'sem pendência agora',
-                        action:()=>{},
-                        done:true,
-                      };
-                    }
-	                    const step = lessonStep(lesson);
-	                    const lessonIndex = item.lessons.findIndex(aula => aula.id === lesson.id) + 1;
-	                    return {
-	                      ...step,
-	                      detail:lesson.title,
-	                      subdetail:`Aula ${lessonIndex || '?'} de ${item.total} · ${step.detail}`,
-	                      action:()=>goToLessonStep(lesson),
-	                    };
-                  };
-                  const moveSubject = (idx, dir) => {
-                    const next = [...normalizedSubjects];
-                    const target = idx + dir;
-                    if (target < 0 || target >= next.length) return;
-                    [next[idx], next[target]] = [next[target], next[idx]];
-                    saveCoursePlanPrefs(next, coursePlanLocked);
-                  };
-                  const actionableSteps = activeSubjectSummaries
-                    .map((item, index) => ({ item, index, step:nextStepForSubject(item) }))
-                    .filter(entry => entry.step && !entry.step.done);
-                  const urgentJourneyStep = actionableSteps.find(entry => entry.step.tone === 'red');
-                  const journeyStepRank = (step = {}) => {
-                    if (step.tone === 'red') return 0;
-                    if (['Fazer ímpares', 'Gerar questões'].includes(step.label)) return 1;
-                    if (step.label === 'Assistir aula') return 2;
-                    return 3;
-                  };
-                  const balancedJourneyStep = actionableSteps
-                    .filter(entry => entry.step.tone !== 'red')
-                    .sort((a, b) => {
-                      const byStep = journeyStepRank(a.step) - journeyStepRank(b.step);
-                      if (byStep) return byStep;
-                      const byPrimary = (a.item.primaryCompleted || 0) - (b.item.primaryCompleted || 0);
-                      if (byPrimary) return byPrimary;
-                      const byWatched = (a.item.watched || 0) - (b.item.watched || 0);
-                      if (byWatched) return byWatched;
-                      return a.index - b.index;
-                    })[0];
-                  const heroJourneyStep = urgentJourneyStep || balancedJourneyStep || actionableSteps[0] || null;
 
                   return (
-                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-5">
+                    <div className="space-y-5">
                       <section className={`rounded-2xl border overflow-hidden ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
                         <div className={`px-5 py-4 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
-                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Jornada do Herói</p>
-	                          <h2 className="text-2xl font-serif font-bold text-yellow-600">Próximo ato</h2>
-	                          <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Assista a aula, faça ímpares, deixe as pares para depois de 3 aulas e os casos clínicos para o teste de verdade.</p>
+                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Ciclo de Estudos</p>
+	                          <h2 className="text-2xl font-serif font-bold text-yellow-600">Próximo comando</h2>
+	                          <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Um roteiro cíclico para alternar matérias e espaçar revisões da mesma aula: diretas ímpares, diretas pares, clínicas ímpares e clínicas pares.</p>
                         </div>
-                        <div className="p-4 space-y-3">
+                        <div className="p-4">
                           {heroJourneyStep&&(
-                            <button onClick={heroJourneyStep.step.action} className={`app-card group w-full rounded-xl px-3.5 py-3 text-left flex items-center gap-3 transition-all`}>
-                              <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 text-yellow-600 ${dm?'bg-gray-800':'bg-yellow-50'}`}>
-                                <Award className="w-5 h-5"/>
+                            <button onClick={heroJourneyStep.step.action} className={`app-card group w-full rounded-2xl px-4 py-4 text-left flex flex-col sm:flex-row sm:items-center gap-4 transition-all`}>
+                              <span className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 text-yellow-600 ${dm?'bg-gray-800':'bg-yellow-50'}`}>
+                                <Award className="w-6 h-6"/>
                               </span>
-                              <div className="min-w-0 flex-1">
-                                <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${dm?'text-gray-500':'text-gray-400'}`}>Continuar</p>
-                                <h3 className={`mt-0.5 text-sm md:text-[15px] font-bold truncate ${dm?'text-gray-100':'text-gray-900'}`}>{heroJourneyStep.step.detail}</h3>
-                                <p className={`mt-0.5 text-xs truncate ${dm?'text-gray-400':'text-gray-600'}`}>
+                              <span className="min-w-0 flex-1">
+                                <span className={`block text-[10px] font-bold uppercase tracking-[0.18em] ${dm?'text-gray-500':'text-gray-400'}`}>Agora</span>
+                                <strong className={`mt-1 block text-lg md:text-xl font-serif leading-tight ${dm?'text-gray-100':'text-gray-900'}`}>{heroJourneyStep.step.detail}</strong>
+                                <span className={`mt-1 block text-sm ${dm?'text-gray-400':'text-gray-600'}`}>
                                   {capitalizeDisplayLabel(heroJourneyStep.item.subject)} · {heroJourneyStep.step.label}{heroJourneyStep.step.subdetail?` · ${heroJourneyStep.step.subdetail}`:''}
-                                </p>
-                              </div>
-                              <span className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-lg bg-yellow-600 px-3.5 py-2 text-xs font-bold text-white group-hover:bg-yellow-700">
-                                Continuar<ChevronRight className="w-3.5 h-3.5"/>
+                                </span>
+                              </span>
+                              <span className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-yellow-600 px-4 py-2.5 text-sm font-bold text-white group-hover:bg-yellow-700">
+                                Continuar<ChevronRight className="w-4 h-4"/>
                               </span>
                             </button>
                           )}
-                          {activeSubjectSummaries.map(item=>{
-                            const step = nextStepForSubject(item);
-                            const color = step.tone === 'green'
-                              ? 'text-green-500'
-                              : step.tone === 'blue'
-                                ? 'text-blue-500'
-                                : step.tone === 'red'
-                                  ? 'text-red-500'
-                                  : step.tone === 'gray'
-                                    ? (dm?'text-gray-400':'text-gray-500')
-                                    : 'text-yellow-600';
-                            return (
-                              <button key={item.subject} onClick={step.action} disabled={step.done}
-                                className={`w-full rounded-xl border p-4 text-left transition-all ${dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-800 hover:bg-gray-950':'bg-gray-50 border-gray-200 hover:border-yellow-300 hover:bg-white'}`}>
-	                                <div className="flex items-center gap-3">
-	                                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>
-	                                    {step.done?<CheckIcon className="w-4 h-4"/>:<PlayIcon className="w-4 h-4"/>}
-	                                  </div>
-	                                  <div className="min-w-0 flex-1">
-	                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${dm?'text-gray-600':'text-gray-400'}`}>{capitalizeDisplayLabel(item.subject)}</p>
-	                                    <p className="font-bold truncate mt-0.5">{step.detail}</p>
-	                                    {step.subdetail&&<p className={`text-xs mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{step.subdetail}</p>}
-	                                  </div>
-	                                  <div className="text-right flex-shrink-0">
-	                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${dm?'text-gray-600':'text-gray-400'}`}>Agora</p>
-	                                    <p className={`text-sm font-bold mt-0.5 ${color}`}>{step.label}</p>
-	                                  </div>
-	                                </div>
-                              </button>
-                            );
-                          })}
                           {!activeSubjectSummaries.length&&(
                             <div className="p-8 text-center">
                               <CheckCircle2 className="w-10 h-10 mx-auto text-green-500 mb-3"/>
@@ -972,13 +542,77 @@ export default function CoursePortalView() {
                         </div>
                       </section>
 
-                      <aside className="space-y-4">
-                        <section className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Ordem</p>
-                          <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">Matérias</h3>
-                          <div className="mt-4 space-y-2">
+                      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-5">
+                        <section className={`rounded-2xl border p-4 md:p-5 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                            <div>
+                              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Progresso do ciclo</p>
+                              <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">Matérias em rotação</h3>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-950/40':'border-gray-100 bg-gray-50'}`}>
+                                <strong className="block text-lg text-yellow-600">{progress.primary}</strong>
+                                <span className="text-[10px] opacity-50">com base</span>
+                              </div>
+                              <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-950/40':'border-gray-100 bg-gray-50'}`}>
+                                <strong className="block text-lg text-yellow-600">{progress.completed}</strong>
+                                <span className="text-[10px] opacity-50">ciclos</span>
+                              </div>
+                              <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-950/40':'border-gray-100 bg-gray-50'}`}>
+                                <strong className="block text-lg text-yellow-600">{progress.pct}%</strong>
+                                <span className="text-[10px] opacity-50">geral</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-5 space-y-3">
+                            {activeSubjectSummaries.map(item=>{
+                              const step = nextStepForSubject(item);
+                              const pct = item.total ? Math.round(item.completed / item.total * 100) : 0;
+                              return (
+                                <button key={item.subject} onClick={step.action} disabled={step.done}
+                                  className={`w-full rounded-xl border p-4 text-left transition-all ${dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-800 hover:bg-gray-950':'bg-gray-50 border-gray-200 hover:border-yellow-300 hover:bg-white'}`}>
+                                  <div className="flex items-center gap-3">
+                                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${dm?'bg-gray-800 text-yellow-300':'bg-yellow-100 text-yellow-700'}`}>
+                                      {step.done?<CheckIcon className="w-4 h-4"/>:<PlayIcon className="w-4 h-4"/>}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className={`text-[10px] font-bold uppercase tracking-widest truncate ${dm?'text-gray-600':'text-gray-400'}`}>{capitalizeDisplayLabel(item.subject)}</p>
+                                        <span className="text-xs font-bold text-yellow-600">{pct}%</span>
+                                      </div>
+                                      <div className={`mt-1.5 h-1.5 rounded-full overflow-hidden ${dm?'bg-gray-800':'bg-gray-200'}`}>
+                                        <div className="h-full rounded-full bg-yellow-500" style={{width:`${pct}%`}}/>
+                                      </div>
+                                      <p className={`mt-2 text-xs truncate ${dm?'text-gray-500':'text-gray-500'}`}>{step.label} · {step.detail}</p>
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+
+                        <aside className="space-y-4">
+                          <section className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Configuração</p>
+                            <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">Ritmo do ciclo</h3>
+                            <p className={`mt-1 text-xs ${dm?'text-gray-500':'text-gray-500'}`}>Escolha quantas matérias ficam ativas antes do ciclo abrir novas frentes.</p>
+                            <div className="mt-4 grid grid-cols-4 gap-2">
+                              {cycleSubjectOptions.map(value=>(
+                                <button key={value} onClick={()=>saveCourseCyclePrefs({ subjectBatchSize:value })}
+                                  className={`rounded-xl border px-3 py-2 text-sm font-bold transition-colors ${cycleSubjectBatchSize===value?(dm?'border-yellow-700 bg-yellow-900/30 text-yellow-300':'border-yellow-300 bg-yellow-50 text-yellow-800'):(dm?'border-gray-800 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                                  {value}
+                                </button>
+                              ))}
+                            </div>
+                          </section>
+
+                          <section className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Ordem</p>
+                            <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">Matérias</h3>
+                            <div className="mt-4 space-y-2">
                             {subjectSummaries.map((item, idx)=>{
-                              const active = idx < unlockedSubjectLimit;
+                              const active = activeSubjectNames.has(item.subject);
                               return (
                                 <div key={item.subject} className={`rounded-xl border p-3 ${active?(dm?'bg-gray-950/70 border-gray-800':'bg-gray-50 border-gray-200'):(dm?'bg-gray-950/30 border-gray-900 opacity-50':'bg-gray-50/60 border-gray-100 opacity-60')}`}>
                                   <div className="flex items-center gap-2">
@@ -993,18 +627,10 @@ export default function CoursePortalView() {
                                 </div>
                               );
                             })}
-                          </div>
-                        </section>
-
-                        <section className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                          <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Revisão</p>
-                          <h3 className="text-xl font-serif font-bold text-yellow-600 mt-1">{dueCourseItems.length} pendente{dueCourseItems.length!==1?'s':''}</h3>
-                          <button onClick={()=>openSpacedReview()} disabled={!dueCourseItems.length}
-                            className={`mt-4 w-full px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-35 ${dueCourseItems.length?'bg-yellow-600 hover:bg-yellow-700 text-white':(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400')}`}>
-                            Revisar agora
-                          </button>
-                        </section>
-                      </aside>
+                            </div>
+                          </section>
+                        </aside>
+                      </div>
                     </div>
                   );
                 })()}

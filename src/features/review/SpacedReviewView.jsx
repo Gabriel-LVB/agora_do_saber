@@ -22,10 +22,12 @@ export default function SpacedReviewView() {
     QUICK_SUBJECT_TITLE,
     RepeatIcon,
     restoreReturnTarget,
+    reviewLoaded,
     reviewSession,
     setReviewNotebook,
     setReviewSession,
     settings,
+    Spinner,
     toggleReviewFavorite,
     trackQuestionAnswered,
     updateReviewItem,
@@ -153,7 +155,11 @@ export default function SpacedReviewView() {
 	                </div>
 	              </div>
 
-	              {dueItems.length === 0 ? (
+	              {!reviewLoaded ? (
+	                <div className={`rounded-2xl border p-8 flex items-center justify-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+	                  <Spinner className="w-8 h-8 text-yellow-600"/>
+	                </div>
+	              ) : dueItems.length === 0 ? (
 	                <EmptyState
 	                  darkMode={dm}
 	                  icon={<RepeatIcon className="w-7 h-7"/>}
