@@ -272,6 +272,10 @@ Implementado nesta primeira rodada:
 - Criado `src/features/FeatureContext.jsx` para reduzir props gigantes nos wrappers lazy. Home, Sub-biblioteca, Portal do Curso, Videoaulas, Questoes do Curso, Configuracoes, Favoritos, Revisao Espacada, Centelha, Biblioteca compartilhada e modal de geracao em massa agora consomem dependencias por `useFeatureContext()`, deixando o `App.jsx` menos ruidoso sem desfazer o code splitting.
 - Smoke unitario reforcado para exigir `FeatureProvider` no render principal e `useFeatureContext()` nas features migradas, evitando que futuras IAs voltem a empilhar props extensas nos wrappers.
 - Apos a limpeza de props, `npm run check` passou e o bundle principal ficou em 481,11 kB raw / 130,17 kB gzip; JS total ficou em 417,0 KiB gzip.
+- Primeira extração de hooks de domínio: `src/hooks/useCourseDerivedState.js` passou a concentrar derivados de curso/videoaulas, como proposta de organização normalizada, dados de videoaulas aplicados e ordenação de matérias para exibição.
+- `src/hooks/useGeminiRuntime.js` passou a concentrar runtime do Gemini no cliente: chave ativa, opções de thinking, rotação, ordenação das chaves e chamada com rotação. O `App.jsx` deixou de manter esse pacote como funções inline.
+- Smoke unitário reforçado para exigir esses hooks e bloquear retorno de `getKey`/`callWithRotation` inline no `App.jsx`.
+- Apos os hooks, `npm run check` passou e o bundle principal ficou em 483,00 kB raw / 130,88 kB gzip; JS total ficou em 417,7 KiB gzip, ainda abaixo do budget de 500 KiB raw.
 
 Ainda pendente:
 

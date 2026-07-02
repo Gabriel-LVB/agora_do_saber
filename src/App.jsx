@@ -7,6 +7,8 @@ import { adminEmail } from './config/environment.js';
 import { cleanFirestoreData } from './lib/firestoreData.js';
 import { deferInteractionWork } from './lib/interaction.js';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
+import { useCourseDerivedState } from './hooks/useCourseDerivedState.js';
+import { useGeminiRuntime } from './hooks/useGeminiRuntime.js';
 import { auth, db } from './services/firebase.js';
 import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
@@ -6988,42 +6990,26 @@ export default function QuestionBankApp() {
   };
 
   // ── API Key helpers ────────────────────────────────────────────────────────
-  const getKey = () => {
-    const s = settingsRef.current;
-    const keys = getConfiguredGeminiKeys(s);
-    const activeId = getActiveGeminiKeyId(s);
-    return keys.find(x => x.id === activeId)?.k || keys[0]?.k || s.apiKey1 || s.apiKey;
-  };
-  const checkKey = () => { if (!getKey()?.trim()){showApiError('API_KEY_MISSING');return false;} return true; };
-  const getGeminiOptions = (sourceSettings = settingsRef.current) => ({
-    thinkingBudget:getGeminiThinkingBudget(!!sourceSettings.geminiThinkingEnabled),
+  const {
+    callWithRotation,
+    checkKey,
+    getGeminiOptions,
+    getKey,
+    getOrderedKeys,
+    rotateKey,
+    showApiError,
+  } = useGeminiRuntime({
+    callGemini,
+    errorConfigs:ERROR_CONFIGS,
+    getActiveGeminiKeyId,
+    getConfiguredGeminiKeys,
+    getGeminiThinkingBudget,
+    normalizeGeminiKeys,
+    saveSettings,
+    settingsRef,
+    setErrorModal,
+    withGeminiKeys,
   });
-
-  // Show error modal with full context for each API error type
-  const showApiError = (errCode, extra='') => {
-    const cfg = ERROR_CONFIGS[errCode] || { title:'Erro Desconhecido', message:extra||'Tente novamente.', link:null };
-    setErrorModal({ title:cfg.title, message:cfg.message+(extra?`\n${extra}`:''), link:cfg.link, isAlert:true });
-  };
-
-  // Build ordered key list starting from current active key
-  const getOrderedKeys = () => {
-    const s = settingsRef.current;
-    const slots = getConfiguredGeminiKeys(s);
-    const activeId = getActiveGeminiKeyId(s);
-    const startIdx = Math.max(0, slots.findIndex(x => x.id === activeId));
-    return [...slots.slice(startIdx), ...slots.slice(0, startIdx)];
-  };
-
-  // Advance to the next available key after each attempted Gemini request.
-  const rotateKey = async () => {
-    const s = settingsRef.current;
-    const slots = getConfiguredGeminiKeys(s);
-    if (slots.length <= 1) return;
-    const activeId = getActiveGeminiKeyId(s);
-    const curIdx = Math.max(0, slots.findIndex(x => x.id === activeId));
-    const nextId = slots[(curIdx + 1) % slots.length].id;
-    await saveSettings(withGeminiKeys(s, normalizeGeminiKeys(s), nextId));
-  };
 
   // ── Material helpers ───────────────────────────────────────────────────────
   const getMaterial = () => { const c=materialText+'\n'+uploadedFiles.map(f=>`[${f.name}]\n${f.content}`).join('\n'); return c.length>MAX_MATERIAL_CHARS?c.substring(0,MAX_MATERIAL_CHARS)+'\n[TRUNCADO]':c; };
@@ -7068,24 +7054,6 @@ export default function QuestionBankApp() {
     if(imageInputRef.current) imageInputRef.current.value='';
   };
 
-  // Wrapper que chama Gemini com rotação automática de chaves — para uso no ChatBox
-  const callWithRotation = async (prompt, sys) => {
-    const orderedKeys = getOrderedKeys();
-    let lastErr;
-    for (const {k} of orderedKeys) {
-      try {
-        const r = await callGemini(prompt, sys, k, [], getGeminiOptions());
-        await rotateKey();
-        return r;
-      } catch(e) {
-        lastErr = e;
-        await rotateKey();
-        // SERVER_OVERLOADED, CONNECTION_ERROR etc. rotacionam para a próxima requisição, sem repetir a mesma chamada.
-        throw e;
-      }
-    }
-    throw lastErr;
-  };
   const addToast = (msg, type='info', duration=5000, onClick=null) => {
     const id = Date.now() + Math.random();
     setToasts(p => [...p, { id, msg, type, onClick }]);
@@ -12097,6 +12065,29 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     );
   };
 
+  const {
+    appliedVideoaulasData,
+    canUseCourseOrganization,
+    courseOrgProposalUsesOriginalSubjects,
+    displayCourseOrgProposal,
+    effectiveCoursePlanLessonOrder,
+    originalSubjectOptions,
+    sortCourseSubjectsForDisplay,
+  } = useCourseDerivedState({
+    applyCourseOrgProposalToVideoData,
+    canSeeVideoaulas,
+    courseCatalogStats,
+    courseOrgProposal,
+    courseOrgSourceMode:COURSE_ORG_SOURCE_MODE,
+    coursePlanLessonOrder,
+    coursePlanSubjects,
+    isAdmin,
+    normalizeCourseOrgProposal,
+    normalizeTextKey,
+    sortSubjects,
+    videoaulasData,
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
   if (user && (user.isAnonymous || !isWhitelistedUser)) return (
@@ -12114,34 +12105,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </div>
     </div>
   );
-  const displayCourseOrgProposal = normalizeCourseOrgProposal(courseOrgProposal);
-  const courseOrgProposalUsesOriginalSubjects = displayCourseOrgProposal?.sourceMode === COURSE_ORG_SOURCE_MODE;
-  const effectiveCoursePlanLessonOrder = courseOrgProposalUsesOriginalSubjects ? coursePlanLessonOrder : [];
-  const canUseCourseOrganization = isAdmin || canSeeVideoaulas;
-  const appliedVideoaulasData = canUseCourseOrganization && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.subjects?.length
-    ? applyCourseOrgProposalToVideoData(videoaulasData || {}, displayCourseOrgProposal)
-    : videoaulasData;
-  const appliedCourseSubjectOrder = courseOrgProposalUsesOriginalSubjects
-    ? (displayCourseOrgProposal?.subjects || []).map(item => item.subject).filter(Boolean)
-    : [];
   const isPureFlashcardSet = (items = []) => Array.isArray(items) && items.length > 0 && items.every(q => q?.isFlashcard);
-  const originalSubjectOptions = sortSubjects((courseCatalogStats.rows || []).map(row => row.subject).filter(Boolean));
-  const sortCourseSubjectsForDisplay = (subjects = []) => {
-    if (!canUseCourseOrganization) return sortSubjects(subjects);
-    const availableByKey = new Map(subjects.map(subject => [normalizeTextKey(subject), subject]));
-    const seen = new Set();
-    const ordered = [];
-    // A ordem escolhida pelo usuário no cronograma vem primeiro. A proposta do
-    // curso funciona apenas como fallback para matérias ainda não selecionadas.
-    [...(coursePlanSubjects || []), ...appliedCourseSubjectOrder].forEach(preferred => {
-      const subject = availableByKey.get(normalizeTextKey(preferred));
-      const key = normalizeTextKey(subject);
-      if (!subject || seen.has(key)) return;
-      seen.add(key);
-      ordered.push(subject);
-    });
-    return [...ordered, ...sortSubjects(subjects.filter(subject => !seen.has(normalizeTextKey(subject))))];
-  };
   const activeAcademiaOrigin = activeTopic?.origin?.source === 'academia' ? (() => {
     const originSubject = library.find(s => String(s.id) === String(activeTopic.origin.subjectId));
     const topics = originSubject?.topics || [];

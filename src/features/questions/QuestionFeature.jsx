@@ -174,6 +174,16 @@ const parseQuestionExplanationParts = (explanation = '') => {
 
 const getCorrectLetter = (question) => question?.options?.find(o => o.isCorrect)?.letter;
 const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze);
+const isAnswerCorrect = (question, answer) => {
+  if (!question || !answer || answer === 'SKIPPED') return false;
+  if (isMemoryCard(question)) return answer === FLASHCARD_CORRECT;
+  if (question.isOpen) {
+    try { return (JSON.parse(answer)?.score ?? 0) >= 70; } catch(e) { return false; }
+  }
+  return answer === getCorrectLetter(question);
+};
+const isFinalObjectiveAnswer = (question, answer) =>
+  !!question && !question.isOpen && !isMemoryCard(question) && answer != null && answer !== '' && answer !== 'SKIPPED';
 const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
 const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
 const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
@@ -2014,4 +2024,3 @@ const TopicStudyPlanPanel = ({ plans = [], questions = [], answers = {}, darkMod
 export { QuestionView, QuestionCard, OpenAnswerModal };
 
 export default QuestionView;
-

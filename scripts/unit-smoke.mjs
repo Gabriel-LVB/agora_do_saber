@@ -55,7 +55,13 @@ const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'ut
 assert.doesNotMatch(appSource, /from ['"]\.\/agora_prompts\.js['"]/);
 assert.match(appSource, /import\(['"]\.\/agora_prompts\.js['"]\)/);
 assert.match(appSource, /import \{ FeatureProvider \} from ['"]\.\/features\/FeatureContext\.jsx['"]/);
+assert.match(appSource, /import \{ useCourseDerivedState \} from ['"]\.\/hooks\/useCourseDerivedState\.js['"]/);
+assert.match(appSource, /import \{ useGeminiRuntime \} from ['"]\.\/hooks\/useGeminiRuntime\.js['"]/);
 assert.match(appSource, /<FeatureProvider value=\{featureContextValue\}>/);
+assert.match(appSource, /useCourseDerivedState\(\{/);
+assert.match(appSource, /useGeminiRuntime\(\{/);
+assert.doesNotMatch(appSource, /const getKey = \(\) => \{/);
+assert.doesNotMatch(appSource, /const callWithRotation = async/);
 assert.match(appSource, /React\.lazy\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)/);
 assert.match(appSource, /import\(['"]\.\/features\/questions\/QuestionFeature\.jsx['"]\)/);
@@ -129,6 +135,15 @@ const featureContextSource = await readFile(new URL('../src/features/FeatureCont
 assert.match(featureContextSource, /export const FeatureProvider/);
 assert.match(featureContextSource, /export const useFeatureContext/);
 
+const courseDerivedStateSource = await readFile(new URL('../src/hooks/useCourseDerivedState.js', import.meta.url), 'utf8');
+assert.match(courseDerivedStateSource, /export const useCourseDerivedState/);
+assert.match(courseDerivedStateSource, /sortCourseSubjectsForDisplay/);
+
+const geminiRuntimeSource = await readFile(new URL('../src/hooks/useGeminiRuntime.js', import.meta.url), 'utf8');
+assert.match(geminiRuntimeSource, /export const useGeminiRuntime/);
+assert.match(geminiRuntimeSource, /callWithRotation/);
+assert.match(geminiRuntimeSource, /rotateKey/);
+
 const bizuarioSource = await readFile(new URL('../src/features/bizuario/BizuarioModal.jsx', import.meta.url), 'utf8');
 assert.match(bizuarioSource, /export default function BizuarioModal/);
 
@@ -137,6 +152,8 @@ assert.match(studyMapPreviewSource, /export default function StudyMapPreview/);
 
 const questionFeatureSource = await readFile(new URL('../src/features/questions/QuestionFeature.jsx', import.meta.url), 'utf8');
 assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenAnswerModal \}/);
+assert.match(questionFeatureSource, /const isAnswerCorrect = \(question, answer\) =>/);
+assert.match(questionFeatureSource, /const isFinalObjectiveAnswer = \(question, answer\) =>/);
 
 const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
 assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
