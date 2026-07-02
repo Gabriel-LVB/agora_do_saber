@@ -266,24 +266,31 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
       return ordered;
     })();
     const courseCycleLessons = interleavedCycleLessons;
-    const primaryDonePrefix = (() => {
-      let count = 0;
-      for (const lesson of courseCycleLessons) {
+    const lessonLocalIndex = new Map();
+    const primaryDonePrefixBySubject = new Map();
+    normalizedSubjects.forEach(subject => {
+      const lessons = lessonsBySubject(subject);
+      lessons.forEach((lesson, index) => lessonLocalIndex.set(lesson.id, index));
+      let donePrefix = 0;
+      for (const lesson of lessons) {
         if (!journeyInfoForLesson(lesson).primaryDone) break;
-        count += 1;
+        donePrefix += 1;
       }
-      return count;
-    })();
-    const primaryCompleteThrough = (cyclePosition) => {
-      if (!courseCycleLessons.length) return false;
-      const requiredIndex = Math.min(cyclePosition, courseCycleLessons.length - 1);
-      return primaryDonePrefix > requiredIndex;
+      primaryDonePrefixBySubject.set(subject, donePrefix);
+    });
+    const primaryCompleteThroughSubjectOffset = (lesson, offset) => {
+      const lessons = lessonsBySubject(lesson.subject);
+      if (!lessons.length) return false;
+      const localIndex = lessonLocalIndex.get(lesson.id) ?? lessons.findIndex(item => item.id === lesson.id);
+      if (localIndex < 0) return false;
+      const requiredIndex = Math.min(localIndex + offset, lessons.length - 1);
+      return (primaryDonePrefixBySubject.get(lesson.subject) || 0) > requiredIndex;
     };
     const cycleEvents = courseCycleLessons.flatMap((lesson, index) => [
-      { kind:'primary', lesson, sourceIndex:index, position:index, priority:0 },
-      { kind:'direct-even', lesson, sourceIndex:index, position:index + 1, priority:1 },
-      { kind:'clinical-odd', lesson, sourceIndex:index, position:index + 4, priority:2 },
-      { kind:'clinical-even', lesson, sourceIndex:index, position:index + 9, priority:3 },
+      { kind:'primary', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index, priority:0 },
+      { kind:'direct-even', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index + 1, priority:1 },
+      { kind:'clinical-odd', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index + 4, priority:2 },
+      { kind:'clinical-even', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index + 9, priority:3 },
     ]).sort((a, b) => (
       a.position - b.position
       || a.priority - b.priority
@@ -353,8 +360,9 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
           },
         };
       }
-      if (!ji.primaryDone || !primaryCompleteThrough(event.position)) return null;
+      if (!ji.primaryDone) return null;
       if (event.kind === 'direct-even') {
+        if (!primaryCompleteThroughSubjectOffset(event.lesson, 1)) return null;
         if (ji.directEvenTotal === 0 || ji.directEvenDone) return null;
         return {
           item,
@@ -365,13 +373,14 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
             detail:event.lesson.title,
             subdetail:ji.directEvenAnswered > 0
               ? `${ji.directEvenAnswered}/${ji.directEvenTotal} respondidas`
-              : `ato ${event.sourceIndex + 2} do ciclo`,
+              : `após a aula ${event.localIndex + 2} da matéria`,
             lesson:event.lesson,
             action:()=>openQuestions(event.lesson, 'direct-even'),
           },
         };
       }
       if (event.kind === 'clinical-odd') {
+        if (!primaryCompleteThroughSubjectOffset(event.lesson, 4)) return null;
         if (!ji.directEvenDone || ji.clinicalOddTotal === 0 || ji.clinicalOddDone) return null;
           return {
             item,
@@ -382,13 +391,14 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
               detail:event.lesson.title,
               subdetail:ji.clinicalOddAnswered > 0
                 ? `${ji.clinicalOddAnswered}/${ji.clinicalOddTotal} respondidas`
-                : `ato ${event.sourceIndex + 5} do ciclo`,
+                : `após a aula ${event.localIndex + 5} da matéria`,
               lesson:event.lesson,
               action:()=>openQuestions(event.lesson, 'clinical-odd'),
             },
           };
       }
       if (event.kind === 'clinical-even') {
+        if (!primaryCompleteThroughSubjectOffset(event.lesson, 9)) return null;
         if (!ji.clinicalOddDone || ji.clinicalEvenTotal === 0 || ji.clinicalEvenDone) return null;
           return {
             item,
@@ -399,7 +409,7 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
               detail:event.lesson.title,
               subdetail:ji.clinicalEvenAnswered > 0
                 ? `${ji.clinicalEvenAnswered}/${ji.clinicalEvenTotal} respondidas`
-                : `ato ${event.sourceIndex + 10} do ciclo`,
+                : `após a aula ${event.localIndex + 10} da matéria`,
               lesson:event.lesson,
               action:()=>openQuestions(event.lesson, 'clinical-even'),
             },

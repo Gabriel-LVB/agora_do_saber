@@ -59,6 +59,10 @@ assert.deepEqual(cleanFirestoreData(input), {
 const firebaseConfig = JSON.parse(await readFile(new URL('../firebase.json', import.meta.url), 'utf8'));
 assert.equal(firebaseConfig.firestore?.rules, 'firestore.rules');
 
+const vercelConfig = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
+assert.ok(vercelConfig.headers?.some(item => item.source === '/index.html' && JSON.stringify(item.headers).includes('no-store')));
+assert.ok(vercelConfig.headers?.some(item => item.source === '/assets/:path*' && JSON.stringify(item.headers).includes('immutable')));
+
 const firestoreRules = await readFile(new URL('../firestore.rules', import.meta.url), 'utf8');
 assert.match(firestoreRules, /function isOwner\(/);
 assert.match(firestoreRules, /function isAdmin\(/);
@@ -102,8 +106,11 @@ assert.match(appSource, /useSharedLibrarySync\(\{/);
 assert.doesNotMatch(appSource, /const getKey = \(\) => \{/);
 assert.doesNotMatch(appSource, /const callWithRotation = async/);
 assert.doesNotMatch(appSource, /const refreshSharedLibrary = useCallback/);
-assert.match(appSource, /React\.lazy\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)/);
-assert.match(appSource, /React\.lazy\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)/);
+assert.match(appSource, /const lazyWithRetry = \(factory\) => factory\(\)\.catch/);
+assert.match(appSource, /promptModulePromise = lazyWithRetry\(\(\) => import\(['"]\.\/agora_prompts\.js['"]\)\)/);
+assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)\)/);
+assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)\)/);
+assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)\)\)/);
 assert.match(appSource, /import\(['"]\.\/features\/questions\/QuestionFeature\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/exporting\/ExportModals\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/modals\/WorkflowModals\.jsx['"]\)/);
@@ -303,6 +310,10 @@ assert.match(courseHeroJourneySource, /interleavedCycleLessons/);
 assert.match(courseHeroJourneySource, /position:index \+ 1/);
 assert.match(courseHeroJourneySource, /position:index \+ 4/);
 assert.match(courseHeroJourneySource, /position:index \+ 9/);
+assert.match(courseHeroJourneySource, /primaryCompleteThroughSubjectOffset\(event\.lesson, 1\)/);
+assert.match(courseHeroJourneySource, /primaryCompleteThroughSubjectOffset\(event\.lesson, 4\)/);
+assert.match(courseHeroJourneySource, /primaryCompleteThroughSubjectOffset\(event\.lesson, 9\)/);
+assert.doesNotMatch(courseHeroJourneySource, /primaryCompleteThrough\(event\.position\)/);
 assert.match(courseHeroJourneySource, /openQuestions\(event\.lesson, 'direct-even'\)/);
 assert.match(courseHeroJourneySource, /openQuestions\(event\.lesson, 'clinical-odd'\)/);
 assert.match(courseHeroJourneySource, /openQuestions\(event\.lesson, 'clinical-even'\)/);

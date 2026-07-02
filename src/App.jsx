@@ -18,29 +18,49 @@ import { persistReviewQueueChanges } from './services/reviewQueue.js';
 import { resetSharedLibraryAnswersPatch, saveSharedLibraryAnswerPatch } from './services/sharedLibraryProgress.js';
 import { saveUserVqBlockPatch } from './services/vqBlocks.js';
 
-const BizuarioModal = React.lazy(() => import('./features/bizuario/BizuarioModal.jsx'));
-const StudyMapPreview = React.lazy(() => import('./features/study-map/StudyMapPreview.jsx'));
-const LazyQuestionView = React.lazy(() => import('./features/questions/QuestionFeature.jsx').then(module => ({ default:module.QuestionView })));
-const LazyQuestionCard = React.lazy(() => import('./features/questions/QuestionFeature.jsx').then(module => ({ default:module.QuestionCard })));
-const LazyOpenAnswerModal = React.lazy(() => import('./features/questions/QuestionFeature.jsx').then(module => ({ default:module.OpenAnswerModal })));
-const LazyExportModal = React.lazy(() => import('./features/exporting/ExportModals.jsx').then(module => ({ default:module.ExportModal })));
-const LazyAcademiaExportModal = React.lazy(() => import('./features/exporting/ExportModals.jsx').then(module => ({ default:module.AcademiaExportModal })));
-const LazySRModal = React.lazy(() => import('./features/modals/WorkflowModals.jsx').then(module => ({ default:module.SRModal })));
-const LazyExternalPromptModal = React.lazy(() => import('./features/modals/WorkflowModals.jsx').then(module => ({ default:module.ExternalPromptModal })));
-const LazyVqGenModal = React.lazy(() => import('./features/video-questions/VqGenModal.jsx'));
-const LazyAcademiaTopicView = React.lazy(() => import('./features/academia/AcademiaTopicView.jsx'));
-const LazyBulkGenerateModal = React.lazy(() => import('./features/bulk/BulkGenerateModal.jsx'));
-const LazySharedLibraryView = React.lazy(() => import('./features/shared-library/SharedLibraryView.jsx'));
-const LazyVideoaulasView = React.lazy(() => import('./features/course/VideoaulasView.jsx'));
-const LazyCoursePortalView = React.lazy(() => import('./features/course/CoursePortalView.jsx'));
-const LazyVideoQuestionsView = React.lazy(() => import('./features/course/VideoQuestionsView.jsx'));
-const LazyHomeView = React.lazy(() => import('./features/home/HomeView.jsx'));
-const LazySettingsView = React.lazy(() => import('./features/settings/SettingsView.jsx'));
-const LazyFavoritesView = React.lazy(() => import('./features/favorites/FavoritesView.jsx'));
-const LazySpacedReviewView = React.lazy(() => import('./features/review/SpacedReviewView.jsx'));
-const LazyQuickView = React.lazy(() => import('./features/quick/QuickView.jsx'));
-const LazyQuickTopicView = React.lazy(() => import('./features/quick/QuickTopicView.jsx'));
-const LazySubLibraryView = React.lazy(() => import('./features/library/SubLibraryView.jsx'));
+const CHUNK_RELOAD_KEY = 'agora_lazy_chunk_reload_v1';
+const isChunkLoadError = (error) =>
+  /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(String(error?.message || error || ''));
+const lazyWithRetry = (factory) => factory().catch(error => {
+  if (typeof window !== 'undefined' && isChunkLoadError(error)) {
+    const activeScript = document.querySelector('script[type="module"][src*="/assets/index-"]')?.getAttribute('src') || '';
+    const reloadKey = `${CHUNK_RELOAD_KEY}:${activeScript || window.location.pathname}`;
+    let shouldReload = true;
+    try {
+      shouldReload = !window.sessionStorage?.getItem(reloadKey);
+      if (shouldReload) window.sessionStorage?.setItem(reloadKey, '1');
+    } catch(e) {}
+    if (shouldReload) {
+      window.location.reload();
+      return new Promise(() => {});
+    }
+  }
+  throw error;
+});
+
+const BizuarioModal = React.lazy(() => lazyWithRetry(() => import('./features/bizuario/BizuarioModal.jsx')));
+const StudyMapPreview = React.lazy(() => lazyWithRetry(() => import('./features/study-map/StudyMapPreview.jsx')));
+const LazyQuestionView = React.lazy(() => lazyWithRetry(() => import('./features/questions/QuestionFeature.jsx').then(module => ({ default:module.QuestionView }))));
+const LazyQuestionCard = React.lazy(() => lazyWithRetry(() => import('./features/questions/QuestionFeature.jsx').then(module => ({ default:module.QuestionCard }))));
+const LazyOpenAnswerModal = React.lazy(() => lazyWithRetry(() => import('./features/questions/QuestionFeature.jsx').then(module => ({ default:module.OpenAnswerModal }))));
+const LazyExportModal = React.lazy(() => lazyWithRetry(() => import('./features/exporting/ExportModals.jsx').then(module => ({ default:module.ExportModal }))));
+const LazyAcademiaExportModal = React.lazy(() => lazyWithRetry(() => import('./features/exporting/ExportModals.jsx').then(module => ({ default:module.AcademiaExportModal }))));
+const LazySRModal = React.lazy(() => lazyWithRetry(() => import('./features/modals/WorkflowModals.jsx').then(module => ({ default:module.SRModal }))));
+const LazyExternalPromptModal = React.lazy(() => lazyWithRetry(() => import('./features/modals/WorkflowModals.jsx').then(module => ({ default:module.ExternalPromptModal }))));
+const LazyVqGenModal = React.lazy(() => lazyWithRetry(() => import('./features/video-questions/VqGenModal.jsx')));
+const LazyAcademiaTopicView = React.lazy(() => lazyWithRetry(() => import('./features/academia/AcademiaTopicView.jsx')));
+const LazyBulkGenerateModal = React.lazy(() => lazyWithRetry(() => import('./features/bulk/BulkGenerateModal.jsx')));
+const LazySharedLibraryView = React.lazy(() => lazyWithRetry(() => import('./features/shared-library/SharedLibraryView.jsx')));
+const LazyVideoaulasView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoaulasView.jsx')));
+const LazyCoursePortalView = React.lazy(() => lazyWithRetry(() => import('./features/course/CoursePortalView.jsx')));
+const LazyVideoQuestionsView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoQuestionsView.jsx')));
+const LazyHomeView = React.lazy(() => lazyWithRetry(() => import('./features/home/HomeView.jsx')));
+const LazySettingsView = React.lazy(() => lazyWithRetry(() => import('./features/settings/SettingsView.jsx')));
+const LazyFavoritesView = React.lazy(() => lazyWithRetry(() => import('./features/favorites/FavoritesView.jsx')));
+const LazySpacedReviewView = React.lazy(() => lazyWithRetry(() => import('./features/review/SpacedReviewView.jsx')));
+const LazyQuickView = React.lazy(() => lazyWithRetry(() => import('./features/quick/QuickView.jsx')));
+const LazyQuickTopicView = React.lazy(() => lazyWithRetry(() => import('./features/quick/QuickTopicView.jsx')));
+const LazySubLibraryView = React.lazy(() => lazyWithRetry(() => import('./features/library/SubLibraryView.jsx')));
 const VqGenModal = (props) => (
   <React.Suspense fallback={null}>
     <LazyVqGenModal {...props}/>
@@ -111,7 +131,7 @@ const SubLibraryView = () => (
     <LazySubLibraryView/>
   </React.Suspense>
 );
-const LazyAdminStudyMapTopicList = React.lazy(() => import('./features/admin/AdminStudyMapTopicList.jsx'));
+const LazyAdminStudyMapTopicList = React.lazy(() => lazyWithRetry(() => import('./features/admin/AdminStudyMapTopicList.jsx')));
 const AdminStudyMapTopicList = (props) => (
   <React.Suspense fallback={null}>
     <LazyAdminStudyMapTopicList {...props} getTopicStudyPlan={getTopicStudyPlan}/>
@@ -158,7 +178,7 @@ const ExternalPromptModal = (props) => (
 
 let promptModulePromise = null;
 const loadPromptModule = () => {
-  if (!promptModulePromise) promptModulePromise = import('./agora_prompts.js');
+  if (!promptModulePromise) promptModulePromise = lazyWithRetry(() => import('./agora_prompts.js'));
   return promptModulePromise;
 };
 const getPromptBuilder = async (name) => {
