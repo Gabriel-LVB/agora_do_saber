@@ -7,7 +7,7 @@ import { deferInteractionWork } from '../src/lib/interaction.js';
 
 const traverse = traverseModule.default;
 const assertNoFreeIdentifiers = (source, label) => {
-  const globals = new Set(['React','Blob','URL','document','Object','Array','String','Number','Math','Date','console','Promise','Set','Map']);
+  const globals = new Set(['React','Blob','URL','document','Object','Array','String','Number','Math','Date','console','Promise','Set','Map','parseInt']);
   const ast = parse(source, { sourceType:'module', plugins:['jsx'] });
   const free = new Map();
   const add = (name, line) => {
@@ -235,6 +235,7 @@ const questionFeatureSource = await readFile(new URL('../src/features/questions/
 assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenAnswerModal \}/);
 assert.match(questionFeatureSource, /const isAnswerCorrect = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /const isFinalObjectiveAnswer = \(question, answer\) =>/);
+assert.match(questionFeatureSource, /normalizeDisplayedAlternativeReferences\(opt\.explanation, opt\.letter\)/);
 
 const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
 assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
@@ -244,6 +245,8 @@ assert.match(workflowModalsSource, /export \{ SRModal, ExternalPromptModal \}/);
 
 const vqGenModalSource = await readFile(new URL('../src/features/video-questions/VqGenModal.jsx', import.meta.url), 'utf8');
 assert.match(vqGenModalSource, /export default VqGenModal/);
+assert.match(vqGenModalSource, /const GraduationCap = /);
+assertNoFreeIdentifiers(vqGenModalSource, 'VqGenModal');
 
 const academiaTopicViewSource = await readFile(new URL('../src/features/academia/AcademiaTopicView.jsx', import.meta.url), 'utf8');
 assert.match(academiaTopicViewSource, /export default AcademiaTopicView/);

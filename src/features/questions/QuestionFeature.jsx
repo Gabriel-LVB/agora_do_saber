@@ -173,6 +173,15 @@ const parseQuestionExplanationParts = (explanation = '') => {
 };
 
 const getCorrectLetter = (question) => question?.options?.find(o => o.isCorrect)?.letter;
+const normalizeDisplayedAlternativeReferences = (text = '', displayLetter = '') => {
+  const letter = String(displayLetter || '').trim().toUpperCase();
+  if (!letter) return String(text || '');
+
+  return String(text || '').replace(
+    /\b((?:[Aa]\s+)?(?:alternativa|op[cç][aã]o|letra)\s+)(\*{0,2})([A-H])(\*{0,2})(?=\b)/gi,
+    (_, prefix, open = '', _oldLetter, close = '') => `${prefix}${open}${letter}${close}`,
+  );
+};
 const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze);
 const isAnswerCorrect = (question, answer) => {
   if (!question || !answer || answer === 'SKIPPED') return false;
@@ -1889,6 +1898,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	          const optionExplanationLabelClass = opt.isCorrect
 	            ? (darkMode ? 'text-green-300' : 'text-green-700')
 	            : (darkMode ? 'text-red-300' : 'text-red-700');
+	          const displayExplanation = normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter);
 	          const content = (
 	            <>
 	              <div className="flex items-start w-full">
@@ -1900,7 +1910,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	              {showOptionExplanation && (
 	                <div className={`mt-3 border-t pt-3 text-sm leading-relaxed select-text md:text-base ${optionExplanationClass}`} style={{userSelect:'text'}}>
 	                  <span className={`font-bold ${optionExplanationLabelClass}`}>{optionExplanationLabel}</span>{' '}
-	                  <span>{parseHtmlTextChat(opt.explanation)}</span>
+	                  <span>{parseHtmlTextChat(displayExplanation)}</span>
 	                </div>
 	              )}
 	            </>
@@ -1965,15 +1975,18 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             </button>
             {alternativeExplanationsOpen && hasStructuredExplanations && (
               <div className={`space-y-5 border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700':'border-gray-100'}`}>
-                {(question.options || []).filter(opt => opt.explanation).map(opt => (
+                {(question.options || []).filter(opt => opt.explanation).map(opt => {
+                  const displayExplanation = normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter);
+                  return (
                   <div key={`alt-exp-${opt.letter}`} className="select-text" style={{userSelect:'text'}}>
                     <div className="flex items-start gap-3 text-sm font-bold leading-relaxed md:text-base">
                       <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-xs ${opt.isCorrect ? 'bg-green-500 text-white' : effectiveLetter === opt.letter ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'border border-gray-200 bg-gray-50 text-gray-600'}`}>{opt.letter}</span>
                       <span className={darkMode?'text-gray-100':'text-gray-900'}>{parseHtmlTextChat(opt.text)}</span>
                     </div>
-                    <div className={`mt-2 pl-10 text-sm leading-relaxed md:text-[15px] ${opt.isCorrect ? darkMode?'text-green-200':'text-green-800' : effectiveLetter === opt.letter ? darkMode?'text-red-200':'text-red-800' : darkMode?'text-gray-300':'text-gray-600'}`}>{parseHtmlTextChat(opt.explanation)}</div>
+                    <div className={`mt-2 pl-10 text-sm leading-relaxed md:text-[15px] ${opt.isCorrect ? darkMode?'text-green-200':'text-green-800' : effectiveLetter === opt.letter ? darkMode?'text-red-200':'text-red-800' : darkMode?'text-gray-300':'text-gray-600'}`}>{parseHtmlTextChat(displayExplanation)}</div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
