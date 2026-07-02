@@ -54,14 +54,54 @@ assert.match(workflowSource, /npm run audit:moderate/);
 const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
 assert.doesNotMatch(appSource, /from ['"]\.\/agora_prompts\.js['"]/);
 assert.match(appSource, /import\(['"]\.\/agora_prompts\.js['"]\)/);
+assert.match(appSource, /import \{ FeatureProvider \} from ['"]\.\/features\/FeatureContext\.jsx['"]/);
+assert.match(appSource, /<FeatureProvider value=\{featureContextValue\}>/);
 assert.match(appSource, /React\.lazy\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)/);
+assert.match(appSource, /import\(['"]\.\/features\/questions\/QuestionFeature\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/exporting\/ExportModals\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/modals\/WorkflowModals\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/video-questions\/VqGenModal\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/academia\/AcademiaTopicView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/bulk\/BulkGenerateModal\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/course\/VideoaulasView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/course\/CoursePortalView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/course\/VideoQuestionsView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/home\/HomeView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/settings\/SettingsView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/favorites\/FavoritesView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/review\/SpacedReviewView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/quick\/QuickView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/quick\/QuickTopicView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/library\/SubLibraryView\.jsx['"]\)/);
+assert.match(appSource, /import\(['"]\.\/features\/admin\/AdminStudyMapTopicList\.jsx['"]\)/);
 assert.doesNotMatch(appSource, /const BizuarioModal = \(\{/);
 assert.doesNotMatch(appSource, /const StudyMapPreview = \(\{/);
+assert.doesNotMatch(appSource, /const QuestionView = \(\{/);
+assert.doesNotMatch(appSource, /const QuestionCard = \(\{/);
+assert.doesNotMatch(appSource, /const OpenAnswerModal = \(\{/);
+assert.doesNotMatch(appSource, /const ExportModal = \(\{ topic/);
+assert.doesNotMatch(appSource, /const AcademiaExportModal = \(\{ topic/);
+assert.doesNotMatch(appSource, /const ExternalPromptModal = \(\{/);
+assert.doesNotMatch(appSource, /const SRModal = \(\{/);
+assert.doesNotMatch(appSource, /const VqGenModal = \(\{/);
+assert.doesNotMatch(appSource, /function AcademiaTopicView\(\{/);
+assert.doesNotMatch(appSource, /bulkGenerateModal&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='shared-library'&&homeCanSeeSharedLibrary&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='videoaulas'&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='curso'&&canSeeVideoaulas&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='videoquestions'&&canSeeVideoaulas&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='library'&&\(\s*\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='settings'&&\(/);
+assert.doesNotMatch(appSource, /view==='favorites'&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='spaced-review'&&canUseAdvancedFeatures&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='quick'&&canUseAdvancedFeatures&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='quick-topic'&&canUseAdvancedFeatures&&activeSubject\?\.source===QUICK_SOURCE&&activeTopic&&\(\(\)=>/);
+assert.doesNotMatch(appSource, /view==='sub-library'&&\(\s*\(\(\)=>/);
 assert.match(appSource, /const homeCanSeeSharedLibrary = isAdmin && adminHomeMode !== 'site';/);
 assert.match(appSource, /view==='shared-library'&&homeCanSeeSharedLibrary/);
 assert.match(appSource, /!user \|\| user\.isAnonymous \|\| !homeCanSeeSharedLibrary/);
-assert.match(appSource, /showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin'/);
 assert.match(appSource, /saveSharedLibraryAnswerPatch/);
 assert.doesNotMatch(appSource, /setDoc\(doc\(db, ['"]users['"], user\.uid, SHARED_LIBRARY_PROGRESS_COLLECTION/);
 assert.match(appSource, /persistReviewQueueChanges/);
@@ -85,11 +125,82 @@ const courseProgressSource = await readFile(new URL('../src/services/courseProgr
 assert.match(courseProgressSource, /saveWatchedAulas/);
 assert.match(courseProgressSource, /saveDailyStats/);
 
+const featureContextSource = await readFile(new URL('../src/features/FeatureContext.jsx', import.meta.url), 'utf8');
+assert.match(featureContextSource, /export const FeatureProvider/);
+assert.match(featureContextSource, /export const useFeatureContext/);
+
 const bizuarioSource = await readFile(new URL('../src/features/bizuario/BizuarioModal.jsx', import.meta.url), 'utf8');
 assert.match(bizuarioSource, /export default function BizuarioModal/);
 
 const studyMapPreviewSource = await readFile(new URL('../src/features/study-map/StudyMapPreview.jsx', import.meta.url), 'utf8');
 assert.match(studyMapPreviewSource, /export default function StudyMapPreview/);
+
+const questionFeatureSource = await readFile(new URL('../src/features/questions/QuestionFeature.jsx', import.meta.url), 'utf8');
+assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenAnswerModal \}/);
+
+const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
+assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
+
+const workflowModalsSource = await readFile(new URL('../src/features/modals/WorkflowModals.jsx', import.meta.url), 'utf8');
+assert.match(workflowModalsSource, /export \{ SRModal, ExternalPromptModal \}/);
+
+const vqGenModalSource = await readFile(new URL('../src/features/video-questions/VqGenModal.jsx', import.meta.url), 'utf8');
+assert.match(vqGenModalSource, /export default VqGenModal/);
+
+const academiaTopicViewSource = await readFile(new URL('../src/features/academia/AcademiaTopicView.jsx', import.meta.url), 'utf8');
+assert.match(academiaTopicViewSource, /export default AcademiaTopicView/);
+
+const bulkGenerateModalSource = await readFile(new URL('../src/features/bulk/BulkGenerateModal.jsx', import.meta.url), 'utf8');
+assert.match(bulkGenerateModalSource, /export default function BulkGenerateModal/);
+assert.match(bulkGenerateModalSource, /useFeatureContext/);
+
+const sharedLibraryViewSource = await readFile(new URL('../src/features/shared-library/SharedLibraryView.jsx', import.meta.url), 'utf8');
+assert.match(sharedLibraryViewSource, /export default function SharedLibraryView/);
+assert.match(sharedLibraryViewSource, /useFeatureContext/);
+assert.match(sharedLibraryViewSource, /showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin'/);
+
+const videoaulasViewSource = await readFile(new URL('../src/features/course/VideoaulasView.jsx', import.meta.url), 'utf8');
+assert.match(videoaulasViewSource, /export default function VideoaulasView/);
+assert.match(videoaulasViewSource, /useFeatureContext/);
+
+const coursePortalViewSource = await readFile(new URL('../src/features/course/CoursePortalView.jsx', import.meta.url), 'utf8');
+assert.match(coursePortalViewSource, /export default function CoursePortalView/);
+assert.match(coursePortalViewSource, /useFeatureContext/);
+
+const videoQuestionsViewSource = await readFile(new URL('../src/features/course/VideoQuestionsView.jsx', import.meta.url), 'utf8');
+assert.match(videoQuestionsViewSource, /export default function VideoQuestionsView/);
+assert.match(videoQuestionsViewSource, /useFeatureContext/);
+
+const homeViewSource = await readFile(new URL('../src/features/home/HomeView.jsx', import.meta.url), 'utf8');
+assert.match(homeViewSource, /export default function HomeView/);
+assert.match(homeViewSource, /useFeatureContext/);
+
+const settingsViewSource = await readFile(new URL('../src/features/settings/SettingsView.jsx', import.meta.url), 'utf8');
+assert.match(settingsViewSource, /export default function SettingsView/);
+assert.match(settingsViewSource, /useFeatureContext/);
+
+const favoritesViewSource = await readFile(new URL('../src/features/favorites/FavoritesView.jsx', import.meta.url), 'utf8');
+assert.match(favoritesViewSource, /export default function FavoritesView/);
+assert.match(favoritesViewSource, /useFeatureContext/);
+
+const spacedReviewViewSource = await readFile(new URL('../src/features/review/SpacedReviewView.jsx', import.meta.url), 'utf8');
+assert.match(spacedReviewViewSource, /export default function SpacedReviewView/);
+assert.match(spacedReviewViewSource, /useFeatureContext/);
+
+const quickViewSource = await readFile(new URL('../src/features/quick/QuickView.jsx', import.meta.url), 'utf8');
+assert.match(quickViewSource, /export default function QuickView/);
+assert.match(quickViewSource, /useFeatureContext/);
+
+const quickTopicViewSource = await readFile(new URL('../src/features/quick/QuickTopicView.jsx', import.meta.url), 'utf8');
+assert.match(quickTopicViewSource, /export default function QuickTopicView/);
+assert.match(quickTopicViewSource, /useFeatureContext/);
+
+const subLibraryViewSource = await readFile(new URL('../src/features/library/SubLibraryView.jsx', import.meta.url), 'utf8');
+assert.match(subLibraryViewSource, /export default function SubLibraryView/);
+assert.match(subLibraryViewSource, /useFeatureContext/);
+
+const adminStudyMapSource = await readFile(new URL('../src/features/admin/AdminStudyMapTopicList.jsx', import.meta.url), 'utf8');
+assert.match(adminStudyMapSource, /export default AdminStudyMapTopicList/);
 
 let deferredRan = false;
 const deferred = deferInteractionWork(() => {

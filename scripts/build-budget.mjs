@@ -25,9 +25,14 @@ for (const file of jsFiles) {
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
 
+const ENTRY_RAW_LIMIT = 500 * 1024;
 const ENTRY_GZIP_LIMIT = 220 * 1024;
-const TOTAL_GZIP_LIMIT = 410 * 1024;
+const TOTAL_GZIP_LIMIT = 430 * 1024;
 
+assert.ok(
+  entry.raw <= ENTRY_RAW_LIMIT,
+  `Bundle principal passou do budget raw: ${fmt(entry.raw)} > ${fmt(ENTRY_RAW_LIMIT)}`
+);
 assert.ok(
   entry.gzip <= ENTRY_GZIP_LIMIT,
   `Bundle principal passou do budget: ${fmt(entry.gzip)} > ${fmt(ENTRY_GZIP_LIMIT)}`

@@ -258,14 +258,26 @@ Implementado nesta primeira rodada:
 - CI passou a rodar `npm run audit:moderate` antes do build, fazendo vulnerabilidades moderadas ou superiores quebrarem o pipeline automaticamente.
 - Primeira quebra real de feature iniciada: `BizuarioModal` saiu do `App.jsx` para `src/features/bizuario/BizuarioModal.jsx` e passou a ser carregado via `React.lazy`, reduzindo o bundle inicial e abrindo o caminho para extrair `QuestionView` em seguida.
 - `StudyMapPreview` tambem saiu do `App.jsx` para `src/features/study-map/StudyMapPreview.jsx` com carregamento lazy, removendo UI de fluxo raro do bundle inicial.
+- `QuestionView`, `QuestionCard`, `OpenAnswerModal`, chat do Oraculo e UI de flashcards foram movidos para `src/features/questions/QuestionFeature.jsx` com carregamento lazy. O `App.jsx` perdeu cerca de 1.500 linhas e o bundle principal caiu para 749,87 kB raw / 183,35 kB gzip no build do Vite; o novo chunk de questoes ficou com 76,02 kB raw / 20,62 kB gzip.
+- Smoke unitario passou a bloquear regressao dessa atomizacao, exigindo o lazy import de `QuestionFeature.jsx` e impedindo que `QuestionView/QuestionCard/OpenAnswerModal` voltem como componentes inline no `App.jsx`.
+- Modais de exportacao PDF/Word da Academia e das questoes foram movidos para `src/features/exporting/ExportModals.jsx`, retirando helpers DOCX/ZIP do bundle inicial.
+- Modais raros de prompt externo e revisao espacada foram movidos para `src/features/modals/WorkflowModals.jsx`.
+- Modal de geracao de questoes das videoaulas foi movido para `src/features/video-questions/VqGenModal.jsx`.
+- Lista admin do mapa de estudo foi movida para `src/features/admin/AdminStudyMapTopicList.jsx`.
+- Apos esses cortes, o bundle principal ficou em 697,07 kB raw / 170,35 kB gzip; ainda ha aviso do Vite por passar de 500 kB raw, mas o budget gzip continua aprovado.
+- Smoke unitario reforcado para exigir os chunks `ExportModals`, `WorkflowModals`, `VqGenModal` e `AdminStudyMapTopicList`, bloqueando retorno desses blocos ao `App.jsx`.
+- Segunda leva de atomizacao: `AcademiaTopicView`, modal de geracao em massa, Biblioteca compartilhada, Home, Sub-biblioteca, Portal do Curso, Videoaulas, Questoes do Curso, Configuracoes, Favoritos, Revisao Espacada e Centelha foram movidos para `src/features/*` com `React.lazy`.
+- O bundle principal caiu para 485,79 kB raw / 131,54 kB gzip; o aviso do Vite de chunk acima de 500 kB sumiu.
+- `scripts/build-budget.mjs` agora bloqueia explicitamente o bundle principal acima de 500 KiB raw, alem de manter limite gzip do entry e limite total gzip ajustado para o novo desenho em chunks.
+- Criado `src/features/FeatureContext.jsx` para reduzir props gigantes nos wrappers lazy. Home, Sub-biblioteca, Portal do Curso, Videoaulas, Questoes do Curso, Configuracoes, Favoritos, Revisao Espacada, Centelha, Biblioteca compartilhada e modal de geracao em massa agora consomem dependencias por `useFeatureContext()`, deixando o `App.jsx` menos ruidoso sem desfazer o code splitting.
+- Smoke unitario reforcado para exigir `FeatureProvider` no render principal e `useFeatureContext()` nas features migradas, evitando que futuras IAs voltem a empilhar props extensas nos wrappers.
+- Apos a limpeza de props, `npm run check` passou e o bundle principal ficou em 481,11 kB raw / 130,17 kB gzip; JS total ficou em 417,0 KiB gzip.
 
 Ainda pendente:
 
 - Testar regras Firestore em emulador/console antes de publicar.
 - Expandir persistencia granular para outros fluxos alem de `vq_blocks`.
 - Migrar Gemini para backend seguro.
-- Quebrar `QuestionView`/`QuestionCard` em arquivos proprios.
-- Modernizar dependencias e reduzir bundle inicial.
 
 ## Conclusao
 
