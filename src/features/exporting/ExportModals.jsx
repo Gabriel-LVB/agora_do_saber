@@ -3,8 +3,228 @@ import React, { useState } from 'react';
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
 const Printer = ic('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>');
 const escapeXml = (s = '') => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-const htmlishToText = (s = '') => String(s).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').replace(/\*\*/g, '').trim();
+const stripInlineMarkdown = (s = '') => String(s).replace(/\*\*([^*\n]+?)\*\*/g, '$1').replace(/\*([^*\n]+?)\*/g, '$1');
+const htmlishToText = (s = '') => stripInlineMarkdown(String(s).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '')).trim();
 const sanitizeFileName = (name = 'export') => (name || 'export').substring(0, 70).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() || 'export';
+const parseInlineMarkdown = (text = '') => {
+  const source = String(text || '')
+    .replace(/<(?:strong|b)>([^<\n]+)<\/(?:strong|b)>/gi, '**$1**')
+    .replace(/<(?:em|i)>([^<\n]+)<\/(?:em|i)>/gi, '*$1*');
+  const parts = [];
+  const re = /(\*\*([^*\n]+?)\*\*|\*([^*\n]+?)\*)/g;
+  let last = 0;
+  let match;
+  while ((match = re.exec(source)) !== null) {
+    if (match.index > last) parts.push({ text:source.slice(last, match.index), bold:false });
+    parts.push({ text:match[2] || match[3] || '', bold:true });
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) parts.push({ text:source.slice(last), bold:false });
+  return parts.length ? parts : [{ text:source, bold:false }];
+};
+const escapeHtml = (s = '') => parseInlineMarkdown(s).map(part => {
+  const text = String(part.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return part.bold ? `<strong>${text}</strong>` : text;
+}).join('');
+const textToHtml = (s = '') => escapeHtml(s).replace(/\n/g, '<br>');
+
+const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
+const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---(?=[ \t]*(?:\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$))|\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$/i;
+const extractLabeledSection = (text = '', labels = EXPLANATION_LABELS, stopRe = QUESTION_OR_SEPARATOR_RE) => {
+  const labelRe = new RegExp(
+    `(?:^|\\n)[ \\t]*(?:[-*•][ \\t]*)?(?:\\*\\*)?[ \\t]*(?:${labels})[ \\t]*(?:(?:\\*\\*)?[ \\t]*[:\\-–—][ \\t]*(?:\\*\\*)?[ \\t]*|(?:\\*\\*)?[ \\t]*(?:\\n|$))`,
+    'i'
+  );
+  const match = String(text || '').match(labelRe);
+  if (!match) return '';
+  const start = match.index + match[0].length;
+  const rest = String(text || '').substring(start);
+  const stop = rest.search(stopRe);
+  return (stop >= 0 ? rest.substring(0, stop) : rest).trim();
+};
+const cleanQuestionExplanation = (explanation = '') => {
+  let exp = String(explanation || '').replace(/\r\n/g, '\n').trim();
+  if (!exp) return '';
+  const labeled = extractLabeledSection(exp);
+  if (labeled) exp = labeled;
+  return exp
+    .replace(/^(?:[Aa]lternativa[ \t]+correta|[Gg]abarito(?:[ \t]+oficial)?|[Rr]esposta(?:[ \t]+correta)?|[Cc]orreta)[ \t]*[:\-–—][^\n]*\n+/i, '')
+    .replace(/^[-–—]+\s*/, '')
+    .replace(/\n---.*$/s, '')
+    .trim();
+};
+const cleanClinicalCaseContext = (context = '') => String(context || '')
+  .replace(/^\s*Caso(?:-base|\s+cl[íi]nico)?\s*\d+\s*[—–:\-]\s*/i, '')
+  .trim();
+const splitQuestionCase = (question = {}) => {
+  const explicitCase = String(question.caseContext || '').trim();
+  const explicitStatement = String(question.statement || '').trim();
+  if (explicitCase) return { caseContext:cleanClinicalCaseContext(explicitCase), statement:explicitStatement };
+  const raw = explicitStatement.replace(/\r\n/g, '\n');
+  if (!/^\s*Caso\s+\d+\b/i.test(raw)) return { caseContext:'', statement:raw };
+  const parts = raw.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+  if (parts.length < 2) return { caseContext:'', statement:raw };
+  return { caseContext:cleanClinicalCaseContext(parts[0]), statement:parts.slice(1).join('\n\n') };
+};
+const cleanStructuredExplanationPart = (text = '') => String(text || '')
+  .replace(/\r\n/g, '\n')
+  .replace(/^\s*(?:Aula|Alternativas)\s*:\s*/i, '')
+  .replace(/\n---.*$/s, '')
+  .trim();
+const parseQuestionExplanationParts = (explanation = '') => {
+  const raw = String(explanation || '').replace(/\r\n/g, '\n').trim();
+  const markerSource = String.raw`\[{1,2}\s*ALT\s*[:\-]?\s*([A-E])\s*\]{1,2}`;
+  if (!raw || !(new RegExp(markerSource, 'i')).test(raw)) return { hasStructured:false, lesson:'', alternatives:{} };
+  const firstAlt = raw.search(new RegExp(markerSource, 'i'));
+  const beforeAlt = firstAlt >= 0 ? raw.substring(0, firstAlt) : raw;
+  const lessonMatch = beforeAlt.match(/(?:^|\n)\s*Aula\s*:\s*([\s\S]*?)(?:\n\s*Alternativas\s*:?\s*$|$)/i);
+  const alternatives = {};
+  const altRe = new RegExp(`${markerSource}\\s*([\\s\\S]*?)(?=\\n\\s*(?:\\*\\*)?${markerSource}(?:\\*\\*)?|$)`, 'gi');
+  let m;
+  while ((m = altRe.exec(raw)) !== null) {
+    const letter = m[1].toUpperCase();
+    const body = cleanStructuredExplanationPart(m[2]);
+    if (body) alternatives[letter] = body;
+  }
+  return {
+    hasStructured:Object.keys(alternatives).length > 0,
+    lesson:cleanStructuredExplanationPart(lessonMatch?.[1] || beforeAlt),
+    alternatives,
+  };
+};
+const normalizeDisplayedAlternativeReferences = (text = '', displayLetter = '') => {
+  const letter = String(displayLetter || '').trim().toUpperCase();
+  if (!letter) return String(text || '');
+  return String(text || '').replace(
+    /\b((?:[Aa]\s+)?(?:alternativa|op[cç][aã]o|letra)\s+)(\*{0,2})([A-H])(\*{0,2})(?=\b)/gi,
+    (_, prefix, open = '', _oldLetter, close = '') => `${prefix}${open}${letter}${close}`,
+  );
+};
+const questionTypeLabel = (question = {}) => question.isCloze
+  ? 'Cloze'
+  : question.isFlashcard
+    ? 'Flashcard'
+    : question.isOpen
+      ? (question.isEssay ? 'Dissertativa' : 'Aberta')
+      : question.libraryQuestionKind === 'clinical' || splitQuestionCase(question).caseContext
+        ? 'Clínica'
+        : question.libraryQuestionKind === 'direct'
+          ? 'Fixação'
+          : 'Questão';
+const getQuestionExportData = (question = {}) => {
+  const parsed = parseQuestionExplanationParts(question.explanation || '');
+  const alternatives = {
+    ...(question.explanationParts?.alternatives || {}),
+    ...(parsed.alternatives || {}),
+  };
+  const text = splitQuestionCase(question);
+  const options = (question.options || []).map(opt => {
+    const letter = String(opt.letter || '').toUpperCase();
+    const originalLetter = String(opt.originalLetter || '').toUpperCase();
+    const explanation = opt.explanation || alternatives[originalLetter] || alternatives[letter] || '';
+    return { ...opt, explanation:normalizeDisplayedAlternativeReferences(explanation, letter) };
+  });
+  const lessonExplanation = cleanQuestionExplanation(question.explanationParts?.lesson || parsed.lesson || question.explanation || question.expectedAnswer || '');
+  return {
+    ...question,
+    label:questionTypeLabel(question),
+    caseContext:text.caseContext,
+    statement:text.statement,
+    options,
+    explanation:lessonExplanation,
+    hasAlternativeExplanations:options.some(opt => String(opt.explanation || '').trim()),
+  };
+};
+const renderAlternativeAnalysisHtml = (options = [], opts = {}) => {
+  const rows = (options || []).filter(o => o.explanation);
+  if (!rows.length) return '';
+  return `<div style="margin-top:${opts.compact?'10px':'12px'};border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;font-family:Arial,sans-serif">
+<div style="padding:9px 12px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#6b7280">Análise das alternativas</div>
+${rows.map((o, index)=>`<div style="display:flex;gap:10px;padding:10px 12px;${index?'border-top:1px solid #f1f5f9':''}">
+<span style="width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;font-size:12px;font-weight:bold;background:${o.isCorrect?'#dcfce7':'#f3f4f6'};color:${o.isCorrect?'#15803d':'#6b7280'}">${escapeHtml(o.letter)}</span>
+<div style="min-width:0">
+<p style="margin:0 0 3px;font-size:11px;font-weight:bold;color:${o.isCorrect?'#15803d':'#6b7280'}">${o.isCorrect?'Correta':'Incorreta'}</p>
+<div style="font-size:12px;line-height:1.55;color:#374151">${textToHtml(o.explanation)}</div>
+</div>
+</div>`).join('')}
+</div>`;
+};
+const PDF_EXPORT_STYLES = `
+@page{margin:16mm}
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;max-width:820px;margin:0 auto;padding:24px;color:#1f2937;background:#fff}
+.export-header{border-bottom:1px solid #e5e7eb;margin-bottom:24px;padding-bottom:16px}
+.export-brand{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#92400e;margin-bottom:8px}
+h1{font-family:Georgia,serif;color:#111827;font-size:29px;line-height:1.15;margin:0 0 8px}
+.export-meta{font-size:12px;color:#6b7280;margin:0}
+h2{font-family:Georgia,serif;color:#111827;font-size:22px;line-height:1.2;margin:30px 0 14px;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
+h3{font-size:14px;color:#92400e;margin:18px 0 8px}
+.sub{color:#d97706;font-weight:800;margin-right:6px}
+.lesson-content p{font-family:Georgia,serif;font-size:14px;line-height:1.72;margin:0 0 8px;color:#1f2937}
+.lesson-content ul{margin:6px 0 10px 20px;padding:0}
+.lesson-content li{font-family:Georgia,serif;font-size:14px;line-height:1.65;margin:3px 0}
+.lesson-content table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12px}
+.lesson-content th{border:1px solid #d1d5db;padding:7px 9px;text-align:left;background:#f9fafb;color:#374151}
+.lesson-content td{border:1px solid #e5e7eb;padding:7px 9px;color:#374151}
+.question-card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:0 0 18px;page-break-inside:avoid;background:#fff}
+.question-kicker{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
+.question-index{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:24px;border-radius:7px;background:#fef3c7;color:#92400e}
+.case-box{border:1px solid #e5e7eb;background:#f9fafb;border-radius:10px;padding:12px 14px;margin:0 0 14px}
+.case-label{margin:0 0 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
+.case-text{font-family:Georgia,serif;font-size:13px;line-height:1.6;color:#374151}
+.question-statement{font-family:Georgia,serif;font-size:15px;line-height:1.65;margin:0 0 14px;color:#111827}
+.option-row{display:flex;gap:10px;align-items:flex-start;border:1px solid #e5e7eb;border-radius:10px;padding:9px 11px;margin:7px 0;background:#fff}
+.option-row.is-correct{border-color:#86efac;background:#f0fdf4}
+.option-letter{display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;height:26px;border-radius:8px;background:#f3f4f6;color:#4b5563;font-size:12px;font-weight:800}
+.option-row.is-correct .option-letter{background:#22c55e;color:#fff}
+.option-text{font-size:13px;line-height:1.55;color:#1f2937;padding-top:3px}
+.answer-space{height:58px;border-bottom:1px dashed #cbd5e1;margin-top:12px}
+.answer-card{border:1px solid #d1fae5;border-left:4px solid #22c55e;border-radius:12px;padding:14px 16px;margin:8px 0 28px;background:#fafffb;page-break-inside:avoid}
+.answer-card.compact{margin-bottom:16px;background:#fff}
+.answer-card.last{margin-bottom:16px}
+.answer-title{margin:0 0 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#15803d}
+.answer-correct{margin:0 0 10px;font-size:13px;font-weight:800;color:#065f46}
+.explanation-box{border-left:3px solid #f59e0b;background:#fffbeb;border-radius:0 10px 10px 0;padding:11px 13px;margin-top:10px;font-family:Georgia,serif;font-size:13px;line-height:1.62;color:#374151}
+.answer-separator{border-top:1px dashed #cbd5e1;margin:24px 0 10px;text-align:center}
+.answer-separator span{position:relative;top:-8px;background:#fff;padding:0 10px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#9ca3af}
+.question-divider{border:0;border-top:1px solid #e5e7eb;margin:8px 0 30px}
+.pb{page-break-before:always}
+@media print{body{padding:0}.question-card,.answer-card,.case-box{break-inside:avoid}.pb{break-before:page}}
+`;
+const renderPdfHeader = ({ title = 'Exportar', meta = '' }) => `<header class="export-header">
+<div class="export-brand">Ágora do Saber</div>
+<h1>${escapeHtml(title)}</h1>
+${meta ? `<p class="export-meta">${escapeHtml(meta)}</p>` : ''}
+</header>`;
+const renderPdfOptions = (options = [], { showAnswer = false } = {}) => (options || []).map(o => (
+  `<div class="option-row ${showAnswer && o.isCorrect ? 'is-correct' : ''}">
+<span class="option-letter">${escapeHtml(o.letter)}</span>
+<div class="option-text">${textToHtml(o.text || '')}</div>
+</div>`
+)).join('');
+const renderPdfQuestionHtml = (question, idx, { showAnswer = false, blank = false } = {}) => {
+  const data = getQuestionExportData(question);
+  const corr = data.options?.find(o => o.isCorrect);
+  return `<article class="question-card">
+<p class="question-kicker"><span class="question-index">${idx + 1}</span>${escapeHtml(data.label)}</p>
+${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${textToHtml(data.caseContext)}</div></section>` : ''}
+<div class="question-statement">${textToHtml(data.statement || '')}</div>
+${renderPdfOptions(data.options || [], { showAnswer })}
+${blank ? '<div class="answer-space"></div>' : ''}
+${showAnswer ? renderPdfAnswerHtml(question, idx, { embedded:true }) : ''}
+</article>`;
+};
+const renderPdfAnswerHtml = (question, idx, { compact = false, embedded = false, isLast = false } = {}) => {
+  const data = getQuestionExportData(question);
+  const corr = data.options?.find(o => o.isCorrect);
+  return `<section class="answer-card ${compact || embedded ? 'compact' : ''} ${isLast ? 'last' : ''}">
+<p class="answer-title">Gabarito — ${escapeHtml(data.label)} ${idx + 1}</p>
+${corr ? `<p class="answer-correct">${escapeHtml(corr.letter)}) ${textToHtml(corr.text || '')}</p>` : ''}
+${data.explanation ? `<div class="explanation-box">${textToHtml(data.explanation)}</div>` : ''}
+${data.hasAlternativeExplanations ? renderAlternativeAnalysisHtml(data.options, { compact:compact || embedded }) : ''}
+</section>`;
+};
+const renderPdfDocument = (body = '') => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${PDF_EXPORT_STYLES}</style></head><body>${body}</body></html>`;
 
 const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -15,10 +235,10 @@ const downloadBlob = (blob, filename) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 const docxRuns = (text = '', opts = {}) => {
-  const chunks = String(text).split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+  const chunks = parseInlineMarkdown(text);
   return chunks.map(chunk => {
-    const bold = opts.bold || (/^\*\*[^*]+\*\*$/.test(chunk));
-    const clean = chunk.replace(/^\*\*|\*\*$/g, '');
+    const bold = opts.bold || chunk.bold;
+    const clean = chunk.text;
     const props = [
       bold ? '<w:b/>' : '',
       opts.color ? `<w:color w:val="${opts.color}"/>` : '',
@@ -133,19 +353,17 @@ const createDocxBlob = (bodyXml) => {
   ], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 };
 const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
-  const [lessonMode,  setLessonMode]  = useState('interleaved'); // 'interleaved'|'end'
-  const [qPlace,      setQPlace]      = useState('topic');        // 'topic'|'end'
   const [answerMode,  setAnswerMode]  = useState('after');        // 'after'|'end'|'none'
-  const [hideSubtitles, setHideSubtitles] = useState(false);
   const [fmt, setFmt] = useState('pdf');
+  const lessonMode = 'end';
+  const qPlace = 'end';
+  const hideSubtitles = true;
 
   const boundaries = topic._topicBoundaries || [];
   const isFolder   = boundaries.length > 0;
   const subtopics  = topic.subtopics || [];
 
-  const escape = s => (s||'')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+  const escape = s => escapeHtml(s);
 
   const mdToHtml = (md) => {
     if (!md) return '';
@@ -159,61 +377,37 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
         const rows = tLines.filter(l => !/^\s*\|[-:\s|]+\|\s*$/.test(l));
         const cells = row => row.replace(/^\s*\|\s*/,'').replace(/\s*\|\s*$/,'').split(/\s*\|\s*/);
         if (rows.length > 0) {
-          html += '<table style="border-collapse:collapse;width:100%;margin:10px 0;font-size:13px">';
-          html += '<thead><tr>' + cells(rows[0]).map(c=>`<th style="border:1px solid #aaa;padding:6px 10px;text-align:left;background:#f5f5f5">${escape(c)}</th>`).join('') + '</tr></thead>';
-          html += '<tbody>' + rows.slice(1).map((r,ri)=>`<tr>${cells(r).map(c=>`<td style="border:1px solid #ccc;padding:5px 10px">${escape(c)}</td>`).join('')}</tr>`).join('') + '</tbody>';
+          html += '<table>';
+          html += '<thead><tr>' + cells(rows[0]).map(c=>`<th>${escape(c)}</th>`).join('') + '</tr></thead>';
+          html += '<tbody>' + rows.slice(1).map((r,ri)=>`<tr>${cells(r).map(c=>`<td>${escape(c)}</td>`).join('')}</tr>`).join('') + '</tbody>';
           html += '</table>';
         }
         continue;
       }
       if (/^\s*[-*•]\s/.test(line)) {
-        html += '<ul style="margin:4px 0 4px 18px;padding:0">';
+        html += '<ul>';
         while (i < lines.length && /^\s*[-*•]\s/.test(lines[i])) {
-          html += `<li style="margin:2px 0;font-size:14px;line-height:1.6">${escape(lines[i].replace(/^\s*[-*•]\s/,''))}</li>`; i++;
+          html += `<li>${escape(lines[i].replace(/^\s*[-*•]\s/,''))}</li>`; i++;
         }
         html += '</ul>'; continue;
       }
       if (!line.trim()) { html += '<br>'; i++; continue; }
-      html += `<p style="margin:0 0 6px;font-size:14px;line-height:1.7">${escape(line)}</p>`; i++;
+      html += `<p>${escape(line)}</p>`; i++;
     }
     return html;
   };
 
   // Renders a single question. showAnswer controls whether gabarito appears.
-  const renderQ = (q, localIdx, showAnswer) => {
-    const opts = q.options||[];
-    return `<div style="margin-bottom:18px;page-break-inside:avoid">
-<p style="font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 3px">Questão ${localIdx+1}</p>
-<p style="font-size:14px;margin:4px 0 8px;line-height:1.6">${escape(q.statement||'')}</p>
-${opts.map(o=>`<div style="margin:2px 0;padding:5px 10px;border-radius:5px;font-size:13px;border:1px solid #ddd${showAnswer&&o.isCorrect?';border-color:#333;font-weight:bold':''}">${o.letter}) ${escape(o.text||'')}</div>`).join('')}
-${showAnswer?`<div style="background:#f5f5f5;border-left:3px solid #555;padding:8px 12px;margin-top:8px;font-size:13px;line-height:1.5">${escape(q.explanation||'')}</div>`:''}
-</div>`;
-  };
+  const renderQ = (q, localIdx, showAnswer) => renderPdfQuestionHtml(q, localIdx, { showAnswer });
 
   // Renders a gabarito block (for answerMode='end')
-  const renderGabarito = (questions) => {
-    let html = '';
-    questions.forEach((q, qi) => {
-      const corr = q.options?.find(o=>o.isCorrect);
-      html += `<div style="padding:8px 12px;border-left:3px solid #555;margin-bottom:10px;font-size:13px">
-<p style="font-weight:bold;margin:0 0 3px">Q${qi+1}. ${escape(corr?.letter||'')}. ${escape(corr?.text||'')}</p>
-<p style="margin:0;color:#444;line-height:1.5">${escape(q.explanation||'')}</p>
-</div>`;
-    });
-    return html;
-  };
+  const renderGabarito = (questions) => questions.map((q, qi) => renderPdfAnswerHtml(q, qi, { compact:true })).join('');
 
   const buildHtml = () => {
-    const styles = `body{font-family:Georgia,serif;max-width:820px;margin:0 auto;padding:24px;color:#111}
-h1{color:#92400e;border-bottom:3px solid #92400e;padding-bottom:8px;margin-bottom:4px}
-h2{color:#374151;margin:28px 0 12px;border-bottom:1px solid #e5e7eb;padding-bottom:5px}
-h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
-.sub{color:#d97706;font-weight:bold;margin-right:6px}
-.pb{page-break-before:always}
-@media print{body{padding:8px}}`;
-
-    let body = `<h1>${escape(topic.title)}</h1>
-<p style="color:#888;font-size:13px;font-family:sans-serif;margin:0 0 20px">${escape(subject?.title||'')} • Ágora do Saber</p>`;
+    let body = renderPdfHeader({
+      title:topic.title || 'Academia',
+      meta:[subject?.title, 'Ágora do Saber'].filter(Boolean).join(' • '),
+    });
 
     const allFixqs = subtopics.flatMap((_,i) => topic.fixationQuestions?.[i]||[]);
     const extraQs  = (topic.extraBattery||[]).flatMap(b => b.questions||b);
@@ -228,14 +422,14 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
         if (!hideSubtitles) {
           h += `<h3><span class="sub">${localNum}.</span>${escape(section?.title || subtopics[si] || '')}</h3>`;
         }
-        h += mdToHtml(section?.content || '');
+        h += `<div class="lesson-content">${mdToHtml(section?.content || '')}</div>`;
       }
       return h;
     };
 
     const renderQBlock = (fixqs, label, showAns) => {
       if (!fixqs.length) return '';
-      let h = label ? `<h3 style="margin-top:20px">${label}</h3>` : '';
+      let h = label ? `<h3>${escape(label)}</h3>` : '';
       fixqs.forEach((q,qi) => { h += renderQ(q, qi, showAns); });
       return h;
     };
@@ -327,11 +521,14 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
 
     if (extraQs.length) {
       body += `<div class="pb"><h2>Baterias Extras</h2>`;
-      extraQs.forEach((q,qi) => { body += renderQ(q, qi, answerMode!=='none'); });
+      extraQs.forEach((q,qi) => { body += renderQ(q, qi, answerMode==='after'); });
+      if (answerMode === 'end') {
+        body += `<div class="pb"><h2>Gabarito — Baterias Extras</h2>` + renderGabarito(extraQs) + `</div>`;
+      }
       body += `</div>`;
     }
 
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body>${body}</body></html>`;
+    return renderPdfDocument(body);
   };
 
   const buildDocx = () => {
@@ -343,9 +540,14 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
     const extraQs  = (topic.extraBattery||[]).flatMap(b => b.questions||b);
 
     const renderQuestion = (q, idx, showAnswer) => {
-      let xml = docxParagraph(`Questão ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
-      xml += docxParagraph(q.statement || '', { after:120 });
-      (q.options || []).forEach(o => {
+      const data = getQuestionExportData(q);
+      let xml = docxParagraph(`${data.label} ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
+      if (data.caseContext) {
+        xml += docxParagraph('Cenário clínico', { bold:true, color:'92400E', after:40 });
+        xml += docxParagraph(data.caseContext, { color:'374151', after:100 });
+      }
+      xml += docxParagraph(data.statement || '', { after:120 });
+      (data.options || []).forEach(o => {
         xml += docxParagraph(`${o.letter}) ${o.text || ''}`, {
           after:60,
           bold: showAnswer && o.isCorrect,
@@ -353,16 +555,36 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
         });
       });
       if (showAnswer) {
-        const corr = (q.options || []).find(o => o.isCorrect);
+        const corr = (data.options || []).find(o => o.isCorrect);
         if (corr) xml += docxParagraph(`Gabarito: ${corr.letter}) ${corr.text || ''}`, { bold:true, color:'15803D', after:80 });
-        xml += docxParagraph(q.explanation || q.expectedAnswer || '', { color:'374151', after:220 });
+        xml += docxParagraph(data.explanation || '', { color:'374151', after:160 });
+        if (data.hasAlternativeExplanations) {
+          xml += docxParagraph('Análise das alternativas', { bold:true, color:'374151', after:60 });
+          (data.options || []).filter(o => o.explanation).forEach(o => {
+            xml += docxParagraph(`${o.letter}. ${o.isCorrect ? 'Correta' : 'Incorreta'} — ${o.explanation}`, {
+              color:o.isCorrect ? '15803D' : '374151',
+              after:80,
+            });
+          });
+        }
       }
       return xml;
     };
     const renderGabaritoDocx = (questions) => questions.map((q, qi) => {
-      const corr = (q.options || []).find(o => o.isCorrect);
-      return docxParagraph(`Q${qi + 1}. ${corr ? `${corr.letter}) ${corr.text || ''}` : ''}`, { bold:true, color:'065F46', after:40 }) +
-        docxParagraph(q.explanation || q.expectedAnswer || '', { color:'374151', after:160 });
+      const data = getQuestionExportData(q);
+      const corr = (data.options || []).find(o => o.isCorrect);
+      let xml = docxParagraph(`Q${qi + 1}. ${corr ? `${corr.letter}) ${corr.text || ''}` : ''}`, { bold:true, color:'065F46', after:40 });
+      xml += docxParagraph(data.explanation || '', { color:'374151', after:120 });
+      if (data.hasAlternativeExplanations) {
+        xml += docxParagraph('Análise das alternativas', { bold:true, color:'374151', after:40 });
+        (data.options || []).filter(o => o.explanation).forEach(o => {
+          xml += docxParagraph(`${o.letter}. ${o.isCorrect ? 'Correta' : 'Incorreta'} — ${o.explanation}`, {
+            color:o.isCorrect ? '15803D' : '374151',
+            after:70,
+          });
+        });
+      }
+      return xml;
     }).join('');
     const renderSections = (start, end) => {
       let xml = '';
@@ -415,7 +637,8 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
 
     if (extraQs.length) {
       body += docxParagraph('Baterias Extras', { bold:true, size:28, pageBreakBefore:true, color:'92400E' });
-      extraQs.forEach((q, qi) => { body += renderQuestion(q, qi, answerMode !== 'none'); });
+      extraQs.forEach((q, qi) => { body += renderQuestion(q, qi, answerMode === 'after'); });
+      if (answerMode === 'end') body += docxParagraph('Gabarito — Baterias Extras', { bold:true, size:28, pageBreakBefore:true, color:'92400E' }) + renderGabaritoDocx(extraQs);
     }
     return body;
   };
@@ -438,34 +661,6 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
       <div className={`w-full max-w-lg rounded-2xl border overflow-y-auto p-8 ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar {isFolder?'Pasta':'Aula'}</h3>
 
-        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Disposição da explicação</p>
-        <div className="space-y-2 mb-5">
-          {[{k:'interleaved',title:'Intercalada',desc:'Explicação de cada subtópico seguida das suas questões'},
-            {k:'end',title:'Explicação depois questões',desc:'Toda a explicação primeiro, questões separadas ao final'}
-          ].map(o=>(
-            <label key={o.k} className={rc(lessonMode===o.k)}>
-              <input type="radio" name="lm" value={o.k} checked={lessonMode===o.k} onChange={()=>setLessonMode(o.k)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
-              <div><p className="font-bold text-sm">{o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
-            </label>
-          ))}
-        </div>
-
-        {isFolder&&(
-          <>
-            <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Questões por</p>
-            <div className="space-y-2 mb-5">
-              {[{k:'topic',title:'Após cada tópico',desc:'Questões + gabarito após o bloco de cada tópico'},
-                {k:'end',title:'Ao final de tudo',desc:'Todas as questões reunidas em seção única no final'}
-              ].map(o=>(
-                <label key={o.k} className={rc(qPlace===o.k)}>
-                  <input type="radio" name="qp" value={o.k} checked={qPlace===o.k} onChange={()=>setQPlace(o.k)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
-                  <div><p className="font-bold text-sm">{o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
-                </label>
-              ))}
-            </div>
-          </>
-        )}
-
         <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Gabarito e explicações</p>
         <div className="space-y-2 mb-5">
           {[{k:'after',title:'Logo após cada questão',desc:'Resposta e explicação abaixo de cada questão'},
@@ -478,12 +673,6 @@ h3{color:#92400e;margin:16px 0 6px;font-size:15px;font-weight:bold}
             </label>
           ))}
         </div>
-
-        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Outros</p>
-        <label className={`${rc(hideSubtitles)} mb-5 cursor-pointer`}>
-          <input type="checkbox" checked={hideSubtitles} onChange={e=>setHideSubtitles(e.target.checked)} className="accent-yellow-600 mt-0.5 flex-shrink-0"/>
-          <div><p className="font-bold text-sm">Ocultar títulos dos subtópicos</p><p className="text-xs opacity-50 mt-0.5">Remove os títulos e números — o texto flui como prosa contínua</p></div>
-        </label>
 
         <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Formato</p>
         <div className="flex gap-3 mb-8">
@@ -508,19 +697,15 @@ const ExportModal = ({ topic, subject, onClose, darkMode }) => {
   const [fmt, setFmt]   = useState('pdf');     // 'pdf'|'word'
 
   const buildHtml = () => {
-    const escape = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
     const qs = topic.questions;
-    let body = `<h1 style="color:#92400e;border-bottom:3px solid #92400e;padding-bottom:8px;font-family:Georgia,serif">${topic.title}</h1>
-<p style="color:#6b7280;font-size:13px;font-family:sans-serif">${qs.length} questões • ${subject?.title||''} • Ágora do Saber</p>`;
+    let body = renderPdfHeader({
+      title:topic.title || 'Exportar',
+      meta:[`${qs.length} questões`, subject?.title, 'Ágora do Saber'].filter(Boolean).join(' • '),
+    });
 
     if (mode==='blank') {
       qs.forEach((q, idx) => {
-        body += `<div style="margin-bottom:28px;page-break-inside:avoid;border-bottom:1px solid #e5e7eb;padding-bottom:16px">
-<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 4px">Questão ${idx + 1}</p>
-<p style="font-size:15px;margin:8px 0 12px;line-height:1.6">${escape(q.statement)}</p>
-${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
-<div style="height:60px;border-bottom:1px dashed #e5e7eb;margin-top:8px"></div>
-</div>`;
+        body += renderPdfQuestionHtml(q, idx, { blank:true });
       });
     } else if (mode==='study') {
       // Study mode: each question appears WITHOUT answer highlighted,
@@ -528,43 +713,25 @@ ${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radiu
       // This way you can answer it before accidentally seeing the response.
       qs.forEach((q, idx) => {
         const isLast = idx === qs.length - 1;
-        body += `<div style="margin-bottom:0;page-break-inside:avoid">
-<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-family:sans-serif;margin:0 0 4px">Questão ${idx + 1}</p>
-<p style="font-size:15px;margin:8px 0 12px;line-height:1.6">${escape(q.statement)}</p>
-${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
-</div>`;
+        body += renderPdfQuestionHtml(q, idx);
         // Spacer — big enough so the answer below isn't accidentally seen
-        body += `<div style="border-top:2px dashed #e5e7eb;margin:32px 0 8px;padding-top:8px">
-<p style="font-size:10px;color:#d1d5db;text-align:center;letter-spacing:.1em;font-family:sans-serif;text-transform:uppercase">✂ gabarito ✂</p>
-</div>`;
+        body += '<div class="answer-separator"><span>Gabarito</span></div>';
         // Answer + explanation
-        body += `<div style="margin-bottom:${isLast?'16px':'48px'};padding:14px 16px;background:#f0fdf4;border-radius:8px;border-left:4px solid #22c55e;page-break-inside:avoid">
-<p style="font-weight:bold;color:#15803d;margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em">✓ Gabarito — Questão ${idx + 1}</p>
-${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;${o.isCorrect?'background:#d1fae5;font-weight:bold;color:#065f46;border:1px solid #6ee7b7':'border:1px solid transparent;color:#6b7280'}">${o.letter}) ${escape(o.text)}</div>`).join('')}
-<div style="background:#fef3c7;padding:12px 16px;margin-top:10px;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;font-size:13px;line-height:1.6">${escape(q.explanation)}</div>
-</div>
-${!isLast ? '<hr style="border:none;border-top:3px solid #e5e7eb;margin:8px 0 40px">' : ''}`;
+        body += renderPdfAnswerHtml(q, idx, { isLast });
+        if (!isLast) body += '<hr class="question-divider">';
       });
     } else { // exam mode
-      body += '<h2 style="margin-top:24px;font-family:Georgia,serif;color:#374151">QUESTÕES</h2>';
+      body += '<h2>Questões</h2>';
       qs.forEach((q, idx) => {
-        body += `<div style="margin-bottom:28px;page-break-inside:avoid">
-<p style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-family:sans-serif;margin:0 0 4px">Questão ${idx + 1}</p>
-<p style="font-size:15px;margin:8px 0 12px;line-height:1.6">${escape(q.statement)}</p>
-${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #e5e7eb">${o.letter}) ${escape(o.text)}</div>`).join('')}
-</div>`;
+        body += renderPdfQuestionHtml(q, idx);
       });
-      body += '<div style="page-break-before:always"><h2 style="font-family:Georgia,serif;color:#92400e;border-bottom:2px solid #92400e;padding-bottom:8px">GABARITO E COMENTÁRIOS</h2>';
+      body += '<div class="pb"><h2>Gabarito e comentários</h2>';
       qs.forEach((q, idx) => {
-      const corr = (q.options || []).find(o=>o.isCorrect);
-        body += `<div style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb">
-<p style="font-weight:bold;margin:0 0 4px;font-size:13px">Questão ${idx + 1}: <span style="color:#065f46">${corr?.letter}) ${escape(corr?.text||'')}</span></p>
-<p style="font-size:12px;margin:0;color:#374151;line-height:1.5">${escape(q.explanation)}</p>
-</div>`;
+        body += renderPdfAnswerHtml(q, idx, { compact:true });
       });
       body += '</div>';
     }
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Georgia,serif;max-width:800px;margin:0 auto;padding:24px;color:#111}@media print{body{padding:10px}}</style></head><body>${body}</body></html>`;
+    return renderPdfDocument(body);
   };
 
   const buildDocx = () => {
@@ -572,9 +739,14 @@ ${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radiu
     let body = docxParagraph(topic.title || 'Exportar', { bold:true, size:32, color:'92400E', after:80, border:true });
     body += docxParagraph(`${qs.length} questões • ${subject?.title || ''} • Ágora do Saber`, { size:20, color:'6B7280', after:260 });
     const renderQuestion = (q, idx, opts = {}) => {
-      let xml = docxParagraph(`Questão ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
-      xml += docxParagraph(q.statement || '', { after:120 });
-      (q.options || []).forEach(o => {
+      const data = getQuestionExportData(q);
+      let xml = docxParagraph(`${data.label} ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
+      if (data.caseContext) {
+        xml += docxParagraph('Cenário clínico', { bold:true, color:'92400E', after:40 });
+        xml += docxParagraph(data.caseContext, { color:'374151', after:100 });
+      }
+      xml += docxParagraph(data.statement || '', { after:120 });
+      (data.options || []).forEach(o => {
         xml += docxParagraph(`${o.letter}) ${o.text || ''}`, {
           after:60,
           bold: opts.showAnswer && o.isCorrect,
@@ -585,10 +757,20 @@ ${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radiu
       return xml;
     };
     const renderAnswer = (q, idx) => {
-      const corr = (q.options || []).find(o => o.isCorrect);
-      let xml = docxParagraph(`Gabarito — Questão ${idx + 1}`, { bold:true, color:'15803D', after:60 });
+      const data = getQuestionExportData(q);
+      const corr = (data.options || []).find(o => o.isCorrect);
+      let xml = docxParagraph(`Gabarito — ${data.label} ${idx + 1}`, { bold:true, color:'15803D', after:60 });
       if (corr) xml += docxParagraph(`${corr.letter}) ${corr.text || ''}`, { bold:true, color:'065F46', after:60 });
-      xml += docxParagraph(q.explanation || q.expectedAnswer || '', { color:'374151', after:240 });
+      xml += docxParagraph(data.explanation || '', { color:'374151', after:160 });
+      if (data.hasAlternativeExplanations) {
+        xml += docxParagraph('Análise das alternativas', { bold:true, color:'374151', after:60 });
+        (data.options || []).filter(o => o.explanation).forEach(o => {
+          xml += docxParagraph(`${o.letter}. ${o.isCorrect ? 'Correta' : 'Incorreta'} — ${o.explanation}`, {
+            color:o.isCorrect ? '15803D' : '374151',
+            after:80,
+          });
+        });
+      }
       return xml;
     };
 
@@ -621,20 +803,21 @@ ${(q.options||[]).map(o=>`<div style="margin:4px 0;padding:6px 10px;border-radiu
   };
 
   const opts = [
-    {k:'study',  icon:'📖', title:'Modo Estudo',   desc:'Questão sem resposta → ✂ separador → gabarito+explicação. Faça as questões offline!'},
-    {k:'exam',   icon:'📋', title:'Modo Simulado', desc:'Todas as questões primeiro, gabarito completo ao final'},
-    {k:'blank',  icon:'📝', title:'Só Questões',   desc:'Apenas perguntas e alternativas, sem nenhuma resposta'},
+    {k:'study', title:'Logo após cada questão', desc:'Resposta, explicação e análise das alternativas abaixo de cada questão'},
+    {k:'exam', title:'No final (modo simulado)', desc:'Questões sem resposta + gabarito completo em página separada'},
+    {k:'blank', title:'Sem gabarito', desc:'Só enunciados e alternativas — para responder no papel'},
   ];
 
   return (
     <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
       <div className={`w-full max-w-md rounded-2xl border overflow-y-auto p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar</h3>
+        <p className={`text-xs font-bold uppercase mb-3 ${darkMode?'text-gray-400':'text-gray-500'}`}>Gabarito e explicações</p>
         <div className="space-y-3 mb-6">
           {opts.map(o=>(
             <label key={o.k} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${mode===o.k?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
               <input type="radio" name="mode" value={o.k} checked={mode===o.k} onChange={()=>setMode(o.k)} className="accent-yellow-600"/>
-              <div><p className="font-bold text-sm">{o.icon} {o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
+              <div><p className="font-bold text-sm">{o.title}</p><p className="text-xs opacity-50 mt-0.5">{o.desc}</p></div>
             </label>
           ))}
         </div>
