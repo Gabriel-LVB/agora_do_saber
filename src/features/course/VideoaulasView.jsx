@@ -1,5 +1,6 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import { useCourseHeroJourney } from './useCourseHeroJourney.js';
 
 export default function VideoaulasView() {
   const {
@@ -69,6 +70,7 @@ export default function VideoaulasView() {
   } = useFeatureContext();
 
           const dm = darkMode;
+          const courseCycle = useCourseHeroJourney({ enabled:!videoaulasLoading });
           // DEMO_DATA usa o novo formato: Assunto → Tópico → { "Aulas Principais": [], "Bônus": [] }
           const DEMO_DATA = {
             "Ginecologia": {
@@ -141,6 +143,13 @@ export default function VideoaulasView() {
 	            : effQuestionAnswered < effQuestionTotal
 	              ? `Responder questões (${effQuestionAnswered}/${effQuestionTotal})`
 	              : 'Rever questões';
+	          const cycleContinueStep = courseCycle.isReady ? courseCycle.heroJourneyStep?.step : null;
+	          const cycleContinueItem = courseCycle.heroJourneyStep?.item;
+	          const isCurrentCycleLesson = !!(cycleContinueStep?.lesson && getAulaId(cycleContinueStep.lesson.aula) === getAulaId(effAula));
+	          const showCycleContinue = !!cycleContinueStep && (!isCurrentCycleLesson || cycleContinueStep.label !== 'Assistir aula');
+	          const cycleContinueText = cycleContinueStep
+	            ? `${cycleContinueStep.label} · ${capitalizeDisplayLabel(cycleContinueItem?.subject || effSubject)}`
+	            : '';
 	          const openEffAulaQuestions = (parity = 'all') => {
 	            setVqQuestionParity(parity);
 	            if (aulaHasVqData(effAula)) {
@@ -431,6 +440,12 @@ export default function VideoaulasView() {
 	                            <button onClick={()=>openEffAulaQuestions('even')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${dm?'border-gray-700 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-600'}`}>Fazer pares</button>
 	                          </div>
 	                        )}
+	                        {showCycleContinue&&(
+	                          <button onClick={cycleContinueStep.action} title={cycleContinueText}
+	                            className={`w-full flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-200 active:bg-gray-700':'border-gray-200 bg-white text-gray-700 active:bg-gray-50'}`}>
+	                            <RepeatIcon className="w-4 h-4 text-yellow-500"/>Continuar ciclo
+	                          </button>
+	                        )}
 	                        {!aulaHasVqData(effAula)&&isAdmin&&(
 	                          <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
 	                            className={`ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-50'}`}>
@@ -549,6 +564,12 @@ export default function VideoaulasView() {
 		                                <button onClick={()=>openEffAulaQuestions('odd')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-600 hover:border-yellow-400'}`}>Ímpares</button>
 		                                <button onClick={()=>openEffAulaQuestions('even')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-600 hover:border-yellow-400'}`}>Pares</button>
 		                              </div>}
+	                                {showCycleContinue&&(
+	                                  <button onClick={cycleContinueStep.action} title={cycleContinueText}
+	                                    className={`w-full flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-200 hover:border-yellow-700':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400'}`}>
+	                                    <RepeatIcon className="w-4 h-4 text-yellow-500"/>Continuar ciclo
+	                                  </button>
+	                                )}
 	                                {!aulaHasVqData(effAula)&&(
 	                                  <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
 	                                    title="Configurações das questões"

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import { useCourseHeroJourney } from './useCourseHeroJourney.js';
 
 export default function VideoQuestionsView() {
   const {
@@ -90,6 +91,7 @@ export default function VideoQuestionsView() {
   } = useFeatureContext();
 
           const dm = darkMode;
+          const courseCycle = useCourseHeroJourney({ enabled:true });
           const data     = parseVideoaulasData(appliedVideoaulasData || {});
           const subjects = sortCourseSubjectsForDisplay(Object.keys(data));
 
@@ -228,6 +230,7 @@ export default function VideoQuestionsView() {
                 topicTitle:blockTitle,
                 questionIds:visibleQuestions.map(q=>q.id),
               });
+              const cycleContinueStep = cycleStage && courseCycle.isReady ? courseCycle.heroJourneyStep?.step : null;
 
   const handleVqAnswer = async (qId, letter) => {
     trackQuestionAnswered(`curso:${aulaIdNew}:${blockId}:${qId}`);
@@ -330,10 +333,10 @@ export default function VideoQuestionsView() {
                     inReviewCount={Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length}
                     onGoToAula={openCurrentCourseAulaFromVq}
                     onNextUnit={cycleStage
-                      ? (()=>{setVqActiveBlockView(null); setCursoTab('plano'); setView('curso');})
+                      ? (cycleContinueStep?.action || (()=>{setVqActiveBlockView(null); setCursoTab('plano'); setView('curso');}))
                       : (nextBlockEntry ? (()=>setVqActiveBlockView({blockId:nextBlockEntry[0],showWrong:false,fromPlan:vqActiveBlockView?.fromPlan||false})) : (nextCourseLesson ? (()=>openCourseLessonFromVq(nextCourseLesson)) : null))}
-                    nextUnitLabel={cycleStage ? 'Voltar ao Ciclo' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
-                    nextUnitHelper={cycleStage ? 'Continuar o roteiro guiado' : (nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência'))}
+                    nextUnitLabel={cycleStage ? 'Continuar ciclo' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
+                    nextUnitHelper={cycleStage ? (cycleContinueStep ? `${cycleContinueStep.label} · ${cycleContinueStep.detail}` : 'Continuar o roteiro guiado') : (nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência'))}
                     generateLabel="Gerar Questões"
                     onGenerate={meta.readOnly?null:()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}

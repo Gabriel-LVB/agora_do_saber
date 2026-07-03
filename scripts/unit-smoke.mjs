@@ -270,6 +270,8 @@ assert.match(sharedLibraryViewSource, /showSharedLibraryAdminTools = isAdmin && 
 const videoaulasViewSource = await readFile(new URL('../src/features/course/VideoaulasView.jsx', import.meta.url), 'utf8');
 assert.match(videoaulasViewSource, /export default function VideoaulasView/);
 assert.match(videoaulasViewSource, /useFeatureContext/);
+assert.match(videoaulasViewSource, /useCourseHeroJourney\(\{ enabled:!videoaulasLoading \}\)/);
+assert.match(videoaulasViewSource, /Continuar ciclo/);
 assertNoFreeIdentifiers(videoaulasViewSource, 'VideoaulasView');
 assert.match(videoaulasViewSource, /\bClock,\s*[\s\S]*\} = useFeatureContext\(\)/);
 assert.match(videoaulasViewSource, /\bvideoMainScrollRef,\s*[\s\S]*\} = useFeatureContext\(\)/);
@@ -291,6 +293,7 @@ assert.match(coursePortalViewSource, /role="button"[\s\S]{0,260}setVqExpandedSub
 const videoQuestionsViewSource = await readFile(new URL('../src/features/course/VideoQuestionsView.jsx', import.meta.url), 'utf8');
 assert.match(videoQuestionsViewSource, /export default function VideoQuestionsView/);
 assert.match(videoQuestionsViewSource, /useFeatureContext/);
+assert.match(videoQuestionsViewSource, /useCourseHeroJourney\(\{ enabled:true \}\)/);
 
 const homeViewSource = await readFile(new URL('../src/features/home/HomeView.jsx', import.meta.url), 'utf8');
 assert.match(homeViewSource, /export default function HomeView/);
@@ -327,6 +330,7 @@ assert.match(videoQuestionsViewSource, /cycleStage === 'direct-odd'/);
 assert.match(videoQuestionsViewSource, /cycleStage === 'direct-even'/);
 assert.match(videoQuestionsViewSource, /if \(type !== journeyStage\.type\) return false;/);
 assert.match(videoQuestionsViewSource, /const clinicalReviewQuestions = parityQuestions\.filter\(question => isClinicalVqQuestion\(question\)\);/);
+assert.match(videoQuestionsViewSource, /nextUnitLabel=\{cycleStage \? 'Continuar ciclo'/);
 
 const settingsViewSource = await readFile(new URL('../src/features/settings/SettingsView.jsx', import.meta.url), 'utf8');
 assert.match(settingsViewSource, /export default function SettingsView/);
