@@ -11,6 +11,14 @@ const stageMeta = (stage) => {
 
 const stageKey = (type, parity, suffix) => `${type}${parity === 'odd' ? 'Odd' : 'Even'}${suffix}`;
 
+const cycleReviewOffsetsForLessonCount = (totalLessons = 0) => {
+  if (totalLessons <= 10) return { directEven:1, clinicalOdd:3, clinicalEven:6 };
+  if (totalLessons <= 20) return { directEven:1, clinicalOdd:4, clinicalEven:9 };
+  if (totalLessons <= 40) return { directEven:2, clinicalOdd:7, clinicalEven:15 };
+  if (totalLessons <= 70) return { directEven:3, clinicalOdd:10, clinicalEven:24 };
+  return { directEven:4, clinicalOdd:14, clinicalEven:32 };
+};
+
 export const useCourseHeroJourney = ({ enabled = true } = {}) => {
   const {
     appliedVideoaulasData,
@@ -286,12 +294,21 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
       const requiredIndex = Math.min(localIndex + offset, lessons.length - 1);
       return (primaryDonePrefixBySubject.get(lesson.subject) || 0) > requiredIndex;
     };
-    const cycleEvents = courseCycleLessons.flatMap((lesson, index) => [
-      { kind:'primary', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index, priority:0 },
-      { kind:'direct-even', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index + 1, priority:1 },
-      { kind:'clinical-odd', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index + 4, priority:2 },
-      { kind:'clinical-even', lesson, sourceIndex:index, localIndex:lessonLocalIndex.get(lesson.id) || 0, position:index + 9, priority:3 },
-    ]).sort((a, b) => (
+    const subjectReviewOffsets = new Map(normalizedSubjects.map(subject => [
+      subject,
+      cycleReviewOffsetsForLessonCount(lessonsBySubject(subject).length),
+    ]));
+    const subjectLessonTotals = new Map(normalizedSubjects.map(subject => [subject, lessonsBySubject(subject).length]));
+    const cycleEvents = courseCycleLessons.flatMap((lesson, index) => {
+      const offsets = subjectReviewOffsets.get(lesson.subject) || cycleReviewOffsetsForLessonCount(0);
+      const localIndex = lessonLocalIndex.get(lesson.id) || 0;
+      return [
+        { kind:'primary', lesson, sourceIndex:index, localIndex, position:index, priority:0, offset:0 },
+        { kind:'direct-even', lesson, sourceIndex:index, localIndex, position:index + offsets.directEven, priority:1, offset:offsets.directEven },
+        { kind:'clinical-odd', lesson, sourceIndex:index, localIndex, position:index + offsets.clinicalOdd, priority:2, offset:offsets.clinicalOdd },
+        { kind:'clinical-even', lesson, sourceIndex:index, localIndex, position:index + offsets.clinicalEven, priority:3, offset:offsets.clinicalEven },
+      ];
+    }).sort((a, b) => (
       a.position - b.position
       || a.priority - b.priority
       || a.sourceIndex - b.sourceIndex
@@ -346,6 +363,12 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
     const cycleEntryForEvent = (event) => {
       const ji = journeyInfoForLesson(event.lesson);
       const item = subjectSummaryBySubject.get(event.lesson.subject) || { subject:event.lesson.subject };
+      const reviewMilestone = () => {
+        const total = subjectLessonTotals.get(event.lesson.subject) || 0;
+        const targetLessonNumber = Math.min(event.localIndex + event.offset + 1, total || event.localIndex + event.offset + 1);
+        if (event.localIndex + event.offset + 1 > total && total > 0) return `após concluir a matéria (${total} aulas)`;
+        return `após a aula ${targetLessonNumber} da matéria`;
+      };
       if (event.kind === 'primary') {
         const step = lessonStep(event.lesson);
         if (!step) return null;
@@ -362,7 +385,7 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
       }
       if (!ji.primaryDone) return null;
       if (event.kind === 'direct-even') {
-        if (!primaryCompleteThroughSubjectOffset(event.lesson, 1)) return null;
+        if (!primaryCompleteThroughSubjectOffset(event.lesson, event.offset)) return null;
         if (ji.directEvenTotal === 0 || ji.directEvenDone) return null;
         return {
           item,
@@ -373,14 +396,14 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
             detail:event.lesson.title,
             subdetail:ji.directEvenAnswered > 0
               ? `${ji.directEvenAnswered}/${ji.directEvenTotal} respondidas`
-              : `após a aula ${event.localIndex + 2} da matéria`,
+              : reviewMilestone(),
             lesson:event.lesson,
             action:()=>openQuestions(event.lesson, 'direct-even'),
           },
         };
       }
       if (event.kind === 'clinical-odd') {
-        if (!primaryCompleteThroughSubjectOffset(event.lesson, 4)) return null;
+        if (!primaryCompleteThroughSubjectOffset(event.lesson, event.offset)) return null;
         if (!ji.directEvenDone || ji.clinicalOddTotal === 0 || ji.clinicalOddDone) return null;
           return {
             item,
@@ -391,14 +414,14 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
               detail:event.lesson.title,
               subdetail:ji.clinicalOddAnswered > 0
                 ? `${ji.clinicalOddAnswered}/${ji.clinicalOddTotal} respondidas`
-                : `após a aula ${event.localIndex + 5} da matéria`,
+                : reviewMilestone(),
               lesson:event.lesson,
               action:()=>openQuestions(event.lesson, 'clinical-odd'),
             },
           };
       }
       if (event.kind === 'clinical-even') {
-        if (!primaryCompleteThroughSubjectOffset(event.lesson, 9)) return null;
+        if (!primaryCompleteThroughSubjectOffset(event.lesson, event.offset)) return null;
         if (!ji.clinicalOddDone || ji.clinicalEvenTotal === 0 || ji.clinicalEvenDone) return null;
           return {
             item,
@@ -409,7 +432,7 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
               detail:event.lesson.title,
               subdetail:ji.clinicalEvenAnswered > 0
                 ? `${ji.clinicalEvenAnswered}/${ji.clinicalEvenTotal} respondidas`
-                : `após a aula ${event.localIndex + 10} da matéria`,
+                : reviewMilestone(),
               lesson:event.lesson,
               action:()=>openQuestions(event.lesson, 'clinical-even'),
             },
