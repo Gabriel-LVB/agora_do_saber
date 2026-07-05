@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 
 import { db } from '../services/firebase.js';
+import { mergeSharedLibraryQuestionChunks, SHARED_LIBRARY_CHUNKS_COLLECTION } from '../services/sharedLibraryContent.js';
 
 const withFirestoreTimeout = (promise, ms = 15000) => Promise.race([
   promise,
@@ -60,6 +61,20 @@ export const useSharedLibrarySync = ({
     return isAdmin ? contentRef : query(contentRef, where('published', '==', true));
   }, [contentCollection, isAdmin]);
 
+  const hydrateSharedLibraryItems = useCallback(async (items) => {
+    const chunkedItems = items.filter(item =>
+      Object.values(item.questionChunks || {}).some(meta => meta?.chunked)
+    );
+    if (!chunkedItems.length) return items;
+    const byId = new Map(items.map(item => [item.id, item]));
+    await Promise.all(chunkedItems.map(async item => {
+      const chunksSnap = await withFirestoreTimeout(getDocs(collection(db, contentCollection, item.id, SHARED_LIBRARY_CHUNKS_COLLECTION)));
+      const chunkDocs = chunksSnap.docs.map(entry => ({ id:entry.id, ...(entry.data() || {}) }));
+      byId.set(item.id, mergeSharedLibraryQuestionChunks(item, chunkDocs));
+    }));
+    return items.map(item => byId.get(item.id) || item);
+  }, [contentCollection]);
+
   const refreshSharedLibrary = useCallback(async () => {
     if (!user || user.isAnonymous || !canReadSharedLibrary) {
       clearSharedLibrary();
@@ -78,7 +93,7 @@ export const useSharedLibrarySync = ({
         const data = entry.data() || {};
         if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
       });
-      setSharedLibraryItems(items);
+      setSharedLibraryItems(await hydrateSharedLibraryItems(items));
       const progress = {};
       progressSnap?.forEach(entry => { progress[entry.id] = entry.data() || {}; });
       setSharedLibraryProgress(progress);
@@ -99,6 +114,7 @@ export const useSharedLibrarySync = ({
     configDocId,
     contentCollection,
     getContentQuery,
+    hydrateSharedLibraryItems,
     isAdmin,
     loadProgress,
     progressCollection,
@@ -116,19 +132,28 @@ export const useSharedLibrarySync = ({
 
   useEffect(() => {
     if (!user || user.isAnonymous || !canReadSharedLibrary) return undefined;
-    return onSnapshot(getContentQuery(), snapshot => {
+    let alive = true;
+    const unsubscribe = onSnapshot(getContentQuery(), snapshot => {
       setSharedLibraryError('');
       const items = [];
       snapshot.forEach(entry => {
         const data = entry.data() || {};
         if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
       });
-      setSharedLibraryItems(items);
+      hydrateSharedLibraryItems(items)
+        .then(hydrated => {
+          if (alive) setSharedLibraryItems(hydrated);
+        })
+        .catch(error => {
+          console.warn('Shared library chunk hydration failed:', error?.code || error?.message || error);
+          if (alive) setSharedLibraryItems(items);
+        });
     }, error => {
       console.warn('Shared library realtime sync failed:', error?.code || error?.message || error);
       setSharedLibraryError(error?.code || error?.message || 'Falha na sincronizacao em tempo real');
     });
-  }, [canReadSharedLibrary, getContentQuery, isAdmin, user]);
+    return () => { alive = false; unsubscribe(); };
+  }, [canReadSharedLibrary, getContentQuery, hydrateSharedLibraryItems, isAdmin, user]);
 
   return {
     refreshSharedLibrary,

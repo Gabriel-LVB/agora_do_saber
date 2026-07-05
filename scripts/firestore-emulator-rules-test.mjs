@@ -60,8 +60,13 @@ try {
   await assertFails(setDoc(doc(studentDb, 'shared_library', 'aula_1'), { title:'Aula' }));
   await assertSucceeds(setDoc(doc(adminDb, 'shared_library', 'aula_1'), { title:'Aula', published:true }));
   await assertSucceeds(setDoc(doc(adminDb, 'shared_library', 'rascunho_1'), { title:'Rascunho', published:false }));
+  await assertSucceeds(setDoc(doc(adminDb, 'shared_library', 'aula_1', 'chunks', 'directQuestions_000'), { questions:[{ id:'q1' }] }));
+  await assertSucceeds(setDoc(doc(adminDb, 'shared_library', 'rascunho_1', 'chunks', 'directQuestions_000'), { questions:[{ id:'q1' }] }));
   await assertSucceeds(getDoc(doc(studentDb, 'shared_library', 'aula_1')));
   await assertFails(getDoc(doc(studentDb, 'shared_library', 'rascunho_1')));
+  await assertSucceeds(getDoc(doc(studentDb, 'shared_library', 'aula_1', 'chunks', 'directQuestions_000')));
+  await assertFails(getDoc(doc(studentDb, 'shared_library', 'rascunho_1', 'chunks', 'directQuestions_000')));
+  await assertFails(setDoc(doc(studentDb, 'shared_library', 'aula_1', 'chunks', 'directQuestions_001'), { questions:[] }));
   await assertSucceeds(getDocs(query(collection(studentDb, 'shared_library'), where('published', '==', true))));
   await assertSucceeds(getDoc(doc(adminDb, 'shared_library', 'aula_1')));
 

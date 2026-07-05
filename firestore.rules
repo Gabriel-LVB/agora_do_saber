@@ -50,6 +50,15 @@ service cloud.firestore {
     match /shared_library/{itemId} {
       allow read: if isAdmin() || (signedIn() && resource.data.published == true);
       allow write: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read: if isAdmin()
+          || (
+            signedIn()
+            && get(/databases/$(database)/documents/shared_library/$(itemId)).data.published == true
+          );
+        allow write: if isAdmin();
+      }
     }
 
     match /access_logs/{logId} {

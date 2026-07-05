@@ -4,6 +4,11 @@ import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { cleanFirestoreData } from '../src/lib/firestoreData.js';
 import { deferInteractionWork } from '../src/lib/interaction.js';
+import {
+  mergeSharedLibraryQuestionChunks,
+  prepareSharedLibraryContentForWrite,
+  sharedLibraryChunkDocId,
+} from '../src/services/sharedLibraryContent.js';
 
 const traverse = traverseModule.default;
 const assertNoFreeIdentifiers = (source, label) => {
@@ -55,6 +60,23 @@ assert.deepEqual(cleanFirestoreData(input), {
     null,
   ],
 });
+
+const bigQuestionText = 'x'.repeat(350000);
+const chunkPrepared = prepareSharedLibraryContentForWrite({
+  title:'Aula grande',
+  directQuestions:[
+    { id:'q1', statement:bigQuestionText },
+    { id:'q2', statement:bigQuestionText },
+  ],
+});
+assert.equal(chunkPrepared.main.directQuestions, undefined);
+assert.equal(chunkPrepared.main.questionChunks.directQuestions.count, 2);
+assert.equal(chunkPrepared.chunks.directQuestions.length, 2);
+assert.equal(chunkPrepared.chunks.directQuestions[0].id, sharedLibraryChunkDocId('directQuestions', 0));
+assert.deepEqual(
+  mergeSharedLibraryQuestionChunks(chunkPrepared.main, chunkPrepared.chunks.directQuestions.map(chunk => ({ id:chunk.id, ...chunk.data }))).directQuestions.map(question => question.id),
+  ['q1', 'q2'],
+);
 
 const firebaseConfig = JSON.parse(await readFile(new URL('../firebase.json', import.meta.url), 'utf8'));
 assert.equal(firebaseConfig.firestore?.rules, 'firestore.rules');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import { FeatureProvider } from './features/FeatureContext.jsx';
 import { adminEmail } from './config/environment.js';
@@ -15,6 +15,11 @@ import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
 import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
+import {
+  prepareSharedLibraryContentForWrite,
+  SHARED_LIBRARY_CHUNKED_FIELDS,
+  SHARED_LIBRARY_CHUNKS_COLLECTION,
+} from './services/sharedLibraryContent.js';
 import { resetSharedLibraryAnswersPatch, saveSharedLibraryAnswerPatch } from './services/sharedLibraryProgress.js';
 import { saveUserVqBlockPatch } from './services/vqBlocks.js';
 
@@ -7665,9 +7670,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
   const saveSharedLibraryItem = async (id, patch) => {
     if (!isAdmin) throw new Error('Apenas o administrador pode publicar na Biblioteca.');
+    const updatedAt = Date.now();
     const current = sharedLibraryItems.find(item => item.id === id) || {};
-    const next = cleanFirestoreData({ ...current, ...patch, id:undefined, updatedAt:Date.now() });
-    await setDoc(doc(db, SHARED_LIBRARY_COLLECTION, id), next, { merge:true });
+    const rawNext = cleanFirestoreData({ ...current, ...patch, id:undefined, updatedAt });
+    const { main, chunks } = prepareSharedLibraryContentForWrite(rawNext, { updatedAt });
+    const firestoreData = cleanFirestoreData(main);
+    SHARED_LIBRARY_CHUNKED_FIELDS.forEach(field => {
+      if (chunks[field]) firestoreData[field] = deleteField();
+    });
+    await Promise.all(Object.values(chunks).flatMap(fieldChunks =>
+      fieldChunks.map(chunk => setDoc(
+        doc(db, SHARED_LIBRARY_COLLECTION, id, SHARED_LIBRARY_CHUNKS_COLLECTION, chunk.id),
+        cleanFirestoreData(chunk.data)
+      ))
+    ));
+    await setDoc(doc(db, SHARED_LIBRARY_COLLECTION, id), firestoreData, { merge:true });
+    const next = {
+      ...rawNext,
+      questionChunks:main.questionChunks,
+      updatedAt,
+    };
     setSharedLibraryItems(items => {
       const index = items.findIndex(item => item.id === id);
       if (index < 0) return [...items, { ...next, id }];
