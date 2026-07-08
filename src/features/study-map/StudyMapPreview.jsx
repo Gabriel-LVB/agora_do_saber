@@ -102,23 +102,11 @@ const ChevronDown = ({ className }) => (
   </svg>
 );
 
-export default function StudyMapPreview({ syllabus, onChange, darkMode, multiplier=1, onMultiplierChange }) {
+export default function StudyMapPreview({ syllabus, onChange, darkMode }) {
   const topics = parseStudyMapSyllabus(syllabus);
   const [expanded, setExpanded] = useState({});
-  const multipliedQuestions = questions => Math.max(1, Math.min(30, questions * multiplier));
   const totalSubtopics = topics.reduce((sum, topic) => sum + topic.subtopics.length, 0);
-  const totalQuestions = topics.reduce((sum, topic) => sum + topic.subtopics.reduce((acc, subtopic) => acc + multipliedQuestions(subtopic.questions), 0), 0);
-  const updateQuestions = (topicIndex, subtopicIndex, delta) => {
-    const next = topics.map((topic, ti) => ({
-      ...topic,
-      subtopics:topic.subtopics.map((subtopic, si) =>
-        ti === topicIndex && si === subtopicIndex
-          ? {...subtopic, questions:Math.max(1, Math.min(30, subtopic.questions + delta))}
-          : subtopic
-      ),
-    }));
-    onChange(formatStudyMapSyllabus(next));
-  };
+  const totalQuestions = topics.reduce((sum, topic) => sum + topic.subtopics.reduce((acc, subtopic) => acc + subtopic.questions, 0), 0);
 
   if (!topics.length) {
     return (
@@ -136,29 +124,17 @@ export default function StudyMapPreview({ syllabus, onChange, darkMode, multipli
     <div className={`rounded-xl border overflow-hidden ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
       <div className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Plano de estudo guiado</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Sumário completo</p>
           <p className="text-sm opacity-60 mt-1">{topics.length} tópicos · {totalSubtopics} objetivos · {totalQuestions} questões planejadas</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase opacity-40">Quantidade</span>
-          <div className={`flex rounded-lg border p-1 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
-            {[1,2,3].map(value=>(
-              <button key={value} type="button" onClick={()=>onMultiplierChange?.(value)}
-                title={`${value === 1 ? 'Usar' : value === 2 ? 'Dobrar' : 'Triplicar'} a quantidade recomendada`}
-                className={`h-7 min-w-[2rem] rounded-md px-2 text-xs font-bold transition-colors ${multiplier===value?'bg-yellow-600 text-white':darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>
-                x{value}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
       <div className={`px-5 py-3 border-b text-xs leading-relaxed ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-yellow-50/40'}`}>
-        <p className="opacity-60">A IA dividiu o assunto em objetivos verificáveis e sugeriu questões suficientes para revisar cada um. Ajuste individualmente ou use o multiplicador antes de salvar.</p>
+        <p className="opacity-60">A IA dividiu o assunto em objetivos verificáveis e planejou questões suficientes para revisar cada um.</p>
       </div>
       <div className="max-h-[52vh] overflow-y-auto">
         {topics.map((topic, topicIndex) => {
           const isOpen = expanded[topicIndex] ?? topicIndex === 0;
-          const topicQuestions = topic.subtopics.reduce((sum, subtopic) => sum + multipliedQuestions(subtopic.questions), 0);
+          const topicQuestions = topic.subtopics.reduce((sum, subtopic) => sum + subtopic.questions, 0);
           return (
             <section key={`${topic.title}-${topicIndex}`} className={`border-b last:border-b-0 ${darkMode?'border-gray-700':'border-gray-100'}`}>
               <button type="button" onClick={()=>setExpanded(prev=>({...prev,[topicIndex]:!isOpen}))}
@@ -173,19 +149,9 @@ export default function StudyMapPreview({ syllabus, onChange, darkMode, multipli
               {isOpen&&<div className="px-5 pb-5 space-y-2">
                 {topic.subtopics.map((subtopic, subtopicIndex)=>(
                   <div key={`${subtopic.title}-${subtopicIndex}`} className={`border-l-2 pl-4 py-2 ${darkMode?'border-gray-600':'border-yellow-400'}`}>
-                    <div className="flex flex-col sm:flex-row items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm">{subtopic.title}</p>
-                        <p className="text-xs opacity-55 mt-1 leading-relaxed">{subtopic.objective || `Dominar ${subtopic.title}`}</p>
-                      </div>
-                      <div className="flex flex-col items-start sm:items-end gap-1 flex-shrink-0">
-                        <span className="text-[10px] uppercase font-bold opacity-40">Questões</span>
-                        <div title="Quantidade de perguntas distintas que serão geradas para este objetivo" className={`flex items-center rounded-lg border overflow-hidden ${darkMode?'border-gray-700':'border-gray-200'}`}>
-                          <button type="button" aria-label="Diminuir questões" onClick={()=>updateQuestions(topicIndex, subtopicIndex, -1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>-</button>
-                          <span className="w-10 text-center text-sm font-bold tabular-nums">{multipliedQuestions(subtopic.questions)}</span>
-                          <button type="button" aria-label="Aumentar questões" onClick={()=>updateQuestions(topicIndex, subtopicIndex, 1)} className={`w-8 h-8 font-bold ${darkMode?'hover:bg-gray-700':'hover:bg-gray-100'}`}>+</button>
-                        </div>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm">{subtopic.title}</p>
+                      <p className="text-xs opacity-55 mt-1 leading-relaxed">{subtopic.objective || `Dominar ${subtopic.title}`}</p>
                     </div>
                   </div>
                 ))}

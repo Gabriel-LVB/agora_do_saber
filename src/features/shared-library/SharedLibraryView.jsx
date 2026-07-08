@@ -256,6 +256,7 @@ export default function SharedLibraryView() {
                 onCall={callWithRotation}
                 onOpenAnswer={question=>setOpenAnswerModal({question,isEssay:question.isEssay})}
                 displayMode={settings.questionDisplayMode || 'list'}
+                onDisplayModeChange={mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})}
                 adminQuestionExplanations={showSharedLibraryAdminTools}
               />;
             }

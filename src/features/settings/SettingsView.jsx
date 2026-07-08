@@ -36,7 +36,6 @@ export default function SettingsView() {
     getActiveGeminiKeyId,
     getGeminiKeyRows,
     globalAllowedEmails,
-    GraduationCap,
     handleLogout,
     HomeMottoEditor,
     isAdmin,
@@ -75,9 +74,9 @@ export default function SettingsView() {
     settingsRef,
     SettingsSection,
     setView,
-    ShieldAlert,
     siteConfig,
     siteOnlyAccessEmails,
+    ShieldAlert,
     Sparkles,
     Spinner,
     startCourseCatalogAnalysis,
@@ -99,8 +98,14 @@ export default function SettingsView() {
                 <h2 className="text-3xl font-serif font-bold text-yellow-600">Configurações</h2>
               </div>
             </div>
+            <div>
+              <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>
+                {isAdmin ? 'Configurações da sua conta' : 'Configurações da conta'}
+              </p>
+              <h3 className="text-xl font-serif font-bold mt-1">Preferências pessoais</h3>
+            </div>
             {/* API Keys */}
-            <SettingsSection id="api" title="Chaves API (Gemini)" icon={<Key className="w-4 h-4"/>}>
+            <SettingsSection id="api" title="Chaves API (Gemini)" icon={<Key className="w-4 h-4"/>} collapsible>
               <div className={`p-3 rounded-xl mb-3 text-xs leading-relaxed ${darkMode?'bg-blue-900/20 border border-blue-800/40 text-blue-300':'bg-blue-50 border border-blue-200 text-blue-800'}`}>
                 <p className="font-bold mb-1">ℹ️ Sobre as chaves</p>
                 <p>Os limites variam por modelo, projeto e plano. Você pode cadastrar mais de uma chave autorizada para o site alternar automaticamente.</p>
@@ -142,38 +147,6 @@ export default function SettingsView() {
                 });
               })()}
             </SettingsSection>
-            {isAdmin&&(
-              <SettingsSection id="home-preview" title="Visualização do painel" icon={<UserIcon className="w-4 h-4"/>}>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {[
-                    {k:'admin', label:'Admin', desc:'Bancada, curso e acervos'},
-                    {k:'course', label:'Aluno com curso', desc:'Curso e funções comuns'},
-                    {k:'site', label:'Aluno sem curso', desc:'Sem mostrar o curso'},
-                  ].map(opt=>(
-                    <button key={opt.k} type="button" onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:opt.k})}
-                      className={`p-3 rounded-xl border-2 text-left transition-all ${(settings.adminHomeMode||'admin')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
-                      <span className="block text-sm font-bold">{opt.label}</span>
-                      <span className="block text-xs opacity-50 mt-0.5 leading-snug">{opt.desc}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className={`text-xs mt-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-400'}`}>
-                  Isso muda só o que aparece no seu painel inicial e menus rápidos. Suas permissões de admin continuam ativas.
-                </p>
-              </SettingsSection>
-            )}
-            {isAdmin&&(
-              <SettingsSection id="home-motto" title="Frase do pórtico" icon={<Landmark className="w-4 h-4"/>}>
-                <p className={`text-xs mb-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-500'}`}>
-                  Esta frase aparece na tela inicial de todos os usuários.
-                </p>
-                <HomeMottoEditor
-                  initialValue={siteConfig.homeMotto}
-                  darkMode={darkMode}
-                  onSave={homeMotto=>saveSiteConfig({homeMotto})}
-                />
-              </SettingsSection>
-            )}
             <SettingsSection id="gemini-thinking" title="Modo Gemini" icon={<Sparkles className="w-4 h-4"/>}>
               <GeminiThinkingSelector
                 value={!!settings.geminiThinkingEnabled}
@@ -184,30 +157,6 @@ export default function SettingsView() {
                 Rápido usa `thinkingBudget: 0`. Thinking usa `thinkingBudget: -1`, deixando o Gemini decidir quando raciocinar mais.
               </p>
             </SettingsSection>
-            {isAdmin&&(
-              <SettingsSection id="question-audit" title="Auditoria" icon={<ShieldAlert className="w-4 h-4"/>}>
-                <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left mb-3 ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white')}`}>
-                  <div>
-                    <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Gerar questões em lotes</p>
-                    <p className="text-xs opacity-50 mt-0.5">Para blocos grandes do Oráculo, manda vários requests menores de cerca de 15 questões.</p>
-                  </div>
-                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                  </div>
-                </button>
-                <button type="button" onClick={()=>saveSettings({...settingsRef.current, auditQuestions:!settings.auditQuestions})}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white')}`}>
-                  <div>
-                    <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditar gerações automaticamente</p>
-                    <p className="text-xs opacity-50 mt-0.5">Faz um segundo request para cortar questões inúteis, corrigir pistas, revisar fatos e cobrir lacunas.</p>
-                  </div>
-                  <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                    <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                  </div>
-                </button>
-              </SettingsSection>
-            )}
             {/* Oracle Length */}
             <SettingsSection id="chat" title="Resposta do Chat" icon={<MessageCircle className="w-4 h-4"/>}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -282,25 +231,57 @@ export default function SettingsView() {
 	                </div>
 	              </SettingsSection>
 	            )}
-	            {canUseAdvancedFeatures&&(
-	              <SettingsSection id="question-mode" title="Modo de questões" icon={<GraduationCap className="w-4 h-4"/>}>
-	                <div className="grid grid-cols-2 gap-3">
-	                  {[
-	                    {k:'list',label:'Lista',desc:'Todas na página'},
-	                    {k:'single',label:'Uma por vez',desc:'Navegação focada'},
-	                  ].map(opt=>(
-	                    <button key={opt.k} onClick={()=>saveSettings({...settingsRef.current,questionDisplayMode:opt.k})}
-	                      className={`p-3 rounded-xl border-2 text-left transition-all ${(settings.questionDisplayMode||'list')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
-	                      <span className="block text-sm font-bold">{opt.label}</span>
-	                      <span className="block text-xs opacity-50 mt-0.5">{opt.desc}</span>
-	                    </button>
-	                  ))}
-	                </div>
-	              </SettingsSection>
-	            )}
-	            <SettingsSection id="prompt" title="Prompt Extra" icon={<MessageCircle className="w-4 h-4"/>}>
-                <textarea value={settings.customPrompt} onChange={e=>setSettings({...settings,customPrompt:e.target.value})} onBlur={()=>saveSettings(settings)} placeholder="Instruções adicionais para o Oráculo..." className={`w-full h-28 p-4 rounded-lg border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
+            <SettingsSection id="account" title="Conta" icon={<UserIcon className="w-4 h-4"/>}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-bold truncate">{username}</p>
+                  <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>{user?.email || (isAdmin?'Administrador':'Estudante')}</p>
+                </div>
+                <button type="button" onClick={handleLogout}
+                  className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/40':'border-red-200 text-red-600 hover:bg-red-50'}`}>
+                  <LogOut className="w-4 h-4"/>Sair da conta
+                </button>
+              </div>
+            </SettingsSection>
+
+            {isAdmin&&(
+              <div className="pt-2">
+                <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Configurações do site</p>
+                <h3 className="text-xl font-serif font-bold mt-1">Gestão global e administração</h3>
+              </div>
+            )}
+            {isAdmin&&(
+              <SettingsSection id="home-preview" title="Visualização do painel" icon={<UserIcon className="w-4 h-4"/>}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    {k:'admin', label:'Admin', desc:'Bancada, curso e acervos'},
+                    {k:'course', label:'Aluno com curso', desc:'Curso e funções comuns'},
+                    {k:'site', label:'Aluno sem curso', desc:'Sem mostrar o curso'},
+                  ].map(opt=>(
+                    <button key={opt.k} type="button" onClick={()=>saveSettings({...settingsRef.current, adminHomeMode:opt.k})}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${(settings.adminHomeMode||'admin')===opt.k?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600':'border-gray-200 bg-white text-gray-700 hover:border-gray-300')}`}>
+                      <span className="block text-sm font-bold">{opt.label}</span>
+                      <span className="block text-xs opacity-50 mt-0.5 leading-snug">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className={`text-xs mt-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-400'}`}>
+                  Isso muda só o que aparece no seu painel inicial e menus rápidos. Suas permissões de admin continuam ativas.
+                </p>
               </SettingsSection>
+            )}
+            {isAdmin&&(
+              <SettingsSection id="home-motto" title="Frase do pórtico" icon={<Landmark className="w-4 h-4"/>}>
+                <p className={`text-xs mb-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-500'}`}>
+                  Esta frase aparece na tela inicial de todos os usuários.
+                </p>
+                <HomeMottoEditor
+                  initialValue={siteConfig.homeMotto}
+                  darkMode={darkMode}
+                  onSave={homeMotto=>saveSiteConfig({homeMotto})}
+                />
+              </SettingsSection>
+            )}
 
             {/* ── ADMIN: Whitelist de acesso ── */}
             {isAdmin&&(
@@ -471,6 +452,7 @@ export default function SettingsView() {
                   icon={<ShieldAlert className="w-4 h-4"/>}
                   className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
                   titleClassName="text-yellow-600"
+                  collapsible
                 >
                   <div className={`mb-3 rounded-xl border px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
                     <div>
@@ -568,6 +550,7 @@ export default function SettingsView() {
                   icon={<UserIcon className="w-4 h-4"/>}
                   className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
                   titleClassName="text-yellow-600"
+                  collapsible
                 >
                   <div className={`mb-3 rounded-xl border px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
                     <div>
@@ -628,6 +611,7 @@ export default function SettingsView() {
                 icon={<BookOpen className="w-4 h-4"/>}
                 className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800/50 border-gray-700':'bg-white border-gray-200'}`}
                 titleClassName="text-yellow-600"
+                collapsible
               >
                 <p className={`text-sm leading-relaxed mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>
                   Gera uma ficha curta por aula usando título, duração e transcrição. Agora o Gerar pendentes varre todas as matérias do curso. Nada é renomeado automaticamente.
@@ -929,19 +913,6 @@ export default function SettingsView() {
                 </div>
               </SettingsSection>
             )}
-
-            <SettingsSection id="account" title="Conta" icon={<UserIcon className="w-4 h-4"/>}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="font-bold truncate">{username}</p>
-                  <p className={`text-xs mt-1 ${darkMode?'text-gray-500':'text-gray-500'}`}>{user?.email || (isAdmin?'Administrador':'Estudante')}</p>
-                </div>
-                <button type="button" onClick={handleLogout}
-                  className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/40':'border-red-200 text-red-600 hover:bg-red-50'}`}>
-                  <LogOut className="w-4 h-4"/>Sair da conta
-                </button>
-              </div>
-            </SettingsSection>
 
             {/* Zona de perigo */}
             {canSeeVideoaulas&&(

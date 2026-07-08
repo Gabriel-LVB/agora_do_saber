@@ -269,7 +269,6 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
     questionStyle:   settings.questionStyle  || 'mixed',
     questionTypes:   filterQuestionTypesForAccess(settings.questionTypes || ['direct'], { isAdmin, canCreateFlashcards }),
     autoMode:        settings.autoMode !== false,
-    customPrompt:    settings.customPrompt   || '',
   });
   const [copied, setCopied] = useState(false);
   const isOldExamPrompt = (cfg.questionTypes || []).includes('old_exam');
@@ -374,14 +373,6 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
             <p className="text-xs font-bold uppercase opacity-50 mb-2">Estilo</p>
             <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>setCfg(p=>({...p,questionStyle:value}))} darkMode={dm}/>
           </div>}
-
-          {/* Instrução extra */}
-          <div>
-            <p className="text-xs font-bold uppercase opacity-50 mb-2">Instrução Extra (opcional)</p>
-            <textarea value={cfg.customPrompt} onChange={e=>setCfg(p=>({...p,customPrompt:e.target.value}))}
-              placeholder="Ex: Foque apenas em farmacologia clínica..."
-              rows={3} className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-          </div>
         </div>
         <div className="px-6 pb-6 pt-4 flex gap-3 flex-shrink-0 border-t border-gray-700/30">
           <button onClick={onClose} className={`flex-1 py-3.5 rounded-xl font-bold ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>

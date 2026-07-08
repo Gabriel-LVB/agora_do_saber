@@ -29,13 +29,13 @@ export const TYPE_INST = {
   direct: '',
   vof: `
 TIPO: VERDADEIRO OU FALSO
-Cada questão deve conter 4 assertivas (I, II, III, IV) que o aluno classifica como V ou F.
+Cada questão deve conter a quantidade de assertivas indicada nas regras específicas da geração, identificadas por numerais romanos, que o aluno classifica como V ou F.
 REGRAS CRÍTICAS das assertivas:
 - Todas devem ter tamanho similar (±15 caracteres) para não dar pista por tamanho
 - Misture verdadeiras e falsas (nunca todas V ou todas F)
 - Use a alternativa correta como o gabarito da combinação (ex: "V, F, V, F")
 - As alternativas devem ser combinações plausíveis das assertivas
-FORMATO especial do enunciado: "Analise as assertivas abaixo e marque a opção correta:\nI. [assertiva]\nII. [assertiva]\nIII. [assertiva]\nIV. [assertiva]"`,
+FORMATO especial do enunciado: "Analise as assertivas abaixo e marque a opção correta:\nI. [assertiva]\nII. [assertiva]\nIII. [assertiva]..."`,
 
   cespe: `
 TIPO: CERTO OU ERRADO (estilo CESPE/CEBRASPE)
@@ -125,7 +125,7 @@ REGRAS DE COBERTURA E QUALIDADE:
 - Quando o material do usuário pedir um foco específico, obedeça esse foco de forma literal. Não substitua uma solicitação específica por princípios amplos, conselhos gerais ou tópicos administrativos.
 - Não repita a mesma memória com outra frase. Exemplo ruim: um card "lítio reduz suicídio" e outro "benefício único do lítio: redução do suicídio".
 - Cubra o essencial antes de detalhes. Não faça card sobre detalhe periférico enquanto faltam escolhas, riscos, mecanismos, apresentações ou comparações centrais do tópico.
-- Antes de finalizar, audite: há pergunta pedindo N e resposta com quantidade diferente? há resposta com "ou" vago? há duplicação? há atomização burra? há card genérico? corrija.
+- Antes de finalizar, revise: há pergunta pedindo N e resposta com quantidade diferente? há resposta com "ou" vago? há duplicação? há atomização burra? há card genérico? corrija.
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Flashcard N
 Pergunta: [pergunta curta e objetiva?]
@@ -152,7 +152,7 @@ REGRAS CRÍTICAS:
 - O campo Extra é explicação, não curso: explique por que o termo oculto pertence ali ou como ele produz o efeito perguntado.
 - O Extra NÃO pode apenas repetir a frase cloze com mais palavras. Se o cloze cobra efeito colateral, explique o motivo do efeito; se cobra escolha/conduta, explique a propriedade que justifica a escolha; se cobra risco/interação, explique a cadeia causal.
 - Tamanho do Extra: normalmente 2 a 4 frases curtas, só o necessário para a resposta fazer sentido.
-- Antes de finalizar, audite: lacuna previsível? quantidade exata? lista curta agrupada quando deveria? lista longa dividida quando deveria? duplicação? card óbvio? corrija.
+- Antes de finalizar, revise: lacuna previsível? quantidade exata? lista curta agrupada quando deveria? lista longa dividida quando deveria? duplicação? card óbvio? corrija.
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
@@ -181,6 +181,13 @@ const isFlashcardType = (type) => type === 'flashcard' || type === 'cloze';
 const onlyMemoryCards = (types = []) => types.length === 1 && isFlashcardType(types[0]);
 const onlyClozeCards = (types = []) => types.length === 1 && types[0] === 'cloze';
 const memoryCardName = (types = []) => onlyClozeCards(types) ? 'clozes' : 'flashcards';
+const normalizedVofStatementCount = (settings = {}) => Math.max(3, Math.min(5, Number(settings.vofStatementCount) || 5));
+const effectiveAlternativeCount = (settings = {}) => (settings.questionTypes || []).includes('vof')
+  ? 5
+  : Number(settings.numAlternatives || 5);
+const vofSpecificRules = (settings = {}) => (settings.questionTypes || []).includes('vof')
+  ? `\nREGRA ESPECÍFICA PARA VERDADEIRO OU FALSO:\n- Cada questão deve ter EXATAMENTE ${normalizedVofStatementCount(settings)} afirmações.\n- Use SEMPRE 5 alternativas (A-E), cada uma com uma combinação plausível de V/F.\n- O gabarito deve ser uma dessas 5 alternativas e corresponder exatamente à sequência correta das afirmações.`
+  : '';
 const memoryCardFormat = (types = []) => onlyClozeCards(types) ? `
 FORMATO OBRIGATÓRIO:
 ## Cloze 1
@@ -219,7 +226,7 @@ REGRAS DOS CASOS ENCADEADOS:
 - Quando o material trouxer preferências de professor, padrões de prova ou focos específicos, incorpore-os. Sem essa informação, use critérios médicos gerais de alto rendimento.
 - Preserve integralmente todas as regras compartilhadas de enunciado, alternativas, distratores, explicação, dificuldade e utilidade.
 
-Antes de finalizar, audite a bateria: a quantidade de casos é adequada? cada caso aprofunda de verdade? cada questão exige uma decisão distinta? o conjunto cobre o conteúdo sem repetição?`,
+Antes de finalizar, revise a bateria: a quantidade de casos é adequada? cada caso aprofunda de verdade? cada questão exige uma decisão distinta? o conjunto cobre o conteúdo sem repetição?`,
 };
 
 // ─── REGRAS COMPARTILHADAS ────────────────────────────────────────────────────
@@ -428,37 +435,21 @@ Depois crie os distratores (B, C, D e E se houver) baseando-se na alternativa A:
 - O site embaralha as alternativas automaticamente antes de exibir — você não precisa se preocupar com isso
 Resultado esperado: 5 alternativas com comprimento quase idêntico, onde só quem domina o conteúdo consegue identificar a correta.`;
 
-export const QUESTION_AUDIT_CHECKLIST = [
+export const QUESTION_REPAIR_CHECKLIST = [
   'Aderência ao material base e à intenção explícita do usuário',
   'Alta utilidade: cada item precisa ser testável em prova ou útil na vida real, não apenas correto',
-  'Exclusão de questões de bom senso, vagas, genéricas ou sem consequência médica específica',
-  'Exclusão de itens sobre adesão, polifarmácia, risco-benefício, otimização ou revisão terapêutica quando a resposta for conselho universal',
   'Cobertura suficiente dos tópicos/subtópicos sem lacunas importantes',
   'Sem redundância conceitual entre questões ou flashcards',
   'Enunciado sem pistas semânticas, gramaticais, de tamanho ou de categoria',
-  'Enunciado com contexto suficiente para uma resposta justa e única',
-  'Vinheta clínica com dado discriminativo real, sem pistas óbvias e sem dados decorativos',
-  'Casos clínicos testam decisão/inferência clínica, não pergunta direta fantasiada de história',
-  'Questões diretas com alvo estreito, resposta previsível e valor real de prova/vida prática',
-  'Questões diretas não amplas, não triviais e não baseadas em curiosidade solta',
-  'Dificuldade desejável: não acertável por eliminação grosseira ou conhecimento leigo',
   'Alternativa correta tecnicamente verdadeira, atual e sem ambiguidade',
   'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',
   'Alternativas no menor texto suficiente para responder ao alvo, sem resumos explicativos que deem pistas',
-  'Quando o alvo for identificar fármaco, diagnóstico, manobra, estrutura, agente ou exame, alternativas contêm apenas os nomes correspondentes',
-  'Alternativa correta não maior, mais detalhada, mais específica ou mais bem escrita que as erradas',
-  'Todas as alternativas com comprimento visual parecido e mesma estrutura gramatical',
-  'Sem "todas", "nenhuma", negações óbvias ou distratores absurdos',
   'Explicação ensina o porquê e o como do conceito, sem parafrasear a resposta',
   'Explicação sem referência fixa a letras, pois o site embaralha alternativas',
-  'Respeito literal ao foco solicitado pelo usuário, sem trocar foco específico por princípios amplos',
-  'Flashcards atômicos, autossuficientes, com resposta curta e explicação útil',
-  'Flashcards sem perguntas abertas genéricas, sem sim/não e sem listas longas',
-  'Questões abertas com resposta esperada objetiva, avaliável e não ambígua',
   'Coerência do formato obrigatório para o parser do site',
 ];
 
-export const buildQuestionAuditPrompt = ({
+export const buildQuestionRepairPrompt = ({
   subjectTitle = '',
   topicTitle = '',
   subtopics = [],
@@ -470,7 +461,7 @@ export const buildQuestionAuditPrompt = ({
   const onlyFlashcards = onlyMemoryCards(types);
   const onlyOpen = types.every(t => ['open', 'essay'].includes(t));
   const caseSeries = !onlyFlashcards && settings.questionStyle === 'mixed';
-  const na = settings.numAlternatives || 5;
+  const na = effectiveAlternativeCount(settings);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -513,7 +504,7 @@ Alternativas:
 [por que a alternativa E está errada, se existir]` : '[Explicação didática sem referir letras]'}
 ---`;
 
-  return `Você é o auditor sênior de questões médicas da Ágora do Saber. Sua tarefa é fazer um SEGUNDO PASSE rigoroso sobre uma bateria recém-criada e devolver apenas a versão final corrigida.
+  return `Você é revisor sênior de questões médicas da Ágora do Saber. Sua tarefa é fazer um passe rigoroso sobre uma bateria recém-criada e devolver apenas a versão final corrigida.
 
 CONTEXTO:
 - Assunto: ${subjectTitle || 'Não informado'}
@@ -523,50 +514,34 @@ ${subtopics?.length ? `- Subtópicos obrigatórios:\n${subtopics.map((s, i) => `
 MATERIAL BASE / INTENÇÃO DO USUÁRIO:
 ${sourceMaterials ? sourceMaterials.substring(0, 14000) : 'Não informado. Use apenas o contexto das questões e subtópicos.'}
 
-CHECKLIST DE AUDITORIA OBRIGATÓRIO:
-${QUESTION_AUDIT_CHECKLIST.map(item => `- ${item}`).join('\n')}
+CHECKLIST DE REPARO OBRIGATÓRIO:
+${QUESTION_REPAIR_CHECKLIST.map(item => `- ${item}`).join('\n')}
 
 REGRAS DE CORREÇÃO:
-- Não comente a auditoria. Não entregue relatório. Entregue somente as questões/flashcards finais.
-- Faça primeiro uma triagem de descarte: todo item que falhe no teste de prova/vida real deve ser excluído ou substituído, mesmo que esteja factualmente correto.
-- Corrija erros factuais, ambiguidade, pistas e explicações fracas.
-- Exclua sem dó itens inúteis, óbvios, genéricos, redundantes ou desalinhados com o material base.
-- Exclua sem dó itens cujo gabarito seja "psicoeducação", "simplificação do regime", "revisão de medicamentos", "desprescrição de fármacos desnecessários", "avaliar risco-benefício", "monitorar", "orientar adesão" ou condutas equivalentes, salvo quando houver um critério técnico concreto que torne a pergunta não óbvia.
-- Exclua questões do tipo "qual princípio fundamental", "qual estratégia geral", "qual medida inicial para reduzir riscos" quando o aluno conseguir responder por bom senso sem dominar o conteúdo.
-- Substitua itens excluídos por cobranças realmente úteis quando houver lacuna importante.
-- Adicione itens somente se a cobertura do tópico/subtópicos estiver insuficiente. Não adicione para inflar volume.
-- Se o usuário pediu foco específico, toda a bateria deve respeitar esse foco. Não troque o pedido por princípios amplos, adesão, polifarmácia, revisão de medicação ou recomendações administrativas.
-- Para questões fechadas, coloque SEMPRE a correta como A porque o site embaralha depois. Faça B/C/D/E plausíveis, parecidas em tamanho e categoria.
-- Enxugue alternativas que funcionem como mini-explicações. Se o enunciado pede identificar um fármaco, diagnóstico, manobra, estrutura, agente ou exame, deixe apenas os nomes nas alternativas. Preserve frases maiores somente quando o próprio alvo for mecanismo, conduta, fisiopatologia ou outra proposição.
-- Remova de todas as alternativas qualquer detalhe que permita acertar por eliminação sem recordar o alvo principal. O contexto fica no enunciado e o ensino fica na explicação.
+- Não comente a revisão. Não entregue relatório. Entregue somente as questões/flashcards finais.
+- Corrija erros factuais, ambiguidade, pistas, lacunas e explicações fracas.
+- Exclua ou substitua itens inúteis, óbvios, genéricos, redundantes ou desalinhados com o material base.
+- Para questões fechadas, coloque SEMPRE a correta como A porque o site embaralha depois.
 - Para flashcards/clozes, mantenha cobranças específicas, atômicas, respostas/lacunas curtas e explicações que ensinem o porquê/como daquela resposta.
-- Reescreva explicações que apenas repitam o gabarito. A explicação deve fazer a resposta ficar compreensível para quem errou, sem virar aula.
-- Reprove explicações que digam apenas "é primeira linha", "é eficaz", "é preferido" ou "é indicado" sem explicar a propriedade, mecanismo, perfil clínico ou razão prática que justifica isso.
-- Em cards de indicação/conduta farmacológica, a explicação deve conectar fármaco/quadro clínico → propriedade relevante → por que isso responde à pergunta.
-- Corrija qualquer flashcard que peça "dois/três/(2)/(3)" e entregue quantidade diferente na resposta.
-- Corrija respostas com "X, Y ou Z" quando a pergunta não pedir explicitamente opções equivalentes; escolha um conjunto fechado ou divida o card.
-- Corrija atomização burra: efeitos adversos, sintomas, monitorização ou interações que formam um conjunto curto e natural devem virar um card de lista curta, não vários cards fracos.
-- Corrija listas abertas: "cite um" não pode ter várias respostas; "quais" deve indicar uma lista curta, fechada e realmente útil.
-- Remova duplicações semânticas, mesmo quando a redação muda. Se dois cards cobram o mesmo fato, preserve o melhor e exclua o outro.
-- Reescreva perguntas de sim/não como perguntas de recuperação ativa com resposta substantiva.
 - Preserve o idioma em português do Brasil.
 
 ${typeInst ? `${typeInst}\n` : ''}
+${vofSpecificRules(settings)}
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
 ${onlyFlashcards ? '' : questionExplanationRules(settings)}
 ${outputFormat}
 
-BATERIA A AUDITAR:
+BATERIA A REPARAR:
 ${generatedText}
 
-Agora devolva APENAS a bateria final auditada, no formato obrigatório.`;
+Agora devolva APENAS a bateria final reparada, no formato obrigatório.`;
 };
 
 // ─── PROMPT: GERAÇÃO DE QUESTÕES DO ORÁCULO ──────────────────────────────────
 
 export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) => {
-  const na   = s.numAlternatives || 5;
+  const na   = effectiveAlternativeCount(s);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -601,7 +576,7 @@ NÃO use quantidade fixa por subtópico:
 - Checklist obrigatório antes de finalizar cada subtópico: ideia central/definição; mecanismo ou fisiopatologia; achados/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável.
 - Não crie questões para encher volume. Não pergunte trivia inútil.
 - Não crie questões de bom senso para completar quantidade. Se a cobrança seria "psicoeducação", "simplificar regime", "revisar medicações", "avaliar risco-benefício" ou equivalente genérico, substitua por um eixo técnico realmente cobrável.
-- Só pare depois de auditar que os eixos importantes foram cobrados sem lacunas e sem redundância.`
+- Só pare depois de verificar que os eixos importantes foram cobrados sem lacunas e sem redundância.`
     : autoMode
     ? `
 ESTRUTURA (modo automático):
@@ -656,13 +631,13 @@ Explicação: [explicação didática]
 
 ${focusBlock ? focusBlock + '\n' : ''}
 ESTILO DE ENUNCIADO: ${styleInst}
-${typeInst ? typeInst + '\n' : ''}${estruturaInst}
+${typeInst ? typeInst + '\n' : ''}${vofSpecificRules(s)}
+${estruturaInst}
 ${caseSeriesStructure}
 ${REGRAS_ENUNCIADO}
 ${templateBlock}
 
 ${onlyFlashcards ? `Use o ID no formato sequencial simples (ex: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2).` : 'Use o ID no formato TOPICO.SUBTOPICO.QUESTAO, sem colchetes (ex: ## Questão 3.2.1).'}
-${s.customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO USUÁRIO:\n${s.customPrompt}` : ''}
 ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper. Não resuma, não pergunte, não comente — apenas ${memoryCardName(types)}.` : 'Gere TODAS as questões sem interromper. Não resuma, não pergunte, não comente — apenas questões.'}`;
 };
 
@@ -670,7 +645,7 @@ ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper. Não resum
 
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const l = SYLLABUS_LIMITS.oracle;
-  const studyMap = !!s.adminStudyMap;
+  const studyMap = true;
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
 OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
@@ -754,7 +729,7 @@ REGRAS FINAIS:
 - Obrigatório cobrir todo o material relevante, sem cortar conteúdo importante para caber em uma quantidade fixa
 - Obrigatório revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado
 - Obrigatório revisar tópicos gigantes e dividir qualquer tópico que passe de 30 subtópicos
-- Obrigatório fazer uma auditoria final contra o material: remova qualquer tópico proibido pelo usuário e confirme que todas as etapas/blocos solicitados aparecem.
+- Obrigatório fazer uma checagem final contra o material: remova qualquer tópico proibido pelo usuário e confirme que todas as etapas/blocos solicitados aparecem.
 - Em pedidos clínicos orientados a decisão, prefira títulos que explicitem o contraste ou cenário: "X versus Y em paciente com...", "troca de X após...", "escolha em...", "quando evitar X". Evite objetivos vagos como apenas "indicações", "efeitos adversos" ou "primeira linha" quando o contexto discriminativo puder ser explicitado.
 - A seção de casos/patologias não pode ser uma recapitulação genérica dos fármacos. Ela deve transformar o conteúdo anterior em cenários de decisão plausíveis, com fatores do paciente que mudam a escolha.
 
@@ -787,7 +762,7 @@ Responda APENAS o sumário.`;
 
 export const buildOracleSyllabusRevisePrompt = (currentSyllabus, feedback, s) => {
   const l = s?.source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
-  const studyMap = !!s?.adminStudyMap;
+  const studyMap = true;
   return `Você é o Arquiteto de Alexandria. Ajuste o sumário abaixo conforme a instrução do usuário.
 
 SUMÁRIO ATUAL:
@@ -810,7 +785,7 @@ ${studyMap ? '- Preserve ou recalcule [Q:n] e [OBJ:objetivo verificável] em CAD
 // ─── PROMPT: IA EXTERNA ───────────────────────────────────────────────────────
 
 export const buildExternalPrompt = (s) => {
-  const na   = s.numAlternatives || 5;
+  const na   = effectiveAlternativeCount(s);
   const qPerSub = Math.max(1, Number(s.qPerSub) || 1);
   const selectedType = s.questionTypes?.[0] || 'direct';
   const types = [selectedType];
@@ -891,7 +866,7 @@ REGRAS FINAIS:
 - Use o formato correspondente à estrutura original de cada questão; não converta questões abertas em objetivas nem objetivas em abertas.
 - Não inclua comentários antes ou depois dos blocos.
 - Não omita questões válidas.
-- Aguarde eu enviar a prova antes de responder.${s.customPrompt ? `\n\nINSTRUÇÕES ADICIONAIS:\n${s.customPrompt}` : ''}`;
+- Aguarde eu enviar a prova antes de responder.`;
   }
   const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
   const onlyFlashcards = onlyMemoryCards(types);
@@ -924,7 +899,7 @@ ${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, s.questionStyle === 'mix
   const importRule = selectedType === 'direct'
     ? `Use exclusivamente blocos "## Questão N" com ${na} alternativas, "Alternativa correta: [letra]" e "Explicação:".`
     : selectedType === 'vof'
-      ? 'Use exclusivamente blocos "## Questão N" com quatro assertivas I-IV, alternativas com combinações V/F, "Alternativa correta: [letra]" e "Explicação:".'
+      ? `Use exclusivamente blocos "## Questão N" com exatamente ${normalizedVofStatementCount(s)} assertivas em numerais romanos, 5 alternativas A-E com combinações V/F, "Alternativa correta: [letra]" e "Explicação:".`
       : selectedType === 'cespe'
         ? 'Use exclusivamente blocos "## Questão N" com A) Certo, B) Errado, "Alternativa correta: [letra]" e "Explicação:".'
         : selectedType === 'open'
@@ -945,6 +920,7 @@ TIPO DE ITEM A GERAR:
 ${QUESTION_TYPE_LABELS[selectedType] || selectedType}
 
 ${typeInst ? `${typeInst}\n` : ''}
+${vofSpecificRules(s)}
 ESTILO: ${STYLE_INST[s.questionStyle || 'mixed']}
 ${REGRAS_ENUNCIADO}
 ${hasClosed ? REGRAS_ALTERNATIVAS : ''}
@@ -1038,6 +1014,7 @@ export const buildVqBlockPrompt = (block, meta, subtopicsArr, transcriptSlice, a
 
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
+${vofSpecificRules(meta)}
 
 SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : caseSeries ? 'cubra todos; os casos podem integrar vários subtópicos relacionados' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
@@ -1134,7 +1111,7 @@ ${transcript}`;
 
 export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) => {
   const l = SYLLABUS_LIMITS.academia;
-  const studyMap = !!s.adminStudyMap;
+  const studyMap = true;
   const estrutura = autoMode
     ? `Defina uma estrutura completa para uma aula eficiente.
 O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria questões de fixação para o tópico como um todo. Portanto, os subtópicos devem ter fronteiras conceituais claras e não devem ser variações redundantes do mesmo eixo de cobrança.
@@ -1164,7 +1141,7 @@ Antes de montar o sumário, extraia mentalmente: o que deve ser aprendido, o que
 - Respeite o enquadramento do pedido. Não transforme um recorte específico, como psicofarmacologia, em um curso geral da classe farmacológica.
 - Respeite ordens explícitas como "primeiro por medicamentos; depois por patologias/casos".
 - Se o usuário precisa escolher, comparar, evitar ou trocar tratamentos em casos clínicos, organize a aula para ensinar essas decisões. Não substitua isso por listas genéricas de indicações e efeitos adversos.
-- Faça uma auditoria final removendo qualquer seção que viole o pedido, mesmo que seja importante em um curso convencional.
+- Faça uma checagem final removendo qualquer seção que viole o pedido, mesmo que seja importante em um curso convencional.
 
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para estudo eficiente, não para uma apostila enciclopédica.
@@ -1329,7 +1306,7 @@ Antes de responder, confira se cada seção respeita o limite do nível escolhid
 // ─── PROMPT: QUESTÕES DE FIXAÇÃO DA ACADEMIA ──────────────────────────────────
 
 export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText = '', questionPlan = null, previousQuestions = '') => {
-  const na = s.numAlternatives || 5;
+  const na = effectiveAlternativeCount(s);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -1349,7 +1326,7 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
   return `Você é um examinador de residência médica criando questões de fixação para "${topicTitle}".
 
 ESTILO: ${styleInst}
-${typeInst ? typeInst + '\n' : ''}
+${typeInst ? typeInst + '\n' : ''}${vofSpecificRules(s)}
 SUBTÓPICOS DA AULA${onlyFlashcards ? ' (cubra alto rendimento, sem quantidade fixa)' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
 
@@ -1393,7 +1370,7 @@ ${onlyFlashcards ? `Gere a bateria de ${memoryCardName(types)} sem interromper.`
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
 
 export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lessonText = '', previousQuestions = '', questionPlan = null) => {
-  const na = s.numAlternatives || 5;
+  const na = effectiveAlternativeCount(s);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -1413,7 +1390,7 @@ export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lesson
   return `Você é o Oráculo de Medicina da Ágora do Saber, gerando uma bateria de revisão sobre "${topicTitle}".
 
 ESTILO: ${styleInst}
-${typeInst ? typeInst + '\n' : ''}
+${typeInst ? typeInst + '\n' : ''}${vofSpecificRules(s)}
 ESTRUTURA${onlyFlashcards ? '' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"` : `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
 ${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.` : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}

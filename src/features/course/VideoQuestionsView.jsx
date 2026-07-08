@@ -51,6 +51,7 @@ export default function VideoQuestionsView() {
     sameId,
     saveVqBlock,
     saveVqBlockPatch,
+    saveSettings,
     setActiveAulaAndReset,
     setActiveSubjectVid,
     setActiveSubtopicVid,
@@ -60,6 +61,7 @@ export default function VideoQuestionsView() {
     setOpenAnswerModal,
     setSrModal,
     settings,
+    settingsRef,
     setView,
     setVqActiveBlock,
     setVqActiveBlockView,
@@ -312,6 +314,7 @@ export default function VideoQuestionsView() {
 	                    onCall={callWithRotation}
 	                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 		                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
+		                    onDisplayModeChange={canUseAdvancedFeatures ? (mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})) : null}
 		                    adminQuestionExplanations={isAdmin}
 		                    onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 		                      questions:qs,

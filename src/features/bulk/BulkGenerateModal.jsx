@@ -15,17 +15,14 @@ export default function BulkGenerateModal() {
     getBulkGenerateTargets,
     getDefaultBulkConfig,
     getConfiguredGeminiKeys,
-    getTopicStudyPlan,
     startBulkGenerate,
     saveSettings,
     ExplanationLengthSelector,
     QuestionTypeSelector,
     QuestionStyleSelector,
-    GeminiThinkingSelector,
     isMemoryCardType,
     memoryCardTypeName,
     AlertTriangle,
-    ShieldAlert,
     RotateCcw,
     Zap,
     Spinner,
@@ -45,11 +42,7 @@ export default function BulkGenerateModal() {
           const showsLessonConfig = isAcademiaBulk && ['generate','regenAll','regenLesson'].includes(mode);
           const showsQuestionConfig = isAcademiaBulk && ['generate','extra','regenAll','regenQuestions'].includes(mode);
           const showsOracleQuestionConfig = isOracleBulk && ['generate','regenQuestions'].includes(mode);
-          const isAuditBulk = ['audit','auditMissing'].includes(mode);
-          const isDestructiveBulk = ['regenAll','regenLesson','regenQuestions','audit','auditMissing'].includes(mode);
-          const hasBulkStudyPlan = isOracleBulk && (subject?.topics || []).length > 0 && (subject?.topics || []).every(topic =>
-            getTopicStudyPlan(topic, topic.subtopics || []).length > 0
-          );
+          const isDestructiveBulk = ['regenAll','regenLesson','regenQuestions'].includes(mode);
 	        return (
 	          <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={()=>{if(!bulkGenerateRun.running)setBulkGenerateModal(null);}}>
 		            <div className={`w-full max-w-3xl rounded-2xl border overflow-y-auto ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 2rem)'}} onClick={e=>e.stopPropagation()}>
@@ -57,7 +50,7 @@ export default function BulkGenerateModal() {
 		              <div className="flex items-start justify-between gap-4 mb-4">
 		                <div className="min-w-0">
 		                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-1">Operação em lote</p>
-		                  <h3 className="text-xl sm:text-2xl font-serif font-bold text-yellow-600 flex items-center gap-2.5">{isAuditBulk?<ShieldAlert className="w-5 h-5 flex-shrink-0"/>:isDestructiveBulk?<RotateCcw className="w-5 h-5 flex-shrink-0"/>:<Zap className="w-5 h-5 flex-shrink-0"/>}<span className="truncate">{operation.title}</span></h3>
+                  <h3 className="text-xl sm:text-2xl font-serif font-bold text-yellow-600 flex items-center gap-2.5">{isDestructiveBulk?<RotateCcw className="w-5 h-5 flex-shrink-0"/>:<Zap className="w-5 h-5 flex-shrink-0"/>}<span className="truncate">{operation.title}</span></h3>
                       <p className="text-sm opacity-45 mt-1 truncate">{subject?.title}</p>
 		                </div>
 		                <button type="button" aria-label="Fechar" disabled={bulkGenerateRun.running} onClick={()=>setBulkGenerateModal(null)} className={`p-2 rounded-lg disabled:opacity-30 ${darkMode?'hover:bg-gray-700 text-gray-400':'hover:bg-gray-100 text-gray-500'}`}>✕</button>
@@ -91,55 +84,46 @@ export default function BulkGenerateModal() {
                     {showsQuestionConfig && (
                       <div>
                         <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-	                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
+	                        <QuestionTypeSelector
+                          selected={cfg.questionTypes || ['direct']}
+                          onChange={v=>updateBulkConfig({questionTypes:v, ...(v[0]==='vof'?{numAlternatives:5}:null)})}
+                          darkMode={darkMode}
+                          single={true}
+                          isAdmin={isAdmin}
+                          canCreateFlashcards={canUseAdvancedFeatures}
+                          renderTypeDetails={type => type.k === 'direct' ? (
+                            <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                              <div>
+                                <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                                <div className="flex gap-2">
+                                  {[4,5].map(n=>(
+                                    <button key={n} onClick={()=>updateBulkConfig({numAlternatives:n})}
+                                      className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.numAlternatives)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                                      {n} (A-{n===4?'D':'E'})
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Estilo</div>
+                                <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>updateBulkConfig({questionStyle:value})} darkMode={darkMode}/>
+                              </div>
+                            </div>
+                          ) : type.k === 'vof' ? (
+                            <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                              <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Afirmações</div>
+                              <div className="grid grid-cols-3 gap-2">
+                                {[3,4,5].map(n=>(
+                                  <button key={n} onClick={()=>updateBulkConfig({vofStatementCount:n,numAlternatives:5})}
+                                    className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.vofStatementCount || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                                    {n}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        />
                       </div>
-                    )}
-                    {showsQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
-                      <div>
-                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                        <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>updateBulkConfig({questionStyle:value})} darkMode={darkMode}/>
-                      </div>
-                    )}
-                    {showsQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
-                      <div>
-                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
-                        <div className="flex gap-2">
-                          {[4,5].map(n=>(
-                            <button key={n} onClick={()=>updateBulkConfig({numAlternatives:n})}
-                              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.numAlternatives)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                              {n} (A-{n===4?'D':'E'})
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                      <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
-                    </div>
-                    {isAdmin && showsQuestionConfig && !isAuditBulk && !(cfg.questionTypes || []).some(isMemoryCardType) && (
-                      <button type="button" onClick={()=>updateBulkConfig({adminChunkedQuestions:!cfg.adminChunkedQuestions})}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                        <div>
-                          <p className={`text-sm font-bold ${cfg.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                          <p className="text-xs opacity-50 mt-0.5">Divide fixações e baterias extras grandes em requests de até 15 questões.</p>
-                        </div>
-                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                        </div>
-                      </button>
-                    )}
-                    {isAdmin && !isAuditBulk && (
-                      <button type="button" onClick={()=>updateBulkConfig({auditQuestions:!cfg.auditQuestions})}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                        <div>
-                          <p className={`text-sm font-bold ${cfg.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                          <p className="text-xs opacity-50 mt-0.5">Segundo request após cada bloco para revisar qualidade e utilidade.</p>
-                        </div>
-                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                        </div>
-                      </button>
                     )}
                   </div>
                 )}
@@ -153,81 +137,53 @@ export default function BulkGenerateModal() {
                           className={`w-full h-20 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${darkMode?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}/>
                       </div>
                     )}
-                    {showsOracleQuestionConfig && (
-                      <div>
-                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-	                        <QuestionTypeSelector selected={cfg.questionTypes || ['direct']} onChange={v=>updateBulkConfig({questionTypes:v})} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
-                      </div>
-                    )}
-                    {showsOracleQuestionConfig && !hasBulkStudyPlan && !(cfg.questionTypes || []).some(isMemoryCardType) && (
-                      <div>
-                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões/Subtópico</div>
-                        <div className="grid grid-cols-[1fr_auto] gap-2">
-                          <input type="number" min="1" max="10" value={cfg.qPerSub || 1}
-                            disabled={!!cfg.qPerSubAuto}
-                            onChange={e=>updateBulkConfig({qPerSub:Math.max(1,Math.min(10,parseInt(e.target.value,10)||1))})}
-                            className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                          <button type="button" onClick={()=>updateBulkConfig({qPerSubAuto:!cfg.qPerSubAuto})}
-                            className={`px-4 rounded-xl border-2 text-xs font-bold transition-all ${cfg.qPerSubAuto?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                            IA
-                          </button>
-                        </div>
-                        <p className="text-[11px] opacity-50 mt-1">{cfg.qPerSubAuto?'A IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.':'Quantidade fixa para cada subtópico.'}</p>
-                      </div>
-                    )}
-                    {showsOracleQuestionConfig && (cfg.questionTypes || ['direct']).some(t=>['direct','vof','cespe'].includes(t)) && (
-                      <div>
-                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                        <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>updateBulkConfig({questionStyle:value})} darkMode={darkMode}/>
-                      </div>
-                    )}
-                    {showsOracleQuestionConfig && !(cfg.questionTypes || []).some(isMemoryCardType) && (
-                      <div>
-                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
-                        <div className="flex gap-2">
-                          {[4,5].map(n=>(
-                            <button key={n} onClick={()=>updateBulkConfig({numAlternatives:n})}
-                              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.numAlternatives)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                              {n} (A-{n===4?'D':'E'})
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {showsOracleQuestionConfig && (cfg.questionTypes || []).some(isMemoryCardType) && (
+	                    {showsOracleQuestionConfig && (
+	                      <div>
+	                        <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
+		                        <QuestionTypeSelector
+                            selected={cfg.questionTypes || ['direct']}
+                            onChange={v=>updateBulkConfig({questionTypes:v, ...(v[0]==='vof'?{numAlternatives:5}:null)})}
+                            darkMode={darkMode}
+                            single={true}
+                            isAdmin={isAdmin}
+                            canCreateFlashcards={canUseAdvancedFeatures}
+                            renderTypeDetails={type => type.k === 'direct' ? (
+                              <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                                  <div className="flex gap-2">
+                                    {[4,5].map(n=>(
+                                      <button key={n} onClick={()=>updateBulkConfig({numAlternatives:n})}
+                                        className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.numAlternatives)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                                        {n} (A-{n===4?'D':'E'})
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Estilo</div>
+                                  <QuestionStyleSelector value={cfg.questionStyle} onChange={value=>updateBulkConfig({questionStyle:value})} darkMode={darkMode}/>
+                                </div>
+                              </div>
+                            ) : type.k === 'vof' ? (
+                              <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                                <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Afirmações</div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {[3,4,5].map(n=>(
+                                    <button key={n} onClick={()=>updateBulkConfig({vofStatementCount:n,numAlternatives:5})}
+                                      className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(cfg.vofStatementCount || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                                      {n}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          />
+	                      </div>
+	                    )}
+	                    {showsOracleQuestionConfig && (cfg.questionTypes || []).some(isMemoryCardType) && (
                       <div className={`rounded-xl border p-3 text-xs leading-relaxed ${darkMode?'border-yellow-800/50 bg-yellow-900/10 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
                         {memoryCardTypeName(cfg.questionTypes || [])}: a IA decide a quantidade ideal, sem meta fixa por subtópico.
-                      </div>
-                    )}
-                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                    <GeminiThinkingSelector value={!!cfg.geminiThinkingEnabled} onChange={v=>updateBulkConfig({geminiThinkingEnabled:v})} darkMode={darkMode}/>
-                    {isAdmin && showsOracleQuestionConfig && !isAuditBulk && !(cfg.questionTypes || []).some(isMemoryCardType) && (
-                      <button type="button" onClick={()=>updateBulkConfig({adminChunkedQuestions:!cfg.adminChunkedQuestions})}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                        <div>
-                          <p className={`text-sm font-bold ${cfg.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                          <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests de até 15 questões, inclusive subtópicos muito longos.</p>
-                        </div>
-                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                        </div>
-                      </button>
-                    )}
-                    {isAdmin && !isAuditBulk && (
-                      <button type="button" onClick={()=>updateBulkConfig({auditQuestions:!cfg.auditQuestions})}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${cfg.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                        <div>
-                          <p className={`text-sm font-bold ${cfg.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                          <p className="text-xs opacity-50 mt-0.5">Segundo request após cada bloco para revisar qualidade e utilidade.</p>
-                        </div>
-                        <div style={{width:40,height:24,borderRadius:12,padding:2,background:cfg.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                          <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:cfg.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                        </div>
-                      </button>
-                    )}
-                    {isAuditBulk && (
-                      <div className={`rounded-xl border p-3 text-xs leading-relaxed ${darkMode?'border-yellow-800/50 bg-yellow-900/10 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
-                        Este modo não gera do zero: ele audita as questões já existentes, remove itens fracos e reescreve o bloco.
                       </div>
                     )}
                   </div>
@@ -271,23 +227,23 @@ export default function BulkGenerateModal() {
                         persist.questionStyle = cfg.questionStyle;
                         persist.questionTypes = cfg.questionTypes;
                         persist.numAlternatives = cfg.numAlternatives;
-                        persist.adminChunkedQuestions = !!cfg.adminChunkedQuestions;
+                        persist.vofStatementCount = cfg.vofStatementCount;
+                        persist.adminChunkedQuestions = true;
                       }
-                      if (showsOracleQuestionConfig) {
-                        persist.questionStyle = cfg.questionStyle;
-                        persist.questionTypes = cfg.questionTypes;
-                        persist.qPerSub = cfg.qPerSub;
-                        persist.qPerSubAuto = !!cfg.qPerSubAuto;
-                        persist.numAlternatives = cfg.numAlternatives;
-                        persist.adminChunkedQuestions = !!cfg.adminChunkedQuestions;
+	                      if (showsOracleQuestionConfig) {
+	                        persist.questionStyle = cfg.questionStyle;
+	                        persist.questionTypes = cfg.questionTypes;
+	                        persist.qPerSubAuto = true;
+	                        persist.numAlternatives = cfg.numAlternatives;
+                          persist.vofStatementCount = cfg.vofStatementCount;
+                        persist.adminChunkedQuestions = true;
                       }
                       persist.geminiThinkingEnabled = !!cfg.geminiThinkingEnabled;
-                      persist.auditQuestions = !!cfg.auditQuestions;
                       if (Object.keys(persist).length) saveSettings({...settingsRef.current, ...persist});
                     }
                     closeOrStartBulk();
                   }} disabled={bulkGenerateRun.running || !subject} className="flex-1 bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
-	                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : isAuditBulk ? <ShieldAlert className="w-4 h-4"/> : isDestructiveBulk ? <RotateCcw className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
+                  {bulkGenerateRun.running ? <Spinner className="w-4 h-4 text-white"/> : isDestructiveBulk ? <RotateCcw className="w-4 h-4"/> : <Zap className="w-4 h-4"/>}
 	                  {bulkGenerateRun.running ? 'Rodando...' : pending.length ? operation.verb : 'Nada para fazer'}
 	                </button>
 	              </div>

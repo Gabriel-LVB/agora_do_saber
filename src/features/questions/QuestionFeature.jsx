@@ -359,7 +359,7 @@ const QuestionView = ({
   questions=[], answers={}, favorites=[],
   onAnswer, onToggleFavorite,
   errorNotebook=[], onToggleErrorNotebook=null, showErrorNotebook=false,
-  onReset, onReshuffle, onRegenerate, onAudit, onExport,
+  onReset, onReshuffle, onRegenerate, onExport,
   isGenerating=false, streamCount=0, loadingMsg='',
   showBizuario=false, onBizuario, bizuarioCached=false,
   darkMode, apiKey, oracleLength='medium', onCall, onOpenAnswer,
@@ -371,15 +371,10 @@ const QuestionView = ({
   isAdmin=false,
   canCreateFlashcards=false,
   adminQuestionExplanations=false,
-  questionCountPerSub=1,
-  questionCountAuto=false,
   numAlternatives=5,
+  vofStatementCount=5,
   geminiThinkingEnabled=false,
   onGeminiThinkingChange=null,
-  adminChunkedQuestionsEnabled=false,
-  onAdminChunkedQuestionsChange=null,
-  auditQuestionsEnabled=false,
-  onAuditQuestionsChange=null,
   onAddToReview=null,
   onReviewErrorNotebook=null,
   onOpenErrorReviewResult=null,
@@ -392,6 +387,7 @@ const QuestionView = ({
 	  nextUnitHelper='Continuar sequência',
 	  inReviewCount=0,
 	  displayMode='list',
+	  onDisplayModeChange=null,
 	  resumeAtFirstUnanswered=false,
 	  onExportAnki=null,
 }) => {
@@ -581,12 +577,19 @@ const QuestionView = ({
 	  }, [resumeAtFirstUnanswered, singleMode, allFlashcards]); // eslint-disable-line
 
   const btnBase = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border transition-colors`;
-  const btnNeutral = dm ? `${btnBase} border-gray-600 text-gray-300 hover:bg-gray-700` : `${btnBase} border-gray-200 text-gray-600 hover:bg-gray-50`;
-  const goToAulaIcon = goToAulaLabel.toLowerCase().includes('ler')
-    ? <BookOpen className="w-4 h-4"/>
-    : <VideoIcon className="w-4 h-4"/>;
+	  const btnNeutral = dm ? `${btnBase} border-gray-600 text-gray-300 hover:bg-gray-700` : `${btnBase} border-gray-200 text-gray-600 hover:bg-gray-50`;
+	  const goToAulaIcon = goToAulaLabel.toLowerCase().includes('ler')
+	    ? <BookOpen className="w-4 h-4"/>
+	    : <VideoIcon className="w-4 h-4"/>;
+	  const canToggleQuestionDisplayMode = !!onDisplayModeChange && !allFlashcards && !resumeAtFirstUnanswered;
+	  const displayModeAction = canToggleQuestionDisplayMode ? {
+	    label:displayMode === 'single' ? 'Ver em lista' : 'Uma por vez',
+	    icon:<LayersIcon className="w-4 h-4"/>,
+	    fn:()=>onDisplayModeChange(displayMode === 'single' ? 'list' : 'single'),
+	  } : null;
   const actionMenuItems = questions.length>0 ? [
     onGoToAula ? { label:goToAulaLabel, icon:goToAulaIcon, fn:onGoToAula } : null,
+    displayModeAction,
     allFlashcards && singleMode ? {
       label:`Cartão ${Math.min(flashcardCursor + 1, Math.max(1, flashcardQueue.length))} de ${Math.max(1, flashcardQueue.length)}`,
       icon:<LayersIcon className="w-4 h-4"/>,
@@ -614,7 +617,6 @@ const QuestionView = ({
       active:flashcardFullscreen,
     } : null,
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
-    onAudit ? { label:'Auditar', icon:<ShieldAlert className="w-4 h-4"/>, fn:onAudit } : null,
     showBizuario&&onBizuario ? { label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:onBizuario } : null,
     onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
 	    onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
@@ -947,10 +949,10 @@ const QuestionView = ({
         </div>
       </div>
 
-      {isAdmin&&adminStudyPlan.length>0&&questions.length===0&&<TopicStudyPlanPanel plans={adminStudyPlan} questions={questions} answers={answers} darkMode={dm}/>}
+      {adminStudyPlan.length>0&&questions.length===0&&<TopicStudyPlanPanel plans={adminStudyPlan} questions={questions} answers={answers} darkMode={dm}/>}
 
       {/* ── Subtópicos ── */}
-      {!isGenerating&&questions.length===0&&subtopics.length>0&&!(isAdmin&&adminStudyPlan.length>0)&&(
+      {!isGenerating&&questions.length===0&&subtopics.length>0&&!(adminStudyPlan.length>0)&&(
         <div className={`mb-4 p-4 rounded-xl border ${dm?'bg-blue-900/20 border-blue-700':'bg-blue-50 border-blue-200'}`}>
           <p className={`text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2 ${dm?'text-blue-400':'text-blue-600'}`}>
             📋 Subtópicos — o Oráculo cobrirá exatamente estes:
@@ -968,48 +970,6 @@ const QuestionView = ({
       {/* ── Seletores de estilo/tipo — aparecem abaixo dos subtópicos, antes de gerar ── */}
 	      {!isGenerating&&questions.length===0&&onGenerate&&onTopicStyleChange&&(
 	        <div className={`mb-6 p-4 rounded-xl border space-y-4 ${dm?'bg-gray-800/50 border-gray-700':'bg-gray-50 border-gray-200'}`}>
-	          {/* Quantidade */}
-	          {!isMemoryCardType(topicType || 'direct') && !(isAdmin&&adminStudyPlan.length>0) && <div>
-	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Configuração das questões</p>
-	            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-	              <div>
-                <label className={`block text-[11px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Questões/Subtópico</label>
-                <div className="grid grid-cols-[1fr_auto] gap-2">
-                  <input type="number" min="1" max="10" value={questionCountPerSub || 1}
-                    disabled={questionCountAuto}
-                    onChange={e=>{
-                      const v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1));
-                      onTopicStyleChange(v, 'qPerSub');
-                    }}
-                    className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${dm?'bg-gray-900 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                  <button type="button" onClick={()=>onTopicStyleChange(!questionCountAuto, 'qPerSubAuto')}
-                    className={`px-3 rounded-xl border-2 text-xs font-bold transition-all ${questionCountAuto?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
-                    IA
-                  </button>
-                </div>
-                <p className={`text-[11px] mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{questionCountAuto?'A IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.':'Quantidade fixa para cada subtópico.'}</p>
-              </div>
-              {['direct','vof','cespe'].includes(topicType || 'direct') && (
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase mb-1.5 ${dm?'text-gray-500':'text-gray-400'}`}>Alternativas</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[4,5].map(n=>(
-                      <button key={n} type="button" onClick={()=>onTopicStyleChange(n, 'numAlternatives')}
-                        style={{minHeight:54}}
-                        className={`rounded-xl border-2 text-sm font-bold transition-all py-3 ${Number(numAlternatives || 5)===n?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
-                        {n} (A-{'ABCDE'[n-1]})
-                      </button>
-                    ))}
-                  </div>
-                </div>
-	              )}
-	            </div>
-	          </div>}
-	          {/* Estilo do enunciado */}
-	          {!isMemoryCardType(topicType || 'direct') && <div>
-	            <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Estilo do Enunciado</p>
-	            <QuestionStyleSelector value={topicStyle} onChange={value=>onTopicStyleChange(value,'style')} darkMode={dm}/>
-	          </div>}
           {/* Tipo de questão */}
           <div>
             <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Tipo de Questão</p>
@@ -1020,42 +980,39 @@ const QuestionView = ({
               single={true}
               isAdmin={isAdmin}
               canCreateFlashcards={canCreateFlashcards}
+              renderTypeDetails={type => type.k === 'direct' ? (
+                <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${dm?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                  <div>
+                    <p className={`text-[11px] font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Alternativas</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[4,5].map(n=>(
+                        <button key={n} type="button" onClick={()=>onTopicStyleChange(n, 'numAlternatives')}
+                          className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(numAlternatives || 5)===n?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                          {n} (A-{'ABCDE'[n-1]})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className={`text-[11px] font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Estilo do enunciado</p>
+                    <QuestionStyleSelector value={topicStyle} onChange={value=>onTopicStyleChange(value,'style')} darkMode={dm}/>
+                  </div>
+                </div>
+              ) : type.k === 'vof' ? (
+                <div className={`mt-2 w-full rounded-xl border-2 p-4 ${dm?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                  <p className={`text-[11px] font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Afirmações</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[3,4,5].map(n=>(
+                      <button key={n} type="button" onClick={()=>onTopicStyleChange(n, 'vofStatementCount')}
+                        className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(vofStatementCount || 5)===n?(dm?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             />
           </div>
-          {onGeminiThinkingChange&&(
-            <div>
-              <p className={`text-xs font-bold uppercase mb-2 ${dm?'text-gray-400':'text-gray-500'}`}>Modo Gemini</p>
-              <GeminiThinkingSelector
-                value={!!geminiThinkingEnabled}
-                onChange={onGeminiThinkingChange}
-                darkMode={dm}
-              />
-            </div>
-          )}
-          {onAdminChunkedQuestionsChange&&(
-            <button type="button" onClick={()=>onAdminChunkedQuestionsChange(!adminChunkedQuestionsEnabled)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${adminChunkedQuestionsEnabled?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-900':'border-gray-200 bg-white')}`}>
-              <div>
-                <p className={`text-sm font-bold ${adminChunkedQuestionsEnabled?'text-yellow-500':''}`}>Geração em lotes</p>
-                <p className="text-xs opacity-50 mt-0.5">Divide blocos grandes em requests de até 15 questões.</p>
-              </div>
-              <div style={{width:40,height:24,borderRadius:12,padding:2,background:adminChunkedQuestionsEnabled?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:adminChunkedQuestionsEnabled?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-              </div>
-            </button>
-          )}
-          {onAuditQuestionsChange&&(
-            <button type="button" onClick={()=>onAuditQuestionsChange(!auditQuestionsEnabled)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${auditQuestionsEnabled?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-900':'border-gray-200 bg-white')}`}>
-              <div>
-                <p className={`text-sm font-bold ${auditQuestionsEnabled?'text-yellow-500':''}`}>Auditoria</p>
-                <p className="text-xs opacity-50 mt-0.5">Segundo request para revisar qualidade, utilidade, pistas e lacunas antes de salvar.</p>
-              </div>
-              <div style={{width:40,height:24,borderRadius:12,padding:2,background:auditQuestionsEnabled?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auditQuestionsEnabled?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-              </div>
-            </button>
-          )}
         </div>
       )}
 
@@ -1489,7 +1446,7 @@ const QUESTION_TYPES = [
   { k:'cloze', group:'memory', icon:LayersIcon, label:'Preencher lacunas', desc:'Cartões com omissões no estilo AnKing e Anki', adminOnly:true },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false, renderTypeDetails=null }) => {
   const dm = darkMode;
   const toggle = (k) => {
     if (single) { onChange([k]); return; }
@@ -1525,19 +1482,22 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, i
                 const on = selected.includes(t.k);
                 const TypeIcon = t.icon;
                 return (
-                  <button key={t.k} onClick={()=>toggle(t.k)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
-                    <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                      <TypeIcon className="w-4 h-4"/>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
-                      <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
-                    </div>
-                    <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
-                      {on && <CheckIcon className="w-3 h-3 text-white"/>}
-                    </div>
-                  </button>
+                  <div key={t.k}>
+                    <button onClick={()=>toggle(t.k)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
+                      <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                        <TypeIcon className="w-4 h-4"/>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
+                        <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
+                      </div>
+                      <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+                        {on && <CheckIcon className="w-3 h-3 text-white"/>}
+                      </div>
+                    </button>
+                    {on && renderTypeDetails?.(t)}
+                  </div>
                 );
               })}
             </div>

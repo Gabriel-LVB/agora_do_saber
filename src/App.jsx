@@ -600,6 +600,14 @@ REGRA CRÍTICA: respeite a quantidade individual de CADA objetivo, inclusive qua
 };
 
 const ADMIN_ORACLE_QUESTION_CHUNK_TARGET = 15;
+const QUESTION_BATCHING_ENABLED = true;
+const STUDY_MAP_ENABLED = true;
+const withDefaultStudyMapSettings = (settings = {}) => ({
+  ...settings,
+  autoMode:true,
+  adminStudyMap:STUDY_MAP_ENABLED,
+  qPerSubAuto:true,
+});
 const buildFixedQuestionPlans = (subtopics = [], qPerSub = 1) => subtopics
   .filter(Boolean)
   .map(title => ({
@@ -966,6 +974,13 @@ const isProtectedMirrorRootFolder = (item) =>
   isAcademiaMirrorRootFolder(item) || isErrorNotebookRootFolder(item);
 const hasAcademiaOriginTopic = (item) =>
   !isFolderItem(item) && (item.topics || []).some(t => t.origin?.source === 'academia');
+const getEffectiveAlternativeCount = (settings = {}) => (settings.questionTypes || []).includes('vof')
+  ? 5
+  : Number(settings.numAlternatives || 5);
+const getVofStatementCount = (settings = {}) => Math.max(3, Math.min(5, Number(settings.vofStatementCount) || 5));
+const getVofPromptRule = (settings = {}) => (settings.questionTypes || []).includes('vof')
+  ? `\nREGRA ESPECÍFICA PARA VERDADEIRO OU FALSO:\n- Cada questão deve ter EXATAMENTE ${getVofStatementCount(settings)} afirmações.\n- Use SEMPRE 5 alternativas (A-E), cada uma com uma combinação plausível de V/F.\n- O gabarito deve corresponder exatamente à sequência correta das afirmações.`
+  : '';
 
 const buildErrorNotebookReviewPrompt = async ({ subjectTitle='', topicTitle='', questions=[], settings={} }) => {
   const perError = Math.max(1, Math.min(10, Number(settings.errorReviewPerQuestion) || 2));
@@ -980,7 +995,7 @@ const buildErrorNotebookReviewPrompt = async ({ subjectTitle='', topicTitle='', 
     direct: 'Use questões diretas de alto rendimento: alvo estreito, resposta previsível e cobrança que diferencie conceitos próximos, sem curiosidade solta.',
     mixed: 'Organize a bateria em uma quantidade ideal de casos clínicos. Para cada caso, crie 2 a 5 questões progressivas com decisões diferentes. Em toda questão use "Caso-base: Caso N — [vinheta original completa]" e depois "Enunciado: [pergunta específica]"; repita integralmente o mesmo caso-base na sequência.',
   }[settings.questionStyle || 'mixed'];
-  const na = settings.numAlternatives || 5;
+  const na = getEffectiveAlternativeCount(settings);
   const alts = na === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -1025,6 +1040,7 @@ REGRAS CRÍTICAS:
 
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
+${getVofPromptRule(settings)}
 ${isFlashcard ? (isCloze ? `FORMATO OBRIGATÓRIO:
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
@@ -2058,7 +2074,8 @@ FORMATO OBRIGATÓRIO:
 };
 
 const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', settings={} }) => {
-  const alts = Number(settings.numAlternatives || 5) === 4
+  const alternativeCount = getEffectiveAlternativeCount(settings);
+  const alts = alternativeCount === 4
     ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
     : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
   const styleInst = {
@@ -2103,8 +2120,9 @@ REGRAS DAS QUESTÕES:
 - O caso deve terminar em uma decisão clara: diagnóstico, próxima conduta, fármaco, efeito adverso, mecanismo, exame ou contraindicação.
 - Em perguntas diretas, evite "O que é X?", "qual a principal característica?" ou "qual conduta?" sem escopo. A pergunta deve dizer exatamente que tipo de resposta espera.
 - Pergunta direta boa deve diferenciar algo: mecanismo vs efeito, regra vs exceção, critério obrigatório vs achado inespecífico, ou fármacos/diagnósticos próximos.
-- Questões com alternativas devem ter exatamente ${Number(settings.numAlternatives || 5)} alternativas no formato:
+- Questões com alternativas devem ter exatamente ${alternativeCount} alternativas no formato:
 ${alts}
+${getVofPromptRule(settings)}
 - Depois de cada questão inclua "Gabarito: X" e "Explicação:".
 ${adminExplanationFormat}
 
@@ -3387,7 +3405,7 @@ const QUESTION_TYPES = [
   { k:'cloze', group:'memory', icon:LayersIcon, label:'Preencher lacunas', desc:'Cartões com omissões no estilo AnKing e Anki', adminOnly:true },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false, renderTypeDetails=null }) => {
   const dm = darkMode;
   const toggle = (k) => {
     if (single) { onChange([k]); return; }
@@ -3423,19 +3441,22 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, i
                 const on = selected.includes(t.k);
                 const TypeIcon = t.icon;
                 return (
-                  <button key={t.k} onClick={()=>toggle(t.k)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
-                    <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                      <TypeIcon className="w-4 h-4"/>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
-                      <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
-                    </div>
-                    <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
-                      {on && <CheckIcon className="w-3 h-3 text-white"/>}
-                    </div>
-                  </button>
+                  <div key={t.k}>
+                    <button onClick={()=>toggle(t.k)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
+                      <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                        <TypeIcon className="w-4 h-4"/>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
+                        <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
+                      </div>
+                      <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+                        {on && <CheckIcon className="w-3 h-3 text-white"/>}
+                      </div>
+                    </button>
+                    {on && renderTypeDetails?.(t)}
+                  </div>
                 );
               })}
             </div>
@@ -3629,7 +3650,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 // ExternalPromptModal foi movido para src/features/modals/WorkflowModals.jsx.
 // ═══════════════════════════════════════════════════════════════════════════════// ═══════════════════════════════════════════════════════════════════════════════
 const DEFAULT_HOME_MOTTO = 'Não são admitidos ignorantes em medicina.';
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:false,adminStudyMap:false,adminChunkedQuestions:false,numAlternatives:5,customPrompt:'',apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:false,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,auditQuestions:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,sharedLibraryDelaySeconds:2,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:true,adminStudyMap:STUDY_MAP_ENABLED,adminChunkedQuestions:QUESTION_BATCHING_ENABLED,numAlternatives:5,vofStatementCount:5,apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:true,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,sharedLibraryDelaySeconds:2,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -3704,7 +3725,6 @@ export default function QuestionBankApp() {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [syllabus, setSyllabus]         = useState('');
   const [syllabusFB, setSyllabusFB]     = useState('');
-  const [studyPlanMultiplier, setStudyPlanMultiplier] = useState(1);
 
   // ── UI State ──────────────────────────────────────────────────────────────
   const [isBusy, setIsBusy]           = useState(false);
@@ -3724,11 +3744,11 @@ export default function QuestionBankApp() {
     questionStyle:'mixed',
     questionTypes:['direct'],
     qPerSub:1,
-    qPerSubAuto:false,
+    qPerSubAuto:true,
     numAlternatives:5,
+    vofStatementCount:5,
     geminiThinkingEnabled:false,
-    auditQuestions:false,
-    adminChunkedQuestions:false,
+    adminChunkedQuestions:QUESTION_BATCHING_ENABLED,
   });
   const [editingSub, setEditingSub]   = useState(null);
   const [editingSubName, setEditingSubName] = useState('');
@@ -3777,7 +3797,6 @@ export default function QuestionBankApp() {
   const [academiaUploadedImages, setAcademiaUploadedImages] = useState([]);
   const [academiaSyllabus, setAcademiaSyllabus]       = useState('');
   const [academiaSyllabusFB, setAcademiaSyllabusFB]   = useState('');
-  const [academiaStudyPlanMultiplier, setAcademiaStudyPlanMultiplier] = useState(1);
   const academiaFileInputRef  = useRef(null);
   const academiaImageInputRef = useRef(null);
   // Academia topic view state
@@ -3793,14 +3812,14 @@ export default function QuestionBankApp() {
   const [errorReviewQStyle, setErrorReviewQStyle]     = useState('mixed');
   const [errorReviewQTypes, setErrorReviewQTypes]     = useState(['direct']);
   const [errorReviewQAlts, setErrorReviewQAlts]       = useState(5);
+  const [errorReviewVofStatements, setErrorReviewVofStatements] = useState(5);
   const [errorReviewPerQuestion, setErrorReviewPerQuestion] = useState(2);
   const [errorReviewThinking, setErrorReviewThinking] = useState(false);
-  const [errorReviewAudit, setErrorReviewAudit]       = useState(false);
   const [academiaExtraQStyle, setAcademiaExtraQStyle] = useState('mixed');
   const [academiaExtraQTypes, setAcademiaExtraQTypes] = useState(['direct']);
   const [academiaExtraQAlts, setAcademiaExtraQAlts]   = useState(5);
+  const [academiaExtraVofStatements, setAcademiaExtraVofStatements] = useState(5);
   const [academiaExtraThinking, setAcademiaExtraThinking] = useState(false);
-  const [academiaExtraAudit, setAcademiaExtraAudit] = useState(false);
   const [academiaRegenLength, setAcademiaRegenLength] = useState('complete');
   const [academiaRegenFormat, setAcademiaRegenFormat] = useState('outline');
   const [academiaRegenCoverage, setAcademiaRegenCoverage] = useState('high-yield');
@@ -3808,8 +3827,8 @@ export default function QuestionBankApp() {
   const [academiaRegenQStyle, setAcademiaRegenQStyle] = useState('mixed');
   const [academiaRegenQTypes, setAcademiaRegenQTypes] = useState(['direct']);
   const [academiaRegenQAlts, setAcademiaRegenQAlts]   = useState(5);
+  const [academiaRegenVofStatements, setAcademiaRegenVofStatements] = useState(5);
   const [academiaRegenThinking, setAcademiaRegenThinking] = useState(false);
-  const [academiaRegenAudit, setAcademiaRegenAudit] = useState(false);
 
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
@@ -4055,14 +4074,16 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     if (!academiaExtraModal) return;
+    setAcademiaExtraQStyle(settingsRef.current.questionStyle || 'mixed');
+    setAcademiaExtraQTypes(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], questionTypeAccess));
+    setAcademiaExtraQAlts(settingsRef.current.numAlternatives || 5);
+    setAcademiaExtraVofStatements(settingsRef.current.vofStatementCount || 5);
     setAcademiaExtraThinking(!!settingsRef.current.geminiThinkingEnabled);
-    setAcademiaExtraAudit(!!settingsRef.current.auditQuestions);
   }, [academiaExtraModal?.topic?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!academiaRegenModal) return;
     setAcademiaRegenThinking(!!settingsRef.current.geminiThinkingEnabled);
-    setAcademiaRegenAudit(!!settingsRef.current.auditQuestions);
   }, [academiaRegenModal?.topic?.id]); // eslint-disable-line
 
   useEffect(() => {
@@ -7282,76 +7303,6 @@ export default function QuestionBankApp() {
     addToast('Removi a cópia de tópico criada pela opção errada.', 'info', 4500);
   }, [library]);
 
-  const shouldAuditQuestions = (sourceSettings = settingsRef.current) =>
-    !!isAdmin && !!sourceSettings?.auditQuestions;
-
-  const QUESTION_AUDIT_VERSION = 3;
-
-  const makeQuestionAuditMeta = (questionCount = 0, source = 'auto') => ({
-    version:QUESTION_AUDIT_VERSION,
-    auditedAt:Date.now(),
-    questionCount,
-    source,
-  });
-
-  const isTopicQuestionAuditCurrent = (topic = {}) => {
-    const questionCount = (topic.questions || []).length;
-    if (!questionCount || !topic.questionAudit?.auditedAt) return false;
-    if (Number(topic.questionAudit.version || 0) !== QUESTION_AUDIT_VERSION) return false;
-    return Number(topic.questionAudit.questionCount || 0) === questionCount;
-  };
-
-  const auditGeneratedQuestions = async ({
-    questions = [],
-    namespace = `audit_${Date.now()}`,
-    settings: auditSettings = settingsRef.current,
-    subjectTitle = '',
-    topicTitle = '',
-    subtopics = [],
-    sourceMaterials = '',
-    toastId = null,
-    onProgress = null,
-    force = false,
-  } = {}) => {
-    if (!questions.length || (!force && !shouldAuditQuestions(auditSettings))) return { questions, audited:false };
-    if (!isAdmin) return { questions, audited:false };
-    const effectiveAuditSettings = withAdminQuestionPromptSettings(auditSettings);
-    const generatedText = questionsToGenerationText(questions);
-    const buildQuestionAuditPrompt = await getPromptBuilder('buildQuestionAuditPrompt');
-    const prompt = buildQuestionAuditPrompt({
-      subjectTitle,
-      topicTitle,
-      subtopics,
-      sourceMaterials,
-      generatedText,
-      settings:effectiveAuditSettings,
-    });
-    onProgress?.('Auditando qualidade...');
-    if (toastId) updateToast(toastId, 'Auditando e corrigindo questões...', 'loading');
-    let lastErr = null;
-    for (const { k } of getOrderedKeys()) {
-      try {
-        const text = await callGemini(
-          prompt,
-          'Você é auditor sênior de questões médicas. Seja rigoroso, técnico e alinhado à intenção do usuário. Responda apenas no formato pedido.',
-          k,
-          [],
-          { ...getGeminiOptions(effectiveAuditSettings), maxTokens:20000 }
-        );
-        await rotateKey();
-        const parsed = parseGeneratedQuestionsByTypes(text, namespace, effectiveAuditSettings.questionTypes || ['direct']);
-        if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
-        return { questions:parsed.questions, summary:parsed.summary || '', audited:true };
-      } catch(e) {
-        lastErr = e;
-        await rotateKey();
-        continue;
-      }
-    }
-    addToast(`Auditoria falhou (${getBulkErrorText(lastErr)}). Mantive a geração original.`, 'info', 6000);
-    return { questions, audited:false, error:lastErr };
-  };
-
   const completeGeneratedQuestionSet = async ({
     questions = [],
     expectedCount = 0,
@@ -7698,6 +7649,54 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     return { ...current, ...next, id };
   };
 
+  const reviewGeneratedQuestions = async ({
+    questions = [],
+    namespace = `review_${Date.now()}`,
+    settings: reviewSettings = settingsRef.current,
+    subjectTitle = '',
+    topicTitle = '',
+    subtopics = [],
+    sourceMaterials = '',
+    toastId = null,
+    onProgress = null,
+  } = {}) => {
+    if (!questions.length || !isAdmin) return { questions, reviewed:false };
+    const effectiveReviewSettings = withAdminQuestionPromptSettings(reviewSettings);
+    const generatedText = questionsToGenerationText(questions);
+    const buildQuestionRepairPrompt = await getPromptBuilder('buildQuestionRepairPrompt');
+    const prompt = buildQuestionRepairPrompt({
+      subjectTitle,
+      topicTitle,
+      subtopics,
+      sourceMaterials,
+      generatedText,
+      settings:effectiveReviewSettings,
+    });
+    onProgress?.('Revisando qualidade...');
+    if (toastId) updateToast(toastId, 'Revisando e corrigindo questões...', 'loading');
+    let lastErr = null;
+    for (const { k } of getOrderedKeys()) {
+      try {
+        const text = await callGemini(
+          prompt,
+          'Você é revisor sênior de questões médicas. Seja rigoroso, técnico e alinhado à intenção do usuário. Responda apenas no formato pedido.',
+          k,
+          [],
+          { ...getGeminiOptions(effectiveReviewSettings), maxTokens:20000 }
+        );
+        await rotateKey();
+        const parsed = parseGeneratedQuestionsByTypes(text, namespace, effectiveReviewSettings.questionTypes || ['direct']);
+        if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
+        return { questions:parsed.questions, summary:parsed.summary || '', reviewed:true };
+      } catch(e) {
+        lastErr = e;
+        await rotateKey();
+      }
+    }
+    addToast(`Revisão falhou (${getBulkErrorText(lastErr)}). Mantive a geração original.`, 'info', 6000);
+    return { questions, reviewed:false, error:lastErr };
+  };
+
   const getSharedLibraryQuestionIssue = (question = {}) => {
     if (question?.isFlashcard || question?.isCloze || question?.isOpen || question?.isEssay) return '';
     const statement = String(question.statement || '').trim();
@@ -7765,23 +7764,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           `QUESTÕES COM PROBLEMA:\n${issues.map((row, index) => `${index + 1}. ${row.label} #${row.index + 1}: ${row.issue}`).join('\n')}`,
         ].filter(Boolean).join('\n\n');
         updateToast(toastId, `Revisando ${item.title || 'aula'} (${issues.length})...`, 'loading');
-        const auditSettings = withAdminQuestionPromptSettings({
+        const reviewSettings = withAdminQuestionPromptSettings({
           ...settingsRef.current,
           questionTypes:['direct'],
           questionStyle:'direct',
           adminQuestionExplanations:true,
-          auditQuestions:true,
         });
-        const result = await auditGeneratedQuestions({
+        const result = await reviewGeneratedQuestions({
           questions:issues.map(row => row.question),
           namespace:`shared_repair_${item.id}_${Date.now()}`,
-          settings:auditSettings,
+          settings:reviewSettings,
           subjectTitle:item.subject || '',
           topicTitle:item.title || item.topic || '',
           subtopics,
           sourceMaterials,
           toastId,
-          force:true,
         });
         const repaired = result.questions || [];
         if (repaired.length < issues.length) {
@@ -9200,8 +9197,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const oracleMap = {
       generate:{title:'Gerar faltantes', verb:'Gerar', toast:'Gerar faltantes', empty:'Nada pendente: todos os blocos já têm questões.', desc:'gera questões apenas nos blocos ainda vazios'},
       regenQuestions:{title:'Regerar tudo', verb:'Regerar', toast:'Regerar tudo', empty:'Nenhum bloco encontrado para regerar.', desc:'substitui as questões de todos os blocos deste assunto'},
-      audit:{title:'Auditar tudo', verb:'Auditar', toast:'Auditoria em massa', empty:'Nenhum bloco com questões para auditar.', desc:'faz um segundo request para revisar, cortar e corrigir questões já geradas'},
-      auditMissing:{title:'Auditar faltantes', verb:'Auditar', toast:'Auditoria dos faltantes', empty:'Nenhum bloco pendente de auditoria.', desc:'audita apenas blocos com questões que ainda não foram auditadas'},
     };
     if (source !== 'academia') return oracleMap[mode] || oracleMap.generate;
     return academiaMap[mode] || academiaMap.generate;
@@ -9212,12 +9207,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     questionStyle:settingsRef.current.questionStyle || 'mixed',
     questionTypes:filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], { isAdmin, canCreateFlashcards:canUseAdvancedFeatures }),
     qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
-    qPerSubAuto:!!settingsRef.current.qPerSubAuto,
+    qPerSubAuto:true,
     numAlternatives:settingsRef.current.numAlternatives || 5,
+    vofStatementCount:settingsRef.current.vofStatementCount || 5,
     adminQuestionExplanations:true,
     geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
-    auditQuestions:!!settingsRef.current.auditQuestions,
-    adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions,
+    adminChunkedQuestions:QUESTION_BATCHING_ENABLED,
     regenReason:'',
     mode,
   });
@@ -9239,8 +9234,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       return topics.filter(t => !t.lessonGenerated);
     }
     if (subject?.source === 'gemini') {
-      if (mode === 'auditMissing') return topics.filter(t => (t.questions || []).length && !isTopicQuestionAuditCurrent(t));
-      if (mode === 'audit') return topics.filter(t => (t.questions || []).length);
       if (mode === 'regenQuestions') return topics;
       return topics.filter(t => !(t.questions || []).length);
     }
@@ -9263,7 +9256,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!checkKey()) return;
     const s = settingsRef.current;
     const durationSecs = aula.duration_seconds || 0;
-    const maxPerBlock = isAdmin && s.adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : 30;
+    const maxPerBlock = ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
     const plan = getCourseVqQuestionPlan({ durationSecs, suggestedQ:10, isAdmin, maxPerBlock });
     const { totalQ, qPerBlock, numBlocks } = plan;
     const aulaId = aulaDocId(aula);
@@ -9272,14 +9265,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
     await generateVqSyllabus({
       aula, aulaId, totalQ, numBlocks, qPerBlock,
-      numAlternatives: s.numAlternatives || 5,
+      numAlternatives:(s.questionTypes || []).includes('vof') ? 5 : s.numAlternatives || 5,
+      vofStatementCount: s.vofStatementCount || 5,
       questionStyle: s.questionStyle || 'mixed',
 	      questionTypes: filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
       geminiThinkingEnabled: !!s.geminiThinkingEnabled,
-      auditQuestions: !!s.auditQuestions,
-      adminChunkedQuestions: !!s.adminChunkedQuestions,
+      adminChunkedQuestions: QUESTION_BATCHING_ENABLED,
       autoMode: s.autoMode !== false,
-      syllabusMaxPerBlock: isAdmin ? maxPerBlock : undefined,
+      syllabusMaxPerBlock: maxPerBlock,
       adminMinuteRule: isAdmin,
       adminFullCoverage: isAdmin,
       extraPrompt: '',
@@ -9307,7 +9300,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   // toastId: ID do toast de progresso já criado pelo chamador
   const generateVqSyllabus = async (cfg) => {
     if(!checkKey()) return;
-    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, questionStyle='mixed', questionTypes=['direct'], toastId } = cfg;
+    const { aula, aulaId, totalQ, numBlocks, qPerBlock, extraPrompt, numAlternatives=5, vofStatementCount=5, questionStyle='mixed', questionTypes=['direct'], toastId } = cfg;
     setVqSyllabusLoading(true);
     const buildVqSyllabusPrompt = await getPromptBuilder('buildVqSyllabusPrompt');
     const buildVqBlockPrompt = await getPromptBuilder('buildVqBlockPrompt');
@@ -9392,9 +9385,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         totalQuestions: parsedBlockIds.reduce((sum, id) => sum + (parsedBlocks[id].subtopics?.length || 0), 0) || totalQ,
         numBlocks: parsedBlockIds.length || numBlocks,
         qPerBlock,
-        numAlternatives, aulaTitle: aula.title,
+        numAlternatives:questionTypes.includes('vof') ? 5 : numAlternatives,
+        vofStatementCount,
+        aulaTitle: aula.title,
         subject: cfg.subject||'', topic: cfg.topic||'',
-        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions, adminChunkedQuestions:!!cfg.adminChunkedQuestions, fullCoverage:isAdmin && !!cfg.adminFullCoverage, createdAt: Date.now(),
+        questionStyle, questionTypes, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, adminChunkedQuestions:QUESTION_BATCHING_ENABLED, fullCoverage:isAdmin && !!cfg.adminFullCoverage, createdAt: Date.now(),
       },
       blocks: blocksForFirestore,
     };
@@ -9409,7 +9404,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
     // 6. Gerar todos os blocos em paralelo, rotacionando a chave após cada tentativa
     let done = 0;
-    const na = numAlternatives;
+    const na = questionTypes.includes('vof') ? 5 : numAlternatives;
     const alts = na===4
       ? 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]'
       : 'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
@@ -9427,23 +9422,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             `Gere as questões do bloco "${block.title}" — ${aula.title}`,
             PROMPT, k, ()=>{}, [], getGeminiOptions(cfg)
           );
-          const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, questionTypes);
-          const audited = await auditGeneratedQuestions({
-            questions:parsed.questions,
-            namespace:`${aulaId}_${blockId}_audited`,
-            settings:{...aulaData.meta, ...cfg, questionTypes},
-            subjectTitle:cfg.subject || '',
-            topicTitle:`${aula.title} — ${block.title}`,
-            subtopics:block.subtopics || [],
-            sourceMaterials:[cfg.extraPrompt, block.transcriptSlice].filter(Boolean).join('\n\n'),
-            toastId,
-          });
-          const { transcriptSlice: _ts, ...blockToSave } = block;
-          setVqBlocks(prev => {
+	          const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, questionTypes);
+	          const { transcriptSlice: _ts, ...blockToSave } = block;
+	          setVqBlocks(prev => {
             const cur = prev[aulaId] || aulaData;
             const updBlocks = {
               ...(cur.blocks||{}),
-              [blockId]: {...blockToSave, generating:false, questions:audited.questions, answers:{}}
+	              [blockId]: {...blockToSave, generating:false, questions:parsed.questions, answers:{}}
             };
             const updated = {...cur, blocks:updBlocks};
             if(user&&!user.isAnonymous) setDoc(doc(db,'users',user.uid,'vq_blocks',aulaId), updated).catch(()=>{});
@@ -9501,7 +9486,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const block = aulaData.blocks?.[blockId];
     if(!block) return;
     const meta = aulaData.meta || {};
-    const na = meta.numAlternatives || settings.numAlternatives || 5;
+    const na = (meta.questionTypes || []).includes('vof') ? 5 : (meta.numAlternatives || settings.numAlternatives || 5);
     const alts = na===4?'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]':'A) [Alt]\nB) [Alt]\nC) [Alt]\nD) [Alt]\nE) [Alt]';
 
     // Marcar como gerando
@@ -9533,20 +9518,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           [],
           getGeminiOptions(meta)
         );
-        const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, meta.questionTypes || ['direct']);
-        const audited = await auditGeneratedQuestions({
-          questions:parsed.questions,
-          namespace:`${aulaId}_${blockId}_audited`,
-          settings:meta,
-          subjectTitle:meta.subject || '',
-          topicTitle:`${meta.aulaTitle || ''} — ${block.title || blockId}`,
-          subtopics:subtopicsArr,
-          sourceMaterials:transcriptSlice,
-        });
-        const finalBlocks = {
-          ...aulaData.blocks,
-          [blockId]: { ...block, generating:false, questions:audited.questions, answers:{} }
-        };
+	        const parsed = parseGeneratedQuestionsByTypes(full, `${aulaId}_${blockId}`, meta.questionTypes || ['direct']);
+	        const finalBlocks = {
+	          ...aulaData.blocks,
+	          [blockId]: { ...block, generating:false, questions:parsed.questions, answers:{} }
+	        };
         await saveVqBlock(aulaId, {...aulaData, blocks:finalBlocks});
         await rotateKey();
         ok = true; break;
@@ -10004,67 +9980,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       questionStyle:topic?.questionStyle || settingsRef.current.questionStyle || 'mixed',
       questionTypes:filterQuestionTypesForAccess(topic?.questionTypes || settingsRef.current.questionTypes || ['direct'], questionTypeAccess),
       qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
-      qPerSubAuto:!!settingsRef.current.qPerSubAuto,
+      qPerSubAuto:true,
       numAlternatives:settingsRef.current.numAlternatives || 5,
+      vofStatementCount:settingsRef.current.vofStatementCount || 5,
       geminiThinkingEnabled:!!settingsRef.current.geminiThinkingEnabled,
-      auditQuestions:!!settingsRef.current.auditQuestions,
-      adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions,
+      adminChunkedQuestions:QUESTION_BATCHING_ENABLED,
     });
     setRegenModal(true);
-  };
-
-  const auditOracleTopicForSubject = async (subject, topic, { onProgress, auditSource = 'manual' } = {}) => {
-    if (!subject || !topic || !(topic.questions || []).length) throw new Error('NO_QUESTIONS_GENERATED');
-    const auditSettings = {
-      ...settingsRef.current,
-      questionStyle:topic.questionStyle || settingsRef.current.questionStyle || 'mixed',
-      questionTypes:filterQuestionTypesForAccess(topic.questionTypes || settingsRef.current.questionTypes || ['direct'], questionTypeAccess),
-      auditQuestions:true,
-    };
-    const audited = await auditGeneratedQuestions({
-      questions:topic.questions || [],
-      namespace:`${subject.id}_${topic.id}_audit_manual`,
-      settings:auditSettings,
-      subjectTitle:subject.title,
-      topicTitle:topic.title,
-      subtopics:topic.subtopics || [],
-      sourceMaterials:subject.sourceMaterials || '',
-      force:true,
-      onProgress,
-    });
-    if (!audited.audited) throw audited.error || new Error('CONNECTION_ERROR');
-    const updatedTopic = {
-      ...topic,
-      questions:audited.questions,
-      summary:audited.summary || topic.summary || '',
-      answers:{},
-      questionStyle:auditSettings.questionStyle,
-      questionTypes:auditSettings.questionTypes,
-      questionAudit:makeQuestionAuditMeta(audited.questions.length, auditSource),
-    };
-    const updatedSubject = {
-      ...subject,
-      topics:(subject.topics || []).map(t => t.id === topic.id ? updatedTopic : t),
-    };
-    await updateSubject(updatedSubject);
-    await persistLibraryTopicProgressFromSubject(updatedSubject, topic.id, { answers:{}, spacedReview:{}, errorNotebook:updatedTopic.errorNotebook || [], bizuario:null });
-    return { subject:updatedSubject, topic:updatedTopic, questionCount:audited.questions.length };
-  };
-
-  const auditActiveTopic = async () => {
-    if (!activeSubject || !activeTopic || !checkKey()) return;
-    setIsBusy(true);
-    const toastId = addToast('Auditando bloco...', 'loading', 0);
-    try {
-      const result = await auditOracleTopicForSubject(activeSubject, activeTopic);
-      updateToast(toastId, `Auditoria concluída: ${result.questionCount} item${result.questionCount!==1?'s':''} no bloco.`, 'success');
-      setTimeout(()=>removeToast(toastId), 7000);
-    } catch(e) {
-      updateToast(toastId, `Auditoria falhou: ${getBulkErrorText(e)}.`, 'error');
-      setTimeout(()=>removeToast(toastId), 7000);
-    } finally {
-      setIsBusy(false);
-    }
   };
 
   const generateMixedClinicalQuestionsForTopic = async ({
@@ -10134,17 +10056,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       if (/SEM_QUESTOES_CLINICAS/i.test(raw)) continue;
       const parsed = parseGeneratedQuestionsByTypes(raw, `${namespace}_clinical_${blockIndex + 1}`, ['direct']).questions;
       if (!parsed.length) continue;
-      const audited = await auditGeneratedQuestions({
-        questions:parsed,
-        namespace:`${namespace}_clinical_${blockIndex + 1}_audited`,
-        settings:runSettings,
-        subjectTitle,
-        topicTitle:`${topicTitle} — clínicas mistas`,
-        subtopics:focusBlock.subtopics || [],
-        sourceMaterials,
-        onProgress,
-      });
-      generated.push(...audited.questions.map(question => ({ ...question, libraryQuestionKind:'clinical' })));
+      generated.push(...parsed.map(question => ({ ...question, libraryQuestionKind:'clinical' })));
     }
     return renumberClinicalCases(generated);
   };
@@ -10152,7 +10064,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const generateOracleTopicForSubject = async (subject, topic, addPrompt='', { onProgress, settingsOverride=null } = {}) => {
     const originalTopic = topic || {};
     const regenInstruction = String(addPrompt || '').trim();
-    const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{}, questionAudit:null } : t) };
+    const cleared = { ...subject, topics: subject.topics.map(t => t.id === topic.id ? { ...t, questions:[], summary:'', answers:{} } : t) };
     await updateSubject(cleared);
     await persistLibraryTopicProgressFromSubject(cleared, topic.id, { answers:{}, spacedReview:{}, errorNotebook:topic.errorNotebook || [], bizuario:null });
     const clearedTopic = cleared.topics.find(t => t.id === topic.id) || topic;
@@ -10192,7 +10104,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const shouldChunkQuestions = shouldSplitQuestionRequest({
       total,
       plans:chunkablePlans,
-      enabled:!!generationSettings.adminChunkedQuestions,
+      enabled:QUESTION_BATCHING_ENABLED,
       flashcardOnly,
       autoCount:countAutoMode,
     });
@@ -10219,18 +10131,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       questionStyle: mixedQuestionMode ? 'direct' : topicStyle,
       questionTypes: promptTopicTypes,
     };
-    const na = s.numAlternatives || 5;
+    const na = getEffectiveAlternativeCount(s);
     const types = s.questionTypes || ['direct'];
     const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
     const hasFlashcardOnly = isOnlyMemoryCardType(types);
+    const vofRule = getVofPromptRule(s);
     const altSuffix = hasFlashcardOnly
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas ${memoryCardTypeName(types)} no formato pedido, sem alternativas A/B/C/D.`
       : hasStudyPlan
-      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões do plano sem interromper e respeite a quantidade individual de cada objetivo.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
+      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões do plano sem interromper e respeite a quantidade individual de cada objetivo.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : countAutoMode
-      ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
+      ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
-      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
     const previousQuestions = hasRegenerationInstruction(regenInstruction)
       ? summarizeQuestionsForPrompt(originalTopic.questions || [])
@@ -10245,7 +10158,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         : subtopicsBlock;
       const chunkSuffix = usingChunk
         ? (hasClosed
-          ? `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+          ? `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}`
           : `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`)
         : altSuffix;
       const generatedBlock = generatedSoFar.length
@@ -10280,23 +10193,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             sourceMaterials:cleared.sourceMaterials || '',
             onProgress,
           });
-          const audited = await auditGeneratedQuestions({
-            questions:completedQuestions,
-            namespace:`${subject.id}_${clearedTopic.id}${namespaceSuffix}_audited`,
-            settings:runSettings,
-            subjectTitle:subject.title,
-            topicTitle:clearedTopic.title,
-            subtopics,
-            sourceMaterials:cleared.sourceMaterials || '',
-            onProgress:msg=>onProgress?.(msg),
-          });
-          const questions = expectedCount && audited.questions.length < expectedCount
+          const questions = expectedCount && completedQuestions.length < expectedCount
             ? completedQuestions
             : expectedCount
-              ? audited.questions.slice(0, expectedCount)
-              : audited.questions;
+              ? completedQuestions.slice(0, expectedCount)
+              : completedQuestions;
           await rotateKey();
-          return { questions, summary:audited.summary || parsed.summary || '', audited:!!audited.audited };
+          return { questions, summary:parsed.summary || '' };
         } catch(e) {
           lastErr = e;
           await rotateKey();
@@ -10328,18 +10231,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         subtopics:subtopicsArr.length ? subtopicsArr : buildSyntheticQuestionPlans(promptSubtopicCount, 1).map(plan => plan.title),
         sourceMaterials:cleared.sourceMaterials || '',
         previousQuestions:directQuestions,
-        settings:{ ...generationSettings, numAlternatives:s.numAlternatives, auditQuestions:generationSettings.auditQuestions, geminiThinkingEnabled:generationSettings.geminiThinkingEnabled },
+	        settings:{ ...generationSettings, numAlternatives:s.numAlternatives, geminiThinkingEnabled:generationSettings.geminiThinkingEnabled },
         namespace:`${subject.id}_${clearedTopic.id}_mixed`,
         onProgress:msg=>onProgress?.(msg),
       })
       : [];
     const allQuestions = [...directQuestions, ...clinicalQuestions];
     const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
-    const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
     const updatedSubject = {
       ...cleared,
       topics: cleared.topics.map(t => t.id === clearedTopic.id
-        ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes, questionAudit }
+        ? { ...t, questions:allQuestions, summary, answers:{}, favorites:t.favorites||[], spacedReview:t.spacedReview||{}, subtopics:clearedTopic.subtopics, questionStyle:topicStyle, questionTypes:topicTypes }
         : t
       )
     };
@@ -10355,7 +10257,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const mi_int=setInterval(()=>{mi=(mi+1)%LOADING_MSGS.length;setLoadingMsg(LOADING_MSGS[mi]);},8000);
     const sourceTopic = activeSubject?.topics?.find(t=>t.id===topicId) || {};
     const regenInstruction = String(addPrompt || '').trim();
-    const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{},questionAudit:null}:t)};
+    const cleared={...activeSubject,topics:activeSubject.topics.map(t=>t.id===topicId?{...t,questions:[],summary:'',answers:{}}:t)};
     await updateSubject(cleared);
     await persistLibraryTopicProgressFromSubject(cleared, topicId, { answers:{}, spacedReview:{}, errorNotebook:sourceTopic.errorNotebook || [], bizuario:null });
     const topic=cleared.topics.find(t=>t.id===topicId);
@@ -10397,7 +10299,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const shouldChunkQuestions = shouldSplitQuestionRequest({
       total,
       plans:chunkablePlans,
-      enabled:!!generationSettings.adminChunkedQuestions,
+      enabled:QUESTION_BATCHING_ENABLED,
       flashcardOnly,
       autoCount:countAutoMode,
     });
@@ -10427,19 +10329,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       questionStyle: mixedQuestionMode ? 'direct' : topicStyle,
       questionTypes: promptTopicTypes,
     };
-    const na = s.numAlternatives || 5;
+    const na = getEffectiveAlternativeCount(s);
     const types = s.questionTypes || ['direct'];
     const hasClosed = types.some(t=>['direct','vof','cespe'].includes(t));
 
     const hasFlashcardOnly = isOnlyMemoryCardType(types);
+    const vofRule = getVofPromptRule(s);
     const altSuffix = hasFlashcardOnly
       ? `\n\nATENÇÃO FINAL: Não use quantidade fixa. Gere apenas ${memoryCardTypeName(types)} no formato pedido, sem alternativas A/B/C/D.`
       : hasStudyPlan
-      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões do plano sem interromper e respeite a quantidade individual de cada objetivo.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
+      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões do plano sem interromper e respeite a quantidade individual de cada objetivo.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : countAutoMode
-      ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
+      ? `\n\nATENÇÃO FINAL: Gere quantidade suficiente de questões, sem total fixo e sem economia excessiva. Cada subtópico/eixo deve ter no mínimo 2 cobranças independentes; use mais em subtópicos densos. Cubra todos os subtópicos/eixos relevantes sem redundância.${hasClosed ? ` Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}` : ' Não inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.'}`
       : hasClosed
-      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+      ? `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}`
       : `\n\nATENÇÃO FINAL: Gere TODAS as ${total} questões sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`;
     const previousQuestions = hasRegenerationInstruction(regenInstruction)
       ? summarizeQuestionsForPrompt(sourceTopic.questions || [])
@@ -10455,7 +10358,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         : subtopicsBlock;
       const chunkSuffix = usingChunk
         ? (hasClosed
-          ? `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).`
+          ? `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. Questões com alternativas devem ter EXATAMENTE ${na} alternativas (${['A','B','C','D','E'].slice(0,na).join(', ')}).${vofRule}`
           : `\n\nATENÇÃO FINAL: Gere TODAS as ${chunkExpected} questões deste lote sem interromper. NÃO pare antes de terminar. NÃO inclua alternativas A/B/C/D — apenas enunciado, resposta esperada e explicação.`)
         : altSuffix;
       const generatedBlock = generatedSoFar.length
@@ -10490,22 +10393,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             sourceMaterials:cleared.sourceMaterials || '',
             onProgress:msg=>setLoadingMsg(typeof msg === 'string' ? msg : loadingMsg),
           });
-          const audited = await auditGeneratedQuestions({
-            questions:completedQuestions,
-            namespace:`${activeSubject.id}_${topicId}${namespaceSuffix}_audited`,
-            settings:runSettings,
-            subjectTitle:activeSubject.title,
-            topicTitle:topic.title,
-            subtopics,
-            sourceMaterials:cleared.sourceMaterials || '',
-          });
-          const questions = expectedCount && audited.questions.length < expectedCount
-            ? completedQuestions
-            : expectedCount
-              ? audited.questions.slice(0, expectedCount)
-              : audited.questions;
-          await rotateKey();
-          return { questions, summary:audited.summary || parsed.summary || '', audited:!!audited.audited };
+	          const questions = expectedCount && completedQuestions.length < expectedCount
+	            ? completedQuestions
+	            : expectedCount
+	              ? completedQuestions.slice(0, expectedCount)
+	              : completedQuestions;
+	          await rotateKey();
+	          return { questions, summary:parsed.summary || '' };
         } catch(e) {
           lastErr = e;
           await rotateKey();
@@ -10538,15 +10432,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           subtopics:subtopicsArr.length ? subtopicsArr : buildSyntheticQuestionPlans(promptSubtopicCount, 1).map(plan => plan.title),
           sourceMaterials:cleared.sourceMaterials || '',
           previousQuestions:directQuestions,
-          settings:{ ...generationSettings, numAlternatives:s.numAlternatives, auditQuestions:generationSettings.auditQuestions, geminiThinkingEnabled:generationSettings.geminiThinkingEnabled },
+	          settings:{ ...generationSettings, numAlternatives:s.numAlternatives, geminiThinkingEnabled:generationSettings.geminiThinkingEnabled },
           namespace:`${activeSubject.id}_${topicId}_mixed`,
           onProgress:msg=>setLoadingMsg(typeof msg === 'string' ? msg : loadingMsg),
         })
         : [];
       const allQuestions = [...directQuestions, ...clinicalQuestions];
       const summary = generatedResults.map(result => result.summary).filter(Boolean).join('\n\n');
-      const questionAudit = generatedResults.some(result => result.audited) ? makeQuestionAuditMeta(allQuestions.length, 'auto') : null;
-      const updatedSubject = {...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes,questionAudit}:t)};
+      const updatedSubject = {...cleared,topics:cleared.topics.map(t=>t.id===topicId?{...t,questions:allQuestions,summary,answers:{},favorites:t.favorites||[],spacedReview:t.spacedReview||{},subtopics:topic.subtopics,questionStyle:topicStyle,questionTypes:topicTypes}:t)};
       await updateSubject(updatedSubject);
       await persistLibraryTopicProgressFromSubject(updatedSubject, topicId, { answers:{}, spacedReview:{}, errorNotebook:updatedSubject.topics.find(t => t.id === topicId)?.errorNotebook || [], bizuario:null });
       ok=true;
@@ -10565,10 +10458,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       setErrorModal({ title: 'Título obrigatório', message: 'Digite o nome do assunto antes de gerar a estrutura.', isAlert: true });
       return;
     }
-    if(!checkKey())return;setIsBusy(true);setStudyPlanMultiplier(1);
-    const s = {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap};
+    if(!checkKey())return;setIsBusy(true);
+    const s = withDefaultStudyMapSettings(settingsRef.current);
     const buildOracleSyllabusPrompt = await getPromptBuilder('buildOracleSyllabusPrompt');
-    const sys = buildOracleSyllabusPrompt(subjectTitle, s, s.autoMode || false);
+    const sys = buildOracleSyllabusPrompt(subjectTitle, s, true);
     const orderedKeys = getTwoAttemptGeminiKeys();
     const chunks = buildAcademiaMaterialChunks(materialText, uploadedFiles);
     if (chunks.length > 1) {
@@ -10629,14 +10522,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const reviseSyllabus = async () => {
     if(!syllabusFB.trim()||!checkKey())return;setIsBusy(true);
     const buildOracleSyllabusRevisePrompt = await getPromptBuilder('buildOracleSyllabusRevisePrompt');
-    const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap});
+    const sys = buildOracleSyllabusRevisePrompt(syllabus, syllabusFB, withDefaultStudyMapSettings(settingsRef.current));
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false;
     let lastErr = null;
     for (const {k} of orderedKeys) {
       try {
         const r=await callGemini('Revise.',sys,k, [], getGeminiOptions());
-        setSyllabus(normalizeOracleSyllabus(r, settingsRef.current));setSyllabusFB('');
+        setSyllabus(normalizeOracleSyllabus(r, withDefaultStudyMapSettings(settingsRef.current)));setSyllabusFB('');
         await rotateKey(); ok = true; break;
       } catch(e) {
         lastErr = e;
@@ -10649,7 +10542,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setIsBusy(false);
   };
   const finalizeSub = async () => {
-    const useStudyMap = !!settingsRef.current.adminStudyMap;
+    const useStudyMap = STUDY_MAP_ENABLED;
     const parsedTopics = useStudyMap ? parseStudyMapSyllabus(syllabus) : parseSyllabusTopics(syllabus);
     if (!parsedTopics.length) {
       setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
@@ -10664,7 +10557,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         subtopics:cleanSubtopics,
         ...(useStudyMap ? {subtopicPlans:subtopics.map(subtopic => ({
           title:subtopic.title,
-          questions:Math.max(1, Math.min(30, subtopic.questions * studyPlanMultiplier)),
+          questions:Math.max(1, Math.min(30, subtopic.questions)),
           objective:subtopic.objective,
         }))} : {}),
         questionStyle: settingsRef.current.questionStyle || 'mixed', // herdado do modal na criação
@@ -10674,7 +10567,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
     const ns = { id: Date.now(), title: newSubName, fullSyllabus: syllabus, source: 'gemini', folderId:libFilter==='gemini'?(activeFolder?.id || null):null, sourceMaterials: getMaterial(), focusAreas:[], topics };
     await addSubject(ns);
-    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1); setCreatorSetupStep('content'); setStudyPlanMultiplier(1);
+    setLibFilter('gemini'); setView('sub-library'); setCreatorStep(1); setCreatorSetupStep('content');
     setNewSubName(''); setMaterialText(''); setUploadedFiles([]); setUploadedImages([]);
   };
 
@@ -10860,6 +10753,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setAcademiaRegenQStyle(settingsRef.current.questionStyle || 'mixed');
     setAcademiaRegenQTypes(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], questionTypeAccess));
     setAcademiaRegenQAlts(settingsRef.current.numAlternatives || 5);
+    setAcademiaRegenVofStatements(settingsRef.current.vofStatementCount || 5);
     setAcademiaRegenThinking(!!settingsRef.current.geminiThinkingEnabled);
     setAcademiaRegenReason('');
     setAcademiaRegenModal({ topic, subject, createMode });
@@ -11138,10 +11032,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
     if (!checkKey()) return;
     setIsBusy(true);
-    setAcademiaStudyPlanMultiplier(1);
-    const s = {...settingsRef.current, adminStudyMap:!!settingsRef.current.adminStudyMap};
+    const s = withDefaultStudyMapSettings(settingsRef.current);
     const buildAcademiaSyllabusPrompt = await getPromptBuilder('buildAcademiaSyllabusPrompt');
-    const sys = buildAcademiaSyllabusPrompt(subjectTitle, s, s.autoMode || false);
+    const sys = buildAcademiaSyllabusPrompt(subjectTitle, s, true);
     const chunks = buildAcademiaMaterialChunks(academiaMaterialText, academiaUploadedFiles);
     if (chunks.length > 1) {
       addToast(`Material grande: vou processar em ${chunks.length} partes. Isso usa ${chunks.length} requests.`, 'info', 7000);
@@ -11204,14 +11097,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!academiaSyllabusFB.trim() || !checkKey()) return;
     setIsBusy(true);
     const buildOracleSyllabusRevisePrompt = await getPromptBuilder('buildOracleSyllabusRevisePrompt');
-    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, {...settingsRef.current, source: 'academia', adminStudyMap:!!settingsRef.current.adminStudyMap});
+    const sys = buildOracleSyllabusRevisePrompt(academiaSyllabus, academiaSyllabusFB, withDefaultStudyMapSettings({...settingsRef.current, source: 'academia'}));
     const orderedKeys = getTwoAttemptGeminiKeys();
     let ok = false;
     let lastErr = null;
     for (const { k } of orderedKeys) {
       try {
         const r = await callGemini('Revise.', sys, k, [], getGeminiOptions());
-        setAcademiaSyllabus(normalizeAcademiaSyllabus(r, settingsRef.current));
+        setAcademiaSyllabus(normalizeAcademiaSyllabus(r, withDefaultStudyMapSettings(settingsRef.current)));
         setAcademiaSyllabusFB('');
         await rotateKey(); ok = true; break;
       } catch (e) {
@@ -11226,7 +11119,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   const finalizeAcademia = async () => {
-    const useStudyMap = !!settingsRef.current.adminStudyMap;
+    const useStudyMap = STUDY_MAP_ENABLED;
     const parsedTopics = useStudyMap ? parseStudyMapSyllabus(academiaSyllabus) : parseSyllabusTopics(academiaSyllabus);
     if (!parsedTopics.length) {
       setErrorModal({ title: 'Sumário ilegível', message: 'Não encontrei tópicos com subtópicos. Use títulos numerados ou "Tópico 1" e liste os subtópicos abaixo.', isAlert: true });
@@ -11241,7 +11134,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         subtopics:cleanSubtopics,
         ...(useStudyMap ? {subtopicPlans:subtopics.map(subtopic => ({
           title:subtopic.title,
-          questions:Math.max(1, Math.min(30, subtopic.questions * academiaStudyPlanMultiplier)),
+          questions:Math.max(1, Math.min(30, subtopic.questions)),
           objective:subtopic.objective,
         }))} : {}),
         questionStyle: settingsRef.current.questionStyle || 'mixed',
@@ -11275,7 +11168,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setAcademiaUploadedFiles([]);
     setAcademiaUploadedImages([]);
     setAcademiaSyllabus('');
-    setAcademiaStudyPlanMultiplier(1);
     setAcademiaCreatorStep(1);
     setAcademiaSetupStep('content');
     setView('library');
@@ -11292,7 +11184,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const shouldGenerateLesson = generationMode !== 'questions';
     const shouldGenerateQuestions = generationMode !== 'lesson';
 
-    const na = s.numAlternatives || 5;
+    const na = getEffectiveAlternativeCount(s);
     const alts = na === 4
       ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
       : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
@@ -11372,7 +11264,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const shouldChunkFixation = shouldSplitQuestionRequest({
         total:totalFixationQuestions,
         plans:fixationPlans,
-        enabled:!!s.adminChunkedQuestions,
+        enabled:QUESTION_BATCHING_ENABLED,
         flashcardOnly:isOnlyMemoryCardType(fixationSettings.questionTypes || ['direct']),
       });
       const fixationChunks = shouldChunkFixation ? chunkQuestionPlansByTarget(fixationPlans) : [fixationPlans];
@@ -11408,17 +11300,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         if (!fixText) throw new Error('CONNECTION_ERROR');
         const parsedQuestions = parseGeneratedQuestionsByTypes(fixText, `acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, fixationSettings.questionTypes || ['direct']).questions;
         if (!parsedQuestions.length) throw new Error('NO_QUESTIONS_GENERATED');
-        const audited = await auditGeneratedQuestions({
-          questions:parsedQuestions,
-          namespace:`acfix_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}_audited`,
-          settings:fixationSettings,
-          subjectTitle:subject.title,
-          topicTitle:topic.title,
-          subtopics:chunkSubtopics,
-          sourceMaterials:[material, lessonText].filter(Boolean).join('\n\n'),
-          onProgress,
-        });
-        const chunkDistributed = distributeAcademiaFixQuestions(audited.questions, chunkPlan);
+        const chunkDistributed = distributeAcademiaFixQuestions(parsedQuestions, chunkPlan);
         plans.forEach((plan, localIndex) => {
           const globalIndex = Number.isInteger(plan.index) ? plan.index : subtopics.indexOf(plan.title);
           generatedByGlobalSubtopic[globalIndex] = [
@@ -11571,11 +11453,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       questionStyle:bulkConfig.questionStyle,
       questionTypes:bulkConfig.questionTypes,
       qPerSub:bulkConfig.qPerSub,
-      qPerSubAuto:!!bulkConfig.qPerSubAuto,
-      numAlternatives:bulkConfig.numAlternatives,
+      qPerSubAuto:true,
+      numAlternatives:(bulkConfig.questionTypes || [])[0] === 'vof' ? 5 : bulkConfig.numAlternatives,
+      vofStatementCount:bulkConfig.vofStatementCount || 5,
       geminiThinkingEnabled:!!bulkConfig.geminiThinkingEnabled,
-      auditQuestions:['audit','auditMissing'].includes(mode) ? true : !!bulkConfig.auditQuestions,
-      adminChunkedQuestions:!!bulkConfig.adminChunkedQuestions,
+      adminChunkedQuestions:QUESTION_BATCHING_ENABLED,
       regenReason:bulkConfig.regenReason || '',
     };
 
@@ -11626,19 +11508,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 });
               }
             } else {
-              if (mode === 'audit' || mode === 'auditMissing') {
-                result = await auditOracleTopicForSubject(workingSubject, topic, {
-                  onProgress: msg => addBulkLog('info', `"${topic.title}": ${msg}`),
-                  auditSource:mode,
-                });
-              } else {
-                result = await generateOracleTopicForSubject(workingSubject, topic, operationSettings.regenReason || '', {
-                  onProgress: count => {
-                    if (count > 0) setStreamCount(count);
-                  },
-                  settingsOverride: operationSettings,
-                });
-              }
+              result = await generateOracleTopicForSubject(workingSubject, topic, operationSettings.regenReason || '', {
+                onProgress: count => {
+                  if (count > 0) setStreamCount(count);
+                },
+                settingsOverride: operationSettings,
+              });
             }
             break;
           } catch(e) {
@@ -11694,7 +11569,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const shouldChunkExtra = shouldSplitQuestionRequest({
       total:totalExtraQuestions,
       plans:extraPlans,
-      enabled:!!s.adminChunkedQuestions,
+      enabled:QUESTION_BATCHING_ENABLED,
       flashcardOnly:isOnlyMemoryCardType(extraPromptSettings.questionTypes || ['direct']),
     });
     const extraChunks = shouldChunkExtra ? chunkQuestionPlansByTarget(extraPlans) : [extraPlans];
@@ -11729,16 +11604,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       }
       const parsed = parseGeneratedQuestionsByTypes(extraText, `extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}`, extraPromptSettings.questionTypes || ['direct']);
       if (!parsed.questions.length) throw new Error('NO_QUESTIONS_GENERATED');
-      const audited = await auditGeneratedQuestions({
-        questions:parsed.questions,
-        namespace:`extra_${topic.id}_${Date.now()}_chunk${chunkIndex + 1}_audited`,
-        settings:extraPromptSettings,
-        subjectTitle:subject.title,
-        topicTitle:`${topic.title} — bateria extra`,
-        subtopics:chunkSubtopics,
-        sourceMaterials:lessonText,
-      });
-      extraQuestions = [...extraQuestions, ...audited.questions.map(question => mixedQuestionMode ? { ...question, libraryQuestionKind:'direct' } : question)];
+      extraQuestions = [...extraQuestions, ...parsed.questions.map(question => mixedQuestionMode ? { ...question, libraryQuestionKind:'direct' } : question)];
     }
     if (mixedQuestionMode) {
       const clinicalQuestions = await generateMixedClinicalQuestionsForTopic({
@@ -11825,9 +11691,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setErrorReviewQStyle(settingsRef.current.questionStyle || 'mixed');
     setErrorReviewQTypes(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], questionTypeAccess));
     setErrorReviewQAlts(settingsRef.current.numAlternatives || 5);
+    setErrorReviewVofStatements(settingsRef.current.vofStatementCount || 5);
     setErrorReviewPerQuestion(2);
     setErrorReviewThinking(!!settingsRef.current.geminiThinkingEnabled);
-    setErrorReviewAudit(!!settingsRef.current.auditQuestions);
     setErrorReviewModal({ subject, topic, questions:selected, notebookIds, sourceLabel, pathTitles });
   };
 
@@ -11934,19 +11800,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         questionStyle:cfg.questionStyle,
         questionTypes:cfg.questionTypes,
         numAlternatives:cfg.numAlternatives,
+        vofStatementCount:cfg.vofStatementCount || settingsRef.current.vofStatementCount || 5,
         errorReviewPerQuestion:cfg.errorReviewPerQuestion,
         geminiThinkingEnabled:!!cfg.geminiThinkingEnabled,
-        auditQuestions:!!cfg.auditQuestions,
-        adminChunkedQuestions:!!cfg.adminChunkedQuestions,
+        adminChunkedQuestions:QUESTION_BATCHING_ENABLED,
       });
-      if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled || settingsRef.current.auditQuestions !== s.auditQuestions || settingsRef.current.adminChunkedQuestions !== s.adminChunkedQuestions) {
-        saveSettings({...settingsRef.current, geminiThinkingEnabled:s.geminiThinkingEnabled, auditQuestions:s.auditQuestions, adminChunkedQuestions:s.adminChunkedQuestions});
+      if (settingsRef.current.geminiThinkingEnabled !== s.geminiThinkingEnabled || settingsRef.current.adminChunkedQuestions !== QUESTION_BATCHING_ENABLED || settingsRef.current.vofStatementCount !== s.vofStatementCount) {
+        saveSettings({...settingsRef.current, vofStatementCount:s.vofStatementCount, geminiThinkingEnabled:s.geminiThinkingEnabled, adminChunkedQuestions:QUESTION_BATCHING_ENABLED});
       }
       const sourceQuestions = errorReviewModal.questions || [];
       const questionType = (s.questionTypes || ['direct'])[0];
       const isFlashcardReview = isMemoryCardType(questionType);
       const perError = Math.max(1, Math.min(10, Number(s.errorReviewPerQuestion) || 2));
-      const maxGeneratedPerRequest = s.adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : ERROR_REVIEW_MAX_GENERATED_PER_REQUEST;
+      const maxGeneratedPerRequest = ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
       const maxSourcePerRequest = isFlashcardReview
         ? 12
         : Math.max(1, Math.floor(maxGeneratedPerRequest / perError));
@@ -11989,17 +11855,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         addToast('Não consegui ler as questões geradas. Tente de novo.', 'info', 5000);
         return;
       }
-      const audited = await auditGeneratedQuestions({
-        questions:parsedQuestions,
-        namespace:`err_${Date.now()}_audited`,
-        settings:s,
-        subjectTitle:errorReviewModal.subject?.title || sourceLabelForErrorReview(errorReviewModal.subject, errorReviewModal.sourceLabel),
-        topicTitle:errorReviewModal.topic?.title || 'Caderno de erros',
-        subtopics:(sourceQuestions || []).map(q => q.statement || q.expectedAnswer || q.explanation || '').filter(Boolean).slice(0, 20),
-        sourceMaterials:questionsToGenerationText(sourceQuestions).substring(0, 12000),
-      });
-      parsedQuestions = audited.questions;
-      if (audited.summary) mergedSummary = audited.summary;
       const pathTitles = getErrorReviewFolderPath(errorReviewModal);
       const targetFolder = await ensureErrorNotebookFolder(pathTitles);
       const dateLabel = new Date().toLocaleDateString('pt-BR');
@@ -12015,7 +11870,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         spacedReview:{},
         questionStyle:s.questionStyle || 'mixed',
         questionTypes:filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
-        questionAudit:audited.audited ? makeQuestionAuditMeta(parsedQuestions.length, 'errorNotebook') : null,
         origin:{
           source:'errorNotebook',
           sourceSubjectTitle:errorReviewModal.subject?.title || '',
@@ -12351,7 +12205,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         errorNotebook:[],
         spacedReview:{},
         reviewStats:{},
-        questionAudit:null,
         bizuario:null,
       })),
       origin:{
@@ -12404,8 +12257,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
   const isSettingsSectionOpen = (key) => settingsOpen[key] ?? (!isAdmin && key !== 'api');
   const toggleSettingsSection = (key) => setSettingsOpen(p => ({ ...p, [key]:!isSettingsSectionOpen(key) }));
-  const SettingsSection = ({ id, title, icon, children, className='app-card rounded-2xl p-5', titleClassName='opacity-50' }) => {
+  const SettingsSection = ({ id, title, icon, children, className='app-card rounded-2xl p-5', titleClassName='opacity-50', collapsible=false }) => {
     const open = isSettingsSectionOpen(id);
+    if (!collapsible) {
+      return (
+        <section className={className} style={{overflowAnchor:'none'}}>
+          <div className={`flex w-full items-center gap-2 text-left text-xs font-bold uppercase ${titleClassName}`}>
+            {icon}{title}
+          </div>
+          <div className="mt-4">{children}</div>
+        </section>
+      );
+    }
     return (
       <div className={className} style={{overflowAnchor:'none'}}>
         <button
@@ -13692,13 +13555,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 		                })()}
 		                {activeSubject.source==='gemini'&&(()=>{
 		                  const runningHere = bulkGenerateRun.running && bulkGenerateModal?.subjectId === activeSubject.id;
-                    const hasAuditedBlocks = (activeSubject.topics || []).some(isTopicQuestionAuditCurrent);
-                    const auditMissingCount = getBulkGenerateTargets(activeSubject,'auditMissing').length;
                     const actions = [
                       {mode:'generate', label:'Gerar faltantes', icon:<Zap className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'generate').length},
                       {mode:'regenQuestions', label:'Regerar tudo', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenQuestions').length, danger:true},
-                      hasAuditedBlocks && auditMissingCount ? {mode:'auditMissing', label:'Auditar faltantes', icon:<ShieldAlert className="w-4 h-4"/>, count:auditMissingCount} : null,
-                      {mode:'audit', label:'Auditar tudo', icon:<ShieldAlert className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'audit').length},
                     ].filter(Boolean);
 	                  return (
                       <div className="relative">
@@ -13928,7 +13787,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               onReset={!isShuffledSubjectTopic&&activeTopic.questions?.length>0?()=>setDeleteId({type:'reset',id:activeTopic.id}):null}
               onReshuffle={isShuffledSubjectTopic?()=>setDeleteId({type:'reshuffle'}):null}
               onRegenerate={!isShuffledSubjectTopic&&activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'?()=>openOracleRegenModal(activeTopic):null}
-              onAudit={!isShuffledSubjectTopic&&activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'&&isAdmin?auditActiveTopic:null}
               onExport={!isShuffledSubjectTopic&&activeTopic.questions?.length>0?()=>setExportModal({topic:activeTopic,subject:activeSubject}):null}
               isGenerating={isBusy&&(activeTopic.questions?.length||0)===0}
               streamCount={streamCount}
@@ -13942,6 +13800,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               onCall={callWithRotation}
 	              onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 	              displayMode={isShuffledSubjectTopic ? 'single' : (canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list')}
+	              onDisplayModeChange={!isShuffledSubjectTopic&&canUseAdvancedFeatures ? (mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})) : null}
 	              resumeAtFirstUnanswered={isShuffledSubjectTopic}
 	              onExportAnki={isAdmin && !isShuffledSubjectTopic ? (qs=>exportFlashcardsToAnki({
 	                questions:qs,
@@ -13953,42 +13812,40 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	              generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
               onGenerate={!isShuffledSubjectTopic&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'?()=>generateBatch(activeTopic.id):null}
               subtopics={activeTopic.subtopics||[]}
-              adminStudyPlan={isAdmin && !isShuffledSubjectTopic ? getTopicStudyPlan(activeTopic, activeTopic.subtopics || []) : []}
+              adminStudyPlan={!isShuffledSubjectTopic ? getTopicStudyPlan(activeTopic, activeTopic.subtopics || []) : []}
               topicStyle={activeTopic.questionStyle||settings.questionStyle||'mixed'}
               topicType={filterQuestionTypesForAccess(activeTopic.questionTypes || visibleQuestionTypes, questionTypeAccess)[0]}
               isAdmin={isAdmin}
               canCreateFlashcards={canUseAdvancedFeatures}
               adminQuestionExplanations={true}
-              questionCountPerSub={settings.qPerSub||1}
-              questionCountAuto={!!settings.qPerSubAuto}
               numAlternatives={settings.numAlternatives||5}
+              vofStatementCount={settings.vofStatementCount||5}
               geminiThinkingEnabled={!!settings.geminiThinkingEnabled}
               onGeminiThinkingChange={enabled=>{
                 const ns = {...settingsRef.current, geminiThinkingEnabled:enabled};
                 setSettings(ns);
                 saveSettings(ns);
               }}
-              adminChunkedQuestionsEnabled={!!settings.adminChunkedQuestions}
-              onAdminChunkedQuestionsChange={isAdmin ? (enabled=>{
-                const ns = {...settingsRef.current, adminChunkedQuestions:enabled};
-                setSettings(ns);
-                saveSettings(ns);
-              }) : null}
-              auditQuestionsEnabled={!!settings.auditQuestions}
-              onAuditQuestionsChange={isAdmin ? (enabled=>{
-                const ns = {...settingsRef.current, auditQuestions:enabled};
-                setSettings(ns);
-                saveSettings(ns);
-              }) : null}
               onTopicStyleChange={!isShuffledSubjectTopic&&activeSubject?.source==='gemini'?(val,kind)=>{
-                if (kind === 'qPerSub' || kind === 'numAlternatives' || kind === 'qPerSubAuto') {
+                if (kind === 'numAlternatives') {
                   const ns = {...settingsRef.current, [kind]:val};
+                  setSettings(ns);
+                  saveSettings(ns);
+                  return;
+                }
+                if (kind === 'vofStatementCount') {
+                  const ns = {...settingsRef.current, vofStatementCount:val, numAlternatives:5};
                   setSettings(ns);
                   saveSettings(ns);
                   return;
                 }
                 const field = kind==='type' ? 'questionTypes' : 'questionStyle';
                 const newVal = kind==='type' ? [val] : val;
+                if (kind === 'type' && val === 'vof') {
+                  const ns = {...settingsRef.current, numAlternatives:5};
+                  setSettings(ns);
+                  saveSettings(ns);
+                }
                 const updated = {...activeSubject, topics: activeSubject.topics.map(t=>
                   t.id===activeTopic.id ? {...t, [field]: newVal} : t
                 )};
@@ -14056,6 +13913,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
               setAcademiaRegenQTypes(visibleQuestionTypes);
               setAcademiaRegenQAlts(settings.numAlternatives || 5);
+              setAcademiaRegenVofStatements(settings.vofStatementCount || 5);
               setAcademiaRegenThinking(!!settings.geminiThinkingEnabled);
               setAcademiaRegenReason('');
               setAcademiaRegenModal(payload);
@@ -14131,146 +13989,52 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <div className={creatorSetupStep==='questions'?'space-y-6':'hidden'}>
                 <div>
                   <h3 className="text-xl font-serif font-bold">Como você quer praticar?</h3>
-                  <p className="text-sm opacity-50 mt-1">Escolha o formato principal. A Ágora pode decidir a quantidade e organizar o restante.</p>
+                  <p className="text-sm opacity-50 mt-1">Escolha o formato principal. A Ágora organiza o sumário e a quantidade automaticamente.</p>
                 </div>
-                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
-                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar quantidade e estrutura</summary>
-                  <div className="mt-5 space-y-4">
-                  {/* Toggle autoMode */}
-                  <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>Deixar o Oráculo escolher</p>
-                      <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos e subtópicos</p>
-                    </div>
-                    <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <button type="button" onClick={()=>{
-                    const enabled = !settings.adminStudyMap;
-                    const ns={...settings,adminStudyMap:enabled,...(enabled?{autoMode:true,qPerSubAuto:false}:{})};
-                    setSettings(ns);saveSettings(ns);
-                  }} className={`w-full mt-3 flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminStudyMap?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div className="flex items-start gap-3">
-                      <Landmark className={`w-5 h-5 mt-0.5 flex-shrink-0 ${settings.adminStudyMap?'text-yellow-500':'opacity-40'}`}/>
-                      <div>
-                        <p className={`flex flex-wrap items-center gap-2 text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado <span className={`rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Experimental</span></p>
-                        <p className="text-xs opacity-50 mt-0.5">Organiza objetivos verificáveis e sugere quantas questões revisar em cada um.</p>
-                      </div>
-                    </div>
-                    <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 flex-shrink-0 ${settings.adminStudyMap?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminStudyMap?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-
-                  <div className={`grid grid-cols-2 gap-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
-                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:1,mx:30}].map(f=>(
-                      <div key={f.k}>
-                        <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
-                        <input type="number" min={f.mn} max={f.mx} value={settings[f.k]}
-                          onChange={e=>setSettings({...settings,[f.k]:e.target.value})}
-                          onBlur={()=>{let v=parseInt(settings[f.k]);if(isNaN(v)||v<f.mn)v=f.mn;if(v>f.mx)v=f.mx;const ns={...settings,[f.k]:v};setSettings(ns);saveSettings(ns);}}
-                          className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                      </div>
-                    ))}
-                  </div>
-                  {!visibleQuestionTypes.some(isMemoryCardType)&&!settings.adminStudyMap&&<div className={`grid grid-cols-1 gap-3 mt-3 ${visibleQuestionTypes.includes('direct')?'sm:grid-cols-2':''}`}>
-                    <div>
-                      <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Questões/Subtópico</label>
-                      <div className="grid grid-cols-[1fr_auto] gap-2">
-                        <input type="number" min="1" max="10" value={settings.qPerSub}
-                          disabled={!!settings.qPerSubAuto}
-                          onChange={e=>setSettings({...settings,qPerSub:e.target.value})}
-                          onBlur={()=>{let v=parseInt(settings.qPerSub);if(isNaN(v)||v<1)v=1;if(v>10)v=10;const ns={...settings,qPerSub:v};setSettings(ns);saveSettings(ns);}}
-                          className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                        <button type="button" onClick={()=>{const ns={...settings,qPerSubAuto:!settings.qPerSubAuto};setSettings(ns);saveSettings(ns);}}
-                          className={`px-3 rounded-lg border-2 text-xs font-bold transition-all ${settings.qPerSubAuto?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                          IA
-                        </button>
-                      </div>
-                    </div>
-                    {visibleQuestionTypes.includes('direct')&&<div>
-                      <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas</label>
-                      <select value={settings.numAlternatives||5} onChange={e=>{const ns={...settings,numAlternatives:parseInt(e.target.value)};setSettings(ns);saveSettings(ns);}} style={{colorScheme:darkMode?'dark':'light'}} className={`w-full p-3 rounded-lg border outline-none ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}>
-                        <option value={4}>4 (A-D)</option>
-                        <option value={5}>5 (A-E)</option>
-                      </select>
-                    </div>}
-                  </div>}
-                  <p className={`text-xs mt-2 opacity-40`}>
-                    {visibleQuestionTypes.some(isMemoryCardType)
-                      ? `${memoryCardTypeName(visibleQuestionTypes)}: a IA decide a quantidade ideal, sem meta fixa por subtópico.`
-                      : settings.adminStudyMap
-                      ? 'O plano sugere uma quantidade própria para cada objetivo; você poderá dobrar ou triplicar antes de salvar.'
-                      : settings.qPerSubAuto
-                      ? 'Questões/subtópico: a IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.'
-                      : settings.autoMode
-                      ? `O sumário fica automático; cada subtópico gerado terá ${settings.qPerSub||1} questão(ões).`
-                      : `Total estimado: ${(settings.numTopics||10) * (settings.numSubtopics||5) * (settings.qPerSub||1)} questões`}
-                  </p>
-                  </div>
-                </details>
 
                 {/* Tipo e estilo das questões */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um)</span></div>
                   <QuestionTypeSelector
                     selected={visibleQuestionTypes}
-                    onChange={types=>{ const ns={...settings, questionTypes:types}; setSettings(ns); saveSettings(ns); }}
+                    onChange={types=>{ const ns={...settings, questionTypes:types, ...(types[0]==='vof'?{numAlternatives:5}:null)}; setSettings(ns); saveSettings(ns); }}
                     darkMode={darkMode}
-                    single={true}
-                    isAdmin={isAdmin}
-                    canCreateFlashcards={canUseAdvancedFeatures}
-                  />
-                </div>
-
-                {/* Estilo clínico/direto */}
-	                {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t))) && (
-                  <div>
-                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                    <QuestionStyleSelector value={settings.questionStyle||'mixed'} onChange={value=>{ const ns={...settings,questionStyle:value}; setSettings(ns); saveSettings(ns); }} darkMode={darkMode}/>
-                  </div>
-                )}
-
-                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
-                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Configurações avançadas</summary>
-                  <div className="mt-5 space-y-5">
-                <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                  <GeminiThinkingSelector
-                    value={!!settings.geminiThinkingEnabled}
-                    onChange={enabled=>{const ns={...settings,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}}
-                    darkMode={darkMode}
-                  />
-                </div>
-
-                {isAdmin&&(
-                  <>
-                    <button type="button" onClick={()=>{const ns={...settings,adminChunkedQuestions:!settings.adminChunkedQuestions};setSettings(ns);saveSettings(ns);}}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                      <div>
-                        <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                        <p className="text-xs opacity-50 mt-0.5">Divide planos grandes em requests de cerca de 15 questões, sem quebrar subtópico no meio.</p>
+	                    single={true}
+	                    isAdmin={isAdmin}
+	                    canCreateFlashcards={canUseAdvancedFeatures}
+                    renderTypeDetails={type => type.k === 'direct' ? (
+                      <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase mb-2 opacity-45">Alternativas</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[4,5].map(n=>(
+                              <button key={n} type="button" onClick={()=>{const ns={...settings,numAlternatives:n};setSettings(ns);saveSettings(ns);}}
+                                className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(settings.numAlternatives || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                                {n} (A-{'ABCDE'[n-1]})
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase mb-2 opacity-40">Estilo das questões</p>
+                          <QuestionStyleSelector value={settings.questionStyle||'mixed'} onChange={value=>{ const ns={...settings,questionStyle:value}; setSettings(ns); saveSettings(ns); }} darkMode={darkMode}/>
+                        </div>
                       </div>
-                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
+                    ) : type.k === 'vof' ? (
+                      <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                        <p className="text-[11px] font-bold uppercase mb-2 opacity-45">Afirmações</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[3,4,5].map(n=>(
+                            <button key={n} type="button" onClick={()=>{const ns={...settings,vofStatementCount:n,numAlternatives:5};setSettings(ns);saveSettings(ns);}}
+                              className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(settings.vofStatementCount || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                              {n}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </button>
-                    <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                      <div>
-                        <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                        <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
-                      </div>
-                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                      </div>
-                    </button>
-                  </>
-                )}
-                  </div>
-                </details>
+                    ) : null}
+	                  />
+	                </div>
 
                 <div className="flex gap-3">
                   <button type="button" onClick={()=>setCreatorSetupStep('content')} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
@@ -14284,9 +14048,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <div className="space-y-6">
                 <h2 className="text-2xl font-serif font-bold text-yellow-600">Estrutura Gerada</h2>
                 <p className={`text-sm rounded-xl border p-4 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200 text-gray-700'}`}>Revise os tópicos abaixo. Você pode pedir ajustes antes de confirmar; o assunto só será adicionado ao acervo ao clicar em <strong>Confirmar e salvar</strong>.</p>
-                {settings.adminStudyMap
-                  ? <React.Suspense fallback={<LoadingState message="Abrindo plano guiado..."/>}><StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode} multiplier={studyPlanMultiplier} onMultiplierChange={setStudyPlanMultiplier}/></React.Suspense>
-                  : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{syllabus}</div>}
+                <React.Suspense fallback={<LoadingState message="Abrindo plano guiado..."/>}><StudyMapPreview syllabus={syllabus} onChange={setSyllabus} darkMode={darkMode}/></React.Suspense>
                 <div className="relative">
                   <textarea value={syllabusFB} onChange={e=>setSyllabusFB(e.target.value)} placeholder="Solicite ajustes..." className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <button onClick={reviseSyllabus} disabled={!syllabusFB.trim()||isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg disabled:opacity-40">{isBusy?<Spinner className="w-5 h-5 text-white"/>:<Send className="w-5 h-5"/>}</button>
@@ -14387,48 +14149,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                     darkMode={darkMode}
                   />
                 </div>
-                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
-                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estrutura da aula</summary>
-                  <div className="mt-5 space-y-4">
-                  <button onClick={()=>{ const ns={...settings,autoMode:!settings.autoMode}; setSettings(ns); saveSettings(ns); }}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.autoMode?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.autoMode?'text-yellow-500':''}`}>Deixar o Oráculo escolher</p>
-                      <p className="text-xs opacity-50 mt-0.5">A IA define a quantidade ideal de tópicos e subtópicos</p>
-                    </div>
-                    <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 ${settings.autoMode?'bg-yellow-500':'bg-gray-400'}`}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <button type="button" onClick={()=>{
-                    const enabled = !settings.adminStudyMap;
-                    const ns={...settings,adminStudyMap:enabled,...(enabled?{autoMode:true,qPerSubAuto:false}:{})};
-                    setSettings(ns);saveSettings(ns);
-                  }} className={`w-full mt-3 flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminStudyMap?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div className="flex items-start gap-3">
-                      <Landmark className={`w-5 h-5 mt-0.5 flex-shrink-0 ${settings.adminStudyMap?'text-yellow-500':'opacity-40'}`}/>
-                      <div>
-                        <p className={`flex flex-wrap items-center gap-2 text-sm font-bold ${settings.adminStudyMap?'text-yellow-500':''}`}>Plano de estudo guiado <span className={`rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>Experimental</span></p>
-                        <p className="text-xs opacity-50 mt-0.5">Organiza objetivos verificáveis e sugere quantas questões revisar em cada um.</p>
-                      </div>
-                    </div>
-                    <div className={`w-10 h-6 rounded-full transition-all flex items-center px-0.5 flex-shrink-0 ${settings.adminStudyMap?'bg-yellow-500':'bg-gray-400 dark:bg-gray-600'}`}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminStudyMap?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <div className={`grid grid-cols-2 gap-3 mt-3 transition-opacity ${settings.autoMode?'opacity-30 pointer-events-none':''}`}>
-                    {[{l:'Tópicos',k:'numTopics',mn:1,mx:10},{l:'Subtópicos/Tópico',k:'numSubtopics',mn:2,mx:15}].map(f=>(
-                      <div key={f.k}>
-                        <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">{f.l}</label>
-                        <input type="number" min={f.mn} max={f.mx} value={settings[f.k]}
-                          onChange={e=>setSettings({...settings,[f.k]:e.target.value})}
-                          onBlur={()=>{let v=parseInt(settings[f.k]);if(isNaN(v)||v<f.mn)v=f.mn;if(v>f.mx)v=f.mx;const ns={...settings,[f.k]:v};setSettings(ns);saveSettings(ns);}}
-                          className={`w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                      </div>
-                    ))}
-                  </div>
-                  </div>
-                </details>
                   <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
                     <summary className="cursor-pointer text-sm font-bold text-yellow-600">Personalizar estilo da aula</summary>
                     <p className="text-xs opacity-50 mt-2 mb-4">Opcional. Ajuste como a aula será escrita sem mudar o conteúdo técnico.</p>
@@ -14463,65 +14183,47 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {/* Tipo e estilo das questões de fixação */}
                 <div>
                   <div className="text-xs font-bold uppercase mb-2 opacity-50">Questões de fixação — tipo</div>
-	                  <QuestionTypeSelector selected={visibleQuestionTypes} onChange={types=>{const ns={...settings,questionTypes:types};setSettings(ns);saveSettings(ns);}} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
+		                  <QuestionTypeSelector
+                      selected={visibleQuestionTypes}
+                      onChange={types=>{const ns={...settings,questionTypes:types,...(types[0]==='vof'?{numAlternatives:5}:null)};setSettings(ns);saveSettings(ns);}}
+                      darkMode={darkMode}
+                      single={true}
+                      isAdmin={isAdmin}
+                      canCreateFlashcards={canUseAdvancedFeatures}
+                      renderTypeDetails={type => type.k === 'direct' ? (
+                        <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                          <div>
+                            <p className="text-[11px] font-bold uppercase mb-2 opacity-45">Alternativas</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {[{v:4,l:'4 alternativas'},{v:5,l:'5 alternativas'}].map(opt=>(
+                                <button key={opt.v} type="button"
+                                  onClick={()=>{const ns={...settings,numAlternatives:opt.v};setSettings(ns);saveSettings(ns);}}
+                                  className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${(settings.numAlternatives||5)===opt.v?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                                  {opt.l}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold uppercase mb-2 opacity-40">Estilo das questões</p>
+                            <QuestionStyleSelector value={settings.questionStyle||'mixed'} onChange={value=>{const ns={...settings,questionStyle:value};setSettings(ns);saveSettings(ns);}} darkMode={darkMode}/>
+                          </div>
+                        </div>
+                      ) : type.k === 'vof' ? (
+                        <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                          <p className="text-[11px] font-bold uppercase mb-2 opacity-45">Afirmações</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[3,4,5].map(n=>(
+                              <button key={n} type="button" onClick={()=>{const ns={...settings,vofStatementCount:n,numAlternatives:5};setSettings(ns);saveSettings(ns);}}
+                                className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(settings.vofStatementCount || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    />
                 </div>
-                {visibleQuestionTypes.includes('direct')&&<div>
-                  <label className="block text-xs font-bold uppercase mb-1.5 opacity-40">Alternativas por questão</label>
-                  <div className="flex gap-2">
-                    {[{v:4,l:'4 alternativas'},{v:5,l:'5 alternativas'}].map(opt=>(
-                      <button key={opt.v} type="button"
-                        onClick={()=>{const ns={...settings,numAlternatives:opt.v};setSettings(ns);saveSettings(ns);}}
-                        className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${(settings.numAlternatives||5)===opt.v?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                        {opt.l}
-                      </button>
-                    ))}
-                  </div>
-                </div>}
-                {(visibleQuestionTypes.some(t=>['direct','vof','cespe'].includes(t)))&&(
-                  <div>
-                    <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo das questões</div>
-                    <QuestionStyleSelector value={settings.questionStyle||'mixed'} onChange={value=>{const ns={...settings,questionStyle:value};setSettings(ns);saveSettings(ns);}} darkMode={darkMode}/>
-                  </div>
-                )}
-
-                <details className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/40':'border-gray-200 bg-gray-50'}`}>
-                  <summary className="cursor-pointer text-sm font-bold text-yellow-600">Configurações avançadas</summary>
-                  <div className="mt-5 space-y-5">
-                <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                  <GeminiThinkingSelector
-                    value={!!settings.geminiThinkingEnabled}
-                    onChange={enabled=>{const ns={...settings,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}}
-                    darkMode={darkMode}
-                  />
-                </div>
-
-                {isAdmin&&(
-                  <>
-                    <button type="button" onClick={()=>{const ns={...settings,adminChunkedQuestions:!settings.adminChunkedQuestions};setSettings(ns);saveSettings(ns);}}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                      <div>
-                        <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                        <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em requests de até 15 questões.</p>
-                      </div>
-                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                      </div>
-                    </button>
-                    <button type="button" onClick={()=>{const ns={...settings,auditQuestions:!settings.auditQuestions};setSettings(ns);saveSettings(ns);}}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                      <div>
-                        <p className={`text-sm font-bold ${settings.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                        <p className="text-xs opacity-50 mt-0.5">Segundo request nas questões de fixação para revisar qualidade e utilidade.</p>
-                      </div>
-                      <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                        <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                      </div>
-                    </button>
-                  </>
-                )}
-                  </div>
-                </details>
 
                 <div className="flex gap-3">
                   <button type="button" onClick={()=>setAcademiaSetupStep('lesson')} className={`flex-1 py-4 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-200 hover:bg-gray-300'}`}>Voltar</button>
@@ -14537,9 +14239,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <p className={`text-sm rounded-xl p-3 ${darkMode?'bg-blue-900/20 text-blue-300 border border-blue-800/30':'bg-blue-50 text-blue-800 border border-blue-200'}`}>
                   ✅ Revise os tópicos e subtópicos. Eles viram seções da aula; as questões de fixação serão geradas para a aula como um todo, evitando repetir o mesmo eixo de cobrança entre subtópicos próximos.
                 </p>
-                {settings.adminStudyMap
-                  ? <React.Suspense fallback={<LoadingState message="Abrindo plano guiado..."/>}><StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode} multiplier={academiaStudyPlanMultiplier} onMultiplierChange={setAcademiaStudyPlanMultiplier}/></React.Suspense>
-                  : <div className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm overflow-y-auto whitespace-pre-wrap ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-gray-50 border-gray-200'}`}>{academiaSyllabus}</div>}
+                <React.Suspense fallback={<LoadingState message="Abrindo plano guiado..."/>}><StudyMapPreview syllabus={academiaSyllabus} onChange={setAcademiaSyllabus} darkMode={darkMode}/></React.Suspense>
                 <div className="relative">
                   <textarea value={academiaSyllabusFB} onChange={e=>setAcademiaSyllabusFB(e.target.value)} placeholder="Solicite ajustes (ex: adicione mais subtópicos sobre tratamento...)" className={`w-full h-20 p-4 pr-14 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                   <button onClick={reviseAcademiaSyllabus} disabled={!academiaSyllabusFB.trim()||isBusy} className="absolute bottom-4 right-4 p-2 bg-yellow-600 text-white rounded-lg disabled:opacity-40">{isBusy?<Spinner className="w-5 h-5 text-white"/>:<Send className="w-5 h-5"/>}</button>
@@ -14979,15 +14679,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         canCreateFlashcards={canUseAdvancedFeatures}
         onClose={(prefs={})=>{
           // Salvar preferências mesmo ao fechar sem confirmar
-          if (prefs.questionStyle || prefs.numAlternatives || prefs.autoMode !== undefined || prefs.auditQuestions !== undefined || prefs.adminChunkedQuestions !== undefined) {
-            const ns = {...settings, ...prefs};
+          if (prefs.questionStyle || prefs.numAlternatives || prefs.vofStatementCount || prefs.autoMode !== undefined) {
+            const ns = {...settings, ...prefs, adminChunkedQuestions:QUESTION_BATCHING_ENABLED};
             saveSettings(ns);
           }
           setVqGenModal(null);
         }}
         onConfirm={(cfg)=>{
           // Salvar preferências para próximas aulas
-          const ns = {...settings, numAlternatives: cfg.numAlternatives, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:filterQuestionTypesForAccess(cfg.questionTypes||visibleQuestionTypes, questionTypeAccess), autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, auditQuestions:!!cfg.auditQuestions, adminChunkedQuestions:!!cfg.adminChunkedQuestions};
+          const ns = {...settings, numAlternatives: cfg.numAlternatives, vofStatementCount: cfg.vofStatementCount || settings.vofStatementCount || 5, questionStyle: cfg.questionStyle||settings.questionStyle, questionTypes:filterQuestionTypesForAccess(cfg.questionTypes||visibleQuestionTypes, questionTypeAccess), autoMode: cfg.autoMode, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled, adminChunkedQuestions:QUESTION_BATCHING_ENABLED};
           saveSettings(ns);
           setVqGenModal(null);
           const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
@@ -15031,7 +14731,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             {(()=>{
               const isFlashcardReview = errorReviewQTypes.some(isMemoryCardType);
               const estimatedTotal = errorReviewModal.questions.length * errorReviewPerQuestion;
-              const maxGeneratedPerRequest = settings.adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : ERROR_REVIEW_MAX_GENERATED_PER_REQUEST;
+              const maxGeneratedPerRequest = ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
               const batchSize = isFlashcardReview ? 12 : Math.max(1, Math.floor(maxGeneratedPerRequest / Math.max(1, errorReviewPerQuestion)));
               const requestCount = Math.max(1, Math.ceil(errorReviewModal.questions.length / batchSize));
               return (
@@ -15051,7 +14751,45 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={errorReviewQTypes} onChange={setErrorReviewQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
+                <QuestionTypeSelector
+                  selected={errorReviewQTypes}
+                  onChange={types=>{setErrorReviewQTypes(types); if (types[0] === 'vof') setErrorReviewQAlts(5);}}
+                  darkMode={darkMode}
+                  single={true}
+                  isAdmin={isAdmin}
+                  canCreateFlashcards={canUseAdvancedFeatures}
+                  renderTypeDetails={type => type.k === 'direct' ? (
+                    <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                      <div>
+                        <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                        <div className="flex gap-2">
+                          {[4,5].map(n=>(
+                            <button key={n} onClick={()=>setErrorReviewQAlts(n)}
+                              className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${errorReviewQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                              {n} (A-{n===4?'D':'E'})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Estilo</div>
+                        <QuestionStyleSelector value={errorReviewQStyle} onChange={setErrorReviewQStyle} darkMode={darkMode}/>
+                      </div>
+                    </div>
+                  ) : type.k === 'vof' ? (
+                    <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                      <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Afirmações</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[3,4,5].map(n=>(
+                          <button key={n} onClick={()=>{setErrorReviewVofStatements(n);setErrorReviewQAlts(5);}}
+                            className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${errorReviewVofStatements===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                />
               </div>
               {!isFlashcardReview&&(
                 <div>
@@ -15074,57 +14812,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   {memoryCardTypeName(errorReviewQTypes)} não usam quantidade fixa. O Oráculo decide o menor conjunto útil; se houver muito erro, roda em {requestCount} lote{requestCount!==1?'s':''}.
                 </div>
               )}
-              {errorReviewQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
-                <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <QuestionStyleSelector value={errorReviewQStyle} onChange={setErrorReviewQStyle} darkMode={darkMode}/>
-                </div>
-              )}
-              {errorReviewQTypes.some(t=>['direct','vof'].includes(t))&&<div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
-                <div className="flex gap-2">
-                  {[4,5].map(n=>(
-                    <button key={n} onClick={()=>setErrorReviewQAlts(n)}
-                      className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${errorReviewQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                      {n} (A-{n===4?'D':'E'})
-                    </button>
-                  ))}
-                </div>
-              </div>}
-              <div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                <GeminiThinkingSelector value={errorReviewThinking} onChange={setErrorReviewThinking} darkMode={darkMode}/>
-              </div>
-              {isAdmin&&(
-                <>
-                  <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                      <p className="text-xs opacity-50 mt-0.5">Reduz o teto de cada request para cerca de 15 questões geradas.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <button type="button" onClick={()=>setErrorReviewAudit(!errorReviewAudit)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${errorReviewAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${errorReviewAudit?'text-yellow-500':''}`}>Auditoria</p>
-                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar revisão fraca e melhorar explicações.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:errorReviewAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:errorReviewAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                </>
-              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setErrorReviewModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button
                 disabled={isBusy}
-                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQAlts, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking, auditQuestions:errorReviewAudit, adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions})}
+                onClick={()=>generateErrorNotebookReview({questionStyle:errorReviewQStyle, questionTypes:errorReviewQTypes, numAlternatives:errorReviewQTypes[0]==='vof'?5:errorReviewQAlts, vofStatementCount:errorReviewVofStatements, errorReviewPerQuestion, geminiThinkingEnabled:errorReviewThinking, adminChunkedQuestions:QUESTION_BATCHING_ENABLED})}
                 className="flex-[2] px-5 py-3 bg-yellow-600 text-white rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {isBusy?<Spinner className="w-4 h-4 text-white"/>:<Sparkles className="w-4 h-4"/>}
                 {isBusy?'Gerando...':'Gerar revisão'}
@@ -15240,53 +14933,46 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo das questões de fixação</div>
-                <QuestionTypeSelector selected={academiaRegenQTypes} onChange={setAcademiaRegenQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
+                <QuestionTypeSelector
+                  selected={academiaRegenQTypes}
+                  onChange={types=>{setAcademiaRegenQTypes(types); if (types[0] === 'vof') setAcademiaRegenQAlts(5);}}
+                  darkMode={darkMode}
+                  single={true}
+                  isAdmin={isAdmin}
+                  canCreateFlashcards={canUseAdvancedFeatures}
+                  renderTypeDetails={type => type.k === 'direct' ? (
+                    <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                      <div>
+                        <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                        <div className="flex gap-2">
+                          {[4,5].map(n=>(
+                            <button key={n} onClick={()=>setAcademiaRegenQAlts(n)}
+                              className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${academiaRegenQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                              {n} (A-{n===4?'D':'E'})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Estilo</div>
+                        <QuestionStyleSelector value={academiaRegenQStyle} onChange={setAcademiaRegenQStyle} darkMode={darkMode}/>
+                      </div>
+                    </div>
+                  ) : type.k === 'vof' ? (
+                    <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                      <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Afirmações</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[3,4,5].map(n=>(
+                          <button key={n} onClick={()=>{setAcademiaRegenVofStatements(n);setAcademiaRegenQAlts(5);}}
+                            className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${academiaRegenVofStatements===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                />
               </div>
-              {academiaRegenQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
-                <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <QuestionStyleSelector value={academiaRegenQStyle} onChange={setAcademiaRegenQStyle} darkMode={darkMode}/>
-                </div>
-              )}
-              {!academiaRegenQTypes.some(isMemoryCardType)&&<div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
-                <div className="flex gap-2">
-                  {[4,5].map(n=>(
-                    <button key={n} onClick={()=>setAcademiaRegenQAlts(n)}
-                      className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${academiaRegenQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                      {n} (A-{n===4?'D':'E'})
-                    </button>
-                  ))}
-                </div>
-              </div>}
-              <div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                <GeminiThinkingSelector value={academiaRegenThinking} onChange={setAcademiaRegenThinking} darkMode={darkMode}/>
-              </div>
-              {isAdmin&&(
-                <>
-                  <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                      <p className="text-xs opacity-50 mt-0.5">Divide fixações grandes em requests de até 15 questões.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <button type="button" onClick={()=>setAcademiaRegenAudit(!academiaRegenAudit)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaRegenAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${academiaRegenAudit?'text-yellow-500':''}`}>Auditoria</p>
-                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaRegenAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaRegenAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                </>
-              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaRegenModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
@@ -15299,10 +14985,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   regenReason: academiaRegenReason.trim(),
                   questionStyle: academiaRegenQStyle,
                   questionTypes: academiaRegenQTypes,
-                  numAlternatives: academiaRegenQAlts,
+                  numAlternatives: academiaRegenQTypes[0]==='vof'?5:academiaRegenQAlts,
+                  vofStatementCount: academiaRegenVofStatements,
                   geminiThinkingEnabled: academiaRegenThinking,
-                  auditQuestions: academiaRegenAudit,
-                  adminChunkedQuestions: !!settingsRef.current.adminChunkedQuestions,
+                  adminChunkedQuestions: QUESTION_BATCHING_ENABLED,
                   generationMode: academiaRegenModal.generationMode || 'full',
                 };
                 const { regenReason, generationMode, ...persistedSettings } = regenSettings;
@@ -15331,59 +15017,52 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</div>
-                <QuestionTypeSelector selected={academiaExtraQTypes} onChange={setAcademiaExtraQTypes} darkMode={darkMode} single={true} isAdmin={isAdmin} canCreateFlashcards={canUseAdvancedFeatures}/>
+                <QuestionTypeSelector
+                  selected={academiaExtraQTypes}
+                  onChange={types=>{setAcademiaExtraQTypes(types); if (types[0] === 'vof') setAcademiaExtraQAlts(5);}}
+                  darkMode={darkMode}
+                  single={true}
+                  isAdmin={isAdmin}
+                  canCreateFlashcards={canUseAdvancedFeatures}
+                  renderTypeDetails={type => type.k === 'direct' ? (
+                    <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                      <div>
+                        <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Alternativas</div>
+                        <div className="flex gap-2">
+                          {[4,5].map(n=>(
+                            <button key={n} onClick={()=>setAcademiaExtraQAlts(n)}
+                              className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${academiaExtraQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                              {n} (A-{n===4?'D':'E'})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Estilo</div>
+                        <QuestionStyleSelector value={academiaExtraQStyle} onChange={setAcademiaExtraQStyle} darkMode={darkMode}/>
+                      </div>
+                    </div>
+                  ) : type.k === 'vof' ? (
+                    <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                      <div className="text-[11px] font-bold uppercase mb-2 opacity-50">Afirmações</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[3,4,5].map(n=>(
+                          <button key={n} onClick={()=>{setAcademiaExtraVofStatements(n);setAcademiaExtraQAlts(5);}}
+                            className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${academiaExtraVofStatements===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                />
               </div>
-              {academiaExtraQTypes.some(t=>['direct','vof','cespe'].includes(t))&&(
-                <div>
-                  <div className="text-xs font-bold uppercase mb-2 opacity-50">Estilo</div>
-                  <QuestionStyleSelector value={academiaExtraQStyle} onChange={setAcademiaExtraQStyle} darkMode={darkMode}/>
-                </div>
-              )}
-              {!academiaExtraQTypes.some(isMemoryCardType)&&<div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Alternativas</div>
-                <div className="flex gap-2">
-                  {[4,5].map(n=>(
-                    <button key={n} onClick={()=>setAcademiaExtraQAlts(n)}
-                      className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${academiaExtraQAlts===n?(darkMode?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                      {n} (A-{n===4?'D':'E'})
-                    </button>
-                  ))}
-                </div>
-              </div>}
-              <div>
-                <div className="text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</div>
-                <GeminiThinkingSelector value={academiaExtraThinking} onChange={setAcademiaExtraThinking} darkMode={darkMode}/>
-              </div>
-              {isAdmin&&(
-                <>
-                  <button type="button" onClick={()=>saveSettings({...settingsRef.current, adminChunkedQuestions:!settings.adminChunkedQuestions})}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${settings.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${settings.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                      <p className="text-xs opacity-50 mt-0.5">Divide baterias grandes em requests menores sem quebrar subtópico.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:settings.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:settings.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <button type="button" onClick={()=>setAcademiaExtraAudit(!academiaExtraAudit)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${academiaExtraAudit?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${academiaExtraAudit?'text-yellow-500':''}`}>Auditoria</p>
-                      <p className="text-xs opacity-50 mt-0.5">Segundo request para revisar utilidade, pistas e cobertura.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:academiaExtraAudit?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:academiaExtraAudit?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                </>
-              )}
             </div>
             <div className="flex gap-3 mt-7">
               <button onClick={()=>setAcademiaExtraModal(null)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
               <button onClick={()=>{
-                const extraSettings = {...settingsRef.current, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQAlts, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit, adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions};
-                saveSettings({...settingsRef.current, geminiThinkingEnabled:academiaExtraThinking, auditQuestions:academiaExtraAudit, adminChunkedQuestions:!!settingsRef.current.adminChunkedQuestions});
+                const extraSettings = {...settingsRef.current, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:academiaExtraQTypes[0]==='vof'?5:academiaExtraQAlts, vofStatementCount:academiaExtraVofStatements, geminiThinkingEnabled:academiaExtraThinking, adminChunkedQuestions:QUESTION_BATCHING_ENABLED};
+                saveSettings({...settingsRef.current, questionStyle:academiaExtraQStyle, questionTypes:academiaExtraQTypes, numAlternatives:extraSettings.numAlternatives, vofStatementCount:academiaExtraVofStatements, geminiThinkingEnabled:academiaExtraThinking, adminChunkedQuestions:QUESTION_BATCHING_ENABLED});
                 const {topic,subject} = academiaExtraModal;
                 setAcademiaExtraModal(null);
                 generateAcademiaExtraBattery(topic, subject, extraSettings);
@@ -15416,97 +15095,56 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão</label>
                 <QuestionTypeSelector
                   selected={oracleRegenConfig.questionTypes || ['direct']}
-                  onChange={questionTypes=>setOracleRegenConfig(p=>({...p, questionTypes}))}
+                  onChange={questionTypes=>setOracleRegenConfig(p=>({...p, questionTypes, ...(questionTypes[0]==='vof'?{numAlternatives:5}:null)}))}
 	                  darkMode={darkMode}
 	                  single={true}
 	                  isAdmin={isAdmin}
 	                  canCreateFlashcards={canUseAdvancedFeatures}
-	                />
-              </div>
-
-              {!(oracleRegenConfig.questionTypes || []).some(isMemoryCardType)&&(
-                <div className={`grid grid-cols-1 gap-4 ${getTopicStudyPlan(activeTopic, activeTopic?.subtopics || []).length===0&&['direct','vof','cespe'].includes((oracleRegenConfig.questionTypes || ['direct'])[0])?'md:grid-cols-2':''}`}>
-                  {getTopicStudyPlan(activeTopic, activeTopic?.subtopics || []).length===0&&<div>
-                    <label className="block text-xs font-bold uppercase mb-2 opacity-50">Questões/Subtópico</label>
-                    <div className="grid grid-cols-[1fr_auto] gap-2">
-                      <input type="number" min="1" max="10" value={oracleRegenConfig.qPerSub || 1}
-                        disabled={!!oracleRegenConfig.qPerSubAuto}
-                        onChange={e=>setOracleRegenConfig(p=>({...p,qPerSub:Math.max(1,Math.min(10,parseInt(e.target.value,10)||1))}))}
-                        className={`w-full p-3 rounded-xl border text-center font-bold outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-40 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
-                      <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,qPerSubAuto:!p.qPerSubAuto}))}
-                        className={`px-4 rounded-xl border-2 text-xs font-bold transition-all ${oracleRegenConfig.qPerSubAuto?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
-                        IA
-                      </button>
-                    </div>
-                    <p className="text-[11px] opacity-50 mt-1">{oracleRegenConfig.qPerSubAuto?'A IA decide a quantidade, com piso de 2 cobranças por subtópico e mais quando o tema for denso.':'Quantidade fixa para cada subtópico.'}</p>
-                  </div>}
-
-                  {['direct','vof','cespe'].includes((oracleRegenConfig.questionTypes || ['direct'])[0])&&(
-                    <div>
-                      <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[4,5].map(n=>(
-                          <button key={n} type="button" onClick={()=>setOracleRegenConfig(p=>({...p,numAlternatives:n}))}
-                            className={`min-h-[50px] rounded-xl border-2 text-sm font-bold transition-all ${Number(oracleRegenConfig.numAlternatives || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-600 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
-                            {n} (A-{'ABCDE'[n-1]})
-                          </button>
-                        ))}
+                    renderTypeDetails={type => type.k === 'direct' ? (
+                      <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase mb-2 opacity-45">Alternativas</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[4,5].map(n=>(
+                              <button key={n} type="button" onClick={()=>setOracleRegenConfig(p=>({...p,numAlternatives:n}))}
+                                className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(oracleRegenConfig.numAlternatives || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                                {n} (A-{'ABCDE'[n-1]})
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase mb-2 opacity-40">Estilo do enunciado</p>
+                          <QuestionStyleSelector value={oracleRegenConfig.questionStyle} onChange={value=>setOracleRegenConfig(p=>({...p,questionStyle:value}))} darkMode={darkMode}/>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {((oracleRegenConfig.questionTypes||['direct']).some(t=>['direct','vof','cespe'].includes(t)))&&(
-                <div>
-                  <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
-                  <QuestionStyleSelector value={oracleRegenConfig.questionStyle} onChange={value=>setOracleRegenConfig(p=>({...p,questionStyle:value}))} darkMode={darkMode}/>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</label>
-                <GeminiThinkingSelector
-                  value={!!oracleRegenConfig.geminiThinkingEnabled}
-                  onChange={geminiThinkingEnabled=>setOracleRegenConfig(p=>({...p,geminiThinkingEnabled}))}
-                  darkMode={darkMode}
-                />
-              </div>
-
-              {isAdmin&&(
-                <>
-                  <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,adminChunkedQuestions:!p.adminChunkedQuestions}))}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${oracleRegenConfig.adminChunkedQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${oracleRegenConfig.adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                      <p className="text-xs opacity-50 mt-0.5">Quando passar de 15 questões, divide por subtópicos inteiros em vários requests.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:oracleRegenConfig.adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:oracleRegenConfig.adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                  <button type="button" onClick={()=>setOracleRegenConfig(p=>({...p,auditQuestions:!p.auditQuestions}))}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${oracleRegenConfig.auditQuestions?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${oracleRegenConfig.auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                      <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar itens fracos, corrigir pistas e cobrir lacunas.</p>
-                    </div>
-                    <div style={{width:40,height:24,borderRadius:12,padding:2,background:oracleRegenConfig.auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                      <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:oracleRegenConfig.auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                    </div>
-                  </button>
-                </>
-              )}
+                    ) : type.k === 'vof' ? (
+                      <div className={`mt-2 w-full rounded-xl border-2 p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+                        <p className="text-[11px] font-bold uppercase mb-2 opacity-45">Afirmações</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[3,4,5].map(n=>(
+                            <button key={n} type="button" onClick={()=>setOracleRegenConfig(p=>({...p,vofStatementCount:n,numAlternatives:5}))}
+                              className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all ${Number(oracleRegenConfig.vofStatementCount || 5)===n?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400 hover:border-gray-500':'border-gray-200 text-gray-500 hover:border-gray-300')}`}>
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+		                />
+	              </div>
 
               <div className="flex gap-3 pt-2">
                 <button onClick={()=>setRegenModal(false)} className={`flex-1 py-3 rounded-xl font-bold ${darkMode?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>Cancelar</button>
                 <button onClick={()=>{
                   const cfg = {
                     ...oracleRegenConfig,
-                    qPerSub:Math.max(1, Math.min(10, parseInt(oracleRegenConfig.qPerSub, 10) || 1)),
-                    numAlternatives:Number(oracleRegenConfig.numAlternatives || 5),
+	                    qPerSub:Math.max(1, Math.min(10, parseInt(oracleRegenConfig.qPerSub, 10) || 1)),
+                      qPerSubAuto:true,
+                    numAlternatives:(oracleRegenConfig.questionTypes || [])[0] === 'vof' ? 5 : Number(oracleRegenConfig.numAlternatives || 5),
+                    vofStatementCount:Number(oracleRegenConfig.vofStatementCount || 5),
                   };
-                  saveSettings({...settingsRef.current, auditQuestions:!!cfg.auditQuestions, adminChunkedQuestions:!!cfg.adminChunkedQuestions, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled});
+                  saveSettings({...settingsRef.current, vofStatementCount:cfg.vofStatementCount, adminChunkedQuestions:QUESTION_BATCHING_ENABLED, geminiThinkingEnabled:!!cfg.geminiThinkingEnabled});
                   setRegenModal(false);
                   generateBatch(activeTopic.id, regenPrompt, cfg);
                   setRegenPrompt('');

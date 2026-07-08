@@ -74,7 +74,7 @@ const QUESTION_TYPES = [
   { k:'cloze', group:'memory', icon:LayersIcon, label:'Preencher lacunas', desc:'Cartões com omissões no estilo AnKing e Anki', adminOnly:true },
 ];
 
-const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false }) => {
+const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false, renderTypeDetails=null }) => {
   const dm = darkMode;
   const toggle = (k) => {
     if (single) { onChange([k]); return; }
@@ -110,19 +110,22 @@ const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, i
                 const on = selected.includes(t.k);
                 const TypeIcon = t.icon;
                 return (
-                  <button key={t.k} onClick={()=>toggle(t.k)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
-                    <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                      <TypeIcon className="w-4 h-4"/>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
-                      <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
-                    </div>
-                    <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
-                      {on && <CheckIcon className="w-3 h-3 text-white"/>}
-                    </div>
-                  </button>
+                  <div key={t.k}>
+                    <button onClick={()=>toggle(t.k)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300')}`}>
+                      <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${on?(dm?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-700'):(dm?'bg-gray-700 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                        <TypeIcon className="w-4 h-4"/>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-bold ${on?'text-yellow-500':''}`}>{t.label}</p>
+                        <p className="text-xs opacity-50 mt-0.5">{t.desc}</p>
+                      </div>
+                      <div className={`w-5 h-5 rounded${single?'-full':''} flex-shrink-0 flex items-center justify-center border-2 ${on?'bg-yellow-500 border-yellow-500':'border-gray-400'}`}>
+                        {on && <CheckIcon className="w-3 h-3 text-white"/>}
+                      </div>
+                    </button>
+                    {on && renderTypeDetails?.(t)}
+                  </div>
                 );
               })}
             </div>
@@ -171,13 +174,13 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
   const [numBlocks,   setNumBlocks]   = useState(initialPlan.numBlocks);
   // Inicializar com as configurações salvas do usuário
   const [numAlts,       setNumAlts]     = useState(savedSettings.numAlternatives || 5);
+  const [vofStatementCount, setVofStatementCount] = useState(savedSettings.vofStatementCount || 5);
   const [extraPrompt,   setExtraPrompt] = useState('');
   const [questionStyle, setQuestionStyle] = useState(savedSettings.questionStyle || 'mixed');
   const [questionTypes, setQuestionTypes] = useState(filterQuestionTypesForAccess(savedSettings.questionTypes || ['direct'], { isAdmin, canCreateFlashcards }));
-  const [autoMode,      setAutoMode]    = useState(savedSettings.autoMode !== false);
+  const [autoMode]    = useState(true);
   const [geminiThinkingEnabled, setGeminiThinkingEnabled] = useState(!!savedSettings.geminiThinkingEnabled);
-  const [auditQuestions, setAuditQuestions] = useState(!!savedSettings.auditQuestions);
-  const [adminChunkedQuestions, setAdminChunkedQuestions] = useState(!!savedSettings.adminChunkedQuestions);
+  const adminChunkedQuestions = true;
   const [initialized,   setInitialized] = useState(false);
 
   useEffect(() => {
@@ -233,7 +236,7 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
     : `${fullBlocks > 0 ? `${fullBlocks} bloco(s) de ${effectivePerBlock} + ` : ''}1 bloco de ${lastBlock} = ${totalQ} no total`;
 
   // Salva preferências atuais e fecha — chamado em qualquer forma de fechar
-  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, autoMode, geminiThinkingEnabled, auditQuestions, adminChunkedQuestions });
+  const handleClose = () => onClose({ questionStyle, numAlternatives: numAlts, vofStatementCount, autoMode, geminiThinkingEnabled });
 
   return (
     <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4" onClick={handleClose}>
@@ -272,77 +275,52 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
                 </p>
               </div>
             ) : (
-              <p className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>Duração não disponível — ajuste manualmente</p>
-            )}
-          </div>
-
-          {/* Toggle autoMode */}
-          <button onClick={()=>setAutoMode(!autoMode)}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${autoMode?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-            <div>
-              <p className={`text-sm font-bold ${autoMode?'text-yellow-500':''}`}>✦ Deixar o Oráculo escolher</p>
-              <p className="text-xs opacity-50 mt-0.5">A IA define a estrutura ideal de blocos e subtópicos</p>
-            </div>
-            <div style={{width:40,height:24,borderRadius:12,padding:2,background:autoMode?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-              <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:autoMode?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-            </div>
-          </button>
-
-          {isAdmin && autoMode && (
-            <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40 text-yellow-300':'bg-yellow-50 border border-yellow-200 text-yellow-800'}`}>
-              <Sparkles className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
-              <span>O sumário vai cobrir a aula inteira na ordem do professor. O único limite é de até {ADMIN_COURSE_TOPIC_QUESTION_MAX} subtópicos por bloco/tópico.</span>
-            </div>
-          )}
-
-          {/* Configuração numérica */}
-          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity ${autoMode?'opacity-30 pointer-events-none':''}`}>
-            {[
-              {label:'Total',sub:'questões',val:totalQ,fn:handleTotalChange},
-              {label:`Por bloco (máx ${MAX_PER_BLOCK})`,sub:'questões',val:qPerBlock,fn:handlePerBlockChange},
-              {label:'Blocos',sub:'blocos',val:numBlocks,fn:handleBlocksChange},
-            ].map(f=>(
-              <div key={f.label}>
-                <label className="block text-xs font-bold uppercase mb-1.5 opacity-50">{f.label}</label>
-                <input type="number" min="1" value={f.val} onChange={e=>f.fn(e.target.value)}
-                  className={`w-full p-3 rounded-xl border text-center text-lg font-bold outline-none focus:ring-2 focus:ring-yellow-500 ${dm?'bg-gray-800 border-gray-600 text-white':'bg-white border-gray-200'}`}/>
-                <p className="text-[10px] text-center mt-1 opacity-40">{f.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Resumo visual — mostra distribuição real */}
-          {!autoMode&&<div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-yellow-900/20 border border-yellow-800/40':'bg-yellow-50 border border-yellow-200'}`}>
-            <Sparkles className="w-4 h-4 text-yellow-600 flex-shrink-0"/>
-            <span className={dm?'text-yellow-300':'text-yellow-800'}>{summaryText}</span>
-          </div>}
-
-          {/* Tipo de questão */}
-          <div>
-            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
-            <QuestionTypeSelector selected={questionTypes} onChange={setQuestionTypes} darkMode={dm} single={true} isAdmin={isAdmin} canCreateFlashcards={canCreateFlashcards}/>
-          </div>
-
-          {/* Estilo clínico/direto — só aparece se "direta" está selecionada */}
-          {(questionTypes.includes('direct') || questionTypes.includes('vof') || questionTypes.includes('cespe')) && (
-            <div>
-              <label className="block text-xs font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
-              <QuestionStyleSelector value={questionStyle} onChange={setQuestionStyle} darkMode={dm}/>
-            </div>
-          )}
-
-          {/* Alternativas */}
-          {!questionTypes.some(isMemoryCardType)&&<div>
-            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Alternativas por questão</label>
-            <div className="flex gap-3">
-              {[4,5].map(n=>(
-                <button key={n} onClick={()=>setNumAlts(n)}
-                  className={`flex-1 py-2.5 rounded-xl border-2 font-bold text-sm transition-all ${numAlts===n?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500':'border-gray-200 bg-white text-gray-700')}`}>
-                  {n} alt. (A–{'ABCDE'[n-1]})
-                </button>
-              ))}
-            </div>
-          </div>}
+	              <p className={`text-sm ${dm?'text-gray-400':'text-gray-500'}`}>Duração não disponível — a estrutura será estimada automaticamente</p>
+	            )}
+	          </div>
+	          {/* Tipo de questão */}
+	          <div>
+	            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Tipo de questão <span className="normal-case font-normal opacity-70">(escolha um ou mais)</span></label>
+	            <QuestionTypeSelector
+	              selected={questionTypes}
+	              onChange={types=>{ setQuestionTypes(types); if (types[0] === 'vof') setNumAlts(5); }}
+	              darkMode={dm}
+	              single={true}
+	              isAdmin={isAdmin}
+	              canCreateFlashcards={canCreateFlashcards}
+	              renderTypeDetails={type => type.k === 'direct' ? (
+	                <div className={`mt-2 w-full rounded-xl border-2 p-4 space-y-4 ${dm?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+	                  <div>
+	                    <label className="block text-[11px] font-bold uppercase mb-2 opacity-50">Alternativas por questão</label>
+	                    <div className="flex gap-3">
+	                      {[4,5].map(n=>(
+	                        <button key={n} onClick={()=>setNumAlts(n)}
+	                          className={`flex-1 min-h-[44px] rounded-xl border-2 font-bold text-sm transition-all ${numAlts===n?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+	                          {n} alt. (A-{'ABCDE'[n-1]})
+	                        </button>
+	                      ))}
+	                    </div>
+	                  </div>
+	                  <div>
+	                    <label className="block text-[11px] font-bold uppercase mb-2 opacity-50">Estilo do enunciado</label>
+	                    <QuestionStyleSelector value={questionStyle} onChange={setQuestionStyle} darkMode={dm}/>
+	                  </div>
+	                </div>
+	              ) : type.k === 'vof' ? (
+	                <div className={`mt-2 w-full rounded-xl border-2 p-4 ${dm?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+	                  <label className="block text-[11px] font-bold uppercase mb-2 opacity-50">Afirmações</label>
+	                  <div className="grid grid-cols-3 gap-2">
+	                    {[3,4,5].map(n=>(
+	                      <button key={n} onClick={()=>{setVofStatementCount(n);setNumAlts(5);}}
+	                        className={`min-h-[44px] rounded-xl border-2 font-bold text-sm transition-all ${vofStatementCount===n?(dm?'border-yellow-500 bg-yellow-900/30 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-300 hover:border-gray-500':'border-gray-200 text-gray-700 hover:border-gray-300')}`}>
+	                        {n}
+	                      </button>
+	                    ))}
+	                  </div>
+	                </div>
+	              ) : null}
+	            />
+	          </div>
 
           {/* Prompt extra */}
           <div>
@@ -353,36 +331,6 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
               className={`w-full h-20 p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white placeholder-gray-500':'bg-white border-gray-200 placeholder-gray-400'}`}
             />
           </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Modo Gemini</label>
-            <GeminiThinkingSelector value={geminiThinkingEnabled} onChange={setGeminiThinkingEnabled} darkMode={dm}/>
-          </div>
-
-          {isAdmin&&(
-            <>
-              <button onClick={()=>setAdminChunkedQuestions(!adminChunkedQuestions)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${adminChunkedQuestions?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                <div>
-                  <p className={`text-sm font-bold ${adminChunkedQuestions?'text-yellow-500':''}`}>Geração em lotes</p>
-                  <p className="text-xs opacity-50 mt-0.5">Limita o sumário a cerca de 15 questões por bloco antes de gerar a aula.</p>
-                </div>
-                <div style={{width:40,height:24,borderRadius:12,padding:2,background:adminChunkedQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                  <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:adminChunkedQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                </div>
-              </button>
-              <button onClick={()=>setAuditQuestions(!auditQuestions)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all text-left ${auditQuestions?(dm?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-600 bg-gray-800':'border-gray-200 bg-white')}`}>
-                <div>
-                  <p className={`text-sm font-bold ${auditQuestions?'text-yellow-500':''}`}>Auditoria</p>
-                  <p className="text-xs opacity-50 mt-0.5">Segundo request para cortar questão inútil, corrigir pistas e cobrir lacunas.</p>
-                </div>
-                <div style={{width:40,height:24,borderRadius:12,padding:2,background:auditQuestions?'#ca8a04':'#9ca3af',transition:'background 0.2s',flexShrink:0,display:'flex',alignItems:'center'}}>
-                  <div style={{width:20,height:20,borderRadius:10,background:'white',boxShadow:'0 1px 3px rgba(0,0,0,0.3)',transform:auditQuestions?'translateX(16px)':'translateX(0)',transition:'transform 0.2s'}}/>
-                </div>
-              </button>
-            </>
-          )}
 
           {isReset&&(
             <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${dm?'bg-red-900/20 border border-red-800/40 text-red-400':'bg-red-50 border border-red-200 text-red-700'}`}>
@@ -404,16 +352,16 @@ const VqGenModal = ({ aula, aulaId, suggestedQ, subject, topic, isReset, darkMod
                 totalQ,
                 numBlocks:adminChunkedQuestions ? Math.ceil(totalQ / Math.max(1, effectivePerBlock)) : numBlocks,
                 qPerBlock:effectivePerBlock,
-                numAlternatives:numAlts,
+                numAlternatives:questionTypes[0] === 'vof' ? 5 : numAlts,
+                vofStatementCount,
                 extraPrompt,
                 lessonMeta,
                 questionStyle,
                 autoMode,
                 questionTypes,
                 geminiThinkingEnabled,
-                auditQuestions,
                 adminChunkedQuestions,
-                syllabusMaxPerBlock:isAdmin?(adminChunkedQuestions ? ADMIN_ORACLE_QUESTION_CHUNK_TARGET : ADMIN_COURSE_TOPIC_QUESTION_MAX):undefined,
+                syllabusMaxPerBlock:ADMIN_ORACLE_QUESTION_CHUNK_TARGET,
                 adminMinuteRule:isAdmin,
                 adminFullCoverage:isAdmin,
               });
