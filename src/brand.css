@@ -12,7 +12,7 @@ body {
 :root[data-theme="dark"],
 :root[data-theme="dark"] body {
   color-scheme: dark;
-  background: #01040a;
+  background: #000000;
 }
 
 ::view-transition-old(root),
