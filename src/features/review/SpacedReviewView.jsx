@@ -145,7 +145,7 @@ export default function SpacedReviewView() {
 	                    <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Fila global</p>
 	                    <h2 className="text-3xl font-serif font-bold text-yellow-600">Revisão Espaçada</h2>
 	                    <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>
-	                      {[QUICK_SUBJECT_TITLE, 'Oráculo', canSeeVideoaulas ? 'Portal do Curso' : null, 'Academia', 'Acervo Externo'].filter(Boolean).join(', ')} no mesmo lugar.
+	                      {[QUICK_SUBJECT_TITLE, 'Criar Questões', canSeeVideoaulas ? 'Portal do Curso' : null, 'Criar Aula', 'Importar Questões'].filter(Boolean).join(', ')} no mesmo lugar.
 	                    </p>
 	                  </div>
 	                  <div className={`rounded-xl border px-4 py-3 ${dm?'bg-gray-950 border-gray-800':'bg-gray-50 border-gray-100'}`}>

@@ -64,6 +64,8 @@ export default function SubLibraryView() {
     setEditingSub,
     setEditingSubName,
     setExternalPromptModal,
+    setFamedCreationTarget,
+    setLibFilter,
     setLibraryActionMenu,
     setLibraryDrag,
     setLibraryOpenFolders,
@@ -84,15 +86,25 @@ export default function SubLibraryView() {
     undefined,
   } = useFeatureContext();
 
-            const sourceTitle = libFilter==='gemini'?'Acervo do Oráculo':libFilter==='academia'?'Academia do Saber':'Acervo Externo';
+            const sourceTitle = libFilter==='gemini'?'Criar Questões':libFilter==='academia'?'Criar Aula':'Importar Questões';
             const iconBox = darkMode?'bg-gray-800 text-yellow-500':'bg-yellow-50 text-yellow-700';
             const actionBtn = darkMode?'border-gray-700 text-gray-400 hover:text-yellow-400 hover:border-yellow-700 hover:bg-gray-800':'border-gray-200 text-gray-500 hover:text-yellow-700 hover:border-yellow-400 hover:bg-yellow-50';
-            const primaryLabel = libFilter==='gemini'?'Gerar assunto':libFilter==='academia'?'Nova aula':'Importar';
+            const primaryLabel = libFilter==='gemini'?'Criar questões':libFilter==='academia'?'Criar aula':'Importar questões';
             const primaryIcon = libFilter==='gemini'?<Sparkles className="w-4 h-4"/>:libFilter==='academia'?<AcademiaIcon className="w-4 h-4"/>:<Feather className="w-4 h-4"/>;
             const primaryAction = () => {
               if (libFilter==='gemini') { setCreatorStep(1); setCreatorSetupStep('content'); setView('creator'); }
-              else if (libFilter==='academia') { setAcademiaCreatorStep(1); setAcademiaSetupStep('content'); setView('academia-creator'); }
+              else if (libFilter==='academia') { setFamedCreationTarget(null); setAcademiaCreatorStep(1); setAcademiaSetupStep('content'); setView('academia-creator'); }
               else { setPasteSubName(''); setPasteTopic('Bloco 1'); setView('paste'); }
+            };
+            const creationTabs = [
+              { key:'academia', label:'Criar Aula', icon:<AcademiaIcon className="w-4 h-4"/>, available:canUseAcademia },
+              { key:'gemini', label:'Criar Questões', icon:<Sparkles className="w-4 h-4"/>, available:true },
+              { key:'external', label:'Importar Questões', icon:<Feather className="w-4 h-4"/>, available:true },
+            ].filter(tab=>tab.available);
+            const switchCreationTab = (source) => {
+              setLibFilter(source);
+              setActiveFolderId(null);
+              setView('sub-library');
             };
             const renderIconButton = (label, icon, fn, extra='') => (
               <button onClick={e=>{e.stopPropagation();fn();}} title={label} aria-label={label} className={`h-8 w-8 md:h-9 md:w-9 rounded-lg border flex items-center justify-center ${actionBtn} ${extra}`}>
@@ -475,8 +487,15 @@ export default function SubLibraryView() {
             return (
               <div>
                 <div className="mb-6">
+                  <div className={`mb-5 grid gap-1 rounded-2xl border p-1.5 ${creationTabs.length===3?'grid-cols-1 sm:grid-cols-3':'grid-cols-1 sm:grid-cols-2'} ${darkMode?'border-gray-800 bg-gray-950/50':'border-gray-200 bg-gray-50'}`} role="tablist" aria-label="Criação de conteúdo">
+                    {creationTabs.map(tab=>(
+                      <button key={tab.key} type="button" role="tab" aria-selected={libFilter===tab.key} onClick={()=>switchCreationTab(tab.key)} className={`min-h-[46px] rounded-xl px-3 py-2.5 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${libFilter===tab.key?(darkMode?'bg-gray-800 text-yellow-400 shadow-sm':'bg-white text-yellow-700 shadow-sm border border-gray-200'):(darkMode?'text-gray-400 hover:bg-gray-900 hover:text-gray-200':'text-gray-500 hover:bg-white hover:text-gray-800')}`}>
+                        {tab.icon}<span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
                   <button onClick={()=>activeFolderId?setActiveFolderId(activeFolder?.parentFolderId || null):setView('library')} className={`flex items-center gap-2 mb-4 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
-                    <ArrowLeft className="w-4 h-4"/>{activeFolderId?'Voltar':'Acervos'}
+                    <ArrowLeft className="w-4 h-4"/>{activeFolderId?'Voltar':'Início'}
                   </button>
                 <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
                     <div className="min-w-0">

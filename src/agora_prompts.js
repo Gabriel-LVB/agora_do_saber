@@ -293,6 +293,10 @@ B) Valproato
 REGRA 3 — DISTRATORES SOFISTICADOS (CRÍTICO):
 Cada distrator deve ser uma afirmação que um estudante que estudou superficialmente poderia confundir com a resposta correta.
 Use: condições do mesmo grupo nosológico, fármacos da mesma classe, mecanismos parecidos, exceções da regra, valores próximos mas incorretos, inversões de causa/efeito, confusões clássicas do tema.
+- Parta sempre da alternativa A correta. Preserve nos distratores a categoria, a estrutura e o máximo possível dos componentes verdadeiros de A; corrompa apenas um elemento decisivo por vez, como direção do efeito, estrutura anatômica, mecanismo, momento, valor, indicação ou contraindicação.
+- Toda alternativa deve conter algum núcleo plausível ou verdadeiro. Em alternativas com duas ou mais afirmações, mantenha uma ou mais partes verdadeiras e altere uma parte decisiva, de modo que a proposição completa fique inequivocamente errada para aquela pergunta.
+- A corrupção deve ser conceitual e sutil, não apenas uma troca cosmética de palavras. Quem domina o conteúdo deve conseguir apontar exatamente qual componente tornou o distrator falso.
+- Depois de criar cada distrator, confira duas coisas: ele parece correto à primeira leitura? ainda existe apenas uma alternativa integralmente correta? Se qualquer resposta for não, reescreva.
 PROIBIDO: distratores obviamente absurdos, anatomicamente impossíveis, ou que qualquer pessoa sem conhecimento médico eliminaria por bom senso.
 PROIBIDO: distratores que são apenas a negação direta do enunciado.
 PROIBIDO: misturar categorias semânticas. Se a pergunta pede uma reação oftalmológica, todos os distratores devem ser reações/achados oftalmológicos plausíveis ou diagnósticos diferenciais oculares — nunca pancreatite, nefrolitíase, enjoo etc.
@@ -397,6 +401,28 @@ Escreva como uma aula/apostila contínua, não como flashcards ou verbetes isola
 Os títulos com ## existem só para o sistema separar as seções; dentro de cada seção, crie um título curto em negrito para orientar a leitura quando o ## estiver oculto.`
 };
 
+const ACADEMIA_NARRATIVE_OBJECTIVE = `
+OBJETIVO DE LEITURA — AULA EM PARÁGRAFOS:
+Escreva como uma aula contínua, em que cada parágrafo prepara naturalmente o seguinte.
+Os marcadores com ## existem somente para o sistema distribuir internamente o conteúdo e não serão mostrados ao aluno.
+O texto final precisa continuar perfeitamente compreensível quando todos esses marcadores forem removidos e os parágrafos forem exibidos em sequência.`;
+
+const ACADEMIA_NARRATIVE_LENGTH_RULES = {
+  essential: `
+PROFUNDIDADE DA AULA: Nível 1
+- Faça uma revisão curta e fluida, preservando apenas o necessário para lembrar, diferenciar e decidir.
+- Use, em regra, no máximo 80 palavras por seção técnica.
+- Conecte causa, mecanismo e consequência em frases completas; não use texto telegráfico.`,
+  balanced: `
+PROFUNDIDADE DA AULA: Nível 2
+- Dedique em regra um parágrafo curto a cada subtópico; use dois apenas se houver critério ou comparação importante.
+- Preserve mecanismos, exemplos e critérios cobrados em prova, sempre fazendo a transição para o parágrafo seguinte.`,
+  complete: `
+PROFUNDIDADE DA AULA: Nível 3
+- Dedique de um a dois parágrafos fortes a cada subtópico; use três apenas quando ele for realmente denso.
+- Contextualize mecanismo, clínica, critérios e exemplos como partes de um único raciocínio progressivo.`
+};
+
 const TEMPLATE_QUESTAO = (alts, adminQuestionExplanations = false, caseSeries = false) => `
 FORMATO OBRIGATÓRIO (uma questão por bloco ---):
 ## Questão 1.1.1
@@ -431,6 +457,7 @@ Depois crie os distratores (B, C, D e E se houver) baseando-se na alternativa A:
 - Use a alternativa A como referência de formato compacto — os distratores devem ter comprimento e estrutura similares
 - Se a pergunta pedir um nome/termo, escreva apenas nomes/termos nas alternativas; não anexe resumos explicativos
 - Crie distratores alterando elementos específicos da alternativa A: troque doses, mecanismos, órgãos, fármacos por versões plausíveis mas incorretas
+- Preserve em cada distrator os componentes verdadeiros de A e corrompa somente um ponto decisivo; em alternativas compostas, mantenha parte das afirmações verdadeiras, mas garanta que o conjunto seja inequivocamente falso
 - Distratores devem parecer igualmente corretos para quem não domina o assunto
 - O site embaralha as alternativas automaticamente antes de exibir — você não precisa se preocupar com isso
 Resultado esperado: 5 alternativas com comprimento quase idêntico, onde só quem domina o conteúdo consegue identificar a correta.`;
@@ -443,6 +470,7 @@ export const QUESTION_REPAIR_CHECKLIST = [
   'Enunciado sem pistas semânticas, gramaticais, de tamanho ou de categoria',
   'Alternativa correta tecnicamente verdadeira, atual e sem ambiguidade',
   'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',
+  'Distratores derivados da correta por uma corrupção conceitual decisiva, preservando algum núcleo verdadeiro sem criar uma segunda resposta correta',
   'Alternativas no menor texto suficiente para responder ao alvo, sem resumos explicativos que deem pistas',
   'Explicação ensina o porquê e o como do conceito, sem parafrasear a resposta',
   'Explicação sem referência fixa a letras, pois o site embaralha alternativas',
@@ -570,9 +598,9 @@ Quando uma lista de subtópicos obrigatórios for fornecida, cubra TODOS eles.
 Se NÃO houver lista obrigatória, defina mentalmente ${expectedSubtopics} eixos/subtópicos de cobrança para este tópico.
 NÃO use quantidade fixa por subtópico:
 - Para cada subtópico/eixo, atomize o conteúdo em perguntas independentes de alto rendimento.
-- Gere a quantidade necessária para cobrir tudo que é relevante, cobrável e ainda não repetido.
-- Piso prático: gere pelo menos 2 questões por subtópico/eixo. Não encerre um subtópico com uma única cobrança óbvia.
-- Referência: 2 a 4 questões por subtópico costuma bastar; use 5 ou 6 quando houver muitos mecanismos, diagnósticos diferenciais, critérios, condutas, complicações ou pegadinhas realmente distintos.
+- Gere o menor conjunto que cubra tudo que é relevante, cobrável e ainda não repetido.
+- Não existe piso, meta habitual nem obrigação de explorar vários ângulos. Uma cobrança forte basta quando recupera o objetivo inteiro com justiça.
+- Acrescente outra questão somente quando ela exigir um mecanismo, diagnóstico diferencial, critério, conduta, complicação ou pegadinha realmente independente.
 - Checklist obrigatório antes de finalizar cada subtópico: ideia central/definição; mecanismo ou fisiopatologia; achados/diagnóstico; conduta, complicação, diferencial ou pegadinha quando aplicável.
 - Não crie questões para encher volume. Não pergunte trivia inútil.
 - Não crie questões de bom senso para completar quantidade. Se a cobrança seria "psicoeducação", "simplificar regime", "revisar medicações", "avaliar risco-benefício" ou equivalente genérico, substitua por um eixo técnico realmente cobrável.
@@ -586,7 +614,6 @@ MODO AUTOMÁTICO NÃO SIGNIFICA QUANTIDADE LIVRE:
 - Gere EXATAMENTE ${expectedTotal} questões no total
 - Distribua como ${expectedQPerSub} questão(ões) por eixo/subtópico
 - NÃO gere apenas uma questão e NÃO pare antes de completar ${expectedTotal}
-FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico.
 Critérios:
 - Use subtópicos suficientes para cobrir os blocos reais de estudo
 - Quantidade ideal: a necessária para cobrir o essencial sem repetição
@@ -643,22 +670,23 @@ ${onlyFlashcards ? `Gere os ${memoryCardName(types)} sem interromper. Não resum
 
 // ─── PROMPT: SUMÁRIO DO ORÁCULO ───────────────────────────────────────────────
 
+const EFFICIENT_SYLLABUS_PRINCIPLE = `PRINCÍPIO DE EFICIÊNCIA E ALTO RENDIMENTO:
+A liberdade para escolher a quantidade não é um convite para produzir o maior sumário possível. Construa o menor mapa de estudo que preserve tudo o que realmente sustenta compreensão, diferenciação e decisão.
+Priorize conceitos que destravam vários outros, são recorrentes em avaliação, mudam diagnóstico ou conduta, evitam erros previsíveis ou distinguem alternativas próximas.
+Cada tópico, subtópico e questão planejada precisa acrescentar um ganho de aprendizagem próprio. Quando o ganho marginal for pequeno, repetido ou meramente contextual, incorpore a informação a uma unidade mais forte ou elimine-a.
+O objetivo é maximizar domínio relevante por tempo de estudo: cobertura essencial sem superficialidade, redundância ou expansão por completude aparente.`;
+
 export const buildOracleSyllabusPrompt = (subjectName, s, autoMode = false) => {
-  const l = SYLLABUS_LIMITS.oracle;
   const studyMap = true;
   const estrutura = autoMode
     ? `Defina a quantidade ideal de tópicos e subtópicos para cobrir "${subjectName}" com base no material fornecido.
 OBJETIVO: criar um roteiro de estudo completo e utilizável, não um índice enciclopédico.
 O sumário será usado assim: cada subtópico vira um eixo de cobrança para questões/flashcards. Portanto, cada subtópico deve ter uma fronteira de cobrança clara e não pode ser apenas variação redundante de outro subtópico.
-FAIXA DE REFERÊNCIA:
-- Assunto comum: ${l.minTopics} a ${l.targetMaxTopics} tópicos no total
-- ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma ser suficiente
-- Materiais longos devem virar MAIS TÓPICOS, não tópicos gigantes
-- Use mais subtópicos quando o material realmente exigir cobertura própria
-- Os tópicos devem emergir naturalmente do material — não use divisões genéricas fixas
-- Cada subtópico = 1 bloco específico e testável, sem sobreposição com outros
-- Cada subtópico precisa ser testável em prova ou útil na vida real. Se só render pergunta de bom senso, não crie o subtópico.
-- PROIBIDO: um único tópico com dezenas de subtópicos. Se um tópico passar de 30 subtópicos, divida em tópicos menores.
+CALIBRAÇÃO SEM META NUMÉRICA:
+- Os tópicos devem emergir naturalmente do material, sem divisões genéricas fixas.
+- Materiais longos devem ser organizados por blocos didáticos coerentes, em vez de concentrados em tópicos gigantes.
+- Só crie um novo subtópico quando ele exigir compreensão ou recuperação própria e não estiver coberto por um eixo vizinho.
+- Cada subtópico precisa ser testável em prova ou útil na vida real. Se só render pergunta de bom senso, não o crie.
 Crie subtópicos como UNIDADES DE COBRANÇA: cada um deve permitir uma questão/flashcard próprio, com resposta ou explicação diferente dos vizinhos.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
 Não crie subtópicos guarda-chuva que misturem definição, diagnóstico, classificação, complicações, exames e tratamento quando esses blocos renderem cobranças próprias.`
@@ -683,6 +711,7 @@ Antes de montar o sumário, extraia mentalmente do material quatro listas: (1) o
 
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para revisão e criação de questões de alto rendimento, não para uma apostila enciclopédica.
+${EFFICIENT_SYLLABUS_PRINCIPLE}
 Evite tópicos ou subtópicos de "introdução", "epidemiologia", "histórico", "conceitos gerais" ou "aspectos gerais" quando eles não forem diretamente úteis para prova, diagnóstico, conduta, mecanismo, classificação, fator de risco, complicação ou pegadinha.
 Evite também subtópicos de "adesão", "polifarmácia", "risco-benefício", "otimização do tratamento" ou "medidas gerais" quando eles só gerariam respostas como orientar, revisar, simplificar, monitorar ou desprescrever.
 Se uma informação contextual puder ser explicada em 1 ou 2 frases dentro de outro subtópico, NÃO crie um subtópico próprio para ela.
@@ -728,7 +757,7 @@ REGRAS FINAIS:
 - Proibido repetir a mesma síndrome/doença/tema em tópicos diferentes sem eixo de cobrança explicitamente novo
 - Obrigatório cobrir todo o material relevante, sem cortar conteúdo importante para caber em uma quantidade fixa
 - Obrigatório revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado
-- Obrigatório revisar tópicos gigantes e dividir qualquer tópico que passe de 30 subtópicos
+- Obrigatório revisar tópicos excessivamente grandes e dividi-los por fronteiras didáticas reais
 - Obrigatório fazer uma checagem final contra o material: remova qualquer tópico proibido pelo usuário e confirme que todas as etapas/blocos solicitados aparecem.
 - Em pedidos clínicos orientados a decisão, prefira títulos que explicitem o contraste ou cenário: "X versus Y em paciente com...", "troca de X após...", "escolha em...", "quando evitar X". Evite objetivos vagos como apenas "indicações", "efeitos adversos" ou "primeira linha" quando o contexto discriminativo puder ser explicitado.
 - A seção de casos/patologias não pode ser uma recapitulação genérica dos fármacos. Ela deve transformar o conteúdo anterior em cenários de decisão plausíveis, com fatores do paciente que mudam a escolha.
@@ -736,24 +765,25 @@ REGRAS FINAIS:
 ${studyMap ? `PLANO DE ESTUDO GUIADO:
 Para CADA subtópico, faça também um planejamento individual:
 - Q mede o número de QUESTÕES DISTINTAS recomendadas para revisar o objetivo:
-  - Use normalmente Q:2 a Q:4 para permitir recuperação por ângulos diferentes.
-  - Use Q:1 apenas para um objetivo realmente estreito e atômico, coberto com justiça por uma única pergunta.
-  - Use Q:5 ou Q:6 quando houver vários conceitos, decisões ou contrastes independentes; divida o subtópico se precisar de mais.
+  - Escolha a menor quantidade que permita recuperar o objetivo com segurança, sem meta padrão, piso artificial ou incentivo para preencher volume.
+  - Aumente Q somente quando cada questão adicional testar uma decisão, contraste, mecanismo ou aplicação realmente independente.
+  - Se várias perguntas seriam paráfrases ou cobrariam o mesmo raciocínio, mantenha apenas a cobrança mais forte.
 - OBJ: objetivo de aprendizagem curto, específico e verificável. Ele deve dizer o que o estudante precisará compreender, diferenciar, reconhecer ou decidir.
 - Quando o pedido for clínico/prático, prefira verbos de decisão: selecionar, comparar, trocar, evitar, priorizar, diferenciar ou justificar. Use "listar/descrever/identificar" apenas quando recuperação factual for realmente o objetivo final.
 - Q deve contar cobranças distintas, não paráfrases da mesma pergunta.
 
 FORMATO OBRIGATÓRIO DE CADA SUBTÓPICO:
-  - [Q:3] [OBJ:Diferenciar X de Y pelo achado que muda a conduta] Nome do subtópico
+  - [Q:NÚMERO] [OBJ:Diferenciar X de Y pelo achado que muda a conduta] Nome do subtópico
+- Substitua NÚMERO pela quantidade calculada segundo o ganho de aprendizagem daquele objetivo; o marcador demonstra sintaxe, não uma meta.
 - Use exatamente linhas "Tópico N: nome" e bullets iniciados por "- [Q:".
 - NÃO use tabelas, JSON, blocos de código, títulos "Eixo/Trilha/Módulo" nem comentários antes ou depois do mapa.
 ` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - ${studyMap ? '[Q:3] [OBJ:objetivo verificável] ' : ''}[Subtópico]
-  - ${studyMap ? '[Q:2] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:NÚMERO] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:NÚMERO] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 Tópico 2: [Nome]
-  - ${studyMap ? '[Q:4] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:NÚMERO] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 
 Responda APENAS o sumário.`;
 };
@@ -761,7 +791,6 @@ Responda APENAS o sumário.`;
 // ─── PROMPT: REVISÃO DE SUMÁRIO ───────────────────────────────────────────────
 
 export const buildOracleSyllabusRevisePrompt = (currentSyllabus, feedback, s) => {
-  const l = s?.source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
   const studyMap = true;
   return `Você é o Arquiteto de Alexandria. Ajuste o sumário abaixo conforme a instrução do usuário.
 
@@ -778,7 +807,8 @@ REGRAS:
 - Cada subtópico deve render cobrança de prova ou utilidade real; não mantenha subtópico que só gere conselho genérico.
 - Mantenha o sumário completo e fiel: use mais tópicos/subtópicos quando o material ou o usuário pedir
 - Não junte tópicos apenas para reduzir tamanho; preserve blocos independentes
-${studyMap ? '- Preserve ou recalcule [Q:n] e [OBJ:objetivo verificável] em CADA subtópico. Use normalmente Q:2 a Q:4; reserve Q:1 para objetivos realmente estreitos.' : ''}
+${studyMap ? '- Preserve ou recalcule [Q:n] e [OBJ:objetivo verificável] em CADA subtópico. Em Q, use a menor quantidade suficiente para cobrir cobranças realmente distintas, sem meta padrão e sem perguntas de preenchimento.' : ''}
+- Aplique o princípio de alto rendimento: maximize domínio relevante por tempo de estudo e remova tudo cujo ganho de aprendizagem seja redundante ou marginal.
 - Responda APENAS o sumário revisado, sem comentários adicionais`;
 };
 
@@ -878,9 +908,9 @@ REGRAS FINAIS:
 
   const parte1 = s.autoMode
     ? `*** PARTE 1: ESTRUTURA (modo automático) ***
-A IA deve definir uma estrutura completa para estudo.
-FAIXA DE REFERÊNCIA: ${SYLLABUS_LIMITS.oracle.minTopics} a ${SYLLABUS_LIMITS.oracle.targetMaxTopics} tópicos no total; ${SYLLABUS_LIMITS.oracle.minSubtopicsPerTopic} a ${SYLLABUS_LIMITS.oracle.targetMaxSubtopicsPerTopic} subtópicos por tópico, ampliando quando o material exigir.
-Critérios: tópicos emergem do material, ordem didática (geral → específico), cada subtópico = 1 bloco testável independente.
+A IA deve definir a estrutura mais eficiente para estudo, sem meta numérica de tópicos ou subtópicos.
+Use o menor mapa que preserve o conteúdo essencial: tópicos emergem do material, seguem ordem didática e cada subtópico acrescenta um bloco testável independente.
+Priorize o que destrava compreensão, diferencia alternativas ou muda decisão; funda ou elimine unidades cujo ganho de aprendizagem seja repetido ou marginal.
 Responda APENAS o sumário. Aguarde confirmação antes de gerar questões.`
     : `*** PARTE 1: ESTRUTURA ***
 Crie um sumário sobre [INSERIR TEMA] com ${s.numTopics} tópicos e ${s.numSubtopics} subtópicos cada.
@@ -1110,22 +1140,20 @@ ${transcript}`;
 // ─── PROMPT: SUMÁRIO DA ACADEMIA ─────────────────────────────────────────────
 
 export const buildAcademiaSyllabusPrompt = (subjectName, s, autoMode = false) => {
-  const l = SYLLABUS_LIMITS.academia;
   const studyMap = true;
   const estrutura = autoMode
     ? `Defina uma estrutura completa para uma aula eficiente.
 O sumário será usado assim: cada subtópico vira uma seção explicada pelo professor, e depois o sistema cria questões de fixação para o tópico como um todo. Portanto, os subtópicos devem ter fronteiras conceituais claras e não devem ser variações redundantes do mesmo eixo de cobrança.
-FAIXA DE REFERÊNCIA:
-- ${l.minTopics} a ${l.targetMaxTopics} tópicos costuma funcionar bem
-- ${l.minSubtopicsPerTopic} a ${l.targetMaxSubtopicsPerTopic} subtópicos por tópico costuma funcionar bem
-- Para materiais longos, crie mais tópicos em vez de inchar um único tópico
-- Use mais subtópicos quando o material trouxer blocos independentes
-- PROIBIDO: tópico com dezenas de subtópicos. Se um tópico passaria de 30 subtópicos, divida esse bloco em tópicos menores.
-Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render cerca de 1 a 2 parágrafos fortes de explicação.
+CALIBRAÇÃO SEM META NUMÉRICA:
+- Deixe a estrutura emergir do material e do desempenho que o aluno precisa treinar.
+- Para materiais longos, distribua o conteúdo em blocos didáticos coerentes em vez de inchar um único tópico.
+- Só crie um novo subtópico quando ele exigir compreensão ou recuperação própria e não estiver coberto por um eixo vizinho.
+- Não use a liberdade de quantidade para maximizar volume.
+Crie subtópicos como UNIDADES ENSINÁVEIS: cada um deve render uma explicação curta, coesa e suficiente.
 Cada subtópico deve ser testável em prova ou útil na vida real. Se só render conselho genérico, orientação vaga ou princípio administrativo, não crie o subtópico.
 Não atomize por frase, item de lista, exemplo isolado ou microdetalhe.
 Não crie subtópicos guarda-chuva que misturem definição, diagnóstico, classificação, complicações, exames e tratamento quando esses blocos renderem cobranças próprias.
-Se um bloco exigiria 4 ou mais parágrafos para explicar bem, divida em 2 ou mais subtópicos.`
+Se um bloco exigir uma explicação extensa com objetivos independentes, divida-o segundo essas fronteiras conceituais.`
     : `Crie exatamente ${s.numTopics} Tópicos com exatamente ${s.numSubtopics} Subtópicos cada.`;
 
   return `Você é o Arquiteto de Alexandria, construindo o sumário de um curso sobre "${subjectName}".
@@ -1145,6 +1173,7 @@ Antes de montar o sumário, extraia mentalmente: o que deve ser aprendido, o que
 
 MODO DE ESTUDO RÁPIDO E ENXUTO:
 Monte o sumário para estudo eficiente, não para uma apostila enciclopédica.
+${EFFICIENT_SYLLABUS_PRINCIPLE}
 Evite tópicos ou subtópicos de "introdução", "epidemiologia", "histórico", "conceitos gerais" ou "aspectos gerais" quando eles não forem diretamente úteis para prova, diagnóstico, conduta, mecanismo, classificação, fator de risco, complicação ou pegadinha.
 Evite também subtópicos de "adesão", "polifarmácia", "risco-benefício", "otimização do tratamento" ou "medidas gerais" se eles não trouxerem conhecimento técnico específico.
 Se uma informação contextual puder ser explicada em 1 ou 2 frases dentro de outro subtópico, NÃO crie um subtópico próprio para ela.
@@ -1152,8 +1181,7 @@ Prefira menos subtópicos, porém mais fortes e cobradores, a muitos subtópicos
 Só mantenha epidemiologia, definição ampla ou introdução quando isso gerar cobrança real de prova ou mudar conduta/raciocínio.
 
 COMO CALIBRAR O TAMANHO DE UM SUBTÓPICO:
-Cada subtópico deve corresponder a um bloco de conteúdo que, no material original, ocupa
-aproximadamente 3 a 10 linhas (ou 1 a 2 parágrafos curtos).
+Cada subtópico deve reunir uma unidade ensinável e testável. Não o fragmente por tamanho visual do material; separe apenas quando surgirem objetivos de aprendizagem realmente independentes.
 
 REGRA DE FRONTEIRA DE COBRANÇA:
 Antes de finalizar o sumário, pergunte para cada subtópico: "que tipo de questão diferente este subtópico permite gerar?".
@@ -1204,29 +1232,30 @@ Proibido: sumário enciclopédico que transforma cada bullet do material em um s
 Proibido: repetir a mesma síndrome/doença em tópicos diferentes sem eixo de cobrança explicitamente novo.
 Obrigatório: cobrir todo o material relevante, sem cortar conteúdo para caber em uma quantidade fixa.
 Obrigatório: revisar o sumário final removendo duplicidades e subtópicos que só mudam palavras, não o conceito cobrado.
-Obrigatório: antes de responder, revise tópicos gigantes e divida qualquer tópico que passe de 30 subtópicos.
+Obrigatório: antes de responder, revise tópicos excessivamente grandes e divida-os por fronteiras didáticas reais.
 Obrigatório: em pedidos clínicos orientados a decisão, a parte de patologias/casos deve conter cenários que mudem escolha, troca, contraindicação ou linha terapêutica; não pode ser apenas uma recapitulação genérica.
 ${studyMap ? `PLANO DE ESTUDO GUIADO:
 Para CADA subtópico, planeje:
 - Q mede quantas QUESTÕES DISTINTAS são recomendadas para revisar o objetivo:
-  - Use normalmente Q:2 a Q:4 para permitir recuperação por ângulos diferentes.
-  - Use Q:1 apenas para um objetivo realmente estreito e atômico.
-  - Use Q:5 ou Q:6 quando houver vários conceitos, decisões ou contrastes independentes; divida o subtópico se precisar de mais.
+  - Escolha a menor quantidade que permita recuperar o objetivo com segurança, sem meta padrão, piso artificial ou incentivo para preencher volume.
+  - Aumente Q somente quando cada questão adicional testar uma decisão, contraste, mecanismo ou aplicação realmente independente.
+  - Se várias perguntas seriam paráfrases ou cobrariam o mesmo raciocínio, mantenha apenas a cobrança mais forte.
 - OBJ: objetivo de aprendizagem curto, específico e verificável.
 - Em pedidos clínicos/práticos, prefira objetivos com selecionar, comparar, trocar, evitar, priorizar, diferenciar ou justificar. Use listar/descrever apenas quando a recuperação factual for o objetivo final.
 - Q deve contar cobranças diferentes, não paráfrases da mesma pergunta.
 
 FORMATO OBRIGATÓRIO DE CADA SUBTÓPICO:
-  - [Q:3] [OBJ:Explicar por que X produz Y e reconhecer sua consequência] Nome do subtópico
+  - [Q:NÚMERO] [OBJ:Explicar por que X produz Y e reconhecer sua consequência] Nome do subtópico
+- Substitua NÚMERO pela quantidade calculada segundo o ganho de aprendizagem daquele objetivo; o marcador demonstra sintaxe, não uma meta.
 - Use exatamente linhas "Tópico N: nome" e bullets iniciados por "- [Q:".
 - NÃO use tabelas, JSON, blocos de código, títulos "Eixo/Trilha/Módulo" nem comentários antes ou depois do mapa.
 ` : ''}
 FORMATO:
 Tópico 1: [Nome]
-  - ${studyMap ? '[Q:3] [OBJ:objetivo verificável] ' : ''}[Subtópico]
-  - ${studyMap ? '[Q:2] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:NÚMERO] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:NÚMERO] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 Tópico 2: [Nome]
-  - ${studyMap ? '[Q:4] [OBJ:objetivo verificável] ' : ''}[Subtópico]
+  - ${studyMap ? '[Q:NÚMERO] [OBJ:objetivo verificável] ' : ''}[Subtópico]
 
 Responda APENAS o sumário.`;
 };
@@ -1240,7 +1269,7 @@ export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', 
   const exampleOutput = subtopics.slice(0, 2).map((s, i) =>
     useOutline
       ? `## ${s}\n**[título curto do bloco]**\n- **[item principal]:** [frase clara]\n- **[grupo, sequência ou mnemônico]:**\n  - [componente subordinado]\n  - [componente subordinado]\n- **[outro item principal]:** [consequência ou conduta]`
-      : `## ${s}\n**[título curto do bloco]**\n[explicação aqui]`
+      : `## ${s}\n[parágrafo que continua o raciocínio anterior e prepara o próximo]`
   ).join('\n\n');
 
   return `Você é um professor de medicina da Ágora do Saber, criando uma aula sobre "${topicTitle}"${subjectName ? ` (${subjectName})` : ''}.
@@ -1248,7 +1277,7 @@ export const buildAcademiaLessonPrompt = (topicTitle, subtopics, material = '', 
 SUBTÓPICOS A COBRIR — gere EXATAMENTE ${subtopics.length} seções, uma por subtópico, nesta ordem:
 ${subtopics.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-${ACADEMIA_LESSON_OBJECTIVE[lengthMode]}
+${useOutline ? ACADEMIA_LESSON_OBJECTIVE[lengthMode] : ACADEMIA_NARRATIVE_OBJECTIVE}
 
 FORMATO DE SAÍDA OBRIGATÓRIO:
 Cada seção DEVE começar com ## seguido do título do subtópico, exatamente assim:
@@ -1266,18 +1295,20 @@ ${exampleOutput}
 ... (continue para todos os ${subtopics.length} subtópicos)
 
 REGRAS DE CONTEÚDO:
-${ACADEMIA_LESSON_LENGTH_RULES[lengthMode]}
+${useOutline ? ACADEMIA_LESSON_LENGTH_RULES[lengthMode] : ACADEMIA_NARRATIVE_LENGTH_RULES[lengthMode]}
 - Cada seção cobre APENAS o conceito do seu subtópico — não misture com outros.
-- Logo após o ## obrigatório, crie um título curto em negrito que sintetize o subtópico sem copiar tudo. Errado: repetir "Tipos especiais de hérnias: incisionais, umbilicais e inguinais". Certo: "**Tipos de hérnias**".
+- ${useOutline
+    ? 'Logo após o ## obrigatório, crie um título curto em negrito que sintetize o subtópico sem copiar tudo. Errado: repetir "Tipos especiais de hérnias: incisionais, umbilicais e inguinais". Certo: "**Tipos de hérnias**".'
+    : 'Depois do ##, comece diretamente o parágrafo. PROIBIDO criar título, rótulo, cabeçalho, linha isolada em negrito ou repetir o nome do subtópico.'}
 - ${useOutline
     ? 'FORMATO EM TÓPICOS: escreva em outline de revisão, com bullets densos e frases completas.'
-    : 'FORMATO EM PARÁGRAFOS: escreva em fluxo narrativo e conectado. Não transforme a seção em uma lista apenas porque a profundidade escolhida é Essencial.'}
+    : 'FORMATO EM PARÁGRAFOS: escreva em fluxo narrativo e conectado. Cada novo parágrafo deve retomar ou desenvolver a ideia anterior com conectores naturais, sem parecer um verbete independente. Não transforme a seção em uma lista apenas porque a profundidade escolhida é Essencial.'}
 - ${useOutline
     ? 'Quando um bullet-pai introduzir classificação, componentes de mnemônico, sequência ou exemplos, coloque cada componente em sub-bullets indentados com dois espaços antes de "-". Nunca deixe filhos visuais no mesmo nível do pai.'
     : 'Use listas somente quando uma classificação ou sequência perderia clareza em prosa; fora desses casos, mantenha parágrafos.'}
 - ${useOutline
     ? 'Não use letras ou números como marcadores internos. Use "- " para bullets principais e "  - " para sub-bullets.'
-    : 'A profundidade controla o tamanho do texto, não o transforma em tópicos.'}
+    : 'A profundidade controla o tamanho do texto, não o transforma em tópicos. O resultado deve ter uma sequência didática clara mesmo sem qualquer título visível.'}
 - ${lengthMode === 'essential'
     ? 'Não use fragmentos soltos como "dor, distensão, vômitos". Transforme-os em uma frase útil, por exemplo: "A hérnia obstrutiva costuma causar dor, distensão, vômitos e constipação."'
     : 'Evite começar toda seção com "[subtópico] é..." ou "[subtópico] refere-se...". Varie a abertura e dê continuidade ao raciocínio.'}

@@ -48,7 +48,7 @@ const parseSyllabusTopics = (syllabusText = '') => {
 
 const parseStudyMapSubtopic = (raw = '') => {
   const text = String(raw).replace(/^\s*\|?/, '').replace(/\|?\s*$/, '').replace(/\s*\|\s*/g, ' ');
-  const questions = Math.max(1, Math.min(30, Number(text.match(/\[Q:(\d+)\]/i)?.[1]) || 2));
+  const questions = Math.max(1, Math.min(30, Number(text.match(/\[Q:(\d+)\]/i)?.[1]) || 1));
   const objective = String(text.match(/\[OBJ:([^\]]+)\]/i)?.[1] || '').trim();
   const title = cleanSyllabusSubtopic(text.replace(/\[(?:Q|P|OBJ):[^\]]+\]\s*/gi, '').replace(/^(?:subt[óo]pico|objetivo)\s*:?\s*/i, '').trim());
   return { title, questions, objective };
@@ -92,7 +92,7 @@ const parseStudyMapSyllabus = (syllabusText = '') => {
 const formatStudyMapSyllabus = (topics = []) => topics.map((topic, topicIndex) => {
   const cleanTitle = topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
   return `Tópico ${topicIndex + 1}: ${cleanTitle || topic.title}\n${topic.subtopics.map(subtopic =>
-    `  - [Q:${Math.max(1, Math.min(30, Number(subtopic.questions) || 2))}] [OBJ:${subtopic.objective || `Dominar ${subtopic.title}`}] ${subtopic.title}`
+    `  - [Q:${Math.max(1, Math.min(30, Number(subtopic.questions) || 1))}] [OBJ:${subtopic.objective || `Dominar ${subtopic.title}`}] ${subtopic.title}`
   ).join('\n')}`;
 }).join('\n\n');
 

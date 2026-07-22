@@ -125,6 +125,35 @@ const splitQuestionCase = (question = {}) => {
   return { caseContext:cleanClinicalCaseContext(parts[0]), statement:parts.slice(1).join('\n\n') };
 };
 
+const clinicalCaseKey = (question = {}) => {
+  const { caseContext } = splitQuestionCase(question);
+  return String(caseContext || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+};
+
+const ClinicalCaseIntro = ({ question, questionCount, darkMode }) => {
+  const { caseContext } = splitQuestionCase(question);
+  if (!caseContext) return null;
+  const count = Math.max(1, Number(questionCount) || 1);
+  return (
+    <section className={`mb-4 w-full rounded-2xl border px-4 py-4 md:px-6 md:py-5 ${darkMode?'border-yellow-900/70 bg-yellow-950/20':'border-yellow-200 bg-yellow-50/70'}`}>
+      <div className={`mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
+        <BrainIcon className="h-4 w-4"/>Caso clínico compartilhado
+      </div>
+      <p className={`mb-3 text-xs font-bold ${darkMode?'text-yellow-200/80':'text-yellow-800'}`}>
+        Use este caso para responder {count === 1 ? 'à questão a seguir' : `às ${count} questões a seguir`}.
+      </p>
+      <div className={`select-text text-base font-medium leading-7 md:text-[17px] ${darkMode?'text-gray-100':'text-gray-900'}`} style={{userSelect:'text'}}>
+        {parseHtmlTextChat(caseContext)}
+      </div>
+    </section>
+  );
+};
+
 const extractStructuredQuestionText = (rawStatement = '') => {
   const raw = String(rawStatement || '').replace(/\r\n/g, '\n').trim();
   const caseMatch = raw.match(/(?:^|\n)\s*Caso-base\s*:\s*([\s\S]*?)(?=\n\s*Enunciado\s*:|$)/i);
@@ -632,6 +661,18 @@ const QuestionView = ({
 	  const currentQuestion = allFlashcards && singleMode
 	    ? (activeFlashcardEntry ? getFlashcardById(activeFlashcardEntry.qid) : null)
 	    : (singleMode ? questions[Math.min(singleIndex, questions.length - 1)] : null);
+	  const clinicalCaseMeta = useMemo(() => {
+	    const counts = new Map();
+	    const keys = questions.map(question => clinicalCaseKey(question));
+	    keys.forEach(key => {
+	      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+	    });
+	    return keys.map((key, index) => ({
+	      key,
+	      count:key ? (counts.get(key) || 1) : 0,
+	      startsGroup:!!key && keys[index - 1] !== key,
+	    }));
+	  }, [questionIdsKey, questions]);
 	  useEffect(() => {
 	    if (!resumeAtFirstUnanswered || !singleMode || allFlashcards || !currentSingleQuestionIdRef.current) return;
 	    const idx = questions.findIndex(q => q.id === currentSingleQuestionIdRef.current);
@@ -697,6 +738,8 @@ const QuestionView = ({
 	    const selected = entry
 	      ? (flashcardEntryAnswers[entryKey] || (entry.attempt === 0 ? validAnswers[q.id] : null) || null)
 	      : validAnswers[q.id];
+	    const caseMeta = clinicalCaseMeta[i] || {};
+	    const showSharedCase = !allFlashcards && !!caseMeta.key && (singleMode || caseMeta.startsGroup);
 	    return (
 	    <div
 	      key={entry ? entryKey : (q.id||i)}
@@ -704,6 +747,7 @@ const QuestionView = ({
 	      data-flashcard-entry={entry ? entryKey : undefined}
 	      className={allFlashcards ? 'scroll-mt-8 flex-1 min-h-0 flex flex-col' : undefined}
 	    >
+	      {showSharedCase&&<ClinicalCaseIntro question={q} questionCount={caseMeta.count} darkMode={dm}/>}
 	      <QuestionCard question={q} index={i}
 	        selectedLetter={selected}
 	        onAnswer={entry ? (l=> selected ? undefined : handleFlashcardStudyAnswer(q, entry, i, l)) : (l=>submitAnswer(q.id,l))}
@@ -715,6 +759,7 @@ const QuestionView = ({
 	        apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
 	        onOpenAnswer={onOpenAnswer}
 	        adminQuestionExplanations={adminQuestionExplanations}
+	        hideCaseContext={!!caseMeta.key}
 	        flashcardStudyMode={!!entry}
 	        flashcardLarge={allFlashcards}/>
 	    </div>
@@ -1611,7 +1656,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
   const [pressedAnswer, setPressedAnswer] = useState(null);
@@ -1768,7 +1813,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         </div>
       </div>}
 	      {!(question.isFlashcard && flashcardLarge)&&<>
-          {questionText.caseContext&&(
+          {questionText.caseContext&&!hideCaseContext&&(
             <section className={`mb-6 w-full rounded-xl border px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700 bg-gray-900/20':'border-gray-200 bg-gray-50/50'}`}>
               <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
                 <BrainIcon className="h-4 w-4"/>Cenário clínico
@@ -1779,7 +1824,6 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             </section>
           )}
           <section className={questionText.caseContext ? 'mb-6' : ''}>
-            {questionText.caseContext&&<div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-yellow-400':'text-yellow-700'}`}>Decisão</div>}
             <div
               className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg font-normal ${questionText.caseContext?'leading-relaxed':'mb-6 leading-relaxed'}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
               style={{userSelect:'text'}}
@@ -1787,6 +1831,14 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               {parseHtmlTextChat(questionText.statement)}
             </div>
           </section>
+          {!!question.images?.length&&(
+            <div className="mb-6 grid gap-3 sm:grid-cols-2">
+              {question.images.map((image, imageIndex)=><figure key={image.id||image.url||imageIndex} className={`overflow-hidden rounded-xl border ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                <img src={image.url} alt={image.altText||'Imagem da questão'} className="max-h-[28rem] w-full object-contain" loading="lazy"/>
+                {(image.credit||image.altText)&&<figcaption className={`border-t px-3 py-2 text-xs leading-relaxed ${darkMode?'border-gray-700 text-gray-400':'border-gray-200 text-gray-500'}`}>{image.altText}{image.credit?` · ${image.credit}`:''}</figcaption>}
+              </figure>)}
+            </div>
+          )}
         </>}
 
 	      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}

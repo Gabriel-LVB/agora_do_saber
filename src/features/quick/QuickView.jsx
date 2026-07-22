@@ -4,12 +4,15 @@ import { useFeatureContext } from '../FeatureContext.jsx';
 export default function QuickView() {
   const {
     ArrowLeft,
+    BookOpen,
+    BrainIcon,
     createQuickSession,
     darkMode,
     EmptyState,
     ExplanationLengthSelector,
     exportFlashcardsToAnki,
     GeminiThinkingSelector,
+    FileText,
     isAdmin,
     openQuickSession,
     QUICK_SOURCE,
@@ -35,6 +38,24 @@ export default function QuickView() {
           const totalFlashcards = quickSessions.reduce((sum, topic) => sum + (topic.questions || []).filter(q => q.isFlashcard).length, 0);
           const totalQuestions = quickSessions.reduce((sum, topic) => sum + (topic.questions || []).filter(q => !q.isFlashcard).length, 0);
           const panel = dm ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200';
+          const validOutputs = ['lesson', 'questions', 'flashcards'];
+          const quickOutputs = Array.isArray(settings.quickOutputs)
+            ? settings.quickOutputs.filter(output=>validOutputs.includes(output))
+            : validOutputs;
+          const selectedOutputs = quickOutputs.length ? quickOutputs : validOutputs;
+          const outputOptions = [
+            { key:'lesson', label:'Aula', description:'Explicação objetiva', icon:<BookOpen className="w-4 h-4"/> },
+            { key:'questions', label:'Questões', description:'Prática direta e clínica', icon:<FileText className="w-4 h-4"/> },
+            { key:'flashcards', label:'Flashcards', description:'Revisão rápida', icon:<BrainIcon className="w-4 h-4"/> },
+          ];
+          const toggleQuickOutput = (output) => {
+            const selected = selectedOutputs.includes(output);
+            if (selected && selectedOutputs.length === 1) return;
+            const nextOutputs = selected ? selectedOutputs.filter(item=>item!==output) : [...selectedOutputs, output];
+            const ns = {...settingsRef.current, quickOutputs:nextOutputs};
+            setSettings(ns);
+            saveSettings(ns);
+          };
           return (
             <div className="space-y-6">
               <section className="app-hero rounded-2xl p-5 md:p-6">
@@ -45,11 +66,11 @@ export default function QuickView() {
                   <div className="min-w-0">
                     <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-yellow-500/80':'text-yellow-700/80'}`}>Estudo rápido</p>
                     <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 leading-tight">{QUICK_SUBJECT_TITLE}</h2>
-                    <p className={`text-sm mt-2 max-w-2xl mobile-safe-text ${dm?'text-gray-400':'text-gray-600'}`}>Para lacunas pontuais: jogue o tema, receba uma explicação curta, questões e flashcards para revisar na hora.</p>
+                    <p className={`text-sm mt-2 max-w-2xl mobile-safe-text ${dm?'text-gray-400':'text-gray-600'}`}>Resolva uma dúvida pontual e escolha se quer uma aula, questões, flashcards ou uma combinação deles.</p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
                     {[
-                      ['Centelhas', quickSessions.length],
+                      ['Dúvidas', quickSessions.length],
                       ['Questões', totalQuestions],
                       ['Flashcards', totalFlashcards],
                     ].map(([label, value])=>(
@@ -69,16 +90,31 @@ export default function QuickView() {
                       <Zap className="w-5 h-5"/>
                     </div>
                     <div className="min-w-0">
-                      <h3 className="mobile-wrap font-serif font-bold text-xl text-yellow-600 leading-tight">Nova centelha</h3>
+                      <h3 className="mobile-wrap font-serif font-bold text-xl text-yellow-600 leading-tight">Nova dúvida</h3>
                       <p className={`text-xs mobile-safe-text ${dm?'text-gray-500':'text-gray-400'}`}>Feito para resolver um assunto sem montar pasta.</p>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Dúvida rápida</label>
-                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Ex: meu professor perguntou como pesquisar o sinal de Jobert e eu travei. Quero entender o que é, como faz e por que indica pneumoperitônio." className={`w-full h-44 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 mobile-safe-text ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
+                      <textarea value={quickContext} onChange={e=>setQuickContext(e.target.value)} placeholder="Ex: Não entendi a diferença entre pré-carga e pós-carga. Explique de forma objetiva e use um exemplo clínico." className={`w-full h-44 p-4 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 mobile-safe-text ${dm?'bg-gray-950 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
                     </div>
                     <div>
+                      <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>O que você quer gerar?</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3 gap-2">
+                        {outputOptions.map(option=>{
+                          const selected = selectedOutputs.includes(option.key);
+                          const isOnlySelected = selected && selectedOutputs.length === 1;
+                          return (
+                            <button key={option.key} type="button" aria-pressed={selected} onClick={()=>toggleQuickOutput(option.key)} title={isOnlySelected?'Selecione outra opção antes de desmarcar esta':''} className={`min-h-[70px] rounded-xl border p-3 text-left transition-colors ${selected?(dm?'border-yellow-600 bg-yellow-900/25 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-800'):(dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                              <span className="flex items-center gap-2 font-bold text-sm">{option.icon}{option.label}</span>
+                              <span className="mt-1 block text-[10px] opacity-60 leading-snug">{option.description}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {selectedOutputs.includes('lesson')&&<div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Tamanho da explicação</label>
                       <ExplanationLengthSelector
                         value={settings.quickExplanationLength || 'essential'}
@@ -89,14 +125,14 @@ export default function QuickView() {
                         }}
                         darkMode={dm}
                       />
-                    </div>
+                    </div>}
                     <div>
                       <label className={`block text-xs font-bold uppercase mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Gemini</label>
                       <GeminiThinkingSelector value={!!settings.geminiThinkingEnabled} onChange={enabled=>{const ns={...settingsRef.current,geminiThinkingEnabled:enabled};setSettings(ns);saveSettings(ns);}} darkMode={dm} compact/>
                     </div>
                     <button onClick={createQuickSession} disabled={quickGenerating || !quickContext.trim()} className="w-full min-h-[56px] bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-4 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
                       {quickGenerating ? <Spinner className="w-5 h-5 text-white"/> : <Sparkles className="w-5 h-5"/>}
-                      {quickGenerating ? 'Gerando centelha...' : 'Gerar centelha'}
+                      {quickGenerating ? 'Gerando conteúdo...' : 'Gerar conteúdo'}
                     </button>
                   </div>
                 </section>
@@ -104,11 +140,11 @@ export default function QuickView() {
                 <section className={`rounded-2xl border overflow-hidden ${panel}`}>
                   <div className={`px-5 py-4 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
                     <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Histórico</p>
-                    <h3 className="font-serif font-bold text-xl text-yellow-600">Centelhas salvas</h3>
+                    <h3 className="font-serif font-bold text-xl text-yellow-600">Dúvidas salvas</h3>
                   </div>
                   {quickSessions.length===0 ? (
                     <div className="p-6">
-                      <EmptyState darkMode={dm} icon={<Zap className="w-7 h-7"/>} title="Nenhuma centelha ainda" message="Crie a primeira a partir de uma dúvida específica."/>
+                      <EmptyState darkMode={dm} icon={<Zap className="w-7 h-7"/>} title="Nenhuma dúvida ainda" message="Crie a primeira a partir de uma dúvida específica."/>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -117,12 +153,14 @@ export default function QuickView() {
                         const fcs = (topic.questions || []).filter(q => q.isFlashcard);
                         const answered = Object.keys(topic.answers || {}).filter(id => (topic.questions || []).some(q => q.id === id)).length;
                         const created = topic.createdAt ? new Date(topic.createdAt).toLocaleDateString('pt-BR') : '';
+                        const savedContent = [topic.quickLesson?'Aula':null, qs.length?`${qs.length} questões`:null, fcs.length?`${fcs.length} flashcards`:null].filter(Boolean).join(' · ');
+                        const responseProgress = (topic.questions || []).length ? ` · ${answered}/${topic.questions.length} respondidas` : '';
                         return (
                           <div key={topic.id} className={`p-4 md:p-5 transition-colors ${dm?'hover:bg-gray-800/60':'hover:bg-gray-50'}`}>
                             <div className="flex items-start justify-between gap-3">
                               <button onClick={()=>openQuickSession(topic)} className="min-w-0 flex-1 text-left">
                                 <h4 className="font-bold text-base truncate">{topic.title}</h4>
-                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{created} · {qs.length} questões · {fcs.length} flashcards · {answered}/{(topic.questions||[]).length} respondidas</p>
+                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-400'}`}>{created} · {savedContent}{responseProgress}</p>
                                 {topic.quickContext&&<p className={`text-sm mt-2 line-clamp-2 ${dm?'text-gray-400':'text-gray-600'}`}>{topic.quickContext}</p>}
                               </button>
                               <div className="flex items-center gap-2 flex-shrink-0">
@@ -131,7 +169,7 @@ export default function QuickView() {
                                     <Send className="w-4 h-4"/>
                                   </button>
                                 )}
-                                  <button onClick={()=>setDeleteId({type:'quick-topic', id:topic.id})} title="Excluir centelha" aria-label="Excluir centelha" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`}>
+                                  <button onClick={()=>setDeleteId({type:'quick-topic', id:topic.id})} title="Excluir dúvida" aria-label="Excluir dúvida" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-red-400 hover:bg-red-950/30':'border-red-100 text-red-500 hover:bg-red-50'}`}>
                                   <Trash2 className="w-4 h-4"/>
                                 </button>
                               </div>

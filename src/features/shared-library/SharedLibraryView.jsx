@@ -1,5 +1,6 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import QuestionAuditReport from '../admin/QuestionAuditReport.jsx';
 
 export default function SharedLibraryView() {
   const {
@@ -10,6 +11,8 @@ export default function SharedLibraryView() {
     setSharedLibraryActiveItemId,
     sharedLibraryConfig,
     sharedLibraryItems,
+    vqBlocks,
+    vqLoading,
     sharedLibrarySubject,
     setSharedLibrarySubject,
     sharedLibrarySearch,
@@ -60,9 +63,6 @@ export default function SharedLibraryView() {
     SHARED_LIBRARY_STAGE_LABELS,
     darkMode,
     BookOpen,
-    FileText,
-    PillIcon,
-    GraduationCap,
     RotateCcw,
     Trash2,
     Spinner,
@@ -73,7 +73,6 @@ export default function SharedLibraryView() {
     ShieldAlert,
     ChevronUp,
     ChevronDown,
-    Sparkles,
     CheckCircle2,
     ChevronRight,
     ArrowLeft,
@@ -82,35 +81,16 @@ export default function SharedLibraryView() {
     EmptyState,
   } = useFeatureContext();
 
+            const [questionAuditOpen, setQuestionAuditOpen] = React.useState(false);
             const showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin';
             const tabs = [
-              { id:'apostila', label:'Apostila', icon:<BookOpen className="w-4 h-4"/> },
-              { id:'summary', label:'Sumários', icon:<BookOpen className="w-4 h-4"/>, adminOnly:true },
-              { id:'exams', label:'Exames', icon:<FileText className="w-4 h-4"/>, shelf:true },
-              { id:'pharmacology', label:'Farmacologia', icon:<PillIcon className="w-4 h-4"/>, shelf:true },
-              { id:'famed', label:'Famed', icon:<GraduationCap className="w-4 h-4"/>, shelf:true },
+              { id:'apostila', label:'Questões', icon:<CheckCircle2 className="w-4 h-4"/> },
+              { id:'summary', label:'Bases internas', icon:<BookOpen className="w-4 h-4"/>, adminOnly:true },
             ];
             const visibleTabs = tabs.filter(tab => !tab.adminOnly || showSharedLibraryAdminTools);
             const currentSharedLibraryTab = visibleTabs.some(tab => tab.id === sharedLibraryTab)
               ? sharedLibraryTab
               : 'apostila';
-            const shelfInfo = {
-              exams:{
-                title:'Exames',
-                description:'Prateleira para treinar interpretação de exames do ciclo clínico, internato, UBS, plantão e residência.',
-                cards:['Radiologia', 'ECG', 'Hemograma', 'Urina, função renal e gasometria'],
-              },
-              pharmacology:{
-                title:'Farmacologia',
-                description:'Classes, medicamentos principais, nomes comerciais, mecanismos, efeitos adversos, indicações, contraindicações e doses úteis.',
-                cards:['Antibióticos', 'Cardiovasculares', 'Endócrino-metabólicos', 'Analgesia e sedação'],
-              },
-              famed:{
-                title:'Famed',
-                description:'Espaço para deixar aulas, slides, resumos antigos e questões da faculdade já prontos antes do semestre começar.',
-                cards:['Slides e aulas', 'Resumos antigos', 'Listas e monitorias', 'Provas antigas'],
-              },
-            };
             const itemQuestions = item => {
               const clinicalReady = !item.clinicalPartial
                 && !!item.clinicalCompletedAt
@@ -214,7 +194,6 @@ export default function SharedLibraryView() {
               { id:'summary', title:'Sumários internos', desc:'Base para questões e conferência. Prioridade máxima agora.' },
               { id:'direct', title:'Questões diretas', desc:'Uma por subtópico cobrável, em lotes de 15.' },
               { id:'clinical', title:'Questões clínicas', desc:'Casos integradores para raciocínio clínico.' },
-              { id:'writtenLesson', title:'Aulas escritas/apostila', desc:'Fica para depois; ainda não vou gastar request nisso.', disabled:true },
             ];
             const toggleGenerationStage = (stageId) => {
               if (sharedLibraryRun.running) return;
@@ -222,7 +201,6 @@ export default function SharedLibraryView() {
                 ? current.filter(stage => stage !== stageId)
                 : [...current, stageId]);
             };
-            const activeShelf = shelfInfo[currentSharedLibraryTab];
             const activeItem = displayedSharedLibraryItems.find(item => item.id === sharedLibraryActiveItemId);
             if (activeItem) {
               if (currentSharedLibraryTab === 'summary') return (
@@ -265,9 +243,9 @@ export default function SharedLibraryView() {
                 <section className={`rounded-2xl border p-5 md:p-7 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                   <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Acervo compartilhado</p>
+                      <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Banco compartilhado</p>
                       <h2 className="font-serif text-3xl font-bold mt-1">Biblioteca</h2>
-                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Aulas, questões e coleções prontas para estudar. O conteúdo é comum a todos; respostas e progresso continuam pessoais.</p>
+                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Questões do curso organizadas por aula. O banco é comum; respostas e progresso continuam pessoais.</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {isAdmin&&(
@@ -277,6 +255,9 @@ export default function SharedLibraryView() {
                           ))}
                         </div>
                       )}
+                      {showSharedLibraryAdminTools&&<button onClick={()=>setQuestionAuditOpen(true)} disabled={sharedLibraryLoading||vqLoading} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-yellow-800/80 text-yellow-300 hover:bg-yellow-950/30':'border-yellow-300 text-yellow-800 hover:bg-yellow-50'}`}>
+                        {sharedLibraryLoading||vqLoading?<Spinner className="w-4 h-4"/>:<ShieldAlert className="w-4 h-4"/>}{sharedLibraryLoading||vqLoading?'Carregando questÃµes...':'Auditar questÃµes'}
+                      </button>}
                       {showSharedLibraryAdminTools&&<button onClick={purgeSharedLibrary} disabled={sharedLibraryRun.running||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-red-900/80 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}>
                         {sharedLibraryPurging?<Spinner className="w-4 h-4"/>:<Trash2 className="w-4 h-4"/>}{sharedLibraryPurging?'Apagando...':'Apagar Biblioteca antiga'}
                       </button>}
@@ -295,7 +276,7 @@ export default function SharedLibraryView() {
                   )}
                 </section>
 
-                <div className={`grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                <div className={`grid w-full grid-cols-2 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                   {visibleTabs.map(tab=><button key={tab.id} disabled={tab.disabled} onClick={()=>{setSharedLibraryTab(tab.id);setSharedLibraryActiveItemId(null);}}
                     className={`relative flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-bold ${tab.disabled?'opacity-35 cursor-not-allowed':currentSharedLibraryTab===tab.id?(darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(darkMode?'text-gray-400':'text-gray-600')}`}>
                     {tab.icon}<span>{tab.label}</span>{tab.disabled&&<span className="absolute -top-1 -right-1 text-[7px] px-1 rounded bg-gray-600 text-white">em breve</span>}
@@ -310,7 +291,7 @@ export default function SharedLibraryView() {
                         <div className={`rounded-2xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-gray-50'}`}>
                           <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Gerar conteúdo do curso</p>
                           <h3 className="mt-1 font-serif text-xl font-bold">Prioridade: sumários e questões</h3>
-                          <p className={`mt-1 text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>Por enquanto, a automação deve alimentar o Portal do Curso e a Apostila com sumários internos e questões. Aulas escritas completas ficam para bem depois.</p>
+                          <p className={`mt-1 text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>A automação alimenta o Portal do Curso e a Biblioteca com bases internas e questões prontas.</p>
                           <div className="mt-4 grid gap-3">
                             <div>
                               <p className="text-xs font-bold">O que gerar</p>
@@ -387,23 +368,7 @@ export default function SharedLibraryView() {
                     {showSharedLibraryAdminTools&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>
                   <div className="space-y-2">
-                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:activeShelf?(
-                      <div className={`rounded-2xl border p-5 md:p-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                        <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Prateleira pronta</p>
-                        <h3 className="font-serif text-2xl font-bold mt-1">{activeShelf.title}</h3>
-                        <p className={`mt-2 text-sm max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>{activeShelf.description}</p>
-                        <div className="mt-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                          {activeShelf.cards.map(card => (
-                            <div key={card} className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-gray-50'}`}>
-                              <span className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}><Sparkles className="w-4 h-4"/></span>
-                              <strong className="block text-sm">{card}</strong>
-                              <span className="mt-1 block text-xs opacity-50">Conteúdo em preparação</span>
-                            </div>
-                          ))}
-                        </div>
-                        {showSharedLibraryAdminTools&&<p className="mt-4 text-xs opacity-55">Quando formos criar essa prateleira de verdade, ela deve publicar aulas, questões e materiais internos como entidades separadas — sem chamar sumário de aula.</p>}
-                      </div>
-                    ):availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há conteúdo nesta seção" description={showSharedLibraryAdminTools?'Use a automação acima para publicar as primeiras aulas.':'O acervo está sendo preparado pelo professor.'}/>:availableItems.map(item=>{
+                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há questões nesta seção" description={showSharedLibraryAdminTools?'Use a automação acima para publicar as primeiras questões.':'O banco está sendo preparado pelo professor.'}/>:availableItems.map(item=>{
                       const questions = itemQuestions(item);
                       const answered = Object.keys(sharedLibraryProgress[item.id]?.answers || {}).filter(id=>questions.some(q=>String(q.id)===String(id))).length;
                       return <button key={item.id} onClick={()=>setSharedLibraryActiveItemId(item.id)} className={`w-full rounded-xl border p-4 text-left flex items-center gap-3 transition-colors ${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'}`}>
@@ -414,6 +379,15 @@ export default function SharedLibraryView() {
                     })}
                   </div>
                 </div>
+                {questionAuditOpen&&showSharedLibraryAdminTools&&(
+                  <QuestionAuditReport
+                    isAdmin={isAdmin}
+                    sharedLibraryItems={sharedLibraryItems}
+                    vqBlocks={vqBlocks}
+                    darkMode={darkMode}
+                    onClose={()=>setQuestionAuditOpen(false)}
+                  />
+                )}
               </div>
             );
 }

@@ -29,6 +29,13 @@ const sharedLibraryBlock = ruleBlock('/shared_library/{itemId}');
 assert.match(sharedLibraryBlock, /allow read: if isAdmin\(\) \|\| \(signedIn\(\) && resource\.data\.published == true\);/);
 assert.match(sharedLibraryBlock, /allow write: if isAdmin\(\);/);
 
+const famedContentBlock = ruleBlock('/famed_content/{lessonId}');
+assert.match(famedContentBlock, /allow read: if isAdmin\(\) \|\| \(signedIn\(\) && resource\.data\.published == true\);/);
+assert.match(famedContentBlock, /allow write: if isAdmin\(\);/);
+
+const famedAssetsBlock = ruleBlock('/famed_assets/{assetId}');
+assert.match(famedAssetsBlock, /allow read, write: if isAdmin\(\);/);
+
 assert.match(compact, /match \/{document=\*\*} \{ allow read, write: if false; \} \} \}$/);
 
 console.log('firestore-rules-smoke ok');

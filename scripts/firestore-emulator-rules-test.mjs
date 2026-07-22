@@ -70,6 +70,13 @@ try {
   await assertSucceeds(getDocs(query(collection(studentDb, 'shared_library'), where('published', '==', true))));
   await assertSucceeds(getDoc(doc(adminDb, 'shared_library', 'aula_1')));
 
+  await assertFails(setDoc(doc(studentDb, 'famed_content', 'cardio-valvopatias'), { title:'Valvopatias', published:true }));
+  await assertSucceeds(setDoc(doc(adminDb, 'famed_content', 'cardio-valvopatias'), { title:'Valvopatias', published:true }));
+  await assertSucceeds(setDoc(doc(adminDb, 'famed_content', 'cardio-rascunho'), { title:'Rascunho', published:false }));
+  await assertSucceeds(getDoc(doc(studentDb, 'famed_content', 'cardio-valvopatias')));
+  await assertFails(getDoc(doc(studentDb, 'famed_content', 'cardio-rascunho')));
+  await assertSucceeds(getDocs(query(collection(studentDb, 'famed_content'), where('published', '==', true))));
+  await assertSucceeds(getDoc(doc(adminDb, 'famed_content', 'cardio-rascunho')));
   await assertSucceeds(getDoc(doc(studentDb, 'config', 'site_ui')));
   await assertFails(setDoc(doc(studentDb, 'config', 'site_ui'), { homeMotto:'x' }));
   await assertSucceeds(setDoc(doc(adminDb, 'config', 'site_ui'), { homeMotto:'x' }));

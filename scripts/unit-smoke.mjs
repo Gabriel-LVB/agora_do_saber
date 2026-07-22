@@ -9,6 +9,16 @@ import {
   prepareSharedLibraryContentForWrite,
   sharedLibraryChunkDocId,
 } from '../src/services/sharedLibraryContent.js';
+import {
+  buildQuickPracticePrompt,
+  extractQuickSection,
+} from '../src/features/quick/quickContent.js';
+import {
+  auditQuestionCollection,
+  collectAuditableQuestions,
+  getQuestionCorrectAnswer,
+  normalizeAuditText,
+} from '../src/services/questionAudit.js';
 
 const traverse = traverseModule.default;
 const assertNoFreeIdentifiers = (source, label) => {
@@ -78,6 +88,83 @@ assert.deepEqual(
   ['q1', 'q2'],
 );
 
+const fullQuickPrompt = buildQuickPracticePrompt({
+  title:'Estenose mitral',
+  outputs:['questions','flashcards'],
+  alternativeCount:4,
+  distractorRule:'REGRA DOS DISTRATORES',
+});
+assert.match(fullQuickPrompt, /Gere de 4 a 6 quest/);
+assert.match(fullQuickPrompt, /Nunca gere menos de 5/);
+assert.match(fullQuickPrompt, /REGRA DOS DISTRATORES/);
+assert.match(buildQuickPracticePrompt({title:'Teste', outputs:['questions']}), /N.o gere flashcards/);
+assert.match(extractQuickSection('## Questoes\n## Questao 1\nEnunciado\n## Flashcards\n## Flashcard 1\nPergunta', 'Questoes'), /Questao 1/);
+
+assert.equal(normalizeAuditText('Nó SA e eletrocardiograma'), 'no_sinoatrial e ecg');
+assert.equal(getQuestionCorrectAnswer({
+  options:[
+    { text:'Nó atrioventricular', isCorrect:false },
+    { text:'Nó sinoatrial', isCorrect:true },
+  ],
+}), 'Nó sinoatrial');
+
+const auditInput = {
+  sharedLibraryItems:[{
+    id:'shared-1',
+    subject:'Cardiologia',
+    topic:'Eletrofisiologia',
+    title:'Atividade elétrica',
+    directQuestions:[
+      {
+        id:'q1',
+        statement:'Qual estrutura funciona como o marcapasso fisiológico do coração?',
+        options:[{ text:'Nó sinoatrial', isCorrect:true }],
+      },
+      {
+        id:'q2',
+        statement:'Em condições normais, onde se origina o impulso elétrico cardíaco?',
+        options:[{ text:'Nó SA', isCorrect:true }],
+      },
+      {
+        id:'q3',
+        statement:'Qual é a função do nó sinusal no ritmo cardíaco?',
+        options:[{ text:'Nó sinoatrial', isCorrect:true }],
+      },
+      {
+        id:'flash',
+        statement:'Frente de flashcard',
+        expectedAnswer:'Verso',
+        isFlashcard:true,
+      },
+    ],
+  }],
+  vqBlocks:{
+    mirrored:{
+      meta:{ source:'shared-library', subject:'Cardiologia' },
+      blocks:{ one:{ questions:[{ id:'mirror', statement:'Não deve ser contado' }] } },
+    },
+    native:{
+      meta:{ subject:'Cardiologia', topic:'Arritmias', aulaTitle:'Ritmo sinusal' },
+      blocks:{
+        one:{
+          title:'Automatismo',
+          questions:[{
+            id:'q4',
+            statement:'Qual estrutura funciona como o marcapasso fisiológico do coração?',
+            options:[{ text:'Nó sinoatrial', isCorrect:true }],
+          }],
+        },
+      },
+    },
+  },
+};
+const auditableQuestions = collectAuditableQuestions(auditInput);
+assert.equal(auditableQuestions.length, 4);
+const auditReport = auditQuestionCollection(auditInput);
+assert.equal(auditReport.summary.total, 4);
+assert.ok(auditReport.summary.probable >= 1);
+assert.ok(auditReport.conceptGroups.some(group => group.concept === 'no_sinoatrial' && group.records.length === 4));
+
 const firebaseConfig = JSON.parse(await readFile(new URL('../firebase.json', import.meta.url), 'utf8'));
 assert.equal(firebaseConfig.firestore?.rules, 'firestore.rules');
 
@@ -133,6 +220,7 @@ assert.match(appSource, /promptModulePromise = lazyWithRetry\(\(\) => import\(['
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)\)\)/);
+assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/famed\/FamedPortalView\.jsx['"]\)\)\)/);
 assert.match(appSource, /import\(['"]\.\/features\/questions\/QuestionFeature\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/exporting\/ExportModals\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/modals\/WorkflowModals\.jsx['"]\)/);
@@ -242,6 +330,8 @@ const geminiServiceSource = await readFile(new URL('../src/services/gemini.js', 
 assert.match(geminiServiceSource, /VITE_GEMINI_BACKEND_URL/);
 assert.match(geminiServiceSource, /callGeminiBackend/);
 assert.match(geminiServiceSource, /\/generate/);
+assert.match(geminiServiceSource, /resolveGeminiTimeout/);
+assert.match(geminiServiceSource, /REQUEST_TIMEOUT/);
 
 const sharedLibrarySyncSource = await readFile(new URL('../src/hooks/useSharedLibrarySync.js', import.meta.url), 'utf8');
 assert.match(sharedLibrarySyncSource, /export const useSharedLibrarySync/);
@@ -283,11 +373,82 @@ assert.match(academiaTopicViewSource, /export default AcademiaTopicView/);
 const bulkGenerateModalSource = await readFile(new URL('../src/features/bulk/BulkGenerateModal.jsx', import.meta.url), 'utf8');
 assert.match(bulkGenerateModalSource, /export default function BulkGenerateModal/);
 assert.match(bulkGenerateModalSource, /useFeatureContext/);
+assert.match(bulkGenerateModalSource, /bulkGenerateModal\.subject/);
 
 const sharedLibraryViewSource = await readFile(new URL('../src/features/shared-library/SharedLibraryView.jsx', import.meta.url), 'utf8');
 assert.match(sharedLibraryViewSource, /export default function SharedLibraryView/);
 assert.match(sharedLibraryViewSource, /useFeatureContext/);
 assert.match(sharedLibraryViewSource, /showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin'/);
+assert.doesNotMatch(sharedLibraryViewSource, /id:'exams'|id:'pharmacology'|id:'famed'/);
+
+const famedPortalViewSource = await readFile(new URL('../src/features/famed/FamedPortalView.jsx', import.meta.url), 'utf8');
+assert.match(famedPortalViewSource, /export default function FamedPortalView/);
+assert.match(famedPortalViewSource, /FAMED_PROGRAM/);
+assert.match(famedPortalViewSource, /FamedScheduleView/);
+assert.match(famedPortalViewSource, /grid grid-cols-4 gap-2/);
+assert.match(famedPortalViewSource, /AcademiaTopicView/);
+assert.match(famedPortalViewSource, /AdminStudyMapTopicList/);
+assert.match(famedPortalViewSource, /startFamedAcademiaCreation/);
+assert.match(famedPortalViewSource, /Geração em lote/);
+assert.match(famedPortalViewSource, /openBulkGenerateModal/);
+assert.match(famedPortalViewSource, /subscribeFamedContent/);
+assert.doesNotMatch(famedPortalViewSource, /FamedManualEditor|FamedPackageImporter|\.zip/i);
+assert.doesNotMatch(famedPortalViewSource, /const TABS|activeTab/);
+
+const famedCatalogSource = await readFile(new URL('../src/features/famed/famedCatalog.js', import.meta.url), 'utf8');
+assert.match(famedCatalogSource, /curriculum:'PPC 2018'/);
+assert.match(famedCatalogSource, /semesters:\[5, 6, 7, 8\]/);
+assert.doesNotMatch(famedCatalogSource, /length:\s*12|S1|S2|S3|S4|S9|S10|S11|S12|Internato/i);
+assert.match(famedCatalogSource, /Cardio \+ Pneumo/);
+assert.match(famedCatalogSource, /id:'cardio-pneumo'/);
+assert.match(famedCatalogSource, /id:'endocrino-nutro-gastro'/);
+
+const famedScheduleSource = await readFile(new URL('../src/features/famed/famedSchedule.js', import.meta.url), 'utf8');
+assert.match(famedScheduleSource, /status:'previous-class-reference'/);
+assert.match(famedScheduleSource, /cardio-valvopatias/);
+assert.match(famedScheduleSource, /pneumo-dpoc-asma/);
+assert.doesNotMatch(famedScheduleSource, /2026-\d{2}-\d{2}|\d{2}:\d{2}|segunda-chamada|cardio-af/i);
+
+const famedScheduleViewSource = await readFile(new URL('../src/features/famed/FamedScheduleView.jsx', import.meta.url), 'utf8');
+assert.match(famedScheduleViewSource, /Aulas e provas/);
+assert.match(famedScheduleViewSource, /Aula da Academia/);
+assert.match(famedScheduleViewSource, /onOpenQuestions/);
+assert.doesNotMatch(famedScheduleViewSource, /Cronograma interativo|Sequência de referência/);
+assert.doesNotMatch(famedScheduleViewSource, /Fontes, avaliação de Pneumo e observações|FAMED_S5_SCHEDULE_META/);
+assert.doesNotMatch(famedScheduleViewSource, /formatScheduleDate|item\.date|item\.time|item\.instructor/);
+
+const famedContentServiceSource = await readFile(new URL('../src/services/famedContent.js', import.meta.url), 'utf8');
+assert.match(famedContentServiceSource, /CONTENT_COLLECTION = 'famed_content'/);
+assert.match(famedContentServiceSource, /saveFamedAcademiaSubject/);
+assert.match(famedContentServiceSource, /famedContentToAcademiaSubject/);
+assert.match(famedContentServiceSource, /deleteFamedContent/);
+assert.match(famedContentServiceSource, /deleteLegacyFamedContent/);
+assert.match(famedContentServiceSource, /creationMode:'academia'/);
+assert.doesNotMatch(famedContentServiceSource, /fflate|unzip|firebase\/storage/);
+
+assert.match(appSource, /const \[famedCreationTarget, setFamedCreationTarget\]/);
+assert.match(appSource, /const FamedIcon = \(\{ className \}\) => \(/);
+assert.match(appSource, /viewBox="0 0 64 64"/);
+assert.match(appSource, /M13 23h38v17\.5/);
+assert.doesNotMatch(appSource, /const FamedIcon\s+= ic\(/);
+assert.match(appSource, /const startFamedAcademiaCreation = scheduleItem =>/);
+assert.match(appSource, /const persistAcademiaSubject = async subject =>/);
+assert.match(appSource, /\n\s+bulkActionMenu,\n\s+bulkGenerateModal,/);
+assert.match(appSource, /\n\s+setBulkActionMenu,\n\s+setBulkGenerateModal,/);
+
+assert.match(questionFeatureSource, /ClinicalCaseIntro/);
+assert.match(questionFeatureSource, /Use este caso para responder/);
+assert.match(questionFeatureSource, /hideCaseContext/);
+assert.doesNotMatch(questionFeatureSource, />Decisão<\/div>/);
+assert.match(academiaTopicViewSource, /lessonPresentationVersion/);
+assert.match(academiaTopicViewSource, /continuousNarrativeContent/);
+const promptsSource = await readFile(new URL('../src/agora_prompts.js', import.meta.url), 'utf8');
+assert.match(promptsSource, /Toda alternativa deve conter algum núcleo plausível ou verdadeiro/);
+assert.match(promptsSource, /PRINCÍPIO DE EFICIÊNCIA E ALTO RENDIMENTO/);
+assert.match(promptsSource, /maximizar domínio relevante por tempo de estudo/);
+assert.match(promptsSource, /sem meta padrão, piso artificial ou incentivo para preencher volume/);
+assert.match(appSource, /timeoutMs:120000/);
+assert.match(appSource, /REQUEST_TIMEOUT/);
 
 const videoaulasViewSource = await readFile(new URL('../src/features/course/VideoaulasView.jsx', import.meta.url), 'utf8');
 assert.match(videoaulasViewSource, /export default function VideoaulasView/);
@@ -326,6 +487,37 @@ assert.match(homeViewSource, /setCursoTab\('plano'\);setView\('curso'\)/);
 assertNoFreeIdentifiers(homeViewSource, 'HomeView');
 assert.doesNotMatch(homeViewSource, /buildHomeJourneyState/);
 assert.doesNotMatch(homeViewSource, /const journeyInfo =/);
+assert.match(homeViewSource, /BrandIdentity variant="hero"/);
+assert.match(homeViewSource, /Pórtico da academia do Gabigol/);
+assert.doesNotMatch(homeViewSource, /Conhecimento organizado\. Estudo com propósito\./);
+assert.doesNotMatch(homeViewSource, /Todo o seu conteúdo organizado em um único lugar/);
+assert.doesNotMatch(homeViewSource, /home-goals/);
+assert.match(homeViewSource, /home-progress-card/);
+assert.doesNotMatch(famedPortalViewSource, /Foco atual|Aulas e questões em uma única sequência/);
+assert.match(famedScheduleViewSource, /supplementaryTopics/);
+assert.match(appSource, /action:toggleMobileMenu/);
+
+const brandIdentitySource = await readFile(new URL('../src/components/BrandIdentity.jsx', import.meta.url), 'utf8');
+assert.match(brandIdentitySource, /agora-brand-circle\.png/);
+assert.match(brandIdentitySource, /Lux in tenebris/);
+assert.doesNotMatch(appSource, /BrandIdentity variant="sidebar" showTagline=\{false\}/);
+assert.doesNotMatch(appSource, /BrandIdentity variant="mobile" showTagline=\{false\}/);
+const brandCssSource = await readFile(new URL('../src/brand.css', import.meta.url), 'utf8');
+assert.match(brandCssSource, /agora-brand--hero/);
+assert.match(brandCssSource, /agora-sidebar/);
+assert.match(brandCssSource, /home-brand-hero/);
+assert.match(brandCssSource, /agora-brand__name > span:first-child/);
+assert.match(brandCssSource, /home-study-card__icon/);
+assert.match(brandCssSource, /background: rgba\(255,255,255,\.045\)/);
+const brandImage = await readFile(new URL('../public/brand/agora-brand-circle.png', import.meta.url));
+assert.ok(brandImage.length > 1_000_000);
+const faviconImage = await readFile(new URL('../public/brand/agora-favicon-v2.png', import.meta.url));
+assert.ok(faviconImage.length > 500_000);
+const faviconIco = await readFile(new URL('../public/favicon.ico', import.meta.url));
+assert.deepEqual([...faviconIco.subarray(0, 4)], [0, 0, 1, 0]);
+const siteIcon = await readFile(new URL('../public/brand/agora-site-icon.png', import.meta.url));
+assert.ok(siteIcon.length > 500_000);
+assert.doesNotMatch(appSource, /data:image\/svg\+xml;base64/);
 
 const courseHeroJourneySource = await readFile(new URL('../src/features/course/useCourseHeroJourney.js', import.meta.url), 'utf8');
 assert.match(courseHeroJourneySource, /export const useCourseHeroJourney/);
@@ -371,14 +563,30 @@ assert.match(spacedReviewViewSource, /useFeatureContext/);
 const quickViewSource = await readFile(new URL('../src/features/quick/QuickView.jsx', import.meta.url), 'utf8');
 assert.match(quickViewSource, /export default function QuickView/);
 assert.match(quickViewSource, /useFeatureContext/);
+assert.match(quickViewSource, /settings\.quickOutputs/);
+assert.match(quickViewSource, /O que .+ quer gerar\?/);
+assert.doesNotMatch(quickViewSource, /sinal de Jobert/);
 
 const quickTopicViewSource = await readFile(new URL('../src/features/quick/QuickTopicView.jsx', import.meta.url), 'utf8');
 assert.match(quickTopicViewSource, /export default function QuickTopicView/);
 assert.match(quickTopicViewSource, /useFeatureContext/);
+assert.match(quickTopicViewSource, /availableTabs/);
+assert.match(quickTopicViewSource, /QuickLessonContent/);
+
+const quickLessonContentSource = await readFile(new URL('../src/features/quick/QuickLessonContent.jsx', import.meta.url), 'utf8');
+assert.match(quickLessonContentSource, /export default function QuickLessonContent/);
+assert.doesNotMatch(appSource, /const renderQuickLesson =/);
 
 const subLibraryViewSource = await readFile(new URL('../src/features/library/SubLibraryView.jsx', import.meta.url), 'utf8');
 assert.match(subLibraryViewSource, /export default function SubLibraryView/);
 assert.match(subLibraryViewSource, /useFeatureContext/);
+assert.match(subLibraryViewSource, /Criar Aula/);
+assert.match(subLibraryViewSource, /Criar Quest/);
+assert.match(subLibraryViewSource, /Importar Quest/);
+assert.match(appSource, /quickOutputs:\['lesson','questions','flashcards'\]/);
+assert.match(appSource, /const wantsLesson = quickOutputs\.includes\('lesson'\)/);
+assert.match(appSource, /import\('\.\/features\/quick\/quickContent\.js'\)/);
+assert.doesNotMatch(appSource, /REGRAS DOS FLASHCARDS:/);
 
 const adminStudyMapSource = await readFile(new URL('../src/features/admin/AdminStudyMapTopicList.jsx', import.meta.url), 'utf8');
 assert.match(adminStudyMapSource, /export default AdminStudyMapTopicList/);

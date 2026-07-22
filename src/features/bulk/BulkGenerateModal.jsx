@@ -29,7 +29,7 @@ export default function BulkGenerateModal() {
   } = useFeatureContext();
   if (!bulkGenerateModal) return null;
 
-	        const subject = library.find(s => s.id === bulkGenerateModal.subjectId);
+	        const subject = library.find(s => s.id === bulkGenerateModal.subjectId) || bulkGenerateModal.subject;
           const mode = bulkGenerateModal.mode || 'generate';
           const operation = getBulkOperationMeta(mode, subject?.source);
 	        const pending = getBulkGenerateTargets(subject, mode);

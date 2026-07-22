@@ -108,6 +108,11 @@ function AcademiaTopicView({
   const subtopics = liveTopic.subtopics || [];
   const hasLesson = liveTopic.lessonGenerated;
   const hideSubtopicTitles = true;
+  const isContinuousNarrative = liveTopic.lessonFormat === 'narrative'
+    && Number(liveTopic.lessonPresentationVersion || 0) >= 2;
+  const continuousNarrativeContent = isContinuousNarrative
+    ? subtopics.map((_, index) => liveTopic.lessonSections?.[index]?.content || '').filter(Boolean).join('\n\n')
+    : '';
   const setLessonLength = (length) => {
     const ns = { ...settings, explanationLength: length };
     setSettings(ns);
@@ -417,9 +422,13 @@ function AcademiaTopicView({
       {hasLesson && !academiaGenerating && (
         <div>
           {/* Explicações */}
-          {subtopics.map((subtopic, idx) => {
+
+          {isContinuousNarrative ? (
+            continuousNarrativeContent
+              ? <div className="mb-8">{renderLesson(continuousNarrativeContent)}</div>
+              : <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível.</p>
+          ) : subtopics.map((subtopic, idx) => {
 	            const section = liveTopic.lessonSections?.[idx];
-	            const fixqs   = liveTopic.fixationQuestions?.[idx] || [];
             return (
               <div key={idx} className={hideSubtopicTitles ? 'mb-5' : 'mb-8'}>
                 {!hideSubtopicTitles && (
@@ -447,7 +456,7 @@ function AcademiaTopicView({
                 )}
               </div>
               <div className={`rounded-2xl border p-5 text-center ${darkMode?'bg-gray-900 border-gray-800':'bg-gray-50 border-gray-100'}`}>
-                <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>{allFixqs.length} questão{allFixqs.length!==1?'s':''} de fixação disponível{allFixqs.length!==1?'is':''} no Acervo do Oráculo.</p>
+                <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>{allFixqs.length} questão{allFixqs.length!==1?'s':''} de fixação disponível{allFixqs.length!==1?'is':''} no banco de questões.</p>
                 <button onClick={()=>onOpenAcademiaQuestions?.(liveSubject, liveTopic, 'fixation')}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-yellow-600 text-white hover:bg-yellow-700">
                   <GraduationCap className="w-4 h-4"/>Questões de fixação
@@ -492,7 +501,7 @@ function AcademiaTopicView({
                   )}
 	                </div>
                 <div className={`rounded-2xl border p-5 text-center ${darkMode?'bg-gray-900 border-gray-800':'bg-gray-50 border-gray-100'}`}>
-                  <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''} disponível{blocoQs.length!==1?'is':''} no Acervo do Oráculo.</p>
+                  <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>{blocoQs.length} questão{blocoQs.length!==1?'s':''} disponível{blocoQs.length!==1?'is':''} no banco de questões.</p>
                   <button onClick={()=>onOpenAcademiaQuestions?.(liveSubject, liveTopic, 'extra', bloco)}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-yellow-600 text-white hover:bg-yellow-700">
                     <GraduationCap className="w-4 h-4"/>Abrir bloco

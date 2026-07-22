@@ -8,6 +8,11 @@ export const normalizeGeminiApiKey = (value = '') => String(value || '').trim();
 
 const GEMINI_BACKEND_URL = String(import.meta.env?.VITE_GEMINI_BACKEND_URL || '').replace(/\/+$/, '');
 const geminiBackendEnabled = () => GEMINI_BACKEND_URL.length > 0;
+const DEFAULT_GEMINI_TIMEOUT_MS = 55000;
+const resolveGeminiTimeout = (opts = {}, fallback = DEFAULT_GEMINI_TIMEOUT_MS) => {
+  const requested = Number(opts.timeoutMs);
+  return Number.isFinite(requested) && requested > 0 ? Math.min(requested, 180000) : fallback;
+};
 
 const getGeminiRequestHeaders = (apiKey) => ({
   'Content-Type':'application/json',
@@ -29,7 +34,7 @@ const buildGeminiPayload = ({ prompt, systemPrompt, images = [], opts = {} }) =>
 
 const callGeminiBackend = async ({ prompt, systemPrompt, images = [], opts = {} }) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  const timeout = setTimeout(() => controller.abort(), resolveGeminiTimeout(opts));
   try {
     const response = await fetch(`${GEMINI_BACKEND_URL}/generate`, {
       method:'POST',
@@ -45,7 +50,7 @@ const callGeminiBackend = async ({ prompt, systemPrompt, images = [], opts = {} 
     return text;
   } catch(error) {
     clearTimeout(timeout);
-    if (error.name === 'AbortError') throw new Error('CONNECTION_ERROR');
+    if (error.name === 'AbortError') throw new Error('REQUEST_TIMEOUT');
     throw error;
   }
 };
@@ -74,7 +79,7 @@ export const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   const payload = buildGeminiPayload({ prompt, systemPrompt, images, opts });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  const timeout = setTimeout(() => controller.abort(), resolveGeminiTimeout(opts));
   try {
     const res = await fetch(url,{method:'POST',headers:getGeminiRequestHeaders(apiKey),body:JSON.stringify(payload),signal:controller.signal});
     clearTimeout(timeout);
@@ -85,7 +90,7 @@ export const callGemini = async (prompt, systemPrompt, apiKey, images=[], opts={
     return text;
   } catch(e) {
     clearTimeout(timeout);
-    if (e.name === 'AbortError') throw new Error('CONNECTION_ERROR');
+    if (e.name === 'AbortError') throw new Error('REQUEST_TIMEOUT');
     throw e;
   }
 };

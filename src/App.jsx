@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
+import BrandIdentity from './components/BrandIdentity.jsx';
+import './brand.css';
 import { FeatureProvider } from './features/FeatureContext.jsx';
 import { adminEmail } from './config/environment.js';
 import { cleanFirestoreData } from './lib/firestoreData.js';
@@ -11,6 +13,7 @@ import { useCourseDerivedState } from './hooks/useCourseDerivedState.js';
 import { useGeminiRuntime } from './hooks/useGeminiRuntime.js';
 import { useSharedLibrarySync } from './hooks/useSharedLibrarySync.js';
 import { auth, db } from './services/firebase.js';
+import { saveFamedAcademiaSubject } from './services/famedContent.js';
 import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
 import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
@@ -56,6 +59,7 @@ const LazyVqGenModal = React.lazy(() => lazyWithRetry(() => import('./features/v
 const LazyAcademiaTopicView = React.lazy(() => lazyWithRetry(() => import('./features/academia/AcademiaTopicView.jsx')));
 const LazyBulkGenerateModal = React.lazy(() => lazyWithRetry(() => import('./features/bulk/BulkGenerateModal.jsx')));
 const LazySharedLibraryView = React.lazy(() => lazyWithRetry(() => import('./features/shared-library/SharedLibraryView.jsx')));
+const LazyFamedPortalView = React.lazy(() => lazyWithRetry(() => import('./features/famed/FamedPortalView.jsx')));
 const LazyVideoaulasView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoaulasView.jsx')));
 const LazyCoursePortalView = React.lazy(() => lazyWithRetry(() => import('./features/course/CoursePortalView.jsx')));
 const LazyVideoQuestionsView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoQuestionsView.jsx')));
@@ -84,6 +88,11 @@ const BulkGenerateModal = () => (
 const SharedLibraryView = () => (
   <React.Suspense fallback={<LoadingState message="Abrindo a Biblioteca..."/>}>
     <LazySharedLibraryView/>
+  </React.Suspense>
+);
+const FamedPortalView = () => (
+  <React.Suspense fallback={<LoadingState message="Abrindo a FAMED..."/>}>
+    <LazyFamedPortalView/>
   </React.Suspense>
 );
 const VideoaulasView = () => (
@@ -122,12 +131,12 @@ const SpacedReviewView = () => (
   </React.Suspense>
 );
 const QuickView = () => (
-  <React.Suspense fallback={<LoadingState message="Abrindo centelha..."/>}>
+  <React.Suspense fallback={<LoadingState message="Abrindo dúvida rápida..."/>}>
     <LazyQuickView/>
   </React.Suspense>
 );
 const QuickTopicView = () => (
-  <React.Suspense fallback={<LoadingState message="Abrindo centelha..."/>}>
+  <React.Suspense fallback={<LoadingState message="Abrindo dúvida rápida..."/>}>
     <LazyQuickTopicView/>
   </React.Suspense>
 );
@@ -197,11 +206,24 @@ const getGoogleProvider = () => {
   return provider;
 };
 
+const isPrivateNetworkHostname = (hostname = '') => (
+  hostname === 'localhost'
+  || hostname === '127.0.0.1'
+  || /^10\./.test(hostname)
+  || /^192\.168\./.test(hostname)
+  || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+);
+
+const shouldUseGoogleRedirect = () => (
+  typeof window !== 'undefined' && window.location.hostname.includes('scf.usercontent.goog')
+);
+
 const authErrorMessage = (error, fallback = 'Login falhou.') => {
   const code = error?.code || 'sem-codigo';
   const message = error?.message || fallback;
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const localHint = code === 'auth/unauthorized-domain'
-    ? '\n\nDica: adicione localhost e 127.0.0.1 em Firebase Console > Authentication > Settings > Authorized domains.'
+    ? `\n\nDica: adicione ${currentHostname || 'o domínio atual'} em Firebase Console > Authentication > Settings > Authorized domains (sem http:// e sem a porta).`
     : '';
   const popupHint = ['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(code)
     ? '\n\nDica: se o Chrome bloqueou o popup, tente novamente; no localhost o app usa redirecionamento como fallback quando possível.'
@@ -260,6 +282,34 @@ const PlusIcon    = ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="1
 const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
 const PlayIcon    = ic('<polygon points="5 3 19 12 5 21 5 3"/>');
 const GraduationCap = ic('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>');
+const FamedIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M13 23h38v17.5C51 49 43.4 55 32 58 20.6 55 13 49 13 40.5Z"/>
+    <path d="M13.5 31.5 19 27l5.5 6 6-5.5 5.5 6 6-5 8.5 8"/>
+
+    <path d="M15.5 15.5h9c1.8 0 2.8 1.2 2.4 2.6-.3 1-1.2 1.7-2.3 1.7h-9.2c-1.1 0-2-.7-2.3-1.7-.4-1.4.6-2.6 2.4-2.6Z"/>
+    <path d="M17 19.8V23M20 19.8V23M23 19.8V23"/>
+    <path d="M20 14.2c-3-2.1-2.2-5.2.2-8.6.3 2.1 2.5 3.2 1.9 5.4-.3 1.4-1 2.5-2.1 3.2Z"/>
+    <path d="M19.6 13.8c-.8-1.6.1-2.9 1.4-4.5"/>
+
+    <path d="M27.5 15.5h9c1.8 0 2.8 1.2 2.4 2.6-.3 1-1.2 1.7-2.3 1.7h-9.2c-1.1 0-2-.7-2.3-1.7-.4-1.4.6-2.6 2.4-2.6Z"/>
+    <path d="M29 19.8V23M32 19.8V23M35 19.8V23"/>
+    <path d="M32 14.2c-3-2.1-2.2-5.2.2-8.6.3 2.1 2.5 3.2 1.9 5.4-.3 1.4-1 2.5-2.1 3.2Z"/>
+    <path d="M31.6 13.8c-.8-1.6.1-2.9 1.4-4.5"/>
+
+    <path d="M39.5 15.5h9c1.8 0 2.8 1.2 2.4 2.6-.3 1-1.2 1.7-2.3 1.7h-9.2c-1.1 0-2-.7-2.3-1.7-.4-1.4.6-2.6 2.4-2.6Z"/>
+    <path d="M41 19.8V23M44 19.8V23M47 19.8V23"/>
+    <path d="M44 14.2c-3-2.1-2.2-5.2.2-8.6.3 2.1 2.5 3.2 1.9 5.4-.3 1.4-1 2.5-2.1 3.2Z"/>
+    <path d="M43.6 13.8c-.8-1.6.1-2.9 1.4-4.5"/>
+
+    <path d="M20 33.5v7.5M20 33.5l-5 4M20 33.5l-2.8 6M20 33.5l2.8 6M20 33.5l5 4"/>
+    <path d="M32 39v7.5M32 39l-5 4M32 39l-2.8 6M32 39l2.8 6M32 39l5 4"/>
+    <path d="M43 44.5V52M43 44.5l-5 4M43 44.5l-2.8 6M43 44.5l2.8 6M43 44.5l5 4"/>
+
+    <path d="M10.5 47.5c10.8 7.2 32.2 7.2 43 0l-1.2 7.2c-11.3 6.4-29.3 6.4-40.6 0Z"/>
+    <path d="M19 58v2.5l2.5 1.5 2.5-1.5V59M30 60v2l2 1 2-1v-2M40 59v1.5l2.5 1.5 2.5-1.5V58"/>
+  </svg>
+);
 const CheckIcon   = ic('<polyline points="20 6 9 17 4 12"/>');
 const GripIcon    = ic('<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>');
 const MoreIcon    = ic('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>');
@@ -378,7 +428,7 @@ const FLASHCARD_CORRECT = 'CORRECT';
 const FLASHCARD_WRONG = 'WRONG';
 const QUICK_SOURCE = 'quick';
 const QUICK_SUBJECT_ID = 'quick-plantao-rapido';
-const QUICK_SUBJECT_TITLE = 'Centelha do Saber';
+const QUICK_SUBJECT_TITLE = 'Dúvida Rápida';
 const LOADING_MSGS = ["O Oráculo está consultando os pergaminhos...","Formulando os enunciados clínicos...","Elaborando as alternativas...","Revisando a semiologia...","Correlacionando fisiopatologia...","Quase pronto, aguarde...","Gerações longas levam até 60s...","O Oráculo não abandona seus discípulos..."];
 const EXPLANATION_LENGTHS = [
   { k:'essential', label:'Essencial', desc:'Revisão curta, em tópicos, apenas com o que mais importa' },
@@ -527,7 +577,7 @@ const formatSyllabusTopics = (topics) => topics.map((topic, index) => {
 
 const parseStudyMapSubtopic = (raw = '') => {
   const text = String(raw).replace(/^\s*\|?/, '').replace(/\|?\s*$/, '').replace(/\s*\|\s*/g, ' ');
-  const questions = Math.max(1, Math.min(30, Number(text.match(/\[Q:(\d+)\]/i)?.[1]) || 2));
+  const questions = Math.max(1, Math.min(30, Number(text.match(/\[Q:(\d+)\]/i)?.[1]) || 1));
   const objective = String(text.match(/\[OBJ:([^\]]+)\]/i)?.[1] || '').trim();
   const title = cleanSyllabusSubtopic(text.replace(/\[(?:Q|P|OBJ):[^\]]+\]\s*/gi, '').replace(/^(?:subt[óo]pico|objetivo)\s*:?\s*/i, '').trim());
   return { title, questions, objective };
@@ -573,7 +623,7 @@ const parseStudyMapSyllabus = (syllabusText = '') => {
 const formatStudyMapSyllabus = (topics = []) => topics.map((topic, topicIndex) => {
   const cleanTitle = topic.title.replace(/^T[óo]pico\s*\d+\s*[:.)-]?\s*/i, '').trim();
   return `Tópico ${topicIndex + 1}: ${cleanTitle || topic.title}\n${topic.subtopics.map(subtopic =>
-    `  - [Q:${Math.max(1, Math.min(30, Number(subtopic.questions) || 2))}] [OBJ:${subtopic.objective || `Dominar ${subtopic.title}`}] ${subtopic.title}`
+    `  - [Q:${Math.max(1, Math.min(30, Number(subtopic.questions) || 1))}] [OBJ:${subtopic.objective || `Dominar ${subtopic.title}`}] ${subtopic.title}`
   ).join('\n')}`;
 }).join('\n\n');
 
@@ -584,7 +634,7 @@ const getTopicStudyPlan = (topic = {}, subtopics = []) => {
     const plan = plans[index] || {};
     return {
       title,
-      questions:Math.max(1, Math.min(30, Number(plan.questions) || 2)),
+      questions:Math.max(1, Math.min(30, Number(plan.questions) || 1)),
       objective:plan.objective || `Dominar ${title}`,
     };
   });
@@ -981,6 +1031,11 @@ const getVofStatementCount = (settings = {}) => Math.max(3, Math.min(5, Number(s
 const getVofPromptRule = (settings = {}) => (settings.questionTypes || []).includes('vof')
   ? `\nREGRA ESPECÍFICA PARA VERDADEIRO OU FALSO:\n- Cada questão deve ter EXATAMENTE ${getVofStatementCount(settings)} afirmações.\n- Use SEMPRE 5 alternativas (A-E), cada uma com uma combinação plausível de V/F.\n- O gabarito deve corresponder exatamente à sequência correta das afirmações.`
   : '';
+const DISTRACTOR_CORRUPTION_PROMPT_RULE = `
+REGRA DOS DISTRATORES:
+- Escreva a correta em A e use-a como âncora. Cada distrator deve preservar algum núcleo verdadeiro ou plausível de A e corromper apenas um componente decisivo, como direção do efeito, estrutura, mecanismo, momento, valor, indicação ou contraindicação.
+- Em alternativas com várias afirmações, mantenha uma ou mais partes verdadeiras e altere uma parte decisiva. A proposição completa precisa continuar inequivocamente errada, sem criar uma segunda resposta aceitável.
+- Mantenha categoria, estrutura, especificidade e comprimento semelhantes. Proibidos absurdos, negações grosseiras e diferenças apenas cosméticas.`;
 
 const buildErrorNotebookReviewPrompt = async ({ subjectTitle='', topicTitle='', questions=[], settings={} }) => {
   const perError = Math.max(1, Math.min(10, Number(settings.errorReviewPerQuestion) || 2));
@@ -1041,6 +1096,7 @@ REGRAS CRÍTICAS:
 ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
 ${getVofPromptRule(settings)}
+${isFlashcard || openMode ? '' : DISTRACTOR_CORRUPTION_PROMPT_RULE}
 ${isFlashcard ? (isCloze ? `FORMATO OBRIGATÓRIO:
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
@@ -1133,6 +1189,7 @@ const normalizeSyllabusByLimits = (syllabusText, source = 'oracle', settings = {
   if (!topics.length) return syllabusText;
   const limits = source === 'academia' ? SYLLABUS_LIMITS.academia : SYLLABUS_LIMITS.oracle;
   const manual = !settings.autoMode;
+  if (!manual) return formatSyllabusTopics(topics);
   const configuredMax = manual && Number(settings.numSubtopics)
     ? Number(settings.numSubtopics)
     : limits.targetMaxSubtopicsPerTopic;
@@ -1153,8 +1210,8 @@ const buildChunkedSyllabusMessage = ({ chunk, index, total, accumulated, subject
   const manual = !settings.autoMode;
   const shapeRule = manual
     ? `MOLDE FINAL OBRIGATÓRIO: ${settings.numTopics || limits.targetMaxTopics} tópicos, com no máximo ${settings.numSubtopics || limits.targetMaxSubtopicsPerTopic} subtópicos por tópico. Se o material for maior, priorize cobertura fiel e divida em tópicos menores quando necessário.`
-    : `MOLDE FINAL: tópicos podem ter até cerca de ${limits.targetMaxSubtopicsPerTopic} subtópicos quando o bloco for grande. Só divida obrigatoriamente se um tópico passaria de 30 subtópicos.`;
-  const antiHugeTopicRule = `REGRA CRÍTICA: NÃO crie um tópico gigante como "Urologia" ou "Intestino" com 40, 60 ou 80 subtópicos. Tópico é bloco didático; subtópico é item testável.`;
+    : `MOLDE FINAL: escolha a estrutura pelo ganho real de aprendizagem. Não há meta de volume; use o menor mapa que preserve os conceitos essenciais e separe apenas objetivos realmente independentes.`;
+  const antiHugeTopicRule = `REGRA CRÍTICA: NÃO concentre um tema amplo como "Urologia" ou "Intestino" em um tópico gigante. Tópico é bloco didático; subtópico é item testável. Divida por fronteiras conceituais reais, não por uma cota numérica.`;
 
   if (total <= 1) {
     return `ASSUNTO: ${subjectTitle}
@@ -1193,6 +1250,15 @@ Ao consolidar, reorganize os blocos: se algum tópico ficar grande demais, quebr
 
 const stripLegacyLessonHighlights = (text = '') =>
   String(text).replace(/==([^=\n]+?)==/g, '$1');
+
+const stripNarrativeSectionLabels = (lessonSections = {}) => Object.fromEntries(
+  Object.entries(lessonSections).map(([key, section]) => [key, {
+    ...section,
+    content:String(section?.content || '')
+      .replace(/^\s*\*\*[^*\n]+?\*\*:?\s*(?:\n+|$)/, '')
+      .trim(),
+  }]),
+);
 
 const parseAcademiaLessonSections = (lessonText, subtopics) => {
   const lessonSections = {};
@@ -1989,260 +2055,6 @@ const parseClozeCards = (text, namespace='') => {
   });
 
   return { questions, summary:'' };
-};
-
-const stripLooseMarkdownAsterisks = (text = '') => {
-  return String(text || '').replace(/\*/g, '');
-};
-
-const extractQuickSection = (text = '', heading = '') => {
-  const raw = String(text || '').replace(/\r\n/g, '\n');
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(?:^|\\n)#{2,4}\\s*${escaped}\\s*\\n([\\s\\S]*?)(?=(?:^|\\n)#{2,4}\\s*(?:Aula\\s+r[aá]pida|Explica[çc][aã]o|Quest[õo]es|Flashcards)\\b|$)`, 'i');
-  return (raw.match(re)?.[1] || '').trim();
-};
-
-const extractQuickLesson = (text = '') => {
-  const raw = String(text || '').replace(/\r\n/g, '\n');
-  const match = raw.match(/(?:^|\n)##\s*Aula\s+r[aá]pida\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Quest[õo]es|Flashcards)\b|$)/i)
-    || raw.match(/(?:^|\n)##\s*Explica[çc][aã]o\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Quest[õo]es|Flashcards)\b|$)/i);
-  const lesson = (match?.[1] || extractQuickSection(raw, 'Aula rápida') || '').trim();
-  return stripLooseMarkdownAsterisks(lesson.replace(/:\*/g, ':')).replace(/\n{3,}/g, '\n\n').trim();
-};
-
-const extractQuickTitle = (text = '', fallback = '') => {
-  const raw = String(text || '').replace(/\r\n/g, '\n');
-  const match = raw.match(/(?:^|\n)##\s*T[íi]tulo\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Foco|Aula\s+r[aá]pida|Explica[çc][aã]o)\b|$)/i);
-  return stripLooseMarkdownAsterisks((match?.[1] || fallback || '').trim().split('\n')[0] || '').replace(/^["'“”]+|["'“”]+$/g, '').trim();
-};
-
-const extractQuickIntent = (text = '', fallback = '') => {
-  const raw = String(text || '').replace(/\r\n/g, '\n');
-  const match = raw.match(/(?:^|\n)##\s*Foco\s*\n([\s\S]*?)(?=(?:^|\n)##\s*(?:Aula\s+r[aá]pida|Explica[çc][aã]o)\b|$)/i);
-  return stripLooseMarkdownAsterisks((match?.[1] || fallback || '').trim()).replace(/\n{3,}/g, '\n\n').trim();
-};
-
-const buildQuickLessonPrompt = ({ context='', explanationLength='essential' }) => {
-  const lengthRule = {
-    essential: `PROFUNDIDADE: Nível 1 — resposta curta e ultra-direta.
-- Alvo: 120 a 220 palavras.
-- Foque no mecanismo/ideia que resolve a dúvida e em 2 a 4 pontos essenciais.
-- Use no máximo 1 subtítulo "###" além do texto principal.
-- Corte exemplos longos, contexto histórico e rodeios.`,
-    balanced: `PROFUNDIDADE: Nível 2 — explicação enxuta com raciocínio.
-- Alvo: 220 a 380 palavras.
-- Explique o mecanismo e traga exemplos/pegadinhas apenas quando ajudarem.
-- Use subtítulos "###" quando organizar melhor.`,
-    complete: `PROFUNDIDADE: Nível 3 — mini-aula mais completa.
-- Alvo: 380 a 650 palavras.
-- Inclua contexto, mecanismo, implicações clínicas e exceções importantes.
-- Ainda assim, não transforme a dúvida em aula genérica.`
-  }[explanationLength] || '';
-  return `
-Você vai criar a primeira parte de uma Centelha do Saber em português brasileiro.
-
-DÚVIDA/MATERIAL DO USUÁRIO:
-${context || 'Sem contexto. Peça mais contexto implicitamente criando uma explicação curta do tema provável.'}
-
-OBJETIVO:
-- Entender exatamente qual lacuna o usuário quer resolver.
-- Definir um título curto e específico.
-- Explicar a lacuna em uma mini-aula objetiva, clínica e high-yield.
-
-REGRAS:
-- Não gere questões e não gere flashcards neste request.
-- Não transforme a dúvida em uma aula genérica.
-- Seja didático, mas respeite rigorosamente o nível escolhido.
-- Use parágrafos curtos.
-- Use subtítulos de nível 3 com "###" quando ajudar.
-- Use tópicos com hífen quando necessário.
-- Não use asteriscos, negrito ou itálico.
-- Se a dúvida veio de conversa leiga, inclua uma forma simples de explicar sem perder precisão.
-
-${lengthRule}
-
-FORMATO OBRIGATÓRIO:
-## Título
-[título curto, sem aspas]
-
-## Foco
-[uma frase dizendo exatamente o que o usuário queria entender]
-
-## Aula rápida
-[mini-aula em markdown]
-`.trim();
-};
-
-const buildQuickPracticePrompt = ({ title='', context='', lesson='', intent='', settings={} }) => {
-  const alternativeCount = getEffectiveAlternativeCount(settings);
-  const alts = alternativeCount === 4
-    ? 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]'
-    : 'A) [alternativa]\nB) [alternativa]\nC) [alternativa]\nD) [alternativa]\nE) [alternativa]';
-  const styleInst = {
-    clinical:'Prefira vinhetas clínicas curtas e cobráveis, com dado discriminativo real e sem entregar diagnóstico/conduta no enunciado.',
-    direct:'Prefira perguntas diretas com alvo estreito: mecanismo, critério, exceção, comparação ou consequência prática.',
-    mixed:'Organize a prática em poucos casos encadeados. Cada caso deve gerar perguntas progressivas e diferentes. Em toda questão use "Caso-base: Caso N — [vinheta original completa]" e depois "Enunciado: [pergunta específica]"; repita integralmente o mesmo caso-base na sequência.',
-  }[settings.questionStyle || 'mixed'];
-  const adminExplanationFormat = settings.adminQuestionExplanations ? `
-FORMATO ADMIN PARA EXPLICAÇÕES DAS QUESTÕES:
-- Separe a explicação em "Aula:" e "Alternativas:".
-- Aula: explique o conceito de modo suficiente para o aluno entender e acertar a questão.
-- Alternativas: use [[ALT:A]], [[ALT:B]], [[ALT:C]], [[ALT:D]] e [[ALT:E]] quando houver E.
-- Em [[ALT:A]], explique por que a correta está certa. Nas demais, explique o erro específico em poucas palavras.
-- A explicação da alternativa precisa ficar presa ao conteúdo dela, pois o site embaralha alternativa + explicação juntas.` : '';
-  return `
-Você vai criar a parte ativa de uma Centelha do Saber em português brasileiro.
-
-TEMA:
-${title}
-
-FOCO IDENTIFICADO:
-${intent || title}
-
-CONTEXTO DO USUÁRIO:
-${context || 'Sem contexto adicional. Explique o tema do zero, mas sem fugir do foco.'}
-
-AULA JÁ GERADA:
-${lesson || 'Sem aula enviada. Use o contexto e o foco acima.'}
-
-OBJETIVO:
-- Criar uma quantidade compacta de questões de fixação que testem se o usuário realmente entendeu essa lacuna.
-- Criar flashcards obrigatórios, atômicos e exportáveis ao Anki para impedir que a lacuna volte.
-- Não reescrever a aula. Gere apenas questões e flashcards.
-
-REGRAS DAS QUESTÕES:
-- ${styleInst}
-- Gere de 4 a 6 questões. A IA decide a quantidade ideal conforme a complexidade da lacuna.
-- Cada questão deve voltar ao problema central do usuário. Não cobre curiosidades periféricas só porque apareceram na explicação.
-- Priorize mecanismos causais, decisões práticas, pegadinhas diretamente relacionadas e reconstrução ativa do raciocínio.
-- Evite perguntas óbvias, decorebas inúteis e alternativas absurdas.
-- Em casos clínicos, inclua apenas dados que mudam o raciocínio: contexto, tempo de evolução, achados positivos e negativos úteis. Não use "clássico", "característico", "destacando-se por" ou frases que entreguem a resposta.
-- O caso deve terminar em uma decisão clara: diagnóstico, próxima conduta, fármaco, efeito adverso, mecanismo, exame ou contraindicação.
-- Em perguntas diretas, evite "O que é X?", "qual a principal característica?" ou "qual conduta?" sem escopo. A pergunta deve dizer exatamente que tipo de resposta espera.
-- Pergunta direta boa deve diferenciar algo: mecanismo vs efeito, regra vs exceção, critério obrigatório vs achado inespecífico, ou fármacos/diagnósticos próximos.
-- Questões com alternativas devem ter exatamente ${alternativeCount} alternativas no formato:
-${alts}
-${getVofPromptRule(settings)}
-- Depois de cada questão inclua "Gabarito: X" e "Explicação:".
-${adminExplanationFormat}
-
-REGRAS DOS FLASHCARDS:
-- Gere de 5 a 8 flashcards. Nunca gere menos de 5.
-- Crie somente a quantidade útil para memorizar a lacuna, sem pilha excessiva.
-- Cada flashcard deve ter um alvo claro de recuperação, ser autossuficiente e não redundante.
-- "Atômico" não significa separar tudo: agrupe 2 a 4 itens quando eles formam uma unidade natural, como principais efeitos adversos, monitorização obrigatória, tríade ou fármacos que compartilham uma interação.
-- Separe em cards diferentes quando os itens têm mecanismos, decisões ou explicações diferentes.
-- Se a pergunta disser "dois", "três", "(2)" ou "(3)", a resposta deve ter exatamente essa quantidade.
-- Não use "cite um" com resposta contendo várias opções. Se quer conjunto, pergunte o conjunto; se quer um exemplo, responda um exemplo.
-- Use dificuldade desejável: a pergunta deve exigir recuperação ativa, não reconhecimento passivo.
-- Zero ambiguidade: a pergunta deve ter contexto suficiente para uma única resposta justa.
-- Teste de previsibilidade: se uma pessoa que entendeu o tema não conseguir adivinhar o tipo exato de resposta esperada, reescreva a pergunta. Proibido fazer perguntas abertas genéricas como "O que é X?" quando a resposta seria "doença autoimune", "condição crônica" ou outra definição ampla.
-- Evite perguntas de sim/não; transforme em uma pergunta que peça a informação substantiva.
-- Toda pergunta deve terminar com ponto de interrogação.
-- Resposta curta: 1 a 6 palavras ou, em conjuntos naturais, 2 a 4 itens curtos.
-- Depois da resposta curta, a explicação deve ensinar por que aquela resposta é correta ou como ela acontece. Ela não pode repetir a resposta com mais palavras nem virar curso.
-- Se o card perguntar efeitos colaterais, a resposta lista os efeitos e a explicação diz por que eles ocorrem ou por que importam. Se perguntar uma escolha/conduta, a explicação diz qual propriedade do fármaco ou do quadro clínico justifica aquela opção.
-- Explicação ruim: "é usado porque é eficaz/primeira linha/indicado". Explicação boa: conecta fármaco/quadro clínico → propriedade relevante → motivo da resposta.
-- Não faça cartões que cobrem detalhes inúteis; faça cartões que, juntos, permitam revisar a dúvida inteira depois.
-
-FORMATO FINAL OBRIGATÓRIO:
-## Questões
-## Questão 1
-[enunciado]
-${alts}
-Gabarito: A
-Explicação:${settings.adminQuestionExplanations ? `
-Aula:
-[aula curta e completa sobre o tema]
-
-Alternativas:
-[[ALT:A]]
-[por que a alternativa A está correta]
-
-[[ALT:B]]
-[por que a alternativa B está errada]
-
-[[ALT:C]]
-[por que a alternativa C está errada]
-
-[[ALT:D]]
-[por que a alternativa D está errada]
-
-[[ALT:E]]
-[por que a alternativa E está errada, se existir]` : ' [explicação]'}
-
-## Flashcards
-## Flashcard 1
-Pergunta: [pergunta objetiva e específica?]
-Resposta: [resposta curta, poucas palavras]
-Explicação: [explicação curta do porquê/como da resposta]
----
-`.trim();
-};
-
-const renderQuickLesson = (lesson = '', darkMode = false) => {
-  const lines = stripLooseMarkdownAsterisks(lesson).split('\n');
-  const elements = [];
-  let i = 0;
-  while (i < lines.length) {
-    const raw = lines[i] || '';
-    const line = raw.trim();
-    const heading = line.match(/^#{2,4}\s+(.+)$/);
-    if (heading) {
-      elements.push(
-        <h3 key={`qh-${i}`} className={`text-base font-bold mt-6 mb-2 ${darkMode?'text-yellow-300':'text-yellow-700'}`}>
-          {parseHtmlText(heading[1].trim())}
-        </h3>
-      );
-      i++;
-      continue;
-    }
-    if (/^\s*[-•](?:\s+|$)/.test(raw)) {
-      const items = [];
-      const isListLine = (value = '') => /^\s*[-•](?:\s+|$)/.test(value);
-      const isBoundary = (value = '') => {
-        const trimmed = value.trim();
-        return !trimmed || /^#{2,4}\s+/.test(trimmed);
-      };
-      while (i < lines.length && isListLine(lines[i] || '')) {
-        const match = (lines[i] || '').match(/^\s*[-•](?:\s+(.*)|\s*)$/);
-        let itemText = (match?.[1] || '').trim();
-        const continuation = [];
-        let j = i + 1;
-        while (j < lines.length && !isListLine(lines[j] || '') && !isBoundary(lines[j] || '')) {
-          continuation.push((lines[j] || '').trim());
-          j++;
-        }
-        items.push([itemText, ...continuation].filter(Boolean).join(' '));
-        i = j;
-      }
-      elements.push(
-        <div key={`qul-${i}`} className={`space-y-1.5 my-3 text-base ${darkMode?'text-gray-200':'text-gray-800'}`}>
-          {items.map((item, idx) => (
-            <div key={idx} className="flex items-start gap-3">
-              <span className="flex flex-shrink-0 items-center justify-center" style={{width:'0.875rem', height:'1.625rem'}}>
-                <span className="rounded-full bg-current" style={{width:'0.4375rem', height:'0.4375rem'}}/>
-              </span>
-              <span className="min-w-0 leading-relaxed">{parseHtmlText(item)}</span>
-            </div>
-          ))}
-        </div>
-      );
-      continue;
-    }
-    if (!line) {
-      elements.push(<div key={`qsp-${i}`} className="h-2"/>);
-      i++;
-      continue;
-    }
-    elements.push(
-      <p key={`qp-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>
-        {parseHtmlText(line)}
-      </p>
-    );
-    i++;
-  }
-  return elements;
 };
 
 const parseGeneratedQuestionsByTypes = (text, namespace='', types=['direct']) => {
@@ -3616,7 +3428,12 @@ const ERROR_CONFIGS = {
   },
   CONNECTION_ERROR: {
     title: 'Falha de Conexão',
-    message: 'Não foi possível conectar ao Gemini.\n\nPossíveis causas:\n• Problema de internet\n• Falha temporária do serviço\n• Timeout na requisição\n\nTente novamente em alguns instantes.',
+    message: 'Não foi possível conectar ao Gemini.\n\nPossíveis causas:\n• Problema de internet\n• Falha temporária do serviço\n\nTente novamente em alguns instantes.',
+    link: null,
+  },
+  REQUEST_TIMEOUT: {
+    title: 'A geração demorou além do esperado',
+    message: 'O Gemini não concluiu a resposta dentro do tempo reservado. Isso pode acontecer com materiais extensos ou em momentos de lentidão do serviço. O sumário não foi limitado: tente novamente; o fluxo de sumários possui uma espera ampliada para gerações longas.',
     link: null,
   },
   INCOMPLETE_GENERATION: {
@@ -3650,7 +3467,7 @@ const GModal = ({ title, message, onConfirm, onCancel, confirmText='OK', darkMod
 // ExternalPromptModal foi movido para src/features/modals/WorkflowModals.jsx.
 // ═══════════════════════════════════════════════════════════════════════════════// ═══════════════════════════════════════════════════════════════════════════════
 const DEFAULT_HOME_MOTTO = 'Não são admitidos ignorantes em medicina.';
-const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:true,adminStudyMap:STUDY_MAP_ENABLED,adminChunkedQuestions:QUESTION_BATCHING_ENABLED,numAlternatives:5,vofStatementCount:5,apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:true,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,sharedLibraryDelaySeconds:2,adminHomeMode:'admin' };
+const defaultSettings = { numTopics:10,numSubtopics:5,qPerSub:1,qPerSubAuto:true,adminStudyMap:STUDY_MAP_ENABLED,adminChunkedQuestions:QUESTION_BATCHING_ENABLED,numAlternatives:5,vofStatementCount:5,apiKey:'',apiKey1:'',apiKey2:'',apiKey3:'',geminiKeys:[],activeKeyId:'gemini_1',activeKeyIndex:1,oracleLength:'medium',questionStyle:'mixed',autoMode:true,questionTypes:['direct'],explanationLength:'complete',lessonFormat:'outline',lessonCoverage:'high-yield',lessonTone:'formal',quickExplanationLength:'essential',quickOutputs:['lesson','questions','flashcards'],geminiThinkingEnabled:false,dailyQuestionGoal:120,dailyLectureMinutesGoal:90,questionDisplayMode:'list',fontScale:100,courseCatalogDelaySeconds:DEFAULT_COURSE_CATALOG_DELAY_SECONDS,sharedLibraryDelaySeconds:2,adminHomeMode:'admin' };
 const FONT_SCALE_OPTIONS = [
   { value:90, label:'Pequena' },
   { value:100, label:'Normal' },
@@ -3665,12 +3482,20 @@ export default function QuestionBankApp() {
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(()=>readStorageJson('qb_dark', false));
   const [menuOpen, setMenuOpen] = useState(false);   // hamburger
+  const [mobileMenuClosing, setMobileMenuClosing] = useState(false);
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
   const [flashcardFullscreen, setFlashcardFullscreen] = useState(false);
+  const [famedDetailActive, setFamedDetailActive] = useState(false);
   const keepBottomNavVisibleRef = useRef(false);
+  const mobileScrollProgressRef = useRef(null);
+  const mobileMainRef = useRef(null);
+  const mobileMenuCloseTimerRef = useRef(null);
+  const bottomNavRef = useRef(null);
+  const mobileNavigationLockRef = useRef(false);
+  const mobileNavigationUnlockTimerRef = useRef(null);
+  const themeTransitionActiveRef = useRef(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(()=>readStorageJson('agora_sidebar_collapsed', false));
   const bg    = darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900';
-  const hdr   = darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200';
   const badge = darkMode?'bg-gray-700 text-gray-200':'bg-gray-100 text-gray-800';
 
   const toggleDesktopSidebar = () => {
@@ -3791,6 +3616,7 @@ export default function QuestionBankApp() {
   // ── Academia do Saber ─────────────────────────────────────────────────────
   const [academiaCreatorStep, setAcademiaCreatorStep] = useState(1);
   const [academiaSetupStep, setAcademiaSetupStep] = useState('content');
+  const [famedCreationTarget, setFamedCreationTarget] = useState(null);
   const [academiaSubName, setAcademiaSubName]         = useState('');
   const [academiaMaterialText, setAcademiaMaterialText] = useState('');
   const [academiaUploadedFiles, setAcademiaUploadedFiles] = useState([]);
@@ -3861,6 +3687,7 @@ export default function QuestionBankApp() {
   const homeShowsAdminTools = isAdmin && adminHomeMode === 'admin';
   const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
   const homeCanSeeSharedLibrary = isAdmin && adminHomeMode !== 'site';
+  const homeCanSeeFamed = homeCanSeeVideoaulas;
   const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
   const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
   useEffect(() => {
@@ -4073,6 +3900,10 @@ export default function QuestionBankApp() {
   }, [homeCanSeeSharedLibrary, view]);
 
   useEffect(() => {
+    if (!homeCanSeeFamed && view === 'famed') setView('library');
+  }, [homeCanSeeFamed, view]);
+
+  useEffect(() => {
     if (!academiaExtraModal) return;
     setAcademiaExtraQStyle(settingsRef.current.questionStyle || 'mixed');
     setAcademiaExtraQTypes(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], questionTypeAccess));
@@ -4184,6 +4015,7 @@ export default function QuestionBankApp() {
   );
   const foregroundVqBlocksData = canSeeVideoaulas && (
     ['curso', 'videoquestions'].includes(view)
+    || (isAdmin && view === 'shared-library')
     || !!vqAula
     || !!vqActiveBlockView
     || (view === 'spaced-review' && canUseAdvancedFeatures)
@@ -5543,11 +5375,7 @@ export default function QuestionBankApp() {
 
   useEffect(()=>{
     document.title='Ágora do Saber';
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><polygon points="12 2 2 7 22 7 12 2"/><line x1="6" x2="6" y1="21" y2="7"/><line x1="10" x2="10" y1="21" y2="7"/><line x1="14" x2="14" y1="21" y2="7"/><line x1="18" x2="18" y1="21" y2="7"/><line x1="2" x2="22" y1="21" y2="21"/></svg>`;
-    let lnk=document.querySelector("link[rel~='icon']")||document.createElement('link');
-    lnk.rel='icon'; lnk.href=`data:image/svg+xml;base64,${window.btoa(svg)}`;
-    if(!document.querySelector("link[rel~='icon']")) document.head.appendChild(lnk);
-    document.body.style.backgroundColor=darkMode?'#111827':'#fafaf9';
+    document.body.style.backgroundColor=darkMode?'#01040a':'#f2efe7';
     writeStorageJson('qb_dark', darkMode);
   },[darkMode]);
 
@@ -5657,7 +5485,7 @@ export default function QuestionBankApp() {
         return true;
       }
       if (view === 'quick-topic') {
-        if (quickStudyTab !== 'lesson') setQuickStudyTab('lesson');
+        if (quickStudyTab !== 'lesson' && activeTopic?.quickLesson) setQuickStudyTab('lesson');
         else setView('quick');
         return true;
       }
@@ -5682,6 +5510,7 @@ export default function QuestionBankApp() {
         else setView('library');
         return true;
       }
+      if (view === 'famed') { setView('library'); return true; }
       if (view === 'settings') { restoreReturnTarget('library'); return true; }
       if (view === 'spaced-review') { restoreReturnTarget('library'); return true; }
       if (view === 'curso') { setView('library'); return true; }
@@ -5731,17 +5560,35 @@ export default function QuestionBankApp() {
     let lastY = window.scrollY;
     let accumulatedDelta = 0;
     const scrollPositions = new WeakMap();
+    const paintScrollProgress = target => {
+      const scrollElement = !target || target === window
+        ? document.scrollingElement || document.documentElement
+        : target;
+      const maxScroll = Math.max(0, (scrollElement?.scrollHeight || 0) - (scrollElement?.clientHeight || 0));
+      const currentScroll = Math.max(0, scrollElement?.scrollTop || 0);
+      // Eventos de filhos sem rolagem não devem apagar o progresso da página.
+      if (target && target !== window && maxScroll <= 1) return;
+      const progress = maxScroll > 1 ? Math.min(1, currentScroll / maxScroll) : 0;
+      if (mobileScrollProgressRef.current) {
+        mobileScrollProgressRef.current.style.transform = `scaleX(${progress})`;
+        mobileScrollProgressRef.current.style.opacity = maxScroll > 1 ? '1' : '0';
+      }
+    };
     const updateNavigationVisibility = (delta, y = window.scrollY) => {
+      if (view === 'library') {
+        setBottomNavVisible(true);
+        return;
+      }
       if (keepBottomNavVisibleRef.current) {
         setBottomNavVisible(true);
         return;
       }
       if (Math.sign(delta) !== Math.sign(accumulatedDelta)) accumulatedDelta = 0;
       accumulatedDelta += delta;
-      if (accumulatedDelta > 28 && y > 96) {
+      if (accumulatedDelta > 120 && y > 160) {
         setBottomNavVisible(false);
         accumulatedDelta = 0;
-      } else if (accumulatedDelta < -20 || y < 40) {
+      } else if (accumulatedDelta < -80 || y < 48) {
         setBottomNavVisible(true);
         accumulatedDelta = 0;
       }
@@ -5749,6 +5596,7 @@ export default function QuestionBankApp() {
     const onScroll = () => {
       const y = window.scrollY;
       updateNavigationVisibility(y - lastY, y);
+      paintScrollProgress(window);
       lastY = y;
     };
     const onAnyScroll = event => {
@@ -5757,27 +5605,36 @@ export default function QuestionBankApp() {
       const y = target.scrollTop || 0;
       const previousY = scrollPositions.get(target) ?? y;
       updateNavigationVisibility(y - previousY, Math.max(y, 73));
+      paintScrollProgress(target);
       scrollPositions.set(target, y);
     };
+    const onResize = () => paintScrollProgress(window);
     window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
     document.addEventListener('scroll', onAnyScroll, { passive: true, capture: true });
+    window.requestAnimationFrame(()=>paintScrollProgress(window));
     return () => {
       window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
       document.removeEventListener('scroll', onAnyScroll, true);
     };
-  }, []);
+  }, [view]);
 
   useEffect(() => {
+    if (view === 'library' || mobileMenuClosing) {
+      setBottomNavVisible(true);
+      return;
+    }
     if (keepBottomNavVisibleRef.current) {
       setBottomNavVisible(true);
       return;
     }
     setBottomNavVisible(!(menuOpen || mobileNavOpen));
-  }, [menuOpen, mobileNavOpen]);
+  }, [menuOpen, mobileNavOpen, mobileMenuClosing, view]);
 
   useEffect(() => {
     setBottomNavVisible(true);
-  }, [view]);
+  }, [view, appBackRouteKey]);
 
   useEffect(() => {
     const onFlashcardLayout = (event) => {
@@ -5790,6 +5647,108 @@ export default function QuestionBankApp() {
     window.addEventListener('agora-flashcard-layout', onFlashcardLayout);
     return () => window.removeEventListener('agora-flashcard-layout', onFlashcardLayout);
   }, [menuOpen, mobileNavOpen]);
+
+  useEffect(() => {
+    const onFamedDetailLayout = event => setFamedDetailActive(!!event.detail?.active);
+    window.addEventListener('agora-famed-detail-layout', onFamedDetailLayout);
+    if (view !== 'famed') setFamedDetailActive(false);
+    return () => window.removeEventListener('agora-famed-detail-layout', onFamedDetailLayout);
+  }, [view]);
+
+  useEffect(() => {
+    const main = mobileMainRef.current;
+    if (!main || window.innerWidth > 1023 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    main.getAnimations?.().forEach(animation=>animation.cancel());
+    main.animate([
+      { opacity:.8, transform:'translateY(3px)' },
+      { opacity:1, transform:'translateY(0)' },
+    ], { duration:140, easing:'cubic-bezier(.2,.8,.2,1)' });
+  }, [view]);
+
+  useEffect(() => {
+    const timers = new WeakMap();
+    const showTouchFeedback = event => {
+      if (window.innerWidth > 1023) return;
+      const control = event.target?.closest?.('button, a, [role="button"]');
+      if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return;
+      clearTimeout(timers.get(control));
+      control.classList.add('agora-touch-feedback');
+      timers.set(control, setTimeout(()=>control.classList.remove('agora-touch-feedback'), 170));
+    };
+    document.addEventListener('pointerdown', showTouchFeedback, { capture:true, passive:true });
+    return () => document.removeEventListener('pointerdown', showTouchFeedback, true);
+  }, []);
+
+  useEffect(() => {
+    if (!username) return;
+    const preloadPrimaryViews = () => Promise.allSettled([
+      import('./features/shared-library/SharedLibraryView.jsx'),
+      import('./features/famed/FamedPortalView.jsx'),
+      import('./features/library/SubLibraryView.jsx'),
+      import('./features/course/CoursePortalView.jsx'),
+    ]);
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(preloadPrimaryViews, { timeout:1800 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+    const timer = setTimeout(preloadPrimaryViews, 500);
+    return () => clearTimeout(timer);
+  }, [username]);
+
+  useEffect(() => {
+    const animateMobileActionMenuClose = menu => {
+      if (!menu || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const rect = menu.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const ghost = menu.cloneNode(true);
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+      ghost.style.setProperty('position', 'fixed', 'important');
+      ghost.style.setProperty('inset', 'auto', 'important');
+      ghost.style.setProperty('top', `${rect.top}px`, 'important');
+      ghost.style.setProperty('left', `${rect.left}px`, 'important');
+      ghost.style.setProperty('right', 'auto', 'important');
+      ghost.style.setProperty('bottom', 'auto', 'important');
+      ghost.style.setProperty('width', `${rect.width}px`, 'important');
+      ghost.style.setProperty('height', `${rect.height}px`, 'important');
+      ghost.style.setProperty('max-height', `${rect.height}px`, 'important');
+      ghost.style.setProperty('margin', '0', 'important');
+      ghost.style.setProperty('pointer-events', 'none', 'important');
+      ghost.style.setProperty('z-index', '100', 'important');
+      ghost.style.setProperty('animation', 'none', 'important');
+      document.querySelector('.agora-shell')?.appendChild(ghost);
+      const origin = menu.dataset.mobileDirection === 'right' ? 'top left' : 'top right';
+      ghost.style.transformOrigin = origin;
+      const animation = ghost.animate([
+        { opacity:1, transform:'translateY(0) scale(1)' },
+        { opacity:0, transform:'translateY(-.2rem) scale(.97)' },
+      ], { duration:140, easing:'ease-in', fill:'forwards' });
+      animation.finished.catch(()=>{}).finally(()=>ghost.remove());
+    };
+    const positionMobileActionMenu = event => {
+      if (window.innerWidth > 640) return;
+      const trigger = event.target?.closest?.('button');
+      const anchor = trigger?.closest?.('.relative');
+      const clickedMenu = event.target?.closest?.('.mobile-safe-action-menu');
+      const openMenu = clickedMenu || anchor?.querySelector?.('.mobile-safe-action-menu');
+      if (openMenu) {
+        animateMobileActionMenuClose(openMenu);
+        return;
+      }
+      if (!trigger || !anchor) return;
+      window.requestAnimationFrame(() => {
+        const menu = anchor.querySelector('.mobile-safe-action-menu');
+        if (!menu) return;
+        const triggerRect = trigger.getBoundingClientRect();
+        const menuWidth = Math.min(256, window.innerWidth - 20);
+        const roomToRight = window.innerWidth - triggerRect.left;
+        const roomToLeft = triggerRect.right;
+        menu.dataset.mobileDirection = roomToRight >= menuWidth || roomToRight >= roomToLeft ? 'right' : 'left';
+      });
+    };
+    document.addEventListener('click', positionMobileActionMenu, true);
+    return () => document.removeEventListener('click', positionMobileActionMenu, true);
+  }, []);
 
   // Exam timer
   useEffect(()=>{
@@ -6267,6 +6226,85 @@ export default function QuestionBankApp() {
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
     if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+  };
+
+  const closeMobileMenu = useCallback((afterClose) => {
+    if (!menuOpen || mobileMenuClosing) return;
+    setMobileMenuClosing(true);
+    afterClose?.();
+    clearTimeout(mobileMenuCloseTimerRef.current);
+    mobileMenuCloseTimerRef.current = setTimeout(() => {
+      setMenuOpen(false);
+      setMobileMenuClosing(false);
+    }, 165);
+  }, [menuOpen, mobileMenuClosing]);
+
+  const toggleMobileMenu = useCallback(() => {
+    if (menuOpen) {
+      closeMobileMenu();
+      return;
+    }
+    clearTimeout(mobileMenuCloseTimerRef.current);
+    setMobileMenuClosing(false);
+    setMenuOpen(true);
+  }, [menuOpen, closeMobileMenu]);
+
+  const releaseMobileNavigation = useCallback(() => {
+    mobileNavigationLockRef.current = false;
+    bottomNavRef.current?.classList.remove('is-navigating');
+    bottomNavRef.current?.querySelectorAll('.is-pending').forEach(button=>button.classList.remove('is-pending'));
+  }, []);
+
+  const runMobileNavigation = useCallback((event, action) => {
+    if (mobileNavigationLockRef.current) return;
+    mobileNavigationLockRef.current = true;
+    const button = event.currentTarget;
+    button.classList.add('is-pending');
+    bottomNavRef.current?.classList.add('is-navigating');
+    clearTimeout(mobileNavigationUnlockTimerRef.current);
+    mobileNavigationUnlockTimerRef.current = setTimeout(releaseMobileNavigation, 1400);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => action?.()));
+  }, [releaseMobileNavigation]);
+
+  const toggleTheme = useCallback((event) => {
+    if (themeTransitionActiveRef.current) return;
+    const x = Number.isFinite(event?.clientX) ? event.clientX : window.innerWidth / 2;
+    const y = Number.isFinite(event?.clientY) ? event.clientY : window.innerHeight / 2;
+    document.documentElement.style.setProperty('--agora-theme-x', `${x}px`);
+    document.documentElement.style.setProperty('--agora-theme-y', `${y}px`);
+    const applyTheme = () => setDarkMode(current=>!current);
+    if (typeof document.startViewTransition === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      themeTransitionActiveRef.current = true;
+      const transition = document.startViewTransition(applyTheme);
+      transition.finished.catch(()=>{}).finally(()=>{ themeTransitionActiveRef.current = false; });
+      return;
+    }
+    themeTransitionActiveRef.current = true;
+    document.documentElement.classList.add('agora-theme-fallback');
+    applyTheme();
+    setTimeout(() => {
+      document.documentElement.classList.remove('agora-theme-fallback');
+      themeTransitionActiveRef.current = false;
+    }, 420);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileNavigationLockRef.current) return;
+    clearTimeout(mobileNavigationUnlockTimerRef.current);
+    mobileNavigationUnlockTimerRef.current = setTimeout(releaseMobileNavigation, 420);
+  }, [view, releaseMobileNavigation]);
+
+  useEffect(() => () => {
+    clearTimeout(mobileMenuCloseTimerRef.current);
+    clearTimeout(mobileNavigationUnlockTimerRef.current);
+  }, []);
+
+  const persistAcademiaSubject = async subject => {
+    if (subject?.storageTarget === 'famed') {
+      await saveFamedAcademiaSubject(subject);
+      return;
+    }
+    await updateSubject(subject);
   };
   const mergeSubjectTopicUpdates = (...subjects) => {
     const validSubjects = subjects.filter(subject => subject?.id && Array.isArray(subject.topics));
@@ -9222,7 +9260,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const targets = getBulkGenerateTargets(subject, mode);
     setBulkActionMenu(null);
     setBulkGenerateRun({running:false,current:0,total:targets.length,logs:[]});
-    setBulkGenerateModal({subjectId:subject.id, mode, config:getDefaultBulkConfig(mode)});
+    setBulkGenerateModal({subjectId:subject.id, subject, mode, config:getDefaultBulkConfig(mode)});
   };
 
   const getBulkGenerateTargets = (subject, mode = 'generate') => {
@@ -9247,8 +9285,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setBulkGenerateRun(p => ({ ...p, logs:[...p.logs, createBulkLog(type, msg)] }));
   };
   const getBulkErrorText = (err) => ERROR_CONFIGS[err?.message]?.title || err?.message || 'Erro desconhecido';
-  const isRetryableBulkError = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR'].includes(err?.message);
-  const shouldTryNextGeminiKey = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR', 'QUOTA_EXCEEDED', 'API_KEY_INVALID'].includes(err?.message);
+  const isRetryableBulkError = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR', 'REQUEST_TIMEOUT'].includes(err?.message);
+  const shouldTryNextGeminiKey = (err) => ['SERVER_OVERLOADED', 'CONNECTION_ERROR', 'NETWORK_ERROR', 'REQUEST_TIMEOUT', 'QUOTA_EXCEEDED', 'API_KEY_INVALID'].includes(err?.message);
   const getTwoAttemptGeminiKeys = () => getOrderedKeys().slice(0, 2);
 
   // ── Gerar questões direto (sem modal) ──────────────────────────────────────
@@ -10489,7 +10527,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       let lastErr = null;
       for (const {k} of orderedKeys) {
         try {
-          const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : [], getGeminiOptions(s));
+          const r=await callGemini(userMsg, sys, k, i === 0 ? uploadedImages : [], {...getGeminiOptions(s),timeoutMs:120000});
           accumulated = normalizeOracleSyllabus(r, s);
           await rotateKey();
           chunkOk = true;
@@ -10528,7 +10566,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     let lastErr = null;
     for (const {k} of orderedKeys) {
       try {
-        const r=await callGemini('Revise.',sys,k, [], getGeminiOptions());
+        const r=await callGemini('Revise.',sys,k, [], {...getGeminiOptions(),timeoutMs:120000});
         setSyllabus(normalizeOracleSyllabus(r, withDefaultStudyMapSettings(settingsRef.current)));setSyllabusFB('');
         await rotateKey(); ok = true; break;
       } catch(e) {
@@ -10615,7 +10653,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const resetQuickSessionAnswers = async (topic) => {
     if (!topic) return;
     await saveQuickSessionTopic({ ...topic, answers:{}, spacedReview:{}, errorNotebook:[] });
-    addToast('Progresso da centelha limpo.', 'success', 3000);
+    addToast('Progresso da dúvida limpo.', 'success', 3000);
   };
 
   const deleteQuickSession = async (topicId) => {
@@ -10631,7 +10669,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       setActiveTopicId(null);
       setView('quick');
     }
-    addToast('Centelha removida.', 'success', 3000);
+    addToast('Dúvida removida.', 'success', 3000);
   };
 
   const createQuickSession = async () => {
@@ -10645,60 +10683,97 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setQuickGenerating(true);
     const toastId = addToast(`Gerando ${QUICK_SUBJECT_TITLE}...`, 'loading', 0);
     const now = Date.now();
+    const configuredOutputs = Array.isArray(settingsRef.current.quickOutputs)
+      ? settingsRef.current.quickOutputs.filter(output=>['lesson','questions','flashcards'].includes(output))
+      : ['lesson','questions','flashcards'];
+    const quickOutputs = configuredOutputs.length ? configuredOutputs : ['lesson','questions','flashcards'];
+    const wantsLesson = quickOutputs.includes('lesson');
+    const wantsQuestions = quickOutputs.includes('questions');
+    const wantsFlashcards = quickOutputs.includes('flashcards');
     const s = withAdminQuestionPromptSettings({
       ...settingsRef.current,
-      questionTypes:['direct', 'flashcard'],
+      questionTypes:[wantsQuestions?'direct':null, wantsFlashcards?'flashcard':null].filter(Boolean),
       questionStyle:settingsRef.current.questionStyle || 'mixed',
       numAlternatives:settingsRef.current.numAlternatives || 5,
       quickExplanationLength:settingsRef.current.quickExplanationLength || 'essential',
     });
-    const sys = `Você é a ${QUICK_SUBJECT_TITLE} da Ágora do Saber: professor de medicina direto, high-yield e excelente em transformar lacunas pontuais em memorização durável.`;
+    const sys = `Você é a ferramenta ${QUICK_SUBJECT_TITLE} da Ágora do Saber: professor de medicina direto, objetivo e excelente em transformar lacunas pontuais em compreensão e memorização duradouras.`;
     let lessonRaw = '';
     let practiceRaw = '';
     try {
-      updateToast(toastId, 'Gerando explicação da centelha...', 'loading');
-      for (const { k } of getOrderedKeys()) {
-        try {
-          lessonRaw = await callGemini(buildQuickLessonPrompt({ context:userContext, explanationLength:s.quickExplanationLength }), sys, k, [], getGeminiOptions(s));
-          await rotateKey();
-          break;
-        } catch(e) {
-          await rotateKey();
-          throw e;
+      const {
+        buildQuickLessonPrompt,
+        buildQuickPracticePrompt,
+        extractQuickIntent,
+        extractQuickLesson,
+        extractQuickSection,
+        extractQuickTitle,
+      } = await import('./features/quick/quickContent.js');
+      const fallbackTitle = (userContext.split(/\n|[.!?]/)[0] || '').trim().slice(0, 90) || 'Dúvida rápida';
+      let quickLesson = '';
+      let generatedTitle = fallbackTitle;
+      let quickIntent = fallbackTitle;
+      if (wantsLesson) {
+        updateToast(toastId, 'Gerando aula...', 'loading');
+        for (const { k } of getOrderedKeys()) {
+          try {
+            lessonRaw = await callGemini(buildQuickLessonPrompt({ context:userContext, explanationLength:s.quickExplanationLength }), sys, k, [], getGeminiOptions(s));
+            await rotateKey();
+            break;
+          } catch(e) {
+            await rotateKey();
+            throw e;
+          }
         }
+        quickLesson = extractQuickLesson(lessonRaw);
+        generatedTitle = extractQuickTitle(lessonRaw, fallbackTitle) || fallbackTitle;
+        quickIntent = extractQuickIntent(lessonRaw, generatedTitle) || generatedTitle;
+        if (!quickLesson) throw new Error('EMPTY_GENERATION');
       }
-      const quickLesson = extractQuickLesson(lessonRaw);
-      const generatedTitle = extractQuickTitle(lessonRaw, userContext.split('\n')[0]);
-      const quickIntent = extractQuickIntent(lessonRaw, generatedTitle);
-      if (!quickLesson) throw new Error('EMPTY_GENERATION');
 
-      updateToast(toastId, 'Gerando questões e flashcards...', 'loading');
-      for (const { k } of getOrderedKeys()) {
-        try {
-          practiceRaw = await callGemini(
-            buildQuickPracticePrompt({ title:generatedTitle, context:userContext, lesson:quickLesson, intent:quickIntent, settings:s }),
-            sys,
-            k,
-            [],
-            { ...getGeminiOptions(s), maxTokens:5000 }
-          );
-          await rotateKey();
-          break;
-        } catch(e) {
-          await rotateKey();
-          throw e;
+      let parsedQuestions = { questions:[], summary:'' };
+      let parsedFlashcards = { questions:[] };
+      if (wantsQuestions || wantsFlashcards) {
+        const activeLabels = [wantsQuestions?'questões':null, wantsFlashcards?'flashcards':null].filter(Boolean).join(' e ');
+        updateToast(toastId, `Gerando ${activeLabels}...`, 'loading');
+        for (const { k } of getOrderedKeys()) {
+          try {
+            practiceRaw = await callGemini(
+              buildQuickPracticePrompt({
+                title:generatedTitle,
+                context:userContext,
+                lesson:quickLesson,
+                intent:quickIntent,
+                settings:s,
+                outputs:quickOutputs,
+                alternativeCount:getEffectiveAlternativeCount(s),
+                vofRule:getVofPromptRule(s),
+                distractorRule:DISTRACTOR_CORRUPTION_PROMPT_RULE,
+              }),
+              sys,
+              k,
+              [],
+              { ...getGeminiOptions(s), maxTokens:5000 }
+            );
+            await rotateKey();
+            break;
+          } catch(e) {
+            await rotateKey();
+            throw e;
+          }
         }
+        const questionSection = wantsQuestions ? (extractQuickSection(practiceRaw, 'Questões') || extractQuickSection(practiceRaw, 'Questoes')) : '';
+        const flashcardSection = wantsFlashcards ? extractQuickSection(practiceRaw, 'Flashcards') : '';
+        if (wantsQuestions) parsedQuestions = parseData(questionSection || practiceRaw, `quick_${now}_q`);
+        if (wantsFlashcards) parsedFlashcards = parseFlashcards(flashcardSection || practiceRaw, `quick_${now}_fc`);
+        if (wantsQuestions && !parsedQuestions.questions.length) throw new Error('EMPTY_GENERATION');
+        if (wantsFlashcards && !parsedFlashcards.questions.length) throw new Error('EMPTY_GENERATION');
       }
-      const questionSection = extractQuickSection(practiceRaw, 'Questões') || extractQuickSection(practiceRaw, 'Questoes');
-      const flashcardSection = extractQuickSection(practiceRaw, 'Flashcards');
-      const parsedQuestions = parseData(questionSection || practiceRaw, `quick_${now}_q`);
-      const parsedFlashcards = parseFlashcards(flashcardSection || practiceRaw, `quick_${now}_fc`);
       const questions = [...parsedQuestions.questions, ...parsedFlashcards.questions];
-      if (!questions.length) throw new Error('EMPTY_GENERATION');
       const topic = {
         id:`quick-${now}`,
-        title:generatedTitle || 'Centelha',
-        subtopics:[generatedTitle || 'Centelha'],
+        title:generatedTitle || 'Dúvida rápida',
+        subtopics:[generatedTitle || 'Dúvida rápida'],
         questions,
         answers:{},
         summary:parsedQuestions.summary || '',
@@ -10706,7 +10781,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         errorNotebook:[],
         spacedReview:{},
         questionStyle:s.questionStyle,
-        questionTypes:['direct', 'flashcard'],
+        questionTypes:s.questionTypes,
         quickLesson,
         quickContext:userContext.trim(),
         quickIntent,
@@ -10730,10 +10805,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         setActiveSubjectId(subject.id);
       }
       setActiveTopicId(topic.id);
-      setQuickStudyTab('lesson');
+      setQuickStudyTab(wantsLesson?'lesson':wantsQuestions?'questions':'flashcards');
       setQuickTitle('');
       setQuickContext('');
-      updateToast(toastId, `Centelha criada: ${questions.filter(q=>!q.isFlashcard).length} questões e ${questions.filter(q=>q.isFlashcard).length} flashcards.`, 'success');
+      const createdLabels = [wantsLesson?'aula':null, wantsQuestions?`${parsedQuestions.questions.length} questões`:null, wantsFlashcards?`${parsedFlashcards.questions.length} flashcards`:null].filter(Boolean).join(' · ');
+      updateToast(toastId, `Dúvida criada: ${createdLabels}.`, 'success');
       setTimeout(()=>removeToast(toastId), 6000);
       setView('quick-topic');
     } catch(e) {
@@ -11024,6 +11100,25 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     return buildAcademiaMaterialText(academiaMaterialText, academiaUploadedFiles);
   };
 
+  const resetAcademiaCreator = () => {
+    setAcademiaCreatorStep(1);
+    setAcademiaSetupStep('content');
+    setAcademiaSubName('');
+    setAcademiaMaterialText('');
+    setAcademiaUploadedFiles([]);
+    setAcademiaUploadedImages([]);
+    setAcademiaSyllabus('');
+    setAcademiaSyllabusFB('');
+  };
+
+  const startFamedAcademiaCreation = scheduleItem => {
+    if (!scheduleItem) return;
+    resetAcademiaCreator();
+    setFamedCreationTarget(scheduleItem);
+    setAcademiaSubName(scheduleItem.title || '');
+    setView('academia-creator');
+  };
+
   const startAcademiaCreation = async () => {
     const subjectTitle = academiaSubName.trim();
     if (!subjectTitle) {
@@ -11062,7 +11157,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       const orderedKeys = getTwoAttemptGeminiKeys();
       for (const { k } of orderedKeys) {
         try {
-          const r = await callGemini(userMsg, sys, k, i === 0 ? academiaUploadedImages : [], getGeminiOptions(s));
+          const r = await callGemini(userMsg, sys, k, i === 0 ? academiaUploadedImages : [], {...getGeminiOptions(s),timeoutMs:120000});
           accumulated = normalizeAcademiaSyllabus(r, s);
           await rotateKey();
           chunkOk = true;
@@ -11103,7 +11198,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     let lastErr = null;
     for (const { k } of orderedKeys) {
       try {
-        const r = await callGemini('Revise.', sys, k, [], getGeminiOptions());
+        const r = await callGemini('Revise.', sys, k, [], {...getGeminiOptions(),timeoutMs:120000});
         setAcademiaSyllabus(normalizeAcademiaSyllabus(r, withDefaultStudyMapSettings(settingsRef.current)));
         setAcademiaSyllabusFB('');
         await rotateKey(); ok = true; break;
@@ -11152,7 +11247,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     });
 
     const ns = {
-      id: Date.now(),
+      id: famedCreationTarget ? `famed-${famedCreationTarget.id}` : Date.now(),
       title: academiaSubName,
       fullSyllabus: academiaSyllabus,
       source: 'academia',
@@ -11162,14 +11257,28 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       topics,
     };
 
+    if (famedCreationTarget) {
+      const famedSubject = {
+        ...ns,
+        storageTarget:'famed',
+        famedMeta:{
+          contentId:famedCreationTarget.id,
+          scheduleItemId:famedCreationTarget.id,
+          discipline:famedCreationTarget.discipline,
+          semester:'S5',
+          published:false,
+        },
+      };
+      await saveFamedAcademiaSubject(famedSubject);
+      resetAcademiaCreator();
+      setFamedCreationTarget(null);
+      setView('famed');
+      addToast('Estrutura criada na FAMED. Agora gere os tópicos pela Academia.', 'success', 5000);
+      return;
+    }
+
     await addSubject(ns);
-    setAcademiaSubName('');
-    setAcademiaMaterialText('');
-    setAcademiaUploadedFiles([]);
-    setAcademiaUploadedImages([]);
-    setAcademiaSyllabus('');
-    setAcademiaCreatorStep(1);
-    setAcademiaSetupStep('content');
+    resetAcademiaCreator();
     setView('library');
     addToast('Academia criada! Agora entre no assunto e gere as aulas.', 'success', 4000);
   };
@@ -11212,9 +11321,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         s.regenReason || '',
       ].filter(Boolean).join('\n');
       const lessonPrompt = buildAcademiaLessonPrompt(topic.title, subtopics, material, subject.title, lessonLevel, lessonPreferenceInstruction, s.lessonFormat || 'outline');
-      const lessonSystemPrompt = lessonLevel === 'essential'
-        ? 'Você é professor de medicina. Escreva em português. No modo essencial, corte tudo que não ajuda a lembrar, diferenciar ou decidir. Após cada ##, comece com um título curto em negrito.'
-        : 'Você é professor de medicina. Escreva em português. Após cada ##, comece com um título curto em negrito que dê contexto à explicação.';
+      const lessonSystemPrompt = s.lessonFormat === 'narrative'
+        ? 'Você é professor de medicina. Escreva em português uma aula contínua, clara e progressiva. Os marcadores ## são apenas separadores técnicos: depois deles, comece diretamente o parágrafo, sem títulos ou rótulos isolados. Use transições naturais entre os parágrafos.'
+        : lessonLevel === 'essential'
+          ? 'Você é professor de medicina. Escreva em português. No modo essencial, corte tudo que não ajuda a lembrar, diferenciar ou decidir. Após cada ##, comece com um título curto em negrito.'
+          : 'Você é professor de medicina. Escreva em português. Após cada ##, comece com um título curto em negrito que dê contexto à explicação.';
       onProgress?.('📝 Gerando explicação dos subtópicos...');
       let lessonErr = null;
       for (const { k } of orderedKeys) {
@@ -11237,6 +11348,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       if (!lessonText) throw lessonErr || new Error('CONNECTION_ERROR');
       lessonText = stripLegacyLessonHighlights(lessonText);
       lessonSections = parseAcademiaLessonSections(lessonText, subtopics);
+      if (s.lessonFormat === 'narrative') lessonSections = stripNarrativeSectionLabels(lessonSections);
     }
     lessonText = stripLegacyLessonHighlights(lessonText);
 
@@ -11352,13 +11464,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       lessonSections,
       fixationQuestions: fixationBySubtopic,
       lessonGenerated: true,
+      ...(shouldGenerateLesson ? {
+        lessonFormat:s.lessonFormat || 'outline',
+        lessonPresentationVersion:s.lessonFormat === 'narrative' ? 2 : 1,
+      } : {}),
     };
     const updatedSubject = {
       ...subject,
       topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
     };
-    await updateSubject(updatedSubject);
-    if (shouldGenerateQuestions && fixQuestions.length) {
+    await persistAcademiaSubject(updatedSubject);
+    if (subject?.storageTarget !== 'famed' && shouldGenerateQuestions && fixQuestions.length) {
       await ensureAcademiaOracleTopic({
         subject:updatedSubject,
         topic:updatedTopic,
@@ -11443,7 +11559,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   }, [canUseAdvancedFeatures, librarySubjects.length]); // eslint-disable-line
 
   const startBulkGenerate = async () => {
-    const initialSubject = library.find(s => s.id === bulkGenerateModal?.subjectId);
+    const initialSubject = library.find(s => s.id === bulkGenerateModal?.subjectId) || bulkGenerateModal?.subject;
     if (!initialSubject || bulkGenerateRun.running || !checkKey()) return;
     const mode = bulkGenerateModal?.mode || 'generate';
     const operation = getBulkOperationMeta(mode, initialSubject.source);
@@ -11527,6 +11643,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
 
         workingSubject = result?.subject || workingSubject;
+        if (workingSubject?.storageTarget === 'famed') {
+          setBulkGenerateModal(current => current ? {...current, subject:workingSubject} : current);
+        }
         successCount++;
         const detail = workingSubject.source === 'academia'
           ? mode === 'regenLesson'
@@ -11638,9 +11757,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       ...subject,
       topics: subject.topics.map(t => t.id === topic.id ? updatedTopic : t),
     };
-    await updateSubject(updatedSubject);
+    await persistAcademiaSubject(updatedSubject);
 
-    const oracle = await ensureAcademiaOracleTopic({
+    const oracle = subject?.storageTarget === 'famed' ? null : await ensureAcademiaOracleTopic({
       subject:updatedSubject,
       topic:updatedTopic,
       kind:'extra',
@@ -11662,12 +11781,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         return;
       }
       const oracle = result.oracle;
-      setLibFilter('gemini');
-      setActiveFolderId(oracle.folder?.id || null);
-      setActiveSubjectId(oracle.subject.id);
-      setActiveTopicId(oracle.topic.id);
-      setShowOnlyWrong(false);
-      setView('topic');
+      if (oracle) {
+        setLibFilter('gemini');
+        setActiveFolderId(oracle.folder?.id || null);
+        setActiveSubjectId(oracle.subject.id);
+        setActiveTopicId(oracle.topic.id);
+        setShowOnlyWrong(false);
+        setView('topic');
+      }
 
       addToast(`${result.questionCount} questões extras adicionadas ao Oráculo!`, 'success', 5000);
     } catch (e) {
@@ -11699,11 +11820,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
   const sourceLabelForErrorReview = (subject = {}, explicit = '') => {
     if (explicit) return explicit;
-    if (subject.source === 'academia') return 'Academia';
-    if (subject.source === 'external') return 'Externo';
+    if (subject.source === 'academia') return 'Criar Aula';
+    if (subject.source === 'external') return 'Importar Questões';
     if (subject.source === 'curso') return 'Curso';
     if (subject.source === QUICK_SOURCE) return QUICK_SUBJECT_TITLE;
-    return 'Oráculo';
+    return 'Criar Questões';
   };
 
   const getErrorReviewFolderPath = (payload) => {
@@ -11955,7 +12076,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      addToast('O caderno de erros desta pasta ainda está vazio.', 'info', 4000);
 	      return;
 	    }
-	    const sourceLabel = folder.source === 'academia' ? 'Academia' : folder.source === 'external' ? 'Externo' : 'Oráculo';
+	    const sourceLabel = folder.source === 'academia' ? 'Criar Aula' : folder.source === 'external' ? 'Importar Questões' : 'Criar Questões';
 	    openErrorReviewModal({
 	      subject:{id:`folder_error_${folder.id}`, title:folder.title, source:folder.source, folderId:folder.id},
 	      topic:{id:`folder_error_topic_${folder.id}`, title:'Caderno de erros da pasta'},
@@ -12224,16 +12345,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   // ── AUTH ──────────────────────────────────────────────────────────────────
   const handleGoogleLogin = async () => {
     try {
-      await setPersistence(auth, browserLocalPersistence);
-      const mustUseRedirect = window.location.hostname.includes('scf.usercontent.goog');
-      if (mustUseRedirect) {
+      if (shouldUseGoogleRedirect()) {
+        await setPersistence(auth, browserLocalPersistence);
         await signInWithRedirect(auth, getGoogleProvider());
         return;
       }
+      // Abra o popup imediatamente a partir do clique. Esperar outra Promise antes
+      // daqui faz navegadores móveis perderem o gesto do usuário e bloquearem a janela.
       await signInWithPopup(auth, getGoogleProvider());
     } catch(e) {
       console.error('Google popup login failed:', e);
-      const canFallbackToRedirect = ['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(e?.code);
+      const isLocalNetwork = typeof window !== 'undefined' && isPrivateNetworkHostname(window.location.hostname);
+      const canFallbackToRedirect = !isLocalNetwork
+        && ['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(e?.code);
       if (canFallbackToRedirect) {
         try {
           await signInWithRedirect(auth, getGoogleProvider());
@@ -12308,7 +12432,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  if (!authReady) return <div className={`min-h-screen flex items-center justify-center ${darkMode?'bg-gray-900 text-yellow-500':'bg-gray-50 text-yellow-600'}`}><Spinner className="w-12 h-12 text-current"/></div>;
+  if (!authReady) return (
+    <div className="agora-auth" data-theme={darkMode?'dark':'light'}>
+      <div className="agora-splash">
+        <BrandIdentity variant="hero"/>
+        <div className="agora-splash__loading" aria-label="Carregando"><span/></div>
+      </div>
+    </div>
+  );
   if (user && (user.isAnonymous || !isWhitelistedUser)) return (
     <div className={`min-h-screen flex items-center justify-center p-4 ${darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900'}`}>
       <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl border text-center ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
@@ -12351,6 +12482,20 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const hideBackToTop = reviewSession
     || activeFlashcardStudy
     || (canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'single' && (['topic','videoquestions'].includes(view) || (view === 'curso' && vqActiveBlockView)));
+  const bottomNavEligibleView = view === 'library'
+    || (view === 'shared-library' && !sharedLibraryActiveItemId)
+    || (view === 'famed' && !famedDetailActive)
+    || view === 'sub-library'
+    || view === 'favorites'
+    || (view === 'curso' && !vqActiveBlockView && !activeAula)
+    || (view === 'videoaulas' && !activeAula);
+  const bottomNavHasOverlay = (menuOpen && !mobileMenuClosing) || mobileNavOpen
+    || errorModal || deleteId || openAnswerModal || externalPromptModal || regenModal
+    || newFolderModal || moveSubjectModal || folderReviewModal || bulkGenerateModal
+    || academiaExtraModal || academiaRegenModal || academiaExportModal || errorReviewModal
+    || examSetup !== null || exportModal || bizuarioModal || vqGenModal
+    || resetCourseModal || srModal || reviewSession;
+  const shouldRenderBottomNav = bottomNavEligibleView && !bottomNavHasOverlay && !activeFlashcardStudy;
   const openAcademiaTopicView = (subject, topic) => {
     if (!subject || !topic) return;
     setLibFilter('academia');
@@ -12360,13 +12505,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setView('academia-topic');
   };
 
+  const openAcademiaRegenModal = payload => {
+    setAcademiaRegenLength(settings.explanationLength || 'complete');
+    setAcademiaRegenFormat(settings.lessonFormat || 'outline');
+    setAcademiaRegenCoverage(settings.lessonCoverage || 'high-yield');
+    setAcademiaRegenTone(settings.lessonTone || 'formal');
+    setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
+    setAcademiaRegenQTypes(visibleQuestionTypes);
+    setAcademiaRegenQAlts(settings.numAlternatives || 5);
+    setAcademiaRegenVofStatements(settings.vofStatementCount || 5);
+    setAcademiaRegenThinking(!!settings.geminiThinkingEnabled);
+    setAcademiaRegenReason('');
+    setAcademiaRegenModal(payload);
+  };
+
   if (!username) return (
-    <div className={`min-h-screen flex items-center justify-center p-4 ${darkMode?'bg-gray-900 text-gray-100':'bg-gray-50 text-gray-900'}`}>
-      <div className={`w-full max-w-md p-8 rounded-2xl shadow-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+    <div className="agora-auth" data-theme={darkMode?'dark':'light'}>
+      <div className="agora-auth__card">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="p-4 bg-yellow-100 rounded-full mb-4"><Landmark className="w-10 h-10 text-yellow-600"/></div>
-          <h1 className="text-3xl font-serif font-bold text-yellow-600 mb-2">Ágora do Saber</h1>
-          <p className="opacity-70 text-sm">{loginView==='login'?'Acesse sua conta.':'Crie seu perfil.'}</p>
+          <BrandIdentity variant="hero"/>
+          <p className="mt-6 opacity-70 text-sm">{loginView==='login'?'Entre para continuar seus estudos.':'Crie seu perfil acadêmico.'}</p>
         </div>
         {loginView==='login'?(
           <div className="space-y-4">
@@ -12393,6 +12551,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
   const featureContextValue = {
     AcademiaIcon,
+    academiaExtraBusy,
+    academiaGenProgress,
+    academiaGenerating,
+    academiaTopicAnswers,
     accessAdminError,
     accessAdminLastRefresh,
     accessLogs,
@@ -12424,6 +12586,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     blockValues,
     BookOpen,
     BrainIcon,
+    bulkActionMenu,
     bulkGenerateModal,
     bulkGenerateRun,
     CalendarCheck,
@@ -12496,6 +12659,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     exportFlashcardsToAnki,
     extractAulas,
     Feather,
+    FamedIcon,
     fetchTranscript,
     FileText,
     findErrorNotebookReviewsForSource,
@@ -12537,6 +12701,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     handleFavorite,
     handleLogout,
     Heart,
+    homeCanSeeFamed,
     homeCanSeeSharedLibrary,
     homeCanSeeVideoaulas,
     homeCanUseAcademia,
@@ -12584,6 +12749,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     normalizeGeminiKeys,
     normalizeTextKey,
     openBizuario,
+    openBulkGenerateModal,
+    openAcademiaRegenModal,
     openErrorNotebookReviewResult,
     openErrorReviewModal,
     openFolderErrorReview,
@@ -12594,6 +12761,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     ORACLE_LENGTH,
     originalSubjectOptions,
     parseVideoaulasData,
+    parseHtmlText,
     pauseCourseCatalogAnalysis,
     pauseSharedLibraryAutomation,
     PillIcon,
@@ -12616,7 +12784,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     refreshSharedLibrary,
     removeFromSiteOnlyWhitelist,
     removeFromWhitelist,
-    renderQuickLesson,
     renderRichText,
     reorderLibraryItem,
     repairSharedLibraryIncompleteQuestions,
@@ -12646,7 +12813,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     saveVqBlockPatch,
     Send,
     setAcademiaCreatorStep,
+    setAcademiaExportModal,
+    setAcademiaExtraModal,
     setAcademiaSetupStep,
+    setAcademiaTopicAnswers,
     setActiveAula,
     setActiveAulaAndReset,
     setActiveFolderId,
@@ -12655,6 +12825,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setActiveSubtopicVid,
     setActiveTopicId,
     setBlockActionMenu,
+    setBulkActionMenu,
     setBulkGenerateModal,
     setCourseOrgSelectedSubject,
     setCourseScheduleSettingsOpen,
@@ -12670,6 +12841,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setExpandedSubjectsVid,
     setExportModal,
     setExternalPromptModal,
+    setFamedCreationTarget,
     setLibFilter,
     setLibraryActionMenu,
     setLibraryDrag,
@@ -12745,6 +12917,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     Sparkles,
     Spinner,
     startBulkGenerate,
+    startFamedAcademiaCreation,
     startCourseCatalogAnalysis,
     startCourseOrganizationProposal,
     startSharedLibraryGuidedGeneration,
@@ -12762,6 +12935,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     undefined,
     updateReviewItem,
     updateSubject,
+    generateAcademiaLesson,
     user,
     userDevices,
     UserIcon,
@@ -12806,32 +12980,31 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     >
       <style>{`
         .agora-shell {
-          --bg: ${darkMode ? '#0c111a' : '#f5f5f4'};
-          --bg-soft: ${darkMode ? '#0c111a' : '#f5f5f4'};
-          --surface: ${darkMode ? '#131b28' : '#ffffff'};
-          --surface-strong: ${darkMode ? '#131b28' : '#ffffff'};
-          --surface-muted: ${darkMode ? '#1a2433' : '#f7f7f6'};
-          --line: ${darkMode ? '#293548' : '#e7e5e4'};
-          --line-strong: ${darkMode ? '#596579' : '#c9c5bf'};
-          --text: ${darkMode ? '#f1f5f9' : '#1f2933'};
-          --muted: ${darkMode ? '#cbd5e1' : '#667085'};
-          --accent: #b45309;
-          --accent-2: #0f766e;
-          --accent-3: #1d4ed8;
+          --bg: ${darkMode ? '#01040a' : '#f2efe7'};
+          --bg-soft: ${darkMode ? '#02070d' : '#f8f5ee'};
+          --surface: ${darkMode ? '#040a12' : '#fbfaf7'};
+          --surface-strong: ${darkMode ? '#06101a' : '#fffdf8'};
+          --surface-muted: ${darkMode ? '#0b1724' : '#eee9de'};
+          --line: ${darkMode ? '#1c3044' : '#ded5c3'};
+          --line-strong: ${darkMode ? '#9b7842' : '#b99a69'};
+          --text: ${darkMode ? '#f5f1e8' : '#17283c'};
+          --muted: ${darkMode ? '#b8c4d1' : '#66717f'};
+          --accent: #b5824a;
+          --accent-2: #123b63;
+          --accent-3: #0a294c;
           --danger: #dc2626;
-          --shadow-sm: ${darkMode ? '0 1px 2px rgba(0, 0, 0, .24)' : '0 1px 2px rgba(28, 25, 23, .06)'};
-          --shadow-md: ${darkMode ? '0 12px 30px rgba(0, 0, 0, .28)' : '0 12px 30px rgba(28, 25, 23, .09)'};
+          --shadow-sm: ${darkMode ? '0 8px 24px rgba(0, 0, 0, .18)' : '0 8px 24px rgba(10, 38, 66, .055)'};
+          --shadow-md: ${darkMode ? '0 20px 46px rgba(0, 0, 0, .28)' : '0 20px 46px rgba(10, 38, 66, .11)'};
           color: var(--text);
           background: var(--bg);
           min-height: 100vh;
           overflow-x: hidden;
         }
         .agora-shell * {
-          letter-spacing: 0;
           box-sizing: border-box;
         }
         .agora-shell header {
-          background: ${darkMode ? '#0f1622' : '#ffffff'} !important;
+          background: ${darkMode ? '#02070d' : '#fffdf8'} !important;
           border-color: var(--line) !important;
           box-shadow: 0 1px 0 var(--line) !important;
         }
@@ -12899,19 +13072,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         .agora-shell .text-yellow-500,
         .agora-shell .text-yellow-400,
         .agora-shell .text-yellow-300 {
-          color: ${darkMode ? '#f5c66a' : '#9a5a12'} !important;
+          color: ${darkMode ? '#e4bd72' : '#986a2c'} !important;
         }
         .agora-shell .bg-yellow-600,
         .agora-shell .bg-yellow-500,
         .agora-shell .hover\\:bg-yellow-700:hover {
-          background: linear-gradient(135deg, #b45309, #d97706) !important;
+          background: linear-gradient(135deg, #092442, #123b63) !important;
           color: #fff !important;
-          border-color: rgba(180, 83, 9, .42) !important;
-          box-shadow: 0 10px 22px rgba(180, 83, 9, .2);
+          border-color: rgba(190, 145, 72, .58) !important;
+          box-shadow: 0 12px 26px rgba(7, 34, 63, .22), inset 0 1px 0 rgba(255,255,255,.09);
         }
         .agora-shell .rounded-2xl,
         .agora-shell .rounded-xl {
-          border-radius: 14px !important;
+          border-radius: 17px !important;
         }
         .agora-shell button,
         .agora-shell input,
@@ -12928,7 +13101,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         .agora-shell input,
         .agora-shell textarea {
-          background: ${darkMode ? '#0f172a' : '#ffffff'} !important;
+          background: ${darkMode ? '#03080f' : '#fffdf9'} !important;
           border-color: var(--line) !important;
           color: var(--text) !important;
           font-size: var(--font-base);
@@ -12955,7 +13128,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         .agora-shell textarea:focus,
         .agora-shell button:focus-visible {
           outline: none;
-          box-shadow: 0 0 0 4px ${darkMode ? 'rgba(217, 119, 6, .22)' : 'rgba(217, 119, 6, .18)'} !important;
+          box-shadow: 0 0 0 4px ${darkMode ? 'rgba(193, 147, 76, .2)' : 'rgba(16, 59, 99, .13)'} !important;
           border-color: var(--line-strong) !important;
         }
         .agora-shell .shadow-sm,
@@ -12965,11 +13138,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           box-shadow: var(--shadow-sm) !important;
         }
         .agora-shell table {
-          border-radius: 12px;
+          border-radius: 16px;
           overflow: hidden;
         }
         .agora-shell ::selection {
-          background: rgba(217, 119, 6, .25);
+          background: rgba(181, 130, 74, .28);
         }
         html,
         body,
@@ -13003,28 +13176,32 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         body::-webkit-scrollbar-thumb:hover,
         .agora-shell::-webkit-scrollbar-thumb:hover,
         .agora-shell *::-webkit-scrollbar-thumb:hover {
-          background: #d97706;
+          background: #b5824a;
         }
         .agora-shell .app-hero {
-          background: var(--surface-strong);
-          border: 1px solid var(--line);
-          box-shadow: var(--shadow-sm);
+          background:
+            radial-gradient(circle at 92% 0, rgba(181, 130, 74, .09), transparent 15rem),
+            var(--surface-strong);
+          border: 1px solid ${darkMode ? 'rgba(181,130,74,.22)' : 'rgba(167,128,66,.25)'};
+          box-shadow: var(--shadow-md);
         }
         .agora-shell .app-card {
-          background: var(--surface);
-          border: 1px solid var(--line);
+          background: linear-gradient(145deg, var(--surface-strong), var(--surface));
+          border: 1px solid ${darkMode ? 'rgba(80,105,132,.44)' : 'rgba(185,167,137,.48)'};
           box-shadow: var(--shadow-sm);
         }
         .agora-shell .app-card:hover {
           border-color: var(--line-strong);
           box-shadow: var(--shadow-md);
+          transform: translateY(-2px);
         }
         .agora-shell .glass-panel {
-          background: var(--surface-strong);
-          border: 1px solid var(--line);
+          background: ${darkMode ? 'rgba(4,10,18,.94)' : 'rgba(255,253,248,.88)'};
+          border: 1px solid ${darkMode ? 'rgba(80,105,132,.46)' : 'rgba(185,167,137,.5)'};
+          backdrop-filter: blur(18px) saturate(135%);
         }
         .agora-shell .modal-scroll > div {
-          background-color: ${darkMode ? '#111827' : '#ffffff'} !important;
+          background-color: ${darkMode ? '#040a12' : '#fffdf8'} !important;
           border-color: var(--line) !important;
           max-height: calc(100dvh - 2rem);
           overflow-y: auto;
@@ -13189,8 +13366,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             max-height: calc(100dvh - 1.5rem);
           }
           .agora-shell main:not(:empty) {
-            padding-left: .9rem;
-            padding-right: .9rem;
+            padding-left: .55rem;
+            padding-right: .55rem;
           }
           .agora-shell {
             width: 100%;
@@ -13237,13 +13414,60 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             min-width: 2.5rem;
           }
           .agora-shell .mobile-safe-action-menu {
-            position: fixed !important;
-            inset: auto .75rem calc(5.75rem + env(safe-area-inset-bottom)) .75rem !important;
-            width: auto !important;
+            position: absolute !important;
+            inset: auto 0 auto auto !important;
+            top: calc(100% + .4rem) !important;
+            width: min(16rem, calc(100vw - 1.25rem)) !important;
             min-width: 0 !important;
-            max-height: min(22rem, calc(100dvh - 8rem)) !important;
+            max-height: min(22rem, calc(100dvh - 5rem)) !important;
             overflow-y: auto !important;
             z-index: 70 !important;
+            transform-origin: top right;
+            animation: agoraActionMenuIn 140ms ease-out both;
+          }
+          .agora-shell .mobile-safe-action-menu[data-mobile-direction="right"] {
+            inset: auto auto auto 0 !important;
+            top: calc(100% + .4rem) !important;
+            transform-origin: top left;
+          }
+          .agora-shell .mobile-safe-action-menu[data-mobile-direction="left"] {
+            inset: auto 0 auto auto !important;
+            top: calc(100% + .4rem) !important;
+            transform-origin: top right;
+          }
+          .agora-shell .agora-mobile-menu-backdrop {
+            animation: agoraMenuBackdropIn 160ms ease-out both;
+          }
+          .agora-shell .agora-mobile-menu-sheet {
+            transform-origin: bottom right;
+            animation: agoraBottomMenuIn 150ms cubic-bezier(.2,.8,.2,1) both;
+          }
+          .agora-shell .agora-mobile-menu-backdrop.is-closing {
+            pointer-events: none;
+            animation: agoraMenuBackdropOut 160ms ease-in both;
+          }
+          .agora-shell .agora-mobile-menu-backdrop.is-closing .agora-mobile-menu-sheet {
+            animation: agoraBottomMenuOut 160ms cubic-bezier(.4,0,1,1) both;
+          }
+          @keyframes agoraActionMenuIn {
+            from { opacity: 0; transform: translateY(-.25rem) scale(.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @keyframes agoraMenuBackdropIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes agoraBottomMenuIn {
+            from { opacity: 0; transform: translateY(.65rem) scale(.985); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @keyframes agoraMenuBackdropOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+          }
+          @keyframes agoraBottomMenuOut {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to { opacity: 0; transform: translateY(.55rem) scale(.985); }
           }
         }
         @media (max-width: 380px) {
@@ -13254,8 +13478,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             font-size: .6rem !important;
           }
           .agora-shell main:not(:empty) {
-            padding-left: .7rem;
-            padding-right: .7rem;
+            padding-left: .4rem;
+            padding-right: .4rem;
           }
         }
         @media (min-width: 1024px) {
@@ -13322,36 +13546,65 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         .modal-scroll *::-webkit-scrollbar-thumb:hover {
           background: #d97706;
         }
+        @media (max-width: 1023px) {
+          .agora-shell button,
+          .agora-shell a,
+          .agora-shell [role="button"] {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+          }
+          .agora-shell .agora-bottom-nav {
+            background: var(--surface-strong) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            contain: layout paint;
+            will-change: transform;
+          }
+          html,
+          body,
+          #root,
+          .agora-shell,
+          .agora-shell *,
+          .modal-scroll,
+          .modal-scroll * {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          html::-webkit-scrollbar,
+          body::-webkit-scrollbar,
+          #root::-webkit-scrollbar,
+          .agora-shell::-webkit-scrollbar,
+          .agora-shell *::-webkit-scrollbar,
+          .modal-scroll::-webkit-scrollbar,
+          .modal-scroll *::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            background: transparent !important;
+            -webkit-appearance: none !important;
+          }
+        }
       `}</style>
+        {!flashcardFullscreen&&<div className="agora-mobile-scroll-progress lg:hidden" aria-hidden="true">
+          <span ref={mobileScrollProgressRef}/>
+        </div>}
         {/* Navegação lateral do desktop */}
         <aside
-          className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-72 flex-col border-r transition-transform duration-200 ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}
+          className={`agora-sidebar hidden lg:flex fixed inset-y-0 left-0 z-40 w-72 flex-col border-r transition-transform duration-200 ${darkMode?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}
           style={{transform:desktopSidebarCollapsed?'translateX(-100%)':'translateX(0)'}}
         >
-          <div className={`flex items-center border-b px-4 py-4 ${darkMode?'border-gray-800':'border-gray-100'}`}>
-            <button type="button" onClick={()=>setView('library')} title="Ir para o início"
-              className="min-w-0 flex flex-1 items-center gap-2.5 text-left">
-              <span className="flex h-10 w-10 rounded-xl items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-5 h-5"/></span>
-              <span className="min-w-0">
-                <strong className={`block font-serif text-xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</strong>
-                <span className="block text-[7px] font-bold uppercase tracking-[0.12em] mt-0.5 opacity-50">Lux in Tenebris</span>
-              </span>
-            </button>
-          </div>
-
           <div className="flex-1 overflow-y-auto px-4 py-4">
             <p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Navegação</p>
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
-                homeCanSeeSharedLibrary ? {label:'Biblioteca', desc:'Acervo pronto', icon:<BookOpen className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
-                homeCanUseAcademia ? {label:'Academia', desc:'Aulas e questões', icon:<AcademiaIcon className="w-5 h-5"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
-                {label:'Oráculo', desc:'Bancos de questões', icon:<Sparkles className="w-5 h-5"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}},
-                {label:'Acervo externo', desc:'Importações e provas', icon:<FolderIcon className="w-5 h-5"/>, active:libFilter==='external'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}},
+                homeCanSeeSharedLibrary ? {label:'Biblioteca', desc:'Questões do curso', icon:<BookOpen className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
+                homeCanSeeFamed ? {label:'FAMED', desc:'Conteúdo da faculdade', icon:<FamedIcon className="w-5 h-5"/>, active:view==='famed', action:()=>setView('famed')} : null,
+                {label:'Meus materiais', desc:'Acessar, criar e importar', icon:<FolderIcon className="w-5 h-5"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic','creator','academia-creator','paste'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}},
                 homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Aulas e mais', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
               ].filter(Boolean).map(item=>(
-                <button key={item.label} type="button" onClick={item.action}
-                  className={`w-full flex items-center rounded-xl gap-3 px-3 py-2.5 text-left transition-colors ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
+                <button key={item.label} type="button" onClick={item.action} data-active={item.active?'true':'false'}
+                  className={`agora-nav-item w-full flex items-center rounded-xl gap-3 px-3 py-2.5 text-left transition-colors ${item.active?(darkMode?'bg-yellow-900/25 text-yellow-300':'bg-yellow-50 text-yellow-800'):(darkMode?'text-gray-300 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
                   <span className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${item.active?(darkMode?'bg-yellow-900/40':'bg-yellow-100'):(darkMode?'bg-gray-800':'bg-gray-100')}`}>{item.icon}</span>
                   <span className="min-w-0">
                     <strong className="block text-sm leading-tight">{item.label}</strong>
@@ -13364,13 +13617,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <p className="px-3 mt-5 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] opacity-40">Ferramentas</p>
             <div className="space-y-1">
               {[
-                canUseAdvancedFeatures ? {label:'Centelha', icon:<Flame className="w-5 h-5"/>, action:()=>openViewWithReturn('quick'), active:view==='quick'} : null,
+                canUseAdvancedFeatures ? {label:'Dúvida Rápida', icon:<Flame className="w-5 h-5"/>, action:()=>openViewWithReturn('quick'), active:['quick','quick-topic'].includes(view)} : null,
                 canUseAdvancedFeatures ? {label:'Revisão espaçada', icon:<RepeatIcon className="w-5 h-5"/>, action:()=>openSpacedReview(), badge:dueCount} : null,
                 {label:'Modo prova', icon:<Zap className="w-5 h-5"/>, action:()=>setExamSetup({}), active:view==='exam'},
                 {label:'Favoritos', icon:<Heart className="w-5 h-5"/>, action:()=>setView('favorites'), active:view==='favorites'},
               ].filter(Boolean).map(item=>(
-                <button key={item.label} type="button" onClick={item.action}
-                  className={`relative w-full flex items-center rounded-xl gap-3 px-4 py-2 text-left text-sm font-bold transition-colors ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
+                <button key={item.label} type="button" onClick={item.action} data-active={item.active?'true':'false'}
+                  className={`agora-tool-item relative w-full flex items-center rounded-xl gap-3 px-4 py-2 text-left text-sm font-bold transition-colors ${item.active?(darkMode?'bg-gray-800 text-yellow-300':'bg-gray-100 text-yellow-800'):(darkMode?'text-gray-400 hover:bg-gray-800 hover:text-gray-200':'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}`}>
                   {item.icon}<span className="flex-1">{item.label}</span>
                   {(item.badge||0)>0&&<span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-center text-[10px] ${darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{item.badge}</span>}
                 </button>
@@ -13385,7 +13638,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <span className="min-w-0 flex-1"><strong className="block text-xs truncate">{username}</strong><span className="block text-[9px] opacity-45">{isAdmin?'Administrador':'Estudante'}</span></span>
               <ChevronRight className="w-4 h-4 opacity-35"/>
             </button>
-            <button type="button" onClick={()=>setDarkMode(!darkMode)} title={darkMode?'Usar tema claro':'Usar tema escuro'}
+            <button type="button" onClick={toggleTheme} title={darkMode?'Usar tema claro':'Usar tema escuro'}
               aria-label={darkMode?'Usar tema claro':'Usar tema escuro'}
               className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 opacity-60 ${darkMode?'hover:bg-gray-800 hover:opacity-100':'hover:bg-gray-50 hover:opacity-100'}`}>
               {darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}
@@ -13398,51 +13651,33 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           {desktopSidebarCollapsed?<ChevronRight className="w-3.5 h-3.5"/>:<ChevronLeft className="w-3.5 h-3.5"/>}
         </button>
 
-	      {/* Header mobile */}
-	      <header className={`${hdr} lg:hidden relative top-0 ${menuOpen?'z-[60]':'z-30'} border-b ${flashcardFullscreen?'hidden':''}`}>
-	        <div className="max-w-6xl mx-auto flex items-center justify-between px-3 py-2.5 md:px-4 md:py-2.5">
-	          {/* Logo */}
-	          <div className="flex items-center gap-2.5 cursor-pointer min-w-0" onClick={()=>{setView('library');setMenuOpen(false);}}>
-	            <div className="flex h-9 w-9 rounded-lg items-center justify-center flex-shrink-0 bg-yellow-600 text-white"><Landmark className="w-5 h-5"/></div>
-	            <div className="min-w-0">
-	              <h1 className={`font-serif font-bold text-2xl leading-none whitespace-nowrap ${darkMode?'text-yellow-500':'text-yellow-700'}`}>Ágora do Saber</h1>
-	              <p className={`block text-[7px] font-bold uppercase tracking-[0.11em] mt-0.5 ${darkMode?'text-gray-500':'text-gray-400'}`}>Lux in Tenebris</p>
-	            </div>
-	          </div>
-
-        </div>
-
         {/* Mobile options sheet */}
         {menuOpen&&(
-          <div className="lg:hidden fixed inset-0 z-50 bg-black/60 flex items-end" onClick={()=>setMenuOpen(false)}>
-            <div onClick={e=>e.stopPropagation()} className={`w-full max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-t-2xl border-t p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+          <div className={`agora-mobile-menu-backdrop ${mobileMenuClosing?'is-closing':''} lg:hidden fixed inset-0 z-50 bg-black/70 flex items-end`} onClick={()=>closeMobileMenu()}>
+            <div onClick={e=>e.stopPropagation()} className={`agora-mobile-menu-sheet w-full max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-t-2xl border-t p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ${darkMode?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="min-w-0">
                   <p className="font-bold truncate">{username}</p>
                   <p className="text-xs opacity-50 mt-0.5">Opções e ferramentas</p>
                 </div>
-                <button onClick={()=>setMenuOpen(false)} aria-label="Fechar" className={`h-9 w-9 rounded-full flex items-center justify-center ${darkMode?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}><XCircle className="w-5 h-5"/></button>
+                <button onClick={()=>closeMobileMenu()} aria-label="Fechar" className={`h-9 w-9 rounded-full flex items-center justify-center ${darkMode?'bg-gray-800 text-gray-300':'bg-gray-100 text-gray-600'}`}><XCircle className="w-5 h-5"/></button>
               </div>
-              <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.16em] opacity-40">Acervos</p>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <button onClick={()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');setMenuOpen(false);}} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
-                  <Sparkles className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
-                  <strong className="block truncate text-sm">Oráculo</strong>
-                </button>
-                <button onClick={()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');setMenuOpen(false);}} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
+              <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.16em] opacity-40">Conteúdo</p>
+              <div className="grid grid-cols-1 gap-2 mb-3">
+                <button onClick={()=>closeMobileMenu(()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');})} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
                   <FolderIcon className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
-                  <strong className="block truncate text-sm">Acervo externo</strong>
+                  <strong className="block truncate text-sm">Meus materiais</strong>
                 </button>
               </div>
               <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.16em] opacity-40">Ferramentas</p>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 {canUseAdvancedFeatures&&(
-                  <button onClick={()=>{openViewWithReturn('quick');setMenuOpen(false);}} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
+                  <button onClick={()=>closeMobileMenu(()=>openViewWithReturn('quick'))} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
                     <Flame className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
-                    <strong className="block truncate text-sm">Centelha</strong>
+                    <strong className="block truncate text-sm">Dúvida Rápida</strong>
                   </button>
                 )}
-                <button onClick={()=>{setExamSetup({});setMenuOpen(false);}} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
+                <button onClick={()=>closeMobileMenu(()=>setExamSetup({}))} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
                   <Zap className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
                   <strong className="block truncate text-sm">Modo Prova</strong>
                 </button>
@@ -13451,9 +13686,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               {[
                 {icon:<Heart className="w-5 h-5"/>,         label:'Favoritos',     action:()=>setView('favorites')},
                 {icon:<SettingsIcon className="w-5 h-5"/>,  label:'Configurações', action:openSettings},
-                {icon:darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>, label:darkMode?'Tema claro':'Tema escuro', action:()=>setDarkMode(!darkMode)},
+                {icon:darkMode?<Sun className="w-5 h-5"/>:<Moon className="w-5 h-5"/>, label:darkMode?'Tema claro':'Tema escuro', action:toggleTheme},
               ].filter(Boolean).map((item,i)=>(
-                <button key={i} onClick={()=>{item.action();setMenuOpen(false);}}
+                <button key={i} onClick={event=>closeMobileMenu(()=>item.action(event))}
                   className={`min-h-[44px] w-full flex items-center gap-3 px-3 py-2 rounded-lg font-bold text-sm transition-colors ${item.danger?(darkMode?'text-red-400 hover:bg-red-950':'text-red-500 hover:bg-red-50'):(darkMode?'text-gray-200 hover:bg-gray-800':'text-gray-700 hover:bg-gray-50')}`}>
                   <span className="flex h-6 w-6 items-center justify-center flex-shrink-0 opacity-75">{item.icon}</span>
                   <span className="flex-1 text-left">{item.label}</span>
@@ -13463,12 +13698,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             </div>
           </div>
         )}
-      </header>
 
-	      <main className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-24 lg:pb-0':view==='curso'?'pb-24 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-24 md:py-7 lg:py-10 lg:pb-10'}`}>
+	      <main ref={mobileMainRef} className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-24 lg:pb-0':view==='curso'?'pb-24 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-24 md:py-7 lg:py-10 lg:pb-10'}`}>
 
           {/* ── BIBLIOTECA COMPARTILHADA ── */}
           {view==='shared-library'&&homeCanSeeSharedLibrary&&<SharedLibraryView/>}
+
+          {/* ── FAMED ── */}
+          {view==='famed'&&homeCanSeeFamed&&<FamedPortalView/>}
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&<HomeView/>}
@@ -13905,19 +14142,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             updateSubject={updateSubject}
             generateAcademiaLesson={generateAcademiaLesson}
             setAcademiaExtraModal={setAcademiaExtraModal}
-            setAcademiaRegenModal={(payload)=>{
-              setAcademiaRegenLength(settings.explanationLength || 'complete');
-              setAcademiaRegenFormat(settings.lessonFormat || 'outline');
-              setAcademiaRegenCoverage(settings.lessonCoverage || 'high-yield');
-              setAcademiaRegenTone(settings.lessonTone || 'formal');
-              setAcademiaRegenQStyle(settings.questionStyle || 'mixed');
-              setAcademiaRegenQTypes(visibleQuestionTypes);
-              setAcademiaRegenQAlts(settings.numAlternatives || 5);
-              setAcademiaRegenVofStatements(settings.vofStatementCount || 5);
-              setAcademiaRegenThinking(!!settings.geminiThinkingEnabled);
-              setAcademiaRegenReason('');
-              setAcademiaRegenModal(payload);
-            }}
+            setAcademiaRegenModal={openAcademiaRegenModal}
             setDeleteId={setDeleteId}
             setAcademiaExportModal={setAcademiaExportModal}
             setOpenAnswerModal={setOpenAnswerModal}
@@ -14065,7 +14290,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {/* ── ACADEMIA CREATOR ── */}
         {view==='academia-creator'&&canUseAcademia&&(
           <div className="max-w-2xl mx-auto">
-            <button onClick={()=>{setAcademiaCreatorStep(1);setAcademiaSetupStep('content');setAcademiaSubName('');setAcademiaMaterialText('');setAcademiaUploadedFiles([]);setAcademiaUploadedImages([]);setView('library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
+            <button onClick={()=>{const returnToFamed=!!famedCreationTarget;resetAcademiaCreator();setFamedCreationTarget(null);setView(returnToFamed?'famed':'library');}} className={`mb-6 font-bold flex items-center gap-2 ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="w-4 h-4"/>Cancelar</button>
             {academiaCreatorStep===1?(
               <div className="space-y-6">
                 <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 flex items-center gap-3 leading-tight"><AcademiaIcon className="w-8 h-8 flex-shrink-0"/>Nova Aula</h2>
@@ -14260,7 +14485,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3 leading-tight"><Feather className="w-8 h-8 flex-shrink-0"/>Importar Questões</h2>
             <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
               <p className="font-bold mb-1">Importe sem alterar o texto original</p>
-              <p>Cole questões com alternativas A-E e indicação de resposta. Elas serão organizadas em um assunto e bloco do Acervo Externo.</p>
+              <p>Cole questões com alternativas A-E e indicação de resposta. Elas serão organizadas em um assunto e bloco de Importar Questões.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div>
@@ -14333,9 +14558,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 const qLabel = (count) => `${count} ${count===1?'questão':'questões'}`;
                 const subjectsWithQuestions = librarySubjects.filter(subjectHasQuestions);
                 const sourceRoots = [
-                  {source:'gemini', title:'Oráculo'},
-                  {source:'external', title:'Externo'},
-                  {source:'academia', title:'Academia'},
+                  {source:'gemini', title:'Criar Questões'},
+                  {source:'external', title:'Importar Questões'},
+                  {source:'academia', title:'Criar Aula'},
                   canUseAdvancedFeatures ? {source:QUICK_SOURCE, title:QUICK_SUBJECT_TITLE} : null,
                 ].filter(Boolean).map(root => {
                   const subjects = subjectsWithQuestions.filter(s=>s.source===root.source);
@@ -14633,20 +14858,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {view==='settings'&&<SettingsView/>}
       </main>
 
-      {!flashcardFullscreen&&['library','shared-library','sub-library','subject','academia-topic','topic','curso','videoaulas','favorites','quick'].includes(view)&&(
-      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.65rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{backgroundColor:darkMode?'#0c111a':'#ffffff',transform:bottomNavVisible&&!menuOpen&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 220ms ease'}} aria-label="Navegação principal">
+      {!flashcardFullscreen&&shouldRenderBottomNav&&(
+      <nav ref={bottomNavRef} className={`agora-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.95rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{transform:bottomNavVisible&&(!menuOpen||mobileMenuClosing)&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 180ms cubic-bezier(.2,.8,.2,1)'}} aria-label="Navegação principal">
         <div className="flex max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-6 h-6"/>, active:view==='library', action:()=>setView('library')},
             homeCanSeeSharedLibrary ? {label:'Biblioteca', icon:<BookOpen className="w-6 h-6"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
-            homeCanUseAcademia ? {label:'Academia', icon:<AcademiaIcon className="w-6 h-6"/>, active:libFilter==='academia'&&['sub-library','subject','academia-topic'].includes(view), action:()=>{setLibFilter('academia');setActiveFolderId(null);setView('sub-library');}} : null,
-            (!homeCanSeeSharedLibrary || !homeCanSeeVideoaulas) ? {label:'Oráculo', icon:<Sparkles className="w-6 h-6"/>, active:libFilter==='gemini'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('gemini');setActiveFolderId(null);setView('sub-library');}} : null,
+            homeCanSeeFamed ? {label:'FAMED', icon:<FamedIcon className="w-6 h-6"/>, active:view==='famed', action:()=>setView('famed')} : null,
+            (!homeCanSeeSharedLibrary || !homeCanSeeVideoaulas) ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
             homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-6 h-6"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
-            (!homeCanSeeSharedLibrary && !homeCanSeeVideoaulas) ? {label:'Acervo externo', icon:<FolderIcon className="w-6 h-6"/>, active:libFilter==='external'&&['sub-library','subject','topic'].includes(view), action:()=>{setLibFilter('external');setActiveFolderId(null);setView('sub-library');}} : null,
-            {label:'Mais', icon:<MoreIcon className="w-6 h-6"/>, active:menuOpen || ['favorites','quick'].includes(view), action:()=>setMenuOpen(true)},
+            {label:'Mais', icon:<MoreIcon className="w-6 h-6"/>, active:menuOpen || ['favorites','quick'].includes(view), action:toggleMobileMenu},
           ].filter(Boolean).map(item=>(
-            <button key={item.label} type="button" onClick={item.action} aria-label={item.label} title={item.label}
-              className={`relative min-w-0 min-h-[60px] flex-1 flex items-center justify-center rounded-xl transition-colors active:scale-95 ${item.active?(darkMode?'text-yellow-400':'text-yellow-700'):(darkMode?'text-gray-500':'text-gray-500')}`}>
+            <button key={item.label} type="button" onClick={event=>item.label==='Mais'?item.action(event):runMobileNavigation(event,item.action)} aria-label={item.label} title={item.label} aria-expanded={item.label==='Mais'?menuOpen:undefined} data-active={item.active?'true':'false'}
+              className={`agora-bottom-nav__item relative min-w-0 min-h-[60px] flex-1 flex items-center justify-center rounded-xl transition-colors active:scale-95 ${item.active?(darkMode?'text-yellow-400':'text-yellow-700'):(darkMode?'text-gray-500':'text-gray-500')}`}>
               <span className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-all ${item.active?(darkMode?'bg-yellow-900/25':'bg-yellow-50'):(darkMode?'hover:bg-gray-800':'hover:bg-gray-50')}`}>{item.icon}</span>
             </button>
           ))}
@@ -15157,7 +15381,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
       {/* ── STANDARD MODALS ── */}
       {newFolderModal&&(()=>{
-        const sourceLabel = libFilter==='gemini'?'Oráculo':libFilter==='academia'?'Academia':'Externo';
+        const sourceLabel = libFilter==='gemini'?'Criar Questões':libFilter==='academia'?'Criar Aula':'Importar Questões';
         const parentLabel = newFolderParentId ? getFolderLabel(newFolderParentId) : sourceLabel;
         const cleanName = newFolderName.trim();
         return (
@@ -15472,7 +15696,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           </div>
         );
       })()}
-      {deleteId?.type==='academia-extra-bloco'&&<GModal title="Excluir bloco?" message="As questões deste bloco serão removidas da Academia e do Acervo do Oráculo." confirmText="Excluir" onConfirm={async()=>{
+      {deleteId?.type==='academia-extra-bloco'&&<GModal title="Excluir bloco?" message="As questões deste bloco serão removidas da aula e do banco de questões." confirmText="Excluir" onConfirm={async()=>{
         const {blocoId, topicId, subjectId, oracleTopicId} = deleteId;
         // Remove from Academia subject
         const acSub = library.find(s=>s.id===subjectId);
@@ -15491,7 +15715,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         setDeleteId(null);
       }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
-      {deleteId?.type==='quick-topic'&&<GModal title="Excluir centelha?" message="A aula rápida, questões, flashcards e respostas desta centelha serão apagados." confirmText="Excluir" onConfirm={async()=>{await deleteQuickSession(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='quick-topic'&&<GModal title="Excluir dúvida?" message="A aula, as questões, os flashcards e as respostas existentes nesta dúvida serão apagados." confirmText="Excluir" onConfirm={async()=>{await deleteQuickSession(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reshuffle'&&<GModal title="Reiniciar embaralhamento?" message="Uma nova ordem será criada. Suas respostas, favoritos e caderno de erros continuarão salvos nos blocos originais." confirmText="Reiniciar" onConfirm={()=>{openShuffledSubjectQuestions(activeSubject,true);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {editingSub&&(()=>{

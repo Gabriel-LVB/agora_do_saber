@@ -61,6 +61,17 @@ service cloud.firestore {
       }
     }
 
+    match /famed_content/{lessonId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.published == true);
+      allow write: if isAdmin();
+    }
+
+    // Coleção legada: mantida acessível apenas ao admin para a limpeza única
+    // dos arquivos do antigo importador por ZIP.
+    match /famed_assets/{assetId} {
+      allow read, write: if isAdmin();
+    }
+
     match /access_logs/{logId} {
       allow create, update: if ownsIncomingData() || isAdmin();
       allow read, delete: if isAdmin();
