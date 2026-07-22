@@ -68,7 +68,7 @@ export default function HomeView() {
   } = useFeatureContext();
 
 			    const sharedLibraryCard = homeCanSeeSharedLibrary ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Questões do curso organizadas por aula e prontas para praticar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
-			    const famedCard = homeCanSeeFamed ? {key:'famed', icon:<FamedIcon className="w-5 h-5"/>, title:'FAMED', desc:'Aulas e questões da faculdade criadas pelo fluxo da Academia.', action:()=>setView('famed')} : null;
+			    const famedCard = homeCanSeeFamed ? {key:'famed', icon:<FamedIcon className="w-5 h-5"/>, title:'FAMED', desc:'Aulas e questões da faculdade', action:()=>setView('famed')} : null;
 			    const creationCard = {key:'creation', icon:<FolderIcon className="w-5 h-5"/>, title:'Meus materiais', desc:'Acesse, crie ou importe suas aulas e bancos de questões.', action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}};
 			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', action:()=>setView('curso')} : null;
 			    const studyCards = [famedCard, sharedLibraryCard, creationCard, cursoCard].filter(Boolean);
@@ -95,7 +95,7 @@ export default function HomeView() {
                   );
 				            return (
 				              <div className="desktop-content-limit space-y-7 md:space-y-9">
-                        <section className="app-hero home-brand-hero rounded-2xl px-5 py-5 md:px-8 md:py-7">
+                        <section className="app-hero home-brand-hero rounded-2xl px-5 pt-7 pb-5 md:px-8 md:pt-9 md:pb-7">
                           <div className="home-brand-hero__ornament" aria-hidden="true"/>
                           <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-10">
                             <div className="min-w-0 flex-1">
