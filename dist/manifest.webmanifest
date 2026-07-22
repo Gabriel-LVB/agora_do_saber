@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Ágora do Saber",
+  "short_name": "Ágora",
+  "description": "Lux in tenebris.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#01040a",
+  "theme_color": "#01040a",
+  "icons": [
+    {
+      "src": "/brand/agora-site-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
