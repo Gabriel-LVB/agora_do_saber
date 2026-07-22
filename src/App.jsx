@@ -5375,7 +5375,7 @@ export default function QuestionBankApp() {
 
   useEffect(()=>{
     document.title='Ágora do Saber';
-    document.body.style.backgroundColor=darkMode?'#01040a':'#f2efe7';
+    window.syncAgoraTheme?.(darkMode);
     writeStorageJson('qb_dark', darkMode);
   },[darkMode]);
 
@@ -5885,20 +5885,26 @@ export default function QuestionBankApp() {
         siteOnlyEmails = cachedAccessConfig.value.siteOnlyEmails || [];
       }
       try {
-        if (!cachedAccessConfig.fresh) {
-          const accessSnap = await getDoc(doc(db, 'config', 'access_whitelist'));
-          if (accessSnap.exists()) {
-            const data = accessSnap.data() || {};
-            courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
-            siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
-          } else {
-            const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
-            courseEmails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
-            siteOnlyEmails = [];
-          }
-          writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails, siteOnlyEmails });
+        // Permissão nunca deve depender de um cache ainda "fresco": valide a
+        // fonte remota em todo carregamento para que revogações sejam imediatas.
+        const accessSnap = await getDoc(doc(db, 'config', 'access_whitelist'));
+        if (accessSnap.exists()) {
+          const data = accessSnap.data() || {};
+          courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
+          siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
+        } else {
+          const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
+          courseEmails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
+          siteOnlyEmails = [];
         }
-      } catch(e) { courseEmails = [ADMIN_EMAIL]; siteOnlyEmails = []; }
+        writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails, siteOnlyEmails });
+      } catch(e) {
+        // Em indisponibilidade real, o cache serve apenas como fallback offline.
+        if (!cachedAccessConfig.value) {
+          courseEmails = [ADMIN_EMAIL];
+          siteOnlyEmails = [];
+        }
+      }
       const normalizedCourse = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
       const normalizedSiteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !normalizedCourse.includes(email));
       const normalizedGlobal = normalizeEmailList([ADMIN_EMAIL, ...normalizedCourse, ...normalizedSiteOnly]);
@@ -5918,6 +5924,23 @@ export default function QuestionBankApp() {
     });
     return ()=>{ mounted = false; unsub(); };
   },[]);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous) return undefined;
+    const accessRef = doc(db, 'config', 'access_whitelist');
+    return onSnapshot(accessRef, snapshot => {
+      if (!snapshot.exists()) return;
+      const data = snapshot.data() || {};
+      const course = normalizeEmailList([ADMIN_EMAIL, ...(data.courseEmails || data.course || data.emails || [])]);
+      const siteOnly = normalizeEmailList(data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [])
+        .filter(email => !course.includes(email));
+      setAllowedEmails(course);
+      setSiteOnlyAllowedEmails(siteOnly);
+      writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails:course, siteOnlyEmails:siteOnly });
+    }, error => {
+      console.warn('Access whitelist realtime sync skipped:', error?.code || error?.message || error);
+    });
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || user.isAnonymous || !user.email || !FIRESTORE_PRESENCE_ENABLED) return;
@@ -10996,16 +11019,26 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   });
 
   const saveAccessWhitelists = async (courseEmails = allowedEmails, siteOnlyEmails = siteOnlyAllowedEmails) => {
-    if (!isAdmin) return;
+    if (!isAdmin) return false;
     const course = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
     const siteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !course.includes(email));
-    setAllowedEmails(course);
-    setSiteOnlyAllowedEmails(siteOnly);
-    writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails:course, siteOnlyEmails:siteOnly });
     try {
       await setDoc(doc(db,'config','access_whitelist'),{courseEmails:course,siteOnlyEmails:siteOnly,updatedAt:Date.now()});
-      await setDoc(doc(db,'config','videoaulas_whitelist'),{emails:course});
-    } catch(e) {}
+      setAllowedEmails(course);
+      setSiteOnlyAllowedEmails(siteOnly);
+      writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails:course, siteOnlyEmails:siteOnly });
+      setAccessAdminError('');
+      setDoc(doc(db,'config','videoaulas_whitelist'),{emails:course}).catch(error => {
+        console.warn('Legacy video whitelist sync skipped:', error?.code || error?.message || error);
+      });
+      return true;
+    } catch(e) {
+      const message = e?.code || e?.message || 'Falha ao salvar os acessos';
+      console.error('Access whitelist save failed:', e);
+      setAccessAdminError(message);
+      addToast('Não foi possível salvar a alteração de acesso.', 'error', 4500);
+      return false;
+    }
   };
   const addToWhitelist = async () => {
     if (!isAdmin) return;
@@ -13664,10 +13697,17 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
               <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.16em] opacity-40">Conteúdo</p>
               <div className="grid grid-cols-1 gap-2 mb-3">
-                <button onClick={()=>closeMobileMenu(()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');})} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
-                  <FolderIcon className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
-                  <strong className="block truncate text-sm">Meus materiais</strong>
-                </button>
+                {isAdmin&&homeCanSeeSharedLibrary ? (
+                  <button onClick={()=>closeMobileMenu(()=>{setSharedLibraryActiveItemId(null);setView('shared-library');})} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
+                    <BookOpen className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
+                    <strong className="block truncate text-sm">Biblioteca</strong>
+                  </button>
+                ) : (
+                  <button onClick={()=>closeMobileMenu(()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');})} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
+                    <FolderIcon className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
+                    <strong className="block truncate text-sm">Meus materiais</strong>
+                  </button>
+                )}
               </div>
               <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.16em] opacity-40">Ferramentas</p>
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -14859,13 +14899,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       </main>
 
       {!flashcardFullscreen&&shouldRenderBottomNav&&(
-      <nav ref={bottomNavRef} className={`agora-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 pb-[calc(.95rem+env(safe-area-inset-bottom))] ${darkMode?'border-gray-800':'border-gray-200'}`} style={{transform:bottomNavVisible&&(!menuOpen||mobileMenuClosing)&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 180ms cubic-bezier(.2,.8,.2,1)'}} aria-label="Navegação principal">
+      <nav ref={bottomNavRef} className={`agora-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-40 border-t px-2 pt-2 ${darkMode?'border-gray-800':'border-gray-200'}`} style={{paddingBottom:'calc(.85rem + env(safe-area-inset-bottom, 0px))',transform:bottomNavVisible&&(!menuOpen||mobileMenuClosing)&&!mobileNavOpen?'translateY(0)':'translateY(calc(100% + env(safe-area-inset-bottom)))',transition:'transform 180ms cubic-bezier(.2,.8,.2,1)'}} aria-label="Navegação principal">
         <div className="flex max-w-lg mx-auto">
           {[
             {label:'Início', icon:<Landmark className="w-6 h-6"/>, active:view==='library', action:()=>setView('library')},
-            homeCanSeeSharedLibrary ? {label:'Biblioteca', icon:<BookOpen className="w-6 h-6"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
+            isAdmin ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
+            homeCanSeeSharedLibrary&&!isAdmin ? {label:'Biblioteca', icon:<BookOpen className="w-6 h-6"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
             homeCanSeeFamed ? {label:'FAMED', icon:<FamedIcon className="w-6 h-6"/>, active:view==='famed', action:()=>setView('famed')} : null,
-            (!homeCanSeeSharedLibrary || !homeCanSeeVideoaulas) ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
+            !isAdmin&&(!homeCanSeeSharedLibrary || !homeCanSeeVideoaulas) ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
             homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-6 h-6"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
             {label:'Mais', icon:<MoreIcon className="w-6 h-6"/>, active:menuOpen || ['favorites','quick'].includes(view), action:toggleMobileMenu},
           ].filter(Boolean).map(item=>(

@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #f2efe7;
 }
@@ -7,6 +7,12 @@
 body {
   margin: 0;
   background: #f2efe7;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] body {
+  color-scheme: dark;
+  background: #01040a;
 }
 
 ::view-transition-old(root),
@@ -266,7 +272,7 @@ html.agora-theme-fallback .agora-shell *::after {
 
 .agora-brand--hero .agora-brand__tagline {
   gap: .72rem;
-  margin-top: .72rem;
+  margin-top: .2rem;
   font-size: .62rem;
 }
 
@@ -378,6 +384,11 @@ html.agora-theme-fallback .agora-shell *::after {
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+}
+
+.agora-shell .agora-bottom-nav__item svg {
+  width: 1.65rem !important;
+  height: 1.65rem !important;
 }
 
 .agora-shell .agora-bottom-nav__item[data-active="true"] > span {
@@ -762,6 +773,7 @@ html.agora-theme-fallback .agora-shell *::after {
 
   .agora-brand--hero .agora-brand__tagline {
     gap: .4rem;
+    margin-top: .05rem;
     font-size: .48rem;
     letter-spacing: .16em;
   }

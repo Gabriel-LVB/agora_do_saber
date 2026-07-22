@@ -5,16 +5,38 @@
     <link rel="icon" type="image/png" href="/brand/agora-site-icon.png?v=20260722-4" />
     <link rel="shortcut icon" href="/favicon.ico?v=20260722-4" />
     <link rel="apple-touch-icon" href="/brand/agora-site-icon.png?v=20260722-4" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#081e3a" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta id="agora-color-scheme" name="color-scheme" content="light" />
+    <meta id="agora-theme-color" name="theme-color" content="#f2efe7" />
+    <script>
+      (() => {
+        window.syncAgoraTheme = dark => {
+          const scheme = dark ? 'dark' : 'light';
+          const background = dark ? '#01040a' : '#f2efe7';
+          const root = document.documentElement;
+          root.dataset.theme = scheme;
+          root.style.colorScheme = scheme;
+          root.style.backgroundColor = background;
+          if (document.body) {
+            document.body.style.colorScheme = scheme;
+            document.body.style.backgroundColor = background;
+          }
+          document.getElementById('agora-color-scheme').content = scheme;
+          document.getElementById('agora-theme-color').content = background;
+        };
+        try {
+          window.syncAgoraTheme(JSON.parse(localStorage.getItem('qb_dark') || 'false') === true);
+        } catch (_) {}
+      })();
+    </script>
     <meta name="description" content="Ágora do Saber — Lux in tenebris." />
     <title>Ágora do Saber</title>
-    <script type="module" crossorigin src="/assets/index-C5iLAti-.js"></script>
+    <script type="module" crossorigin src="/assets/index-_pOKPQFl.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Bh1tDfsg.js">
     <link rel="modulepreload" crossorigin href="/assets/react-vendor-CI8xfpHQ.js">
     <link rel="modulepreload" crossorigin href="/assets/firebase-BX6zZUyZ.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-R5gSNyQI.css">
-    <link rel="stylesheet" crossorigin href="/assets/vendor-Dlz6j8gc.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-CPebUIvb.css">
+    <link rel="stylesheet" crossorigin href="/assets/vendor-DfWc41q5.css">
   </head>
   <body>
     <div id="root"></div>
