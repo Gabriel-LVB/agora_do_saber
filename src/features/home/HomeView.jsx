@@ -19,7 +19,6 @@ export default function HomeView() {
     coursePlanSubjects,
     dailyStats,
     darkMode,
-    DEFAULT_HOME_MOTTO,
     dueCount,
     effectiveCoursePlanLessonOrder,
     FamedIcon,
@@ -49,6 +48,7 @@ export default function HomeView() {
     setLibFilter,
     setSharedLibraryActiveItemId,
     setCursoTab,
+    settings,
     settingsRef,
     setView,
     setVqActiveBlock,
@@ -58,8 +58,6 @@ export default function HomeView() {
     setVqQuestionParity,
     setVqSubject,
     setVqTopic,
-    siteConfig,
-    settings,
     sortCourseSubjectsForDisplay,
     vqBlocks,
     vqBlocksLoaded,
@@ -84,46 +82,37 @@ export default function HomeView() {
                       : `${capitalizeDisplayLabel(heroJourneyStep.item.subject)} · ${heroJourneyStep.step.label}`,
                   } : null;
                   const renderHomeCard = (card) => (
-                    <button key={card.key} onClick={card.action} className="app-card home-study-card group rounded-xl px-4 py-4 text-left flex items-start gap-3.5 transition-all">
-                      <span className="home-study-card__icon mt-0.5 flex-shrink-0 text-yellow-600 transition-transform group-hover:scale-105">{card.icon}</span>
+                    <button key={card.key} onClick={card.action} className="home-study-card group rounded-xl px-4 py-4 text-left flex items-start gap-3.5 transition-colors">
+                      <span className="home-icon home-study-card__icon mt-0.5">{card.icon}</span>
                       <span className="min-w-0 flex-1">
                         <strong className={`block text-sm md:text-[15px] leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}>{card.title}</strong>
                         <span className={`mt-1 block text-[11px] leading-snug line-clamp-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>{card.desc}</span>
                       </span>
-                      <ChevronRight className="mt-1.5 w-4 h-4 opacity-25 flex-shrink-0 transition-transform group-hover:translate-x-0.5"/>
+                      <ChevronRight className="mt-1.5 w-4 h-4 opacity-25 flex-shrink-0"/>
                     </button>
                   );
 				            return (
-				              <div className="desktop-content-limit space-y-7 md:space-y-9">
-                        <section className="app-hero home-brand-hero rounded-2xl px-5 pt-7 pb-5 md:px-8 md:pt-9 md:pb-7">
-                          <div className="home-brand-hero__ornament" aria-hidden="true"/>
-                          <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-10">
-                            <div className="min-w-0 flex-1">
-                              <BrandIdentity variant="hero"/>
-                              <div className="home-hero-motto mt-3 md:mt-4">
-                                <h2 className="font-serif text-lg md:text-2xl font-semibold leading-snug">“{siteConfig.homeMotto || DEFAULT_HOME_MOTTO}”</h2>
-                                <p className="home-author mt-1">— Pórtico da academia do Gabigol</p>
+				              <div className="desktop-content-limit space-y-8 md:space-y-10">
+                        <header className="home-page-header">
+                          <BrandIdentity variant="hero" showMark={false}/>
+                          {homeCanUseAdvancedFeatures&&(
+                            <div className={`home-progress-inline ${homeCanSeeVideoaulas?'has-lesson-stat':'questions-only'}`} aria-label="Progresso de hoje">
+                              <p>Hoje</p>
+                              <div className="home-progress-card__metric">
+                                <div className="flex items-baseline justify-between gap-3"><span>Questões</span><strong>{dailyQuestions}<small>/{questionGoal}</small></strong></div>
+                                <div className="home-progress-card__track"><i style={{width:`${Math.min(100,dailyQuestions/questionGoal*100)}%`}}/></div>
                               </div>
+                              {homeCanSeeVideoaulas&&<div className="home-progress-card__metric">
+                                <div className="flex items-baseline justify-between gap-3"><span>Aulas</span><strong>{dailyMinutes}<small>/{minuteGoal} min</small></strong></div>
+                                <div className="home-progress-card__track"><i style={{width:`${Math.min(100,dailyMinutes/minuteGoal*100)}%`}}/></div>
+                              </div>}
                             </div>
-                            {homeCanUseAdvancedFeatures&&(
-                              <aside className="home-progress-card w-full rounded-2xl p-4 md:w-64 md:flex-shrink-0" aria-label="Progresso de hoje">
-                                <p className="home-progress-card__title">Hoje</p>
-                                <div className="home-progress-card__metric">
-                                  <div className="flex items-baseline justify-between gap-3"><span>Questões</span><strong>{dailyQuestions}<small>/{questionGoal}</small></strong></div>
-                                  <div className="home-progress-card__track"><i style={{width:`${Math.min(100,dailyQuestions/questionGoal*100)}%`}}/></div>
-                                </div>
-                                <div className="home-progress-card__metric">
-                                  <div className="flex items-baseline justify-between gap-3"><span>Aulas</span><strong>{dailyMinutes}<small>/{minuteGoal} min</small></strong></div>
-                                  <div className="home-progress-card__track"><i style={{width:`${Math.min(100,dailyMinutes/minuteGoal*100)}%`}}/></div>
-                                </div>
-                              </aside>
-                            )}
-                          </div>
-                        </section>
+                          )}
+                        </header>
 
                         {homeJourney&&(
-                          <section className={`app-card rounded-xl px-3.5 py-3 flex items-center gap-3`}>
-                            <span className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 text-yellow-600 ${darkMode?'bg-gray-800':'bg-yellow-50'}`}>
+                          <section className="home-journey-row rounded-xl px-3.5 py-3 flex items-center gap-3">
+                            <span className="home-icon mt-0.5">
                               <Award className="w-5 h-5"/>
                             </span>
                             <div className="min-w-0 flex-1">
@@ -143,22 +132,22 @@ export default function HomeView() {
                         )}
 
                         <section className="space-y-3">
-                          <h3 className={`home-section-heading text-[11px] font-bold uppercase tracking-[0.18em] px-1 ${darkMode?'text-gray-500':'text-gray-500'}`}><span>Ações rápidas</span></h3>
+                          <h3 className="home-section-heading px-1"><span>Ações rápidas</span></h3>
                           <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures?'md:grid-cols-3':'md:grid-cols-1'} gap-3`}>
                             {homeCanUseAdvancedFeatures&&(
-                              <button onClick={()=>openViewWithReturn('quick')} className="app-card home-action-card rounded-xl p-4 text-left flex items-start gap-3">
-                                <Flame className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
+                              <button onClick={()=>openViewWithReturn('quick')} className="home-action-card rounded-xl p-4 text-left flex items-start gap-3 transition-colors">
+                                <Flame className="home-icon mt-0.5"/>
                                 <span><strong className="block text-base">Dúvida Rápida</strong><span className="block text-xs opacity-50 mt-1 leading-relaxed">Tire uma dúvida pontual e escolha como quer estudá-la.</span></span>
                               </button>
                             )}
                             {homeCanUseAdvancedFeatures&&(
-                              <button onClick={()=>openSpacedReview()} className="app-card home-action-card rounded-xl p-4 text-left flex items-start gap-3">
-                                <RepeatIcon className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
+                              <button onClick={()=>openSpacedReview()} className="home-action-card rounded-xl p-4 text-left flex items-start gap-3 transition-colors">
+                                <RepeatIcon className="home-icon mt-0.5"/>
                                 <span><strong className="block text-base">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="block text-xs opacity-50 mt-1 leading-relaxed">Revise conteúdos no momento certo para não esquecer.</span></span>
                               </button>
                             )}
-                            <button onClick={()=>setExamSetup({})} className="app-card home-action-card rounded-xl p-4 text-left flex items-start gap-3">
-                              <Zap className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0"/>
+                            <button onClick={()=>setExamSetup({})} className="home-action-card rounded-xl p-4 text-left flex items-start gap-3 transition-colors">
+                              <Zap className="home-icon mt-0.5"/>
                               <span><strong className="block text-base">Modo prova</strong><span className="block text-xs opacity-50 mt-1 leading-relaxed">Monte um simulado e veja o resultado somente ao terminar.</span></span>
                             </button>
                           </div>
@@ -173,7 +162,7 @@ export default function HomeView() {
 
                         <section className="space-y-4">
                           <div className="px-1">
-                            <h3 className={`home-section-heading text-[11px] font-bold uppercase tracking-[0.18em] ${darkMode?'text-gray-500':'text-gray-500'}`}><span>Áreas de estudo</span></h3>
+                            <h3 className="home-section-heading"><span>Áreas de estudo</span></h3>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {studyCards.map(renderHomeCard)}

@@ -170,10 +170,10 @@ export default function CoursePortalView() {
                     <div className={`h-full rounded-full transition-all duration-700 ${globalPct===100?'bg-green-500':'bg-yellow-500'}`} style={{width:`${globalPct}%`}}/>
                   </div>
                   {/* Tabs */}
-                  <div className="flex mt-1 -mb-px">
+                  <div className="flex overflow-x-auto mt-1 -mb-px">
 	                    {tabs.map(tab=>(
 	                      <button key={tab.id} onClick={()=>tab.id==='revisoes'&&canUseAdvancedFeatures?openSpacedReview():setCursoTab(tab.id)}
-                        className={`relative flex items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${cursoTab===tab.id
+                        className={`relative flex flex-shrink-0 items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${cursoTab===tab.id
                           ?'border-yellow-500 text-yellow-600'
                           :`border-transparent ${dm?'text-gray-500 hover:text-gray-300':'text-gray-400 hover:text-gray-700'}`}`}>
                         {tab.icon}

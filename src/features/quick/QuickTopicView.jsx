@@ -103,7 +103,7 @@ export default function QuickTopicView() {
                     </div>
                   )}
                   {activeTopic.quickLesson ? (
-                    <div className="space-y-3"><QuickLessonContent lesson={activeTopic.quickLesson} darkMode={dm} renderText={parseHtmlText}/></div>
+                    <div className="reading-content space-y-3"><QuickLessonContent lesson={activeTopic.quickLesson} darkMode={dm} renderText={parseHtmlText}/></div>
                   ) : (
                     <EmptyState darkMode={dm} icon={<BookOpen className="w-7 h-7"/>} title="Sem aula salva" message="Esta dúvida não possui uma aula, mas os outros conteúdos continuam disponíveis."/>
                   )}

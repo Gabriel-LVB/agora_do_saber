@@ -1708,7 +1708,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           ? 'Fixação'
           : 'Questão';
   const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
-  const iconBtnBase = 'h-8 w-8 rounded-full border flex items-center justify-center transition-colors shadow-sm active:shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
+  const iconBtnBase = 'question-icon-button h-8 w-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
     if (!onToggleErrorNotebook) return;
     const previous = optimisticNotebook;
@@ -1782,13 +1782,13 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 
 	  const cardClass = question.isFlashcard && flashcardLarge
 	    ? `mb-0 flex-1 min-h-0 flex flex-col ${darkMode?'bg-transparent':'bg-transparent'}`
-	    : `rounded-2xl border p-4 shadow-sm md:p-7 mb-6 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`;
+	    : 'study-question-card rounded-2xl p-4 md:p-7 mb-6';
 
 		  return (
 	    <div className={cardClass}>
 	      {!flashcardLarge&&<div className="flex items-center justify-between mb-4">
 	        <div className="flex items-center gap-2">
-	          <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${darkMode?'bg-yellow-900/30 text-yellow-300':'bg-yellow-100 text-yellow-800'}`}>{questionTypeLabel} {index + 1}</span>
+	          <span className={`question-type-label text-xs font-bold px-2.5 py-1 rounded-lg ${darkMode?'text-yellow-300':'text-yellow-800'}`}>{questionTypeLabel} {index + 1}</span>
 	          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
 	        </div>
         <div className="flex items-center gap-2">
@@ -1814,7 +1814,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       </div>}
 	      {!(question.isFlashcard && flashcardLarge)&&<>
           {questionText.caseContext&&!hideCaseContext&&(
-            <section className={`mb-6 w-full rounded-xl border px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700 bg-gray-900/20':'border-gray-200 bg-gray-50/50'}`}>
+            <section className="question-case-context mb-6 w-full rounded-xl px-4 py-4 md:px-5 md:py-5">
               <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
                 <BrainIcon className="h-4 w-4"/>Cenário clínico
               </div>
@@ -1874,27 +1874,45 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
           const isSelected = effectiveLetter===opt.letter;
-          let cls = `w-full text-left flex flex-col items-stretch px-4 py-3.5 md:px-5 md:py-4 rounded-xl border transition-colors focus:outline-none ${darkMode?'border-gray-700':'border-gray-200'} `;
+          let optionState = 'neutral';
+          let cls = `question-option w-full text-left flex flex-col items-stretch px-4 py-3.5 md:px-5 md:py-4 rounded-xl border border-transparent transition-colors focus:outline-none `;
           if (!isAnswered && !isSkipped || revealMode==='selected') {
-            if (isSelected && revealMode==='selected') cls += darkMode?'bg-blue-900/20 text-blue-100':'bg-blue-50 text-blue-900';
+            if (isSelected && revealMode==='selected') {
+              optionState = 'selected';
+              cls += darkMode?'bg-blue-900/20 text-blue-100':'bg-blue-50 text-blue-900';
+            }
             else cls += darkMode?'bg-gray-900/35 text-gray-200 hover:bg-gray-900/65':'bg-gray-50/50 text-gray-800 hover:bg-yellow-50/30 hover:shadow-sm';
             if (revealMode==='selected') cls += ' cursor-pointer';
           } else if (isSkipped) {
             // Em branco: mantém o mesmo contorno neutro e sinaliza a correta só pelo fundo.
             cls += 'cursor-text ';
-            if (opt.isCorrect) cls += darkMode?'bg-green-900/10 text-gray-300':'bg-green-50/50 text-gray-700';
-            else cls += darkMode?'text-gray-500 opacity-50':'text-gray-400 opacity-60';
+            if (opt.isCorrect) {
+              optionState = 'correct-muted';
+              cls += darkMode?'bg-green-900/10 text-gray-300':'bg-green-50/50 text-gray-700';
+            } else {
+              optionState = 'disabled';
+              cls += darkMode?'text-gray-500 opacity-50':'text-gray-400 opacity-60';
+            }
           } else {
             cls += 'cursor-text ';
-            if (opt.isCorrect) cls += darkMode?'bg-green-900/20 text-green-100':'bg-green-50 text-green-900';
-            else if (isSelected) cls += darkMode?'bg-red-900/20 text-red-100':'bg-red-50 text-red-900';
-            else cls += 'opacity-55';
+            if (opt.isCorrect) {
+              optionState = 'correct';
+              cls += darkMode?'bg-green-900/20 text-green-100':'bg-green-50 text-green-900';
+            } else if (isSelected) {
+              optionState = 'wrong';
+              cls += darkMode?'bg-red-900/20 text-red-100':'bg-red-50 text-red-900';
+            } else {
+              optionState = 'disabled';
+            }
           }
 	          const canClick = (!isAnswered && !isSkipped) || revealMode==='selected';
 	          const isPressed = canClick && pressedAnswer === opt.letter;
-	          if (isPressed) cls += darkMode
-	            ? ' ring-2 ring-yellow-400/70 border-yellow-400 bg-yellow-900/30 text-yellow-100 scale-[0.99]'
-	            : ' ring-2 ring-yellow-300 border-yellow-400 bg-yellow-50 text-yellow-900 scale-[0.99]';
+	          if (isPressed) {
+              optionState = 'pressed';
+              cls += darkMode
+	              ? ' ring-2 ring-yellow-400/70 border-yellow-400 bg-yellow-900/30 text-yellow-100 scale-[0.99]'
+	              : ' ring-2 ring-yellow-300 border-yellow-400 bg-yellow-50 text-yellow-900 scale-[0.99]';
+            }
 	          // Letter badge color
 	          let letterBadge = darkMode?'bg-gray-700 text-gray-300':'bg-gray-100 text-gray-600';
 	          if (showResults && !isSkipped && opt.isCorrect) letterBadge = 'bg-green-500 text-white';
@@ -1937,11 +1955,12 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               onPointerLeave={clearAnswerPointer}
               onClick={()=>handleAnswerButtonClick(opt.letter)}
               className={cls}
+              data-state={optionState}
             >
               {content}
             </button>
           ) : (
-            <div key={opt.letter} className={`${cls} cursor-text select-text`} style={{userSelect:'text'}}>
+            <div key={opt.letter} className={`${cls} cursor-text select-text`} data-state={optionState} style={{userSelect:'text'}}>
               {content}
             </div>
           );
@@ -1950,7 +1969,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       )}
       {showResults && (
         <div className={`mt-7 space-y-3 border-t pt-5 ${darkMode?'border-gray-700':'border-gray-200'}`}>
-          <div className={`overflow-hidden rounded-xl border ${darkMode?'border-gray-700 bg-gray-900/20':'border-gray-200 bg-white'}`}>
+          <div className="question-explanation-panel overflow-hidden rounded-xl">
             <button
               type="button"
               onClick={()=>setLessonExplanationOpen(open=>!open)}
@@ -1971,7 +1990,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             )}
           </div>
 
-          <div className={`overflow-hidden rounded-xl border ${darkMode?'border-gray-700 bg-gray-900/20':'border-gray-200 bg-white'}`}>
+          <div className="question-explanation-panel overflow-hidden rounded-xl">
             <button
               type="button"
               onClick={()=>hasStructuredExplanations && setAlternativeExplanationsOpen(open=>!open)}

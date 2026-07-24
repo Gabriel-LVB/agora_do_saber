@@ -425,7 +425,7 @@ function AcademiaTopicView({
 
           {isContinuousNarrative ? (
             continuousNarrativeContent
-              ? <div className="mb-8">{renderLesson(continuousNarrativeContent)}</div>
+              ? <div className="reading-content mb-8">{renderLesson(continuousNarrativeContent)}</div>
               : <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível.</p>
           ) : subtopics.map((subtopic, idx) => {
 	            const section = liveTopic.lessonSections?.[idx];
@@ -435,7 +435,7 @@ function AcademiaTopicView({
                   <h2 className={`text-base font-semibold leading-snug mb-5 ${darkMode?'text-gray-100':'text-gray-900'}`}><span className={`text-sm font-bold tabular-nums mr-2 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
                 )}
                 {section?.content ? (
-                  <div className={`space-y-3 ${hideSubtopicTitles?'mb-5':'mb-8'}`}>{renderLesson(section.content)}</div>
+                  <div className={`reading-content space-y-3 ${hideSubtopicTitles?'mb-5':'mb-8'}`}>{renderLesson(section.content)}</div>
                 ) : (
                   <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este subtópico.</p>
                 )}

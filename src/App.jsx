@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import ct, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
@@ -213,7 +213,6 @@ const isPrivateNetworkHostname = (hostname = '') => (
   || /^192\.168\./.test(hostname)
   || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
 );
-
 const shouldUseGoogleRedirect = () => (
   typeof window !== 'undefined' && window.location.hostname.includes('scf.usercontent.goog')
 );
@@ -6289,12 +6288,8 @@ export default function QuestionBankApp() {
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => action?.()));
   }, [releaseMobileNavigation]);
 
-  const toggleTheme = useCallback((event) => {
+  const toggleTheme = useCallback(() => {
     if (themeTransitionActiveRef.current) return;
-    const x = Number.isFinite(event?.clientX) ? event.clientX : window.innerWidth / 2;
-    const y = Number.isFinite(event?.clientY) ? event.clientY : window.innerHeight / 2;
-    document.documentElement.style.setProperty('--agora-theme-x', `${x}px`);
-    document.documentElement.style.setProperty('--agora-theme-y', `${y}px`);
     const applyTheme = () => setDarkMode(current=>!current);
     if (typeof document.startViewTransition === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       themeTransitionActiveRef.current = true;
@@ -6308,7 +6303,7 @@ export default function QuestionBankApp() {
     setTimeout(() => {
       document.documentElement.classList.remove('agora-theme-fallback');
       themeTransitionActiveRef.current = false;
-    }, 420);
+    }, 220);
   }, []);
 
   useEffect(() => {
@@ -12468,7 +12463,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   if (!authReady) return (
     <div className="agora-auth" data-theme={darkMode?'dark':'light'}>
       <div className="agora-splash">
-        <BrandIdentity variant="hero"/>
+        <BrandIdentity variant="hero" showMark={false}/>
         <div className="agora-splash__loading" aria-label="Carregando"><span/></div>
       </div>
     </div>
@@ -12556,7 +12551,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     <div className="agora-auth" data-theme={darkMode?'dark':'light'}>
       <div className="agora-auth__card">
         <div className="flex flex-col items-center text-center mb-8">
-          <BrandIdentity variant="hero"/>
+          <BrandIdentity variant="hero" showMark={false}/>
           <p className="mt-6 opacity-70 text-sm">{loginView==='login'?'Entre para continuar seus estudos.':'Crie seu perfil acadêmico.'}</p>
         </div>
         {loginView==='login'?(
@@ -13013,33 +13008,34 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     >
       <style>{`
         .agora-shell {
-          --bg: ${darkMode ? '#01040a' : '#f2efe7'};
-          --bg-soft: ${darkMode ? '#02070d' : '#f8f5ee'};
-          --surface: ${darkMode ? '#040a12' : '#fbfaf7'};
-          --surface-strong: ${darkMode ? '#06101a' : '#fffdf8'};
-          --surface-muted: ${darkMode ? '#0b1724' : '#eee9de'};
-          --line: ${darkMode ? '#1c3044' : '#ded5c3'};
-          --line-strong: ${darkMode ? '#9b7842' : '#b99a69'};
-          --text: ${darkMode ? '#f5f1e8' : '#17283c'};
-          --muted: ${darkMode ? '#b8c4d1' : '#66717f'};
-          --accent: #b5824a;
-          --accent-2: #123b63;
-          --accent-3: #0a294c;
+          --bg: ${darkMode ? '#151719' : '#ffffff'};
+          --bg-soft: ${darkMode ? '#181b1e' : '#f7f8f9'};
+          --surface: ${darkMode ? '#1b1e22' : '#f5f6f7'};
+          --surface-strong: ${darkMode ? '#20242a' : '#ffffff'};
+          --surface-muted: ${darkMode ? '#282d33' : '#eceff1'};
+          --line: ${darkMode ? '#30363d' : '#e1e4e8'};
+          --line-strong: ${darkMode ? '#58616b' : '#aeb6bf'};
+          --text: ${darkMode ? '#d8dcdf' : '#485058'};
+          --muted: ${darkMode ? '#9fa6ae' : '#68717a'};
+          --nav-text: ${darkMode ? '#a9afb6' : '#5d6670'};
+          --accent: #b88a46;
+          --accent-2: #2f668c;
+          --accent-3: #234d6b;
           --danger: #dc2626;
-          --shadow-sm: ${darkMode ? '0 8px 24px rgba(0, 0, 0, .18)' : '0 8px 24px rgba(10, 38, 66, .055)'};
-          --shadow-md: ${darkMode ? '0 20px 46px rgba(0, 0, 0, .28)' : '0 20px 46px rgba(10, 38, 66, .11)'};
+          --shadow-sm: ${darkMode ? '0 1px 2px rgba(0, 0, 0, .22)' : '0 1px 2px rgba(20, 28, 36, .07)'};
+          --shadow-md: ${darkMode ? '0 10px 30px rgba(0, 0, 0, .22)' : '0 10px 30px rgba(20, 28, 36, .09)'};
           color: var(--text);
           background: var(--bg);
           min-height: 100vh;
           overflow-x: hidden;
+          font-weight: 450;
+          line-height: 1.55;
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
         }
         .agora-shell * {
           box-sizing: border-box;
-        }
-        .agora-shell header {
-          background: ${darkMode ? '#02070d' : '#fffdf8'} !important;
-          border-color: var(--line) !important;
-          box-shadow: 0 1px 0 var(--line) !important;
         }
         .agora-shell main {
           position: relative;
@@ -13061,7 +13057,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         .agora-shell .bg-white,
         .agora-shell .bg-gray-50 {
-          background-color: var(--surface) !important;
+          background-color: var(--surface-strong) !important;
         }
         .agora-shell .bg-gray-900,
         .agora-shell .bg-gray-800 {
@@ -13110,31 +13106,33 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         .agora-shell .bg-yellow-600,
         .agora-shell .bg-yellow-500,
         .agora-shell .hover\\:bg-yellow-700:hover {
-          background: linear-gradient(135deg, #092442, #123b63) !important;
+          background: var(--accent-2) !important;
           color: #fff !important;
-          border-color: rgba(190, 145, 72, .58) !important;
-          box-shadow: 0 12px 26px rgba(7, 34, 63, .22), inset 0 1px 0 rgba(255,255,255,.09);
+          border-color: transparent !important;
+          box-shadow: none !important;
         }
-        .agora-shell .rounded-2xl,
+        .agora-shell .rounded-2xl {
+          border-radius: 12px !important;
+        }
         .agora-shell .rounded-xl {
-          border-radius: 17px !important;
+          border-radius: 10px !important;
         }
         .agora-shell button,
         .agora-shell input,
         .agora-shell textarea,
         .agora-shell select {
-          transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease, opacity .18s ease;
+          transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, opacity .16s ease;
           touch-action: manipulation;
         }
         .agora-shell button:not(:disabled):hover {
-          transform: translateY(-1px);
+          filter: brightness(${darkMode ? '1.08' : '.98'});
         }
         .agora-shell button:not(:disabled):active {
-          transform: translateY(0);
+          filter: brightness(${darkMode ? '1.13' : '.95'});
         }
         .agora-shell input,
         .agora-shell textarea {
-          background: ${darkMode ? '#03080f' : '#fffdf9'} !important;
+          background: var(--surface-strong) !important;
           border-color: var(--line) !important;
           color: var(--text) !important;
           font-size: var(--font-base);
@@ -13161,8 +13159,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         .agora-shell textarea:focus,
         .agora-shell button:focus-visible {
           outline: none;
-          box-shadow: 0 0 0 4px ${darkMode ? 'rgba(193, 147, 76, .2)' : 'rgba(16, 59, 99, .13)'} !important;
-          border-color: var(--line-strong) !important;
+          box-shadow: 0 0 0 3px ${darkMode ? 'rgba(72, 139, 181, .26)' : 'rgba(47, 102, 140, .16)'} !important;
+          border-color: var(--accent-2) !important;
         }
         .agora-shell .shadow-sm,
         .agora-shell .shadow-lg,
@@ -13171,7 +13169,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           box-shadow: var(--shadow-sm) !important;
         }
         .agora-shell table {
-          border-radius: 16px;
+          border-radius: 10px;
           overflow: hidden;
         }
         .agora-shell ::selection {
@@ -13182,7 +13180,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         .agora-shell,
         .agora-shell * {
           scrollbar-width: thin;
-          scrollbar-color: ${darkMode ? '#4b5563 #0f172a' : '#cbd5e1 #f8fafc'};
+          scrollbar-color: ${darkMode ? '#454b52 #151719' : '#c6ccd2 #f5f6f7'};
         }
         html::-webkit-scrollbar,
         body::-webkit-scrollbar,
@@ -13195,15 +13193,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         body::-webkit-scrollbar-track,
         .agora-shell::-webkit-scrollbar-track,
         .agora-shell *::-webkit-scrollbar-track {
-          background: ${darkMode ? '#0f172a' : '#f8fafc'};
+          background: var(--bg);
         }
         html::-webkit-scrollbar-thumb,
         body::-webkit-scrollbar-thumb,
         .agora-shell::-webkit-scrollbar-thumb,
         .agora-shell *::-webkit-scrollbar-thumb {
-          background: ${darkMode ? '#4b5563' : '#cbd5e1'};
+          background: ${darkMode ? '#454b52' : '#c6ccd2'};
           border-radius: 999px;
-          border: 2px solid ${darkMode ? '#0f172a' : '#f8fafc'};
+          border: 2px solid var(--bg);
         }
         html::-webkit-scrollbar-thumb:hover,
         body::-webkit-scrollbar-thumb:hover,
@@ -13212,29 +13210,27 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           background: #b5824a;
         }
         .agora-shell .app-hero {
-          background:
-            radial-gradient(circle at 92% 0, rgba(181, 130, 74, .09), transparent 15rem),
-            var(--surface-strong);
-          border: 1px solid ${darkMode ? 'rgba(181,130,74,.22)' : 'rgba(167,128,66,.25)'};
-          box-shadow: var(--shadow-md);
+          background: transparent;
+          border: 0;
+          box-shadow: none;
         }
         .agora-shell .app-card {
-          background: linear-gradient(145deg, var(--surface-strong), var(--surface));
-          border: 1px solid ${darkMode ? 'rgba(80,105,132,.44)' : 'rgba(185,167,137,.48)'};
-          box-shadow: var(--shadow-sm);
+          background: var(--surface-strong);
+          border: 0;
+          box-shadow: none;
         }
         .agora-shell .app-card:hover {
-          border-color: var(--line-strong);
-          box-shadow: var(--shadow-md);
-          transform: translateY(-2px);
+          background: var(--surface-muted);
+          border-color: transparent;
+          box-shadow: none;
         }
         .agora-shell .glass-panel {
-          background: ${darkMode ? 'rgba(4,10,18,.94)' : 'rgba(255,253,248,.88)'};
-          border: 1px solid ${darkMode ? 'rgba(80,105,132,.46)' : 'rgba(185,167,137,.5)'};
-          backdrop-filter: blur(18px) saturate(135%);
+          background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+          border: 1px solid var(--line);
+          backdrop-filter: blur(14px);
         }
         .agora-shell .modal-scroll > div {
-          background-color: ${darkMode ? '#040a12' : '#fffdf8'} !important;
+          background-color: var(--surface-strong) !important;
           border-color: var(--line) !important;
           max-height: calc(100dvh - 2rem);
           overflow-y: auto;
@@ -13248,12 +13244,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         .agora-shell .skeleton-line {
           height: .9rem;
-          background: linear-gradient(90deg, ${darkMode ? '#182233' : '#f1eee5'}, ${darkMode ? '#243246' : '#faf8ef'}, ${darkMode ? '#182233' : '#f1eee5'});
+          background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
           background-size: 220% 100%;
           animation: agoraShimmer 1.35s ease-in-out infinite;
         }
         .agora-shell .empty-state {
-          box-shadow: ${darkMode ? 'inset 0 1px 0 rgba(255,255,255,.03)' : 'inset 0 1px 0 rgba(255,255,255,.75)'};
+          box-shadow: none;
         }
         .agora-shell .empty-state button {
           min-height: 2.75rem;
@@ -13399,8 +13395,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             max-height: calc(100dvh - 1.5rem);
           }
           .agora-shell main:not(:empty) {
-            padding-left: .55rem;
-            padding-right: .55rem;
+            padding-left: .375rem;
+            padding-right: .375rem;
           }
           .agora-shell {
             width: 100%;
@@ -13511,8 +13507,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             font-size: .6rem !important;
           }
           .agora-shell main:not(:empty) {
-            padding-left: .4rem;
-            padding-right: .4rem;
+            padding-left: .3rem;
+            padding-right: .3rem;
           }
         }
         @media (min-width: 1024px) {
@@ -14912,7 +14908,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           ].filter(Boolean).map(item=>(
             <button key={item.label} type="button" onClick={event=>item.label==='Mais'?item.action(event):runMobileNavigation(event,item.action)} aria-label={item.label} title={item.label} aria-expanded={item.label==='Mais'?menuOpen:undefined} data-active={item.active?'true':'false'}
               className={`agora-bottom-nav__item relative min-w-0 min-h-[60px] flex-1 flex items-center justify-center rounded-xl transition-colors active:scale-95 ${item.active?(darkMode?'text-yellow-400':'text-yellow-700'):(darkMode?'text-gray-500':'text-gray-500')}`}>
-              <span className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-all ${item.active?(darkMode?'bg-yellow-900/25':'bg-yellow-50'):(darkMode?'hover:bg-gray-800':'hover:bg-gray-50')}`}>{item.icon}</span>
+              <span className={`flex h-14 w-full max-w-14 items-center justify-center rounded-2xl transition-all ${item.active?(darkMode?'bg-yellow-900/25':'bg-yellow-50'):(darkMode?'hover:bg-gray-800':'hover:bg-gray-50')}`}>{item.icon}</span>
             </button>
           ))}
         </div>

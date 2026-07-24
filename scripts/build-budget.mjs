@@ -29,7 +29,7 @@ assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
 
 const ENTRY_RAW_LIMIT = 500 * 1024;
 const ENTRY_GZIP_LIMIT = 220 * 1024;
-const CORE_TOTAL_GZIP_LIMIT = 435 * 1024;
+const CORE_TOTAL_GZIP_LIMIT = 436 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT + QUICK_CONTENT_GZIP_LIMIT;
 const coreGzip = totalGzip - (quickContent?.gzip || 0);

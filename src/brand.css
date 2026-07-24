@@ -1,162 +1,85 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f2efe7;
+  background: #ffffff;
 }
 
 body {
   margin: 0;
-  background: #f2efe7;
+  background: #ffffff;
 }
 
 :root[data-theme="dark"],
 :root[data-theme="dark"] body {
   color-scheme: dark;
-  background: #000000;
+  background: #151719;
 }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation: none;
+  animation-duration: 180ms;
+  animation-timing-function: ease;
   mix-blend-mode: normal;
 }
 
 ::view-transition-old(root) {
-  z-index: 1;
+  animation-name: agoraThemeOut;
 }
 
 ::view-transition-new(root) {
-  z-index: 2;
-  animation: agoraThemeReveal 520ms cubic-bezier(.22, .78, .22, 1) both;
+  animation-name: agoraThemeIn;
 }
 
-@keyframes agoraThemeReveal {
-  from {
-    clip-path: circle(0 at var(--agora-theme-x, 50vw) var(--agora-theme-y, 50vh));
-  }
+@keyframes agoraThemeOut {
+  to { opacity: 0; }
+}
 
-  to {
-    clip-path: circle(150vmax at var(--agora-theme-x, 50vw) var(--agora-theme-y, 50vh));
-  }
+@keyframes agoraThemeIn {
+  from { opacity: 0; }
 }
 
 html.agora-theme-fallback .agora-shell,
 html.agora-theme-fallback .agora-shell *,
 html.agora-theme-fallback .agora-shell *::before,
 html.agora-theme-fallback .agora-shell *::after {
-  transition-property: background-color, border-color, color, fill, stroke, box-shadow !important;
-  transition-duration: 360ms !important;
-  transition-timing-function: cubic-bezier(.22, .78, .22, 1) !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: .01ms !important;
-  }
-}
-
-@media (max-width: 1023px) {
-  .agora-shell .agora-touch-feedback {
-    scale: .965 !important;
-    opacity: .72 !important;
-    filter: brightness(.9);
-    transition: scale 65ms ease-out, opacity 65ms ease-out, filter 65ms ease-out !important;
-  }
-
-  .agora-shell .agora-bottom-nav__item > span {
-    position: relative;
-  }
-
-  .agora-shell .agora-bottom-nav.is-navigating .agora-bottom-nav__item:not(.is-pending) {
-    opacity: .38;
-    pointer-events: none;
-  }
-
-  .agora-shell .agora-bottom-nav__item.is-pending {
-    opacity: 1 !important;
-    pointer-events: none;
-  }
-
-  .agora-shell .agora-bottom-nav__item.is-pending > span {
-    color: var(--accent) !important;
-    background: color-mix(in srgb, var(--accent) 16%, transparent) !important;
-    animation: agoraBottomNavPending 620ms ease-in-out infinite alternate;
-  }
-
-  .agora-shell .agora-bottom-nav__item.is-pending > span::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    bottom: .13rem;
-    width: .28rem;
-    height: .28rem;
-    border-radius: 999px;
-    background: currentColor;
-    transform: translateX(-50%);
-  }
-
-  @keyframes agoraBottomNavPending {
-    from {
-      scale: .96;
-      box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-    }
-
-    to {
-      scale: 1.035;
-      box-shadow: 0 0 0 .28rem color-mix(in srgb, var(--accent) 8%, transparent);
-    }
-  }
+  transition-property: background-color, border-color, color, fill, stroke, opacity !important;
+  transition-duration: 180ms !important;
+  transition-timing-function: ease !important;
 }
 
 .agora-shell.agora-shell {
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(circle at 86% 5%, rgba(181, 130, 74, .09), transparent 25rem),
-    radial-gradient(circle at 18% 88%, rgba(15, 47, 82, .06), transparent 30rem),
-    linear-gradient(135deg, transparent 0 49.7%, rgba(181, 130, 74, .025) 49.8% 50.2%, transparent 50.3% 100%);
-  background-size: auto, auto, 42px 42px;
+  background: var(--bg);
 }
 
-.agora-shell .font-serif,
-.agora-brand__name,
-.home-hero-motto h2 {
-  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif !important;
+.agora-shell .font-serif {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  letter-spacing: -.02em;
 }
 
+/* Brand */
 .agora-brand {
   display: inline-flex;
-  align-items: center;
   min-width: 0;
+  align-items: center;
   color: inherit;
 }
 
 .agora-brand__mark {
   position: relative;
   display: block;
-  flex: none;
   overflow: hidden;
-  background: #081e3a;
+  flex: none;
   border-radius: 50%;
-  box-shadow:
-    0 8px 22px rgba(4, 17, 35, .2);
-}
-
-.agora-brand__mark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgba(196, 151, 75, .22);
-  pointer-events: none;
+  background: #13202c;
+  box-shadow: 0 0 0 1px rgba(126, 135, 145, .3);
 }
 
 .agora-brand__mark img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
 .agora-brand__copy {
@@ -167,191 +90,182 @@ html.agora-theme-fallback .agora-shell *::after {
 
 .agora-brand__name {
   display: flex;
-  color: #0a294c;
+  color: #23384d;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .025em;
+  letter-spacing: .01em;
   line-height: .88;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 [data-theme="dark"] .agora-brand__name {
-  color: #f7f1e5;
+  color: #e8e5de;
 }
 
 .agora-brand__tagline {
   display: flex;
   align-items: center;
-  color: #aa7833;
-  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  color: #98713d;
+  font-size: .52rem;
   font-weight: 700;
+  letter-spacing: .14em;
   text-transform: uppercase;
-  letter-spacing: .21em;
   white-space: nowrap;
 }
 
 .agora-brand__tagline i {
   display: block;
-  flex: 1;
+  min-width: .5rem;
   height: 1px;
-  min-width: .6rem;
-  background: linear-gradient(90deg, transparent, #bd8a40);
-}
-
-.agora-brand__tagline i:last-child {
-  background: linear-gradient(90deg, #bd8a40, transparent);
+  flex: 1;
+  background: color-mix(in srgb, currentColor 55%, transparent);
 }
 
 .agora-brand--sidebar {
   width: 100%;
-  gap: .72rem;
+  gap: .7rem;
 }
 
 .agora-brand--sidebar .agora-brand__mark {
-  width: 3.45rem;
-  height: 3.45rem;
+  width: 3rem;
+  height: 3rem;
 }
 
 .agora-brand--sidebar .agora-brand__name {
   flex-direction: column;
   gap: .12rem;
-  font-size: 1.04rem;
-}
-
-.agora-brand--sidebar .agora-brand__name > span:first-child,
-.agora-brand--hero .agora-brand__name > span:first-child {
-  font-size: 1.36em;
-  letter-spacing: .018em;
+  font-size: .98rem;
 }
 
 .agora-brand--sidebar .agora-brand__tagline {
-  gap: .42rem;
-  margin-top: .42rem;
-  font-size: .43rem;
-  letter-spacing: .16em;
-}
-
-.agora-brand--mobile {
-  gap: .58rem;
-}
-
-.agora-brand--mobile .agora-brand__mark {
-  width: 3rem;
-  height: 3rem;
-}
-
-.agora-brand--mobile .agora-brand__name {
-  gap: .28rem;
-  font-size: 1.18rem;
-  letter-spacing: .018em;
-}
-
-.agora-brand--mobile .agora-brand__tagline {
   gap: .35rem;
-  margin-top: .32rem;
+  margin-top: .35rem;
   font-size: .4rem;
 }
 
+.agora-brand--mobile {
+  gap: .55rem;
+}
+
+.agora-brand--mobile .agora-brand__mark {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.agora-brand--mobile .agora-brand__name {
+  gap: .22rem;
+  font-size: 1rem;
+}
+
+.agora-brand--mobile .agora-brand__tagline {
+  gap: .3rem;
+  margin-top: .25rem;
+  font-size: .38rem;
+}
+
 .agora-brand--hero {
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .agora-brand--hero .agora-brand__mark {
-  width: 7.35rem;
-  height: 7.35rem;
-  box-shadow:
-    0 18px 42px rgba(3, 18, 38, .24);
+  width: 4.6rem;
+  height: 4.6rem;
 }
 
 .agora-brand--hero .agora-brand__name {
   flex-direction: column;
-  gap: .12rem;
-  font-size: clamp(2rem, 5vw, 3.25rem);
-  letter-spacing: .035em;
+  gap: .1rem;
+  font-size: 1.72rem;
+}
+
+.agora-brand--hero .agora-brand__name > span:first-child {
+  font-size: 1.34em;
+}
+
+.agora-brand--sidebar .agora-brand__name > span:first-child {
+  font-size: 1.28em;
 }
 
 .agora-brand--hero .agora-brand__tagline {
-  gap: .72rem;
-  margin-top: .2rem;
-  font-size: .62rem;
+  gap: .5rem;
+  margin-top: .28rem;
 }
 
+/* Navigation */
 .agora-shell .agora-sidebar {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.55), transparent 12rem),
-    var(--surface-strong) !important;
-  border-color: rgba(170, 120, 51, .24) !important;
-  box-shadow: 16px 0 48px rgba(12, 32, 55, .06);
-}
-
-.agora-shell[data-theme="dark"] .agora-sidebar {
-  background:
-    radial-gradient(circle at 20% 0, rgba(192, 145, 70, .12), transparent 16rem),
-    #02060c !important;
-  box-shadow: 18px 0 50px rgba(0, 0, 0, .24);
-}
-
-.agora-shell .agora-sidebar__brand {
-  min-height: 5.6rem;
-  border-color: rgba(170, 120, 51, .2) !important;
+  border-color: var(--line) !important;
+  background: var(--bg-soft) !important;
+  box-shadow: none;
 }
 
 .agora-shell .agora-nav-item,
 .agora-shell .agora-tool-item {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid transparent;
+  border: 0;
+  color: var(--nav-text) !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.agora-shell .agora-nav-item::before,
-.agora-shell .agora-tool-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 24%;
-  bottom: 24%;
-  width: 2px;
-  border-radius: 999px;
-  background: #c3944b;
-  opacity: 0;
-  transform: scaleY(.4);
-  transition: .2s ease;
+.agora-shell .agora-nav-item > span:first-child {
+  width: 2rem !important;
+  height: 2rem !important;
+  color: currentColor !important;
+  background: transparent !important;
+}
+
+.agora-shell .agora-nav-item:hover,
+.agora-shell .agora-tool-item:hover {
+  color: var(--nav-text) !important;
+  background: var(--surface) !important;
 }
 
 .agora-shell .agora-nav-item[data-active="true"],
 .agora-shell .agora-tool-item[data-active="true"] {
-  color: #f8f1e4 !important;
-  border-color: rgba(191, 145, 70, .45) !important;
-  background: linear-gradient(135deg, #092342, #123b63) !important;
-  box-shadow: 0 10px 24px rgba(7, 31, 58, .17);
+  color: var(--nav-text) !important;
+  background: var(--surface-muted) !important;
 }
 
-.agora-shell .agora-nav-item[data-active="true"]::before,
-.agora-shell .agora-tool-item[data-active="true"]::before {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
-.agora-shell .agora-nav-item[data-active="true"] > span:first-child {
-  color: #e6be76 !important;
-  background: rgba(255,255,255,.08) !important;
+.agora-shell .agora-nav-item[data-active="true"] > span:first-child,
+.agora-shell .agora-tool-item[data-active="true"] > svg {
+  color: var(--accent) !important;
 }
 
 .agora-shell .agora-bottom-nav {
-  background: color-mix(in srgb, var(--surface-strong) 96%, transparent) !important;
   border-color: var(--line) !important;
-  box-shadow: 0 -10px 28px rgba(7, 28, 51, .1);
-  backdrop-filter: blur(20px) saturate(145%);
+  background: color-mix(in srgb, var(--surface-strong) 97%, transparent) !important;
+  box-shadow: 0 -1px 0 color-mix(in srgb, var(--line) 55%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.agora-shell .agora-bottom-nav__item > span {
+  position: relative;
+  width: 2.9rem !important;
+  height: 2.9rem !important;
+  color: var(--muted);
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.agora-shell .agora-bottom-nav__item svg {
+  width: 1.55rem !important;
+  height: 1.55rem !important;
+}
+
+.agora-shell .agora-bottom-nav__item[data-active="true"] > span {
+  color: var(--accent);
+  background: var(--surface-muted) !important;
 }
 
 .agora-shell .agora-mobile-scroll-progress {
   position: fixed;
-  inset: 0 0 auto;
   z-index: 75;
-  height: 3px;
+  inset: 0 0 auto;
+  height: 2px;
   overflow: hidden;
   pointer-events: none;
-  background: rgba(181, 125, 49, .12);
+  background: transparent;
 }
 
 .agora-shell .agora-mobile-scroll-progress span {
@@ -361,132 +275,72 @@ html.agora-theme-fallback .agora-shell *::after {
   opacity: 0;
   transform: scaleX(0);
   transform-origin: left center;
-  background: linear-gradient(90deg, #a66f27, #e0bb70);
-  box-shadow: 0 0 8px rgba(211, 166, 88, .45);
+  background: var(--accent);
   transition: transform 80ms linear, opacity 160ms ease;
   will-change: transform;
 }
 
-.agora-shell[data-theme="dark"] .agora-mobile-scroll-progress {
-  background: rgba(225, 184, 102, .08);
-}
-
-.agora-shell[data-theme="dark"] .agora-bottom-nav {
-  background: rgba(2, 7, 13, .97) !important;
-  border-color: #172535 !important;
-  box-shadow: 0 -10px 30px rgba(0, 0, 0, .38);
-}
-
-.agora-shell .agora-bottom-nav__item > span {
-  width: 2.8rem !important;
-  height: 2.8rem !important;
-  color: var(--muted);
-  border: 0 !important;
+/* Home */
+.agora-shell .home-page-header {
+  display: flex;
+  align-items: center;
+  min-height: 6.5rem;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.15rem 1rem 1.35rem;
+  border-bottom: 1px solid var(--line);
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.agora-shell .agora-bottom-nav__item svg {
-  width: 1.65rem !important;
-  height: 1.65rem !important;
+.agora-shell .home-page-header > .agora-brand--hero {
+  text-align: left;
 }
 
-.agora-shell .agora-bottom-nav__item[data-active="true"] > span {
-  color: #b57d31;
-  background: rgba(181, 125, 49, .08) !important;
-}
-
-.agora-shell[data-theme="dark"] .agora-bottom-nav__item[data-active="true"] > span {
-  color: #e2b866;
-  background: rgba(190, 145, 72, .08) !important;
-}
-
-.agora-shell .app-hero.home-brand-hero {
-  position: relative;
-  overflow: hidden;
+.agora-shell .home-page-header .agora-brand--hero .agora-brand__name {
+  align-items: flex-start;
   color: var(--text);
-  border-color: rgba(170, 120, 51, .34);
-  background:
-    radial-gradient(circle at 92% 10%, rgba(193, 147, 76, .19), transparent 20rem),
-    linear-gradient(135deg, var(--surface-strong), var(--surface));
-  box-shadow: 0 24px 70px rgba(9, 35, 63, .11);
+  font-size: 1.9rem;
 }
 
-.agora-shell .home-brand-hero__ornament {
-  position: absolute;
-  width: 22rem;
-  height: 22rem;
-  right: -8rem;
-  top: -11rem;
-  border: 1px solid rgba(181, 130, 74, .18);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 1.1rem rgba(181, 130, 74, .035),
-    0 0 0 2.2rem rgba(181, 130, 74, .025),
-    0 0 0 3.3rem rgba(181, 130, 74, .018);
+.agora-shell .home-progress-inline {
+  display: grid;
+  width: min(100%, 31rem);
+  grid-template-columns: auto minmax(8rem, 1fr) minmax(8rem, 1fr);
+  align-items: end;
+  gap: 1.25rem;
 }
 
-.agora-shell .home-hero-motto {
-  max-width: 38rem;
-  padding-left: 1rem;
-  border-left: 2px solid #bd8b42;
+.agora-shell .home-progress-inline.questions-only {
+  width: min(100%, 20rem);
+  grid-template-columns: auto minmax(10rem, 1fr);
 }
 
-.agora-shell .home-author {
+.agora-shell .home-progress-inline > p {
+  align-self: center;
+  margin: 0;
   color: var(--muted);
-  font-size: .7rem;
-  font-weight: 800;
-  letter-spacing: .12em;
-  line-height: 1.4;
-  margin-left: .65rem;
-  text-transform: uppercase;
-  opacity: .9;
-}
-
-.agora-shell .home-progress-card {
-  color: var(--text);
-  border: 1px solid rgba(170, 120, 51, .24);
-  background: rgba(255, 253, 248, .56);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
-  backdrop-filter: blur(12px);
-}
-
-.agora-shell[data-theme="dark"] .home-progress-card {
-  border-color: rgba(190, 145, 72, .2);
-  background: rgba(255,255,255,.026);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
-}
-
-.agora-shell .home-progress-card__title {
-  margin-bottom: .8rem;
-  color: #9b6a28;
-  font-size: .62rem;
-  font-weight: 800;
-  letter-spacing: .17em;
-  text-transform: uppercase;
-}
-
-.agora-shell .home-progress-card__metric + .home-progress-card__metric {
-  margin-top: .9rem;
+  font-size: .72rem;
+  font-weight: 700;
 }
 
 .agora-shell .home-progress-card__metric span {
   color: var(--muted);
-  font-size: .7rem;
-  font-weight: 700;
+  font-size: .74rem;
+  font-weight: 600;
 }
 
 .agora-shell .home-progress-card__metric strong {
-  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  font-size: 1.08rem;
+  font-size: .92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .agora-shell .home-progress-card__metric small {
   margin-left: .15rem;
   color: var(--muted);
-  font-family: Inter, ui-sans-serif, sans-serif;
-  font-size: .62rem;
-  font-weight: 600;
+  font-size: .65rem;
+  font-weight: 500;
 }
 
 .agora-shell .home-progress-card__track {
@@ -494,190 +348,254 @@ html.agora-theme-fallback .agora-shell *::after {
   margin-top: .38rem;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  background: var(--surface-muted);
 }
 
 .agora-shell .home-progress-card__track i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #a9722a, #d6ad61);
+  background: var(--accent-2);
 }
 
-.agora-shell .app-card.home-study-card,
-.agora-shell .app-card.home-action-card {
-  position: relative;
-  overflow: hidden;
+.agora-shell .home-journey-row,
+.agora-shell .home-study-card,
+.agora-shell .home-action-card {
+  color: var(--text);
+  border: 0;
+  background: var(--surface-strong);
+  box-shadow: none;
 }
 
-.agora-shell .app-card.home-study-card::after,
-.agora-shell .app-card.home-action-card::after {
-  content: "";
-  position: absolute;
-  inset: auto 1rem 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(183, 126, 49, .72), transparent);
-  opacity: 0;
-  transition: opacity .2s ease;
+.agora-shell .home-journey-row {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.agora-shell .app-card.home-study-card:hover::after,
-.agora-shell .app-card.home-action-card:hover::after {
-  opacity: 1;
+.agora-shell .home-study-card:hover,
+.agora-shell .home-action-card:hover {
+  background: var(--surface-muted);
 }
 
-.agora-shell .home-study-card__icon {
-  color: #9b6a28 !important;
+.agora-shell .home-icon {
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent) !important;
   border: 0;
   background: transparent !important;
 }
 
-.agora-shell .home-action-card > svg {
-  color: #a8752e !important;
+.agora-shell .home-icon > svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: inherit !important;
 }
 
-/* The app theme is state-driven via data-theme, so icon surfaces must not rely
-   on Tailwind's system-level dark: variant. */
+.agora-shell .home-section-heading {
+  display: block;
+  color: var(--text) !important;
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  text-transform: none;
+}
+
+/* Long-form reading */
+.agora-shell .reading-content {
+  max-width: 74ch;
+  color: var(--text);
+  letter-spacing: .002em;
+}
+
+.agora-shell .reading-content .text-base,
+.agora-shell .reading-content p,
+.agora-shell .reading-content li {
+  font-size: calc(var(--font-base) + .04rem) !important;
+  line-height: 1.78 !important;
+}
+
+.agora-shell[data-theme="dark"] .reading-content {
+  color: #dde0e3;
+}
+
+.agora-shell .reading-content h2,
+.agora-shell .reading-content h3,
+.agora-shell .reading-content h4 {
+  color: var(--text) !important;
+  letter-spacing: -.015em;
+  line-height: 1.35;
+}
+
+/* Questions */
+.agora-shell .study-question-card {
+  color: var(--text);
+  background: var(--surface-strong) !important;
+  box-shadow: none;
+}
+
+.agora-shell .question-type-label {
+  color: var(--muted) !important;
+  background: var(--surface-muted) !important;
+  font-size: .72rem !important;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.agora-shell .question-icon-button {
+  color: var(--muted);
+  border: 0 !important;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.agora-shell .question-icon-button:hover {
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.agora-shell .question-case-context {
+  border: 0;
+  border-left: 3px solid color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  background: var(--surface) !important;
+}
+
+.agora-shell .question-option {
+  box-shadow: none !important;
+}
+
+.agora-shell .question-option[data-state="neutral"] {
+  color: var(--text) !important;
+  border-color: transparent !important;
+  background: var(--surface) !important;
+}
+
+.agora-shell .question-option[data-state="neutral"]:hover {
+  background: var(--surface-muted) !important;
+}
+
+.agora-shell .question-option[data-state="selected"],
+.agora-shell .question-option[data-state="pressed"] {
+  border-color: color-mix(in srgb, var(--accent-2) 58%, transparent) !important;
+  background: color-mix(in srgb, var(--accent-2) 16%, var(--surface)) !important;
+}
+
+.agora-shell .question-option[data-state="correct"],
+.agora-shell .question-option[data-state="correct-muted"] {
+  border-color: color-mix(in srgb, #3f9b72 38%, transparent) !important;
+  background: color-mix(in srgb, #3f9b72 13%, var(--surface)) !important;
+}
+
+.agora-shell .question-option[data-state="wrong"] {
+  border-color: color-mix(in srgb, #c45c60 38%, transparent) !important;
+  background: color-mix(in srgb, #c45c60 13%, var(--surface)) !important;
+}
+
+.agora-shell .question-option[data-state="disabled"] {
+  opacity: 1 !important;
+  color: var(--muted) !important;
+  border-color: transparent !important;
+  background: var(--surface) !important;
+}
+
+.agora-shell .question-explanation-panel {
+  border: 0;
+  background: var(--surface) !important;
+}
+
+/* Theme-safe icon surfaces */
 .agora-shell[data-theme="dark"] .bg-yellow-50,
 .agora-shell[data-theme="dark"] .bg-yellow-100 {
-  color: #e7bd70 !important;
-  background: rgba(181, 130, 74, .16) !important;
+  color: #d8b06a !important;
+  background: rgba(184, 138, 70, .12) !important;
 }
 
 .agora-shell[data-theme="dark"] .bg-blue-50,
 .agora-shell[data-theme="dark"] .bg-blue-100 {
-  color: #9ec8ef !important;
-  background: rgba(42, 111, 170, .18) !important;
+  color: #9fc6df !important;
+  background: rgba(47, 102, 140, .16) !important;
 }
 
 .agora-shell[data-theme="dark"] .bg-green-50,
 .agora-shell[data-theme="dark"] .bg-green-100 {
-  color: #8ed8b1 !important;
-  background: rgba(34, 132, 88, .18) !important;
+  color: #9bd3b7 !important;
+  background: rgba(63, 155, 114, .15) !important;
 }
 
 .agora-shell[data-theme="dark"] .bg-red-50,
 .agora-shell[data-theme="dark"] .bg-red-100 {
-  color: #f3a7a7 !important;
-  background: rgba(166, 50, 50, .18) !important;
+  color: #e9a9ab !important;
+  background: rgba(196, 92, 96, .15) !important;
 }
 
 .agora-shell[data-theme="dark"] .bg-purple-50,
 .agora-shell[data-theme="dark"] .bg-purple-100,
 .agora-shell[data-theme="dark"] .bg-indigo-50,
 .agora-shell[data-theme="dark"] .bg-indigo-100 {
-  color: #c8b8ef !important;
-  background: rgba(105, 76, 167, .2) !important;
+  color: #c4b6df !important;
+  background: rgba(111, 85, 155, .15) !important;
 }
 
-.agora-shell[data-theme="dark"] .agora-nav-item:not([data-active="true"]) > span:first-child {
-  color: #cad3dd !important;
-  background: rgba(255,255,255,.045) !important;
-}
-
-.agora-shell[data-theme="dark"] .home-study-card__icon {
-  color: #e7bd70 !important;
-  background: transparent !important;
-}
-
-.agora-shell[data-theme="dark"] .home-action-card > svg {
-  color: #e7bd70 !important;
-}
-
-.agora-shell .home-section-heading {
-  display: flex;
-  align-items: center;
-  gap: .85rem;
-  color: #8b642d !important;
-}
-
-.agora-shell .home-section-heading::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: linear-gradient(90deg, rgba(181,130,74,.38), transparent);
-}
-
+/* Authentication and loading */
 .agora-auth {
-  min-height: 100vh;
   display: flex;
+  min-height: 100vh;
   align-items: center;
   justify-content: center;
   padding: 1.25rem;
-  color: #12243a;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(184, 135, 61, .18), transparent 22rem),
-    radial-gradient(circle at 88% 88%, rgba(10, 41, 75, .13), transparent 26rem),
-    #f2efe7;
+  color: #485058;
+  background: #f5f6f7;
 }
 
 .agora-auth[data-theme="dark"] {
-  color: #f4efe5;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(184, 135, 61, .15), transparent 24rem),
-    radial-gradient(circle at 88% 88%, rgba(20, 59, 96, .22), transparent 28rem),
-    #01040a;
+  color: #d8dcdf;
+  background: #151719;
 }
 
 .agora-auth__card {
   width: 100%;
-  max-width: 29rem;
+  max-width: 27rem;
   padding: 2rem;
-  border: 1px solid rgba(171, 125, 52, .28);
-  border-radius: 1.5rem;
-  background: rgba(255, 253, 248, .88);
-  box-shadow: 0 30px 80px rgba(8, 30, 54, .16);
-  backdrop-filter: blur(20px) saturate(130%);
+  border: 1px solid #dde1e5;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(20, 28, 36, .08);
 }
 
 .agora-auth[data-theme="dark"] .agora-auth__card {
-  background: rgba(3, 9, 16, .96);
+  border-color: #30363d;
+  background: #20242a;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .2);
 }
 
-.agora-shell .home-brand-hero .agora-brand--hero {
-  align-items: flex-start;
+.agora-auth .agora-brand--hero {
+  text-align: center;
 }
 
-.agora-shell .home-brand-hero .agora-brand--hero .agora-brand__mark {
-  width: 8.25rem;
-  height: 8.25rem;
-  transform: translateY(-.55rem);
+.agora-auth .agora-brand--hero .agora-brand__name {
+  font-size: 2rem;
 }
 
-.agora-shell .home-brand-hero .agora-brand--hero .agora-brand__copy {
-  transform: translateY(.4rem);
-}
-
-.agora-shell .home-brand-hero .agora-brand--hero .agora-brand__name {
-  font-size: 2.55rem;
-}
-
-.agora-shell[data-theme="dark"] .app-card {
-  background: linear-gradient(145deg, #050b13, #02060b) !important;
-  border-color: rgba(73, 91, 110, .42) !important;
-}
-
-.agora-shell[data-theme="dark"] .agora-nav-item[data-active="true"],
-.agora-shell[data-theme="dark"] .agora-tool-item[data-active="true"] {
-  background: linear-gradient(135deg, #02070d, #07121e) !important;
-  border-color: rgba(191, 145, 70, .28) !important;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .3);
+.agora-auth .agora-brand--hero .agora-brand__tagline {
+  justify-content: center;
 }
 
 .agora-splash {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
-  animation: agoraSplashIn .65s ease both;
+  gap: 1.5rem;
+  animation: agoraSplashIn .35s ease both;
 }
 
 .agora-splash__loading {
-  width: 8rem;
+  width: 7rem;
   height: 2px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(9, 41, 76, .12);
+  background: rgba(104, 113, 123, .18);
 }
 
 .agora-splash__loading span {
@@ -685,13 +603,12 @@ html.agora-theme-fallback .agora-shell *::after {
   width: 42%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #956426, #dfb96e);
-  animation: agoraLoading 1.2s ease-in-out infinite;
+  background: #79828b;
+  animation: agoraLoading 1.1s ease-in-out infinite;
 }
 
 @keyframes agoraSplashIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
 }
 
 @keyframes agoraLoading {
@@ -699,28 +616,43 @@ html.agora-theme-fallback .agora-shell *::after {
   100% { transform: translateX(340%); }
 }
 
-.agora-auth .agora-brand--hero {
-  flex-direction: column;
-  gap: 1rem;
-  text-align: center;
-}
-
-.agora-auth .agora-brand--hero .agora-brand__name {
-  font-size: 2.2rem;
-}
-
-.agora-auth .agora-brand--hero .agora-brand__tagline {
-  justify-content: center;
-}
-
-@media (min-width: 641px) and (max-width: 1023px) {
-  .agora-shell .home-brand-hero .agora-brand--hero .agora-brand__mark {
-    width: 6.2rem;
-    height: 6.2rem;
+@media (max-width: 1023px) {
+  .agora-shell .agora-touch-feedback {
+    scale: .985 !important;
+    opacity: .86 !important;
+    transition: scale 60ms ease-out, opacity 60ms ease-out !important;
   }
 
-  .agora-shell .home-brand-hero .agora-brand--hero .agora-brand__name {
-    font-size: 2.05rem;
+  .agora-shell .agora-bottom-nav.is-navigating .agora-bottom-nav__item:not(.is-pending) {
+    opacity: .58;
+    pointer-events: none;
+  }
+
+  .agora-shell .agora-bottom-nav__item.is-pending {
+    opacity: 1 !important;
+    pointer-events: none;
+  }
+
+  .agora-shell .agora-bottom-nav__item.is-pending > span {
+    color: var(--accent) !important;
+    background: var(--surface-muted) !important;
+  }
+
+  .agora-shell .agora-bottom-nav__item.is-pending > span::after {
+    content: "";
+    position: absolute;
+    bottom: .16rem;
+    left: 50%;
+    width: .24rem;
+    height: .24rem;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translateX(-50%);
+    animation: agoraPending 700ms ease-in-out infinite alternate;
+  }
+
+  @keyframes agoraPending {
+    to { opacity: .35; }
   }
 }
 
@@ -742,44 +674,86 @@ html.agora-theme-fallback .agora-shell *::after {
     height: 0;
   }
 
-  .agora-brand--hero {
-    align-items: flex-start;
-    gap: .9rem;
+  .agora-shell .home-page-header {
+    align-items: stretch;
+    min-height: 6.25rem;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 1rem;
+    padding: 1.15rem .75rem 1.3rem;
   }
 
-  .agora-brand--hero .agora-brand__mark {
-    width: 4.2rem;
-    height: 4.2rem;
+  .agora-shell .home-page-header > .agora-brand--hero {
+    width: auto;
+    flex: none;
+    align-self: center;
+    text-align: center;
   }
 
-  .agora-brand--hero .agora-brand__name {
-    font-size: 1.72rem;
-  }
-
-  .agora-shell .home-brand-hero .agora-brand--hero {
-    align-items: flex-start;
-    gap: .75rem;
-  }
-
-  .agora-shell .home-brand-hero .agora-brand--hero .agora-brand__mark {
-    width: 5.4rem;
-    height: 5.4rem;
-    align-self: flex-start;
-  }
-
-  .agora-shell .home-brand-hero .agora-brand--hero .agora-brand__name {
-    font-size: 1.5rem;
-  }
-
-  .agora-brand--hero .agora-brand__tagline {
-    gap: .4rem;
-    margin-top: .05rem;
-    font-size: .48rem;
-    letter-spacing: .16em;
-  }
-
-  .agora-auth .agora-brand--hero {
+  .agora-shell .home-page-header .agora-brand--hero .agora-brand__name {
     align-items: center;
+    font-size: 1.7rem;
+  }
+
+  .agora-shell .home-page-header .agora-brand--hero .agora-brand__tagline {
+    justify-content: center;
+  }
+
+  .agora-shell .home-progress-inline {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .5rem;
+    padding-top: .8rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .agora-shell .home-progress-inline.questions-only {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agora-shell .home-progress-inline > p {
+    margin-bottom: -.18rem;
+    font-size: .62rem;
+  }
+
+  .agora-shell .home-progress-card__metric span {
+    font-size: .68rem;
+  }
+
+  .agora-shell .home-progress-card__metric strong {
+    font-size: .82rem;
+  }
+
+  .agora-shell .home-progress-card__metric small {
+    font-size: .56rem;
+  }
+
+  .agora-shell .home-progress-card__track {
+    height: 2px;
+    margin-top: .28rem;
+  }
+
+  .agora-shell .home-action-card,
+  .agora-shell .home-study-card {
+    padding: .9rem !important;
+  }
+
+  .agora-shell .study-question-card {
+    padding: .85rem !important;
+  }
+
+  .agora-shell .question-option,
+  .agora-shell .question-case-context {
+    padding-right: .8rem !important;
+    padding-left: .8rem !important;
+  }
+
+  .agora-shell .reading-content .text-base,
+  .agora-shell .reading-content p,
+  .agora-shell .reading-content li {
+    font-size: var(--font-base) !important;
+    line-height: 1.72 !important;
   }
 
   .agora-shell .famed-portal > :not([hidden]) ~ :not([hidden]) {
@@ -791,16 +765,12 @@ html.agora-theme-fallback .agora-shell *::after {
   }
 
   .agora-shell .famed-hero {
-    padding: .9rem 1rem !important;
+    padding: .6rem .35rem !important;
   }
 
   .agora-shell .famed-hero h1 {
     margin-top: .2rem;
     font-size: 1.65rem;
-  }
-
-  .agora-shell .famed-hero p:last-child {
-    margin-top: .2rem;
   }
 
   .agora-shell .famed-semesters {
@@ -813,9 +783,9 @@ html.agora-theme-fallback .agora-shell *::after {
 
   .agora-shell .famed-semester {
     min-height: 2.9rem;
-    padding-left: .2rem;
     padding-right: .2rem;
-    border-radius: .65rem;
+    padding-left: .2rem;
+    border-radius: .55rem;
   }
 
   .agora-shell .famed-semester > span {
@@ -832,19 +802,15 @@ html.agora-theme-fallback .agora-shell *::after {
     padding: .15rem .25rem !important;
   }
 
-  .agora-shell .famed-schedule-summary h2 {
-    font-size: 1.35rem;
-  }
-
   .agora-shell .famed-schedule-stats {
-    margin-top: .8rem;
     gap: .35rem;
+    margin-top: .8rem;
   }
 
   .agora-shell .famed-stat {
     min-width: 0;
     padding: .75rem .9rem;
-    border-radius: .65rem;
+    border-radius: .55rem;
   }
 
   .agora-shell .famed-stat strong {
@@ -853,30 +819,18 @@ html.agora-theme-fallback .agora-shell *::after {
   }
 
   .agora-shell .famed-stat span {
+    overflow-wrap: anywhere;
     font-size: .6rem;
     line-height: 1.1;
-    overflow-wrap: anywhere;
   }
 
   .agora-shell .famed-discipline {
     padding: .75rem !important;
   }
 
-  .agora-shell .famed-discipline > div:first-child {
-    margin-bottom: .65rem;
-  }
-
-  .agora-shell .famed-discipline > div:last-child {
-    gap: .5rem;
-  }
-
   .agora-shell .famed-lesson-card,
   .agora-shell .famed-assessment {
     padding: .7rem !important;
-  }
-
-  .agora-shell .famed-lesson-card > div {
-    gap: .55rem;
   }
 
   .agora-shell .famed-status {
@@ -886,16 +840,22 @@ html.agora-theme-fallback .agora-shell *::after {
   }
 
   .agora-shell .famed-actions {
-    margin-top: .55rem;
     gap: .4rem;
+    margin-top: .55rem;
   }
 
   .agora-shell .famed-actions button {
     min-width: 0;
     min-height: 2.25rem;
     padding: .4rem .45rem;
-    white-space: normal;
     line-height: 1.15;
+    white-space: normal;
   }
+}
 
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: .01ms !important;
+  }
 }
