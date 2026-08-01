@@ -2,17 +2,19 @@ import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
 import QuestionAuditReport from '../admin/QuestionAuditReport.jsx';
 
+const QuestionCurationView = React.lazy(() => import('../question-factory/QuestionCurationView.jsx'));
+const EcgCaseBankView = React.lazy(() => import('../question-factory/EcgCaseBankView.jsx'));
+const CourseStudentsView = React.lazy(() => import('../admin/CourseStudentsView.jsx'));
+
 export default function SharedLibraryView() {
   const {
     isAdmin,
-    sharedLibraryAudienceMode,
     sharedLibraryTab,
     setSharedLibraryTab,
     setSharedLibraryActiveItemId,
     sharedLibraryConfig,
     sharedLibraryItems,
     vqBlocks,
-    vqLoading,
     sharedLibrarySubject,
     setSharedLibrarySubject,
     sharedLibrarySearch,
@@ -49,7 +51,6 @@ export default function SharedLibraryView() {
     resetSharedLibraryAnswers,
     purgeSharedLibrary,
     refreshSharedLibrary,
-    setSharedLibraryAudienceMode,
     setSharedLibraryGenerationStages,
     setSharedLibraryGenerationSubject,
     setSharedLibraryGenerationLesson,
@@ -79,12 +80,15 @@ export default function SharedLibraryView() {
     QuestionView,
     LoadingState,
     EmptyState,
+    UserIcon,
   } = useFeatureContext();
 
             const [questionAuditOpen, setQuestionAuditOpen] = React.useState(false);
-            const showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin';
+            const [factorySection, setFactorySection] = React.useState('create');
+            if (!isAdmin) return null;
+            const showSharedLibraryAdminTools = isAdmin;
             const tabs = [
-              { id:'apostila', label:'Questões', icon:<CheckCircle2 className="w-4 h-4"/> },
+              { id:'apostila', label:'Criar questões', icon:<CheckCircle2 className="w-4 h-4"/> },
               { id:'summary', label:'Bases internas', icon:<BookOpen className="w-4 h-4"/>, adminOnly:true },
             ];
             const visibleTabs = tabs.filter(tab => !tab.adminOnly || showSharedLibraryAdminTools);
@@ -189,6 +193,7 @@ export default function SharedLibraryView() {
               .filter(lesson => sharedLibraryGenerationSubject === 'all' || normalizeTextKey(lesson.subject) === normalizeTextKey(sharedLibraryGenerationSubject))
               .sort((a,b) => (sharedLessonOrder.get(sharedLibraryDocIdForLesson(a)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(sharedLibraryDocIdForLesson(b)) ?? Number.MAX_SAFE_INTEGER)
                 || String(a.title).localeCompare(String(b.title), 'pt'));
+            const factoryItems = displayedSharedLibraryItems.filter(item => itemQuestions(item).length > 0);
             const sharedLibraryFieldClass = `mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-yellow-600 disabled:bg-gray-800 disabled:text-gray-500':'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-yellow-500 disabled:bg-gray-100 disabled:text-gray-400'}`;
             const generationStageOptions = [
               { id:'summary', title:'Sumários internos', desc:'Base para questões e conferência. Prioridade máxima agora.' },
@@ -206,7 +211,7 @@ export default function SharedLibraryView() {
               if (currentSharedLibraryTab === 'summary') return (
                 <div className="desktop-content-limit">
                   <div className="mb-5 flex items-center justify-between gap-3">
-                    <button onClick={()=>setSharedLibraryActiveItemId(null)} className={`flex items-center gap-2 font-bold ${darkMode?'text-gray-400':'text-gray-600'}`}><ArrowLeft className="w-4 h-4"/>Biblioteca</button>
+                    <button onClick={()=>setSharedLibraryActiveItemId(null)} className={`flex items-center gap-2 font-bold ${darkMode?'text-gray-400':'text-gray-600'}`}><ArrowLeft className="w-4 h-4"/>Fábrica de Questões</button>
                     {showSharedLibraryAdminTools&&<button onClick={()=>restartSharedLibraryItem(activeItem)} disabled={sharedLibraryRun.running} className="inline-flex items-center gap-2 rounded-lg border border-red-500/50 px-3 py-2 text-xs font-bold text-red-500 disabled:opacity-40"><RotateCcw className="w-4 h-4"/>Apagar e gerar novamente</button>}
                   </div>
                   <article className={`rounded-2xl border p-5 md:p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
@@ -220,7 +225,7 @@ export default function SharedLibraryView() {
               return <QuestionView
                 title={activeItem.title}
                 onBack={()=>setSharedLibraryActiveItemId(null)}
-                backLabel="Biblioteca"
+                backLabel="Fábrica de Questões"
                 questions={questions}
                 answers={sharedLibraryProgress[activeItem.id]?.answers || {}}
                 favorites={[]}
@@ -238,28 +243,83 @@ export default function SharedLibraryView() {
                 adminQuestionExplanations={showSharedLibraryAdminTools}
               />;
             }
+            const factoryNavigation = showSharedLibraryAdminTools ? (
+              <nav className={`grid grid-cols-2 gap-1 rounded-xl border p-1 md:grid-cols-5 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`} aria-label="Etapas da Fábrica de Questões">
+                {[
+                  { id:'create', label:'Criar', icon:<CheckCircle2 className="h-4 w-4"/> },
+                  { id:'curation', label:'Curadoria', icon:<SettingsIcon className="h-4 w-4"/> },
+                  { id:'ecg', label:'Banco de ECG', icon:<BookOpen className="h-4 w-4"/> },
+                  { id:'students', label:'Alunos', icon:<UserIcon className="h-4 w-4"/> },
+                  { id:'audit', label:'Auditoria', icon:<ShieldAlert className="h-4 w-4"/> },
+                ].map(section => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={()=>{
+                      if (section.id === 'audit') {
+                        setQuestionAuditOpen(true);
+                        return;
+                      }
+                      setFactorySection(section.id);
+                      setSharedLibraryActiveItemId(null);
+                    }}
+                    className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-bold md:text-sm ${
+                      (factorySection === section.id || (section.id === 'audit' && questionAuditOpen))
+                        ? darkMode?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'
+                        : darkMode?'text-gray-400 hover:text-gray-200':'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {section.icon}{section.label}
+                  </button>
+                ))}
+              </nav>
+            ) : null;
+            if (showSharedLibraryAdminTools && factorySection !== 'create') {
+              return (
+                <div className="desktop-content-limit space-y-5">
+                  <section className={`rounded-2xl border p-5 md:p-7 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                    <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Inteligência do banco</p>
+                    <h2 className="mt-1 font-serif text-3xl font-bold">Fábrica de Questões</h2>
+                    <p className={`mt-2 max-w-3xl text-sm ${darkMode?'text-gray-400':'text-gray-600'}`}>
+                      Produção e curadoria trabalham sobre as mesmas questões. Ao concluir uma aula, a seleção pedagógica é publicada automaticamente.
+                    </p>
+                  </section>
+                  {factoryNavigation}
+                  {factorySection === 'curation'
+                    ? <React.Suspense fallback={<LoadingState message="Abrindo Curadoria..."/>}>
+                        <QuestionCurationView items={factoryItems} subjectOrder={subjectOrder}/>
+                      </React.Suspense>
+                    : factorySection === 'students'
+                        ? <React.Suspense fallback={<LoadingState message="Carregando alunos..."/>}>
+                            <CourseStudentsView/>
+                          </React.Suspense>
+                        : <React.Suspense fallback={<LoadingState message="Abrindo Banco de ECG..."/>}>
+                            <EcgCaseBankView darkMode={darkMode}/>
+                          </React.Suspense>}
+                  {questionAuditOpen&&(
+                    <QuestionAuditReport
+                      isAdmin={isAdmin}
+                      sharedLibraryItems={sharedLibraryItems}
+                      vqBlocks={vqBlocks}
+                      darkMode={darkMode}
+                      onClose={()=>setQuestionAuditOpen(false)}
+                    />
+                  )}
+                </div>
+              );
+            }
             return (
               <div className="desktop-content-limit space-y-5">
                 <section className={`rounded-2xl border p-5 md:p-7 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                   <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Banco compartilhado</p>
-                      <h2 className="font-serif text-3xl font-bold mt-1">Biblioteca</h2>
-                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Questões do curso organizadas por aula. O banco é comum; respostas e progresso continuam pessoais.</p>
+                      <p className="text-xs font-bold uppercase tracking-[.18em] text-yellow-600">Inteligência do banco</p>
+                      <h2 className="font-serif text-3xl font-bold mt-1">Fábrica de Questões</h2>
+                      <p className={`text-sm mt-2 max-w-2xl ${darkMode?'text-gray-400':'text-gray-600'}`}>Produza, classifique e selecione o banco sem misturar conteúdo global com progresso individual.</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {isAdmin&&(
-                        <div className={`inline-flex items-center rounded-xl border p-1 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
-                          {[['student','Prévia aluno'],['admin','Admin']].map(([mode,label])=>(
-                            <button key={mode} onClick={()=>setSharedLibraryAudienceMode(mode)} className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${sharedLibraryAudienceMode===mode?(darkMode?'bg-yellow-900/50 text-yellow-300':'bg-yellow-100 text-yellow-800'):(darkMode?'text-gray-400 hover:text-gray-200':'text-gray-600 hover:text-gray-900')}`}>{label}</button>
-                          ))}
-                        </div>
-                      )}
-                      {showSharedLibraryAdminTools&&<button onClick={()=>setQuestionAuditOpen(true)} disabled={sharedLibraryLoading||vqLoading} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-yellow-800/80 text-yellow-300 hover:bg-yellow-950/30':'border-yellow-300 text-yellow-800 hover:bg-yellow-50'}`}>
-                        {sharedLibraryLoading||vqLoading?<Spinner className="w-4 h-4"/>:<ShieldAlert className="w-4 h-4"/>}{sharedLibraryLoading||vqLoading?'Carregando questÃµes...':'Auditar questÃµes'}
-                      </button>}
                       {showSharedLibraryAdminTools&&<button onClick={purgeSharedLibrary} disabled={sharedLibraryRun.running||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 ${darkMode?'border-red-900/80 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}>
-                        {sharedLibraryPurging?<Spinner className="w-4 h-4"/>:<Trash2 className="w-4 h-4"/>}{sharedLibraryPurging?'Apagando...':'Apagar Biblioteca antiga'}
+                        {sharedLibraryPurging?<Spinner className="w-4 h-4"/>:<Trash2 className="w-4 h-4"/>}{sharedLibraryPurging?'Apagando...':'Apagar banco antigo'}
                       </button>}
                       <button onClick={refreshSharedLibrary} disabled={sharedLibraryLoading||sharedLibraryPurging} className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-sm font-bold ${darkMode?'border-gray-600':'border-gray-300'}`}>
                         {sharedLibraryLoading?<Spinner className="w-4 h-4"/>:<RotateCcw className="w-4 h-4"/>}Atualizar
@@ -270,11 +330,13 @@ export default function SharedLibraryView() {
                     <div className={`mt-4 rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${sharedLibraryError ? (darkMode?'border-red-900/60 bg-red-950/20 text-red-200':'border-red-200 bg-red-50 text-red-800') : (darkMode?'border-gray-700 bg-gray-900 text-gray-300':'border-gray-200 bg-gray-50 text-gray-700')}`}>
                       {sharedLibraryLoading ? <Spinner className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-600"/> : <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0"/>}
                       <span className="min-w-0 flex-1">
-                        {sharedLibraryLoading ? 'Carregando Biblioteca...' : `Nao consegui sincronizar a Biblioteca (${sharedLibraryError}). Confira login, regras do Firestore e conexão.`}
+                        {sharedLibraryLoading ? 'Carregando a Fábrica...' : `Não consegui sincronizar a Fábrica (${sharedLibraryError}). Confira login, regras do Firestore e conexão.`}
                       </span>
                     </div>
                   )}
                 </section>
+
+                {factoryNavigation}
 
                 <div className={`grid w-full grid-cols-2 gap-1 p-1 rounded-xl border ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                   {visibleTabs.map(tab=><button key={tab.id} disabled={tab.disabled} onClick={()=>{setSharedLibraryTab(tab.id);setSharedLibraryActiveItemId(null);}}
@@ -285,13 +347,13 @@ export default function SharedLibraryView() {
 
                 {showSharedLibraryAdminTools&&(
                   <details className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
-                    <summary className="cursor-pointer font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4"/>Automação da Biblioteca</summary>
+                    <summary className="cursor-pointer font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4"/>Automação da Fábrica</summary>
                     <div className="mt-5 grid lg:grid-cols-[1.05fr_.95fr] gap-5">
                       <div className="space-y-4">
                         <div className={`rounded-2xl border p-4 ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-gray-50'}`}>
                           <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Gerar conteúdo do curso</p>
                           <h3 className="mt-1 font-serif text-xl font-bold">Prioridade: sumários e questões</h3>
-                          <p className={`mt-1 text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>A automação alimenta o Portal do Curso e a Biblioteca com bases internas e questões prontas.</p>
+                          <p className={`mt-1 text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>A automação alimenta o Portal do Curso com bases internas e questões prontas.</p>
                           <div className="mt-4 grid gap-3">
                             <div>
                               <p className="text-xs font-bold">O que gerar</p>
@@ -368,7 +430,7 @@ export default function SharedLibraryView() {
                     {showSharedLibraryAdminTools&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>
                   <div className="space-y-2">
-                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há questões nesta seção" description={showSharedLibraryAdminTools?'Use a automação acima para publicar as primeiras questões.':'O banco está sendo preparado pelo professor.'}/>:availableItems.map(item=>{
+                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há questões nesta seção" description="Use a automação acima para publicar as primeiras questões."/>:availableItems.map(item=>{
                       const questions = itemQuestions(item);
                       const answered = Object.keys(sharedLibraryProgress[item.id]?.answers || {}).filter(id=>questions.some(q=>String(q.id)===String(id))).length;
                       return <button key={item.id} onClick={()=>setSharedLibraryActiveItemId(item.id)} className={`w-full rounded-xl border p-4 text-left flex items-center gap-3 transition-colors ${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'}`}>

@@ -53,17 +53,26 @@ const QuestionStyleSelector = ({ value='mixed', onChange, darkMode=false }) => (
     ))}
   </div>
 );
-const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose, currentReview, notebookIds=[], isAdmin=false }) => {
+const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose, currentReview, notebookIds=[], isAdmin=false, source='personal' }) => {
   const dm = darkMode;
-  const SR_LABELS = ['3d','7d','14d','30d','90d'];
-  const wrongIds = questions.filter(q => answers[q.id] && !isAnswerCorrect(q, answers[q.id])).map(q => q.id);
+  const metadataBlocksReview = question => {
+    const policy = question?.learningPolicy;
+    if (source === 'curso' && !policy) return true;
+    return !!policy && (
+      policy.tier === 'disabled'
+      || policy.reviewEligible === false
+      || ['deprecated', 'review_required'].includes(policy.status)
+    );
+  };
+  const selectableQuestions = questions.filter(question => !metadataBlocksReview(question));
+  const wrongIds = selectableQuestions.filter(q => answers[q.id] && !isAnswerCorrect(q, answers[q.id])).map(q => q.id);
 
   // currentReview: object { [qId]: { interval, dueDate } } from reviewQueue[aulaId][blockId]
   const inReview = currentReview || {};
   const inReviewIds = Object.keys(inReview);
 
   // Ao gerenciar uma fila existente, não pré-seleciona questões novas.
-  const [selected, setSelected] = useState(() => inReviewIds.length ? [] : questions.map(q=>q.id).filter(id => !inReviewIds.includes(id)));
+  const [selected, setSelected] = useState(() => inReviewIds.length ? [] : selectableQuestions.map(q=>q.id).filter(id => !inReviewIds.includes(id)));
   const [toRemove, setToRemove] = useState([]);
 
   const toggle = (id) => {
@@ -83,10 +92,12 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
   const dueNow = (qId) => inReview[qId] && inReview[qId].dueDate <= Date.now();
   const dueLabel = (qId) => {
     if (!inReview[qId]) return null;
-    const days = Math.ceil((inReview[qId].dueDate - Date.now()) / 86400000);
-    const interval = SR_LABELS[inReview[qId].interval] || '?';
-    if (days <= 0) return `vence hoje · intervalo ${interval}`;
-    return `em ${days}d · intervalo ${interval}`;
+    const item = inReview[qId];
+    const days = Math.ceil((item.dueDate - Date.now()) / 86400000);
+    const intervalDays = Number(item.fsrs?.intervalDays ?? item.intervalDays);
+    const intervalLabel = Number.isFinite(intervalDays) && intervalDays > 0 ? ` · intervalo FSRS ${intervalDays}d` : '';
+    if (days <= 0) return `vence hoje${intervalLabel}`;
+    return `em ${days}d${intervalLabel}`;
   };
 
   const addCount = selected.length;
@@ -100,20 +111,20 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
 
         <div className={`px-5 py-4 border-b flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <h3 className="font-serif font-bold text-lg text-yellow-600 flex items-center gap-2">
-            <RepeatIcon className="w-5 h-5"/> Revisão Espaçada
+            <RepeatIcon className="w-5 h-5"/> Revisão
           </h3>
           <p className={`text-xs mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>
             {inReviewIds.length > 0
-              ? <>{inReviewIds.length} questão{inReviewIds.length!==1?'s':''} já na fila · Acertos: 3→7→14→30→90 dias</>
-              : <>Questões selecionadas voltarão em <strong>3 dias</strong>. Acertos avançam o intervalo.</>
+              ? <>{inReviewIds.length} questão{inReviewIds.length!==1?'s':''} ativa{inReviewIds.length!==1?'s':''} · O FSRS recalcula cada próxima data após a resposta.</>
+              : <>Questões escolhidas terão o primeiro vencimento em <strong>3 dias</strong>; depois, o FSRS assume cada cartão.</>
             }
           </p>
         </div>
 
         <div className="flex gap-2 px-5 pt-3 pb-2 flex-shrink-0 flex-wrap">
-          <button onClick={()=>setSelected(questions.filter(q=>!inReviewIds.includes(q.id)).map(q=>q.id))}
+          <button onClick={()=>setSelected(selectableQuestions.filter(q=>!inReviewIds.includes(q.id)).map(q=>q.id))}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-gray-600 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            Todas novas ({questions.filter(q=>!inReviewIds.includes(q.id)).length})
+            Todas novas ({selectableQuestions.filter(q=>!inReviewIds.includes(q.id)).length})
           </button>
           <button onClick={()=>setSelected((isAdmin ? notebookIds : wrongIds).filter(id=>!inReviewIds.includes(id)))}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${dm?'border-red-700/50 text-red-400 hover:bg-red-900/20':'border-red-200 text-red-600 hover:bg-red-50'}`}>
@@ -129,6 +140,7 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
 
         <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-1.5 min-h-0">
           {questions.map((q, i) => {
+            const metadataBlocked = metadataBlocksReview(q);
             const isInReview = inReviewIds.includes(q.id);
             const isWrong = wrongIds.includes(q.id);
             const isCorrect = answers[q.id] && isAnswerCorrect(q, answers[q.id]);
@@ -137,12 +149,13 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
             const isDue = dueNow(q.id);
 
             return (
-              <button key={q.id} onClick={()=>toggle(q.id)}
+              <button key={q.id} onClick={()=>toggle(q.id)} disabled={metadataBlocked}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all
                   ${isInReview && !willRemove ? (dm?'border-yellow-700/50 bg-yellow-900/10':'border-yellow-200 bg-yellow-50/50') : ''}
                   ${willRemove ? (dm?'border-red-700/50 bg-red-900/10 opacity-60':'border-red-200 bg-red-50 opacity-60') : ''}
                   ${willAdd ? (dm?'border-yellow-500/60 bg-yellow-900/15':'border-yellow-400 bg-yellow-50') : ''}
                   ${!isInReview && !willAdd ? (dm?'border-gray-700 bg-gray-800/50':'border-gray-100 bg-gray-50') : ''}
+                  ${metadataBlocked ? 'cursor-not-allowed opacity-45' : ''}
                 `}>
                 <div className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-all
                   ${isInReview && !willRemove ? 'bg-yellow-600 border-yellow-600' : ''}
@@ -159,7 +172,9 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
                     <span className="opacity-40 mr-1">Q{i+1}</span>
                     {q.statement.replace(/\n/g,' ').substring(0,80)}…
                   </p>
-                  {isInReview && (
+                  {metadataBlocked ? (
+                    <p className="mt-0.5 text-[10px] font-bold text-orange-500">Aguardando curadoria publicada</p>
+                  ) : isInReview && (
                     <p className={`text-[10px] mt-0.5 ${isDue?(dm?'text-yellow-400':'text-yellow-600'):(dm?'text-gray-500':'text-gray-400')}`}>
                       {isDue ? '🔔 ' : ''}{dueLabel(q.id)}
                     </p>

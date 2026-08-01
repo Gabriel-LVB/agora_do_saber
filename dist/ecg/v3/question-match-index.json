@@ -1,0 +1,4469 @@
+{
+  "schemaVersion": 1,
+  "matchingVersion": "agora-ecg-question-matching-v1",
+  "datasetId": "agora_ecg_cases_owner_provided_v1",
+  "caseCount": 150,
+  "conceptCount": 89,
+  "concepts": [
+    {
+      "id": "ecg",
+      "label": "Eletrocardiograma",
+      "aliases": [],
+      "parentId": null
+    },
+    {
+      "id": "ecg.normal",
+      "label": "ECG normal e variantes",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.normal.normal",
+      "label": "ECG normal",
+      "aliases": [
+        "normal"
+      ],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.normal.sinus_arrhythmia",
+      "label": "Arritmia sinusal",
+      "aliases": [],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.normal.early_repolarization",
+      "label": "Repolarização precoce",
+      "aliases": [],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.normal.athlete",
+      "label": "ECG do atleta",
+      "aliases": [],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.normal.axis_right_variant",
+      "label": "Eixo à direita como variante",
+      "aliases": [],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.normal.t_wave_variant",
+      "label": "Variação normal de onda T",
+      "aliases": [],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.normal.artifact",
+      "label": "Artefato eletrocardiográfico",
+      "aliases": [],
+      "parentId": "ecg.normal"
+    },
+    {
+      "id": "ecg.rhythm",
+      "label": "Ritmo e frequência",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.rhythm.sinus",
+      "label": "Ritmo sinusal",
+      "aliases": [],
+      "parentId": "ecg.rhythm"
+    },
+    {
+      "id": "ecg.rhythm.sinus_tachycardia",
+      "label": "Taquicardia sinusal",
+      "aliases": [],
+      "parentId": "ecg.rhythm"
+    },
+    {
+      "id": "ecg.rhythm.atrial_ectopic",
+      "label": "Ritmo/taquicardia atrial ectópica",
+      "aliases": [],
+      "parentId": "ecg.rhythm"
+    },
+    {
+      "id": "ecg.rhythm.junctional",
+      "label": "Ritmo/escape juncional",
+      "aliases": [],
+      "parentId": "ecg.rhythm"
+    },
+    {
+      "id": "ecg.rhythm.accelerated_idioventricular",
+      "label": "Ritmo idioventricular acelerado",
+      "aliases": [
+        "RIVA"
+      ],
+      "parentId": "ecg.rhythm"
+    },
+    {
+      "id": "ecg.arrhythmia",
+      "label": "Arritmias",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.arrhythmia.af",
+      "label": "Fibrilação atrial",
+      "aliases": [
+        "FA"
+      ],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.flutter",
+      "label": "Flutter atrial",
+      "aliases": [],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.atrial_tachycardia",
+      "label": "Taquicardia atrial",
+      "aliases": [],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.svt",
+      "label": "Taquicardia supraventricular",
+      "aliases": [
+        "TSV"
+      ],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.avnrt",
+      "label": "Taquicardia por reentrada nodal",
+      "aliases": [
+        "TRN",
+        "AVNRT"
+      ],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.pac",
+      "label": "Extrassístole atrial",
+      "aliases": [],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.pvc",
+      "label": "Extrassístole ventricular",
+      "aliases": [
+        "EV",
+        "PVC"
+      ],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.vt",
+      "label": "Taquicardia ventricular",
+      "aliases": [
+        "TV"
+      ],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.vf",
+      "label": "Fibrilação ventricular",
+      "aliases": [
+        "FV"
+      ],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.arrhythmia.wide_complex_tachycardia",
+      "label": "Taquicardia de QRS largo",
+      "aliases": [],
+      "parentId": "ecg.arrhythmia"
+    },
+    {
+      "id": "ecg.conduction",
+      "label": "Distúrbios de condução",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.conduction.avb1",
+      "label": "Bloqueio AV de primeiro grau",
+      "aliases": [
+        "BAV 1º"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.avb2_wenckebach",
+      "label": "Bloqueio AV de segundo grau Mobitz I/Wenckebach",
+      "aliases": [
+        "Mobitz I"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.avb2_mobitz2",
+      "label": "Bloqueio AV de segundo grau Mobitz II",
+      "aliases": [
+        "Mobitz II"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.avb2_2to1",
+      "label": "Bloqueio AV 2:1",
+      "aliases": [],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.avb3",
+      "label": "Bloqueio AV total/terceiro grau",
+      "aliases": [
+        "BAVT"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.rbbb",
+      "label": "Bloqueio de ramo direito",
+      "aliases": [
+        "BRD",
+        "RBBB"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.incomplete_rbbb",
+      "label": "Bloqueio de ramo direito incompleto",
+      "aliases": [],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.lbbb",
+      "label": "Bloqueio de ramo esquerdo",
+      "aliases": [
+        "BRE",
+        "LBBB"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.lafb",
+      "label": "Bloqueio divisional anterossuperior",
+      "aliases": [
+        "BDAIS",
+        "BDAS",
+        "LAFB"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.lpfb",
+      "label": "Bloqueio divisional posteroinferior",
+      "aliases": [
+        "BDPI",
+        "LPFB"
+      ],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.bifascicular",
+      "label": "Bloqueio bifascicular",
+      "aliases": [],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.conduction.trifascicular",
+      "label": "Bloqueio trifascicular",
+      "aliases": [],
+      "parentId": "ecg.conduction"
+    },
+    {
+      "id": "ecg.preexcitation",
+      "label": "Pré-excitação",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.preexcitation.wpw_a",
+      "label": "Wolff-Parkinson-White tipo A",
+      "aliases": [
+        "WPW A"
+      ],
+      "parentId": "ecg.preexcitation"
+    },
+    {
+      "id": "ecg.preexcitation.wpw_b",
+      "label": "Wolff-Parkinson-White tipo B",
+      "aliases": [
+        "WPW B"
+      ],
+      "parentId": "ecg.preexcitation"
+    },
+    {
+      "id": "ecg.preexcitation.lgl",
+      "label": "Síndrome de Lown-Ganong-Levine",
+      "aliases": [
+        "LGL"
+      ],
+      "parentId": "ecg.preexcitation"
+    },
+    {
+      "id": "ecg.channelopathy",
+      "label": "Canalopatias",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.channelopathy.long_qt",
+      "label": "Síndrome/intervalo QT longo",
+      "aliases": [],
+      "parentId": "ecg.channelopathy"
+    },
+    {
+      "id": "ecg.channelopathy.torsades",
+      "label": "Torsades de pointes",
+      "aliases": [],
+      "parentId": "ecg.channelopathy"
+    },
+    {
+      "id": "ecg.channelopathy.brugada",
+      "label": "Síndrome de Brugada",
+      "aliases": [],
+      "parentId": "ecg.channelopathy"
+    },
+    {
+      "id": "ecg.ischemia",
+      "label": "Isquemia e infarto",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.ischemia.stemi",
+      "label": "IAM com supradesnível de ST",
+      "aliases": [
+        "IAMST",
+        "STEMI"
+      ],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.ischemia.stemi_anterior",
+      "label": "IAM com supra anterior",
+      "aliases": [],
+      "parentId": "ecg.ischemia.stemi"
+    },
+    {
+      "id": "ecg.ischemia.stemi_inferior",
+      "label": "IAM com supra inferior",
+      "aliases": [],
+      "parentId": "ecg.ischemia.stemi"
+    },
+    {
+      "id": "ecg.ischemia.stemi_anterolateral",
+      "label": "IAM com supra anterolateral",
+      "aliases": [],
+      "parentId": "ecg.ischemia.stemi"
+    },
+    {
+      "id": "ecg.ischemia.nstemi",
+      "label": "SCA/IAM sem supradesnível de ST",
+      "aliases": [
+        "IAMSST",
+        "NSTEMI"
+      ],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.ischemia.ischemia",
+      "label": "Isquemia miocárdica",
+      "aliases": [],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.ischemia.old_infarct",
+      "label": "Infarto antigo/ondas Q",
+      "aliases": [],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.ischemia.posterior_infarct",
+      "label": "Infarto posterior",
+      "aliases": [],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.ischemia.prinzmetal",
+      "label": "Angina variante de Prinzmetal",
+      "aliases": [],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.ischemia.aneurysm",
+      "label": "Aneurisma ventricular pós-infarto",
+      "aliases": [],
+      "parentId": "ecg.ischemia"
+    },
+    {
+      "id": "ecg.repolarization",
+      "label": "Alterações de repolarização",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.repolarization.st_elevation",
+      "label": "Elevação do segmento ST",
+      "aliases": [],
+      "parentId": "ecg.repolarization"
+    },
+    {
+      "id": "ecg.repolarization.st_depression",
+      "label": "Depressão do segmento ST",
+      "aliases": [],
+      "parentId": "ecg.repolarization"
+    },
+    {
+      "id": "ecg.repolarization.t_inversion",
+      "label": "Inversão de onda T",
+      "aliases": [],
+      "parentId": "ecg.repolarization"
+    },
+    {
+      "id": "ecg.repolarization.nonspecific",
+      "label": "Alterações inespecíficas de ST-T",
+      "aliases": [],
+      "parentId": "ecg.repolarization"
+    },
+    {
+      "id": "ecg.chamber",
+      "label": "Sobrecargas de câmaras",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.chamber.lvh",
+      "label": "Sobrecarga/hipertrofia ventricular esquerda",
+      "aliases": [
+        "SVE",
+        "HVE"
+      ],
+      "parentId": "ecg.chamber"
+    },
+    {
+      "id": "ecg.chamber.rvh",
+      "label": "Sobrecarga/hipertrofia ventricular direita",
+      "aliases": [
+        "SVD",
+        "HVD"
+      ],
+      "parentId": "ecg.chamber"
+    },
+    {
+      "id": "ecg.chamber.lae",
+      "label": "Sobrecarga atrial esquerda",
+      "aliases": [
+        "SAE"
+      ],
+      "parentId": "ecg.chamber"
+    },
+    {
+      "id": "ecg.chamber.rae",
+      "label": "Sobrecarga atrial direita",
+      "aliases": [
+        "SAD"
+      ],
+      "parentId": "ecg.chamber"
+    },
+    {
+      "id": "ecg.cardiomyopathy",
+      "label": "Cardiomiopatias",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.cardiomyopathy.hcm",
+      "label": "Cardiomiopatia hipertrófica",
+      "aliases": [
+        "CMH"
+      ],
+      "parentId": "ecg.cardiomyopathy"
+    },
+    {
+      "id": "ecg.cardiomyopathy.dcm",
+      "label": "Cardiomiopatia dilatada",
+      "aliases": [
+        "CMD"
+      ],
+      "parentId": "ecg.cardiomyopathy"
+    },
+    {
+      "id": "ecg.metabolic",
+      "label": "Metabólico, drogas e sistêmico",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.metabolic.hyperkalemia",
+      "label": "Hipercalemia",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.metabolic.hypokalemia",
+      "label": "Hipocalemia",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.metabolic.digitalis",
+      "label": "Efeito/intoxicação digitálica",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.metabolic.hypothermia",
+      "label": "Hipotermia",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.metabolic.lithium",
+      "label": "Efeito do lítio",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.metabolic.sotalol",
+      "label": "Efeito do sotalol",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.metabolic.cns_t_wave",
+      "label": "Alterações de onda T por evento neurológico",
+      "aliases": [],
+      "parentId": "ecg.metabolic"
+    },
+    {
+      "id": "ecg.pericardium",
+      "label": "Pericárdio",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.pericardium.pericarditis",
+      "label": "Pericardite",
+      "aliases": [],
+      "parentId": "ecg.pericardium"
+    },
+    {
+      "id": "ecg.pericardium.effusion",
+      "label": "Derrame pericárdico",
+      "aliases": [],
+      "parentId": "ecg.pericardium"
+    },
+    {
+      "id": "ecg.pulmonary",
+      "label": "Pulmão e coração direito",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.pulmonary.pe",
+      "label": "Embolia pulmonar",
+      "aliases": [
+        "TEP"
+      ],
+      "parentId": "ecg.pulmonary"
+    },
+    {
+      "id": "ecg.pulmonary.copd",
+      "label": "DPOC/cor pulmonale",
+      "aliases": [
+        "DPOC"
+      ],
+      "parentId": "ecg.pulmonary"
+    },
+    {
+      "id": "ecg.pacing",
+      "label": "Estimulação cardíaca",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.pacing.ventricular",
+      "label": "Marca-passo ventricular",
+      "aliases": [],
+      "parentId": "ecg.pacing"
+    },
+    {
+      "id": "ecg.anatomy",
+      "label": "Posição/anatomia",
+      "aliases": [],
+      "parentId": "ecg"
+    },
+    {
+      "id": "ecg.anatomy.dextrocardia",
+      "label": "Dextrocardia",
+      "aliases": [],
+      "parentId": "ecg.anatomy"
+    }
+  ],
+  "cases": [
+    {
+      "id": "ECG001",
+      "image": {
+        "url": "/ecg/v3/assets/ECG001/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG002",
+      "image": {
+        "url": "/ecg/v3/assets/ECG002/ecg_principal.jpg",
+        "width": 781,
+        "height": 347
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG003",
+      "image": {
+        "url": "/ecg/v3/assets/ECG003/ecg_principal.jpg",
+        "width": 781,
+        "height": 458
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb3",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG004",
+      "image": {
+        "url": "/ecg/v3/assets/ECG004/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_anterior",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG005",
+      "image": {
+        "url": "/ecg/v3/assets/ECG005/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.metabolic.digitalis",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG006",
+      "image": {
+        "url": "/ecg/v3/assets/ECG006/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.avnrt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.svt",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG007",
+      "image": {
+        "url": "/ecg/v3/assets/ECG007/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG008",
+      "image": {
+        "url": "/ecg/v3/assets/ECG008/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lpfb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.avb3",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.conduction.bifascicular",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG009",
+      "image": {
+        "url": "/ecg/v3/assets/ECG009/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.rvh",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG010",
+      "image": {
+        "url": "/ecg/v3/assets/ECG010/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG011",
+      "image": {
+        "url": "/ecg/v3/assets/ECG011/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.atrial_tachycardia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pac",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG012",
+      "image": {
+        "url": "/ecg/v3/assets/ECG012/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.chamber.lvh",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG013",
+      "image": {
+        "url": "/ecg/v3/assets/ECG013/ecg_principal.jpg",
+        "width": 781,
+        "height": 441
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.flutter",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG014",
+      "image": {
+        "url": "/ecg/v3/assets/ECG014/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_inferior",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG015",
+      "image": {
+        "url": "/ecg/v3/assets/ECG015/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.wpw_a",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG016",
+      "image": {
+        "url": "/ecg/v3/assets/ECG016/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG017",
+      "image": {
+        "url": "/ecg/v3/assets/ECG017/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_anterolateral",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG018",
+      "image": {
+        "url": "/ecg/v3/assets/ECG018/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.lvh",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG019",
+      "image": {
+        "url": "/ecg/v3/assets/ECG019/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG020",
+      "image": {
+        "url": "/ecg/v3/assets/ECG020/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb2_wenckebach",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.stemi_inferior",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG021",
+      "image": {
+        "url": "/ecg/v3/assets/ECG021/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.normal.sinus_arrhythmia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG022",
+      "image": {
+        "url": "/ecg/v3/assets/ECG022/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.nstemi",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG023",
+      "image": {
+        "url": "/ecg/v3/assets/ECG023/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG024",
+      "image": {
+        "url": "/ecg/v3/assets/ECG024/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.metabolic.digitalis",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG025",
+      "image": {
+        "url": "/ecg/v3/assets/ECG025/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG026",
+      "image": {
+        "url": "/ecg/v3/assets/ECG026/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG027",
+      "image": {
+        "url": "/ecg/v3/assets/ECG027/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.flutter",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG028",
+      "image": {
+        "url": "/ecg/v3/assets/ECG028/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.sinus_tachycardia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.pulmonary.pe",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG029",
+      "image": {
+        "url": "/ecg/v3/assets/ECG029/ecg_principal.jpg",
+        "width": 781,
+        "height": 439
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.nstemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG030",
+      "image": {
+        "url": "/ecg/v3/assets/ECG030/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG031",
+      "image": {
+        "url": "/ecg/v3/assets/ECG031/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG032",
+      "image": {
+        "url": "/ecg/v3/assets/ECG032/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_inferior",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG033",
+      "image": {
+        "url": "/ecg/v3/assets/ECG033/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG034",
+      "image": {
+        "url": "/ecg/v3/assets/ECG034/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb2_2to1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG035",
+      "image": {
+        "url": "/ecg/v3/assets/ECG035/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.lvh",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG036",
+      "image": {
+        "url": "/ecg/v3/assets/ECG036/ecg_principal.jpg",
+        "width": 781,
+        "height": 377
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG037",
+      "image": {
+        "url": "/ecg/v3/assets/ECG037/ecg_principal.jpg",
+        "width": 781,
+        "height": 365
+      },
+      "concepts": [
+        {
+          "id": "ecg.repolarization.nonspecific",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG038",
+      "image": {
+        "url": "/ecg/v3/assets/ECG038/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb2_wenckebach",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.conduction.avb2_mobitz2",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG039",
+      "image": {
+        "url": "/ecg/v3/assets/ECG039/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG040",
+      "image": {
+        "url": "/ecg/v3/assets/ECG040/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.atrial_ectopic",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG041",
+      "image": {
+        "url": "/ecg/v3/assets/ECG041/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.anatomy.dextrocardia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG042",
+      "image": {
+        "url": "/ecg/v3/assets/ECG042/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.metabolic.digitalis",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG043",
+      "image": {
+        "url": "/ecg/v3/assets/ECG043/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG044",
+      "image": {
+        "url": "/ecg/v3/assets/ECG044/ecg_principal.jpg",
+        "width": 781,
+        "height": 377
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG045",
+      "image": {
+        "url": "/ecg/v3/assets/ECG045/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG046",
+      "image": {
+        "url": "/ecg/v3/assets/ECG046/ecg_principal.jpg",
+        "width": 781,
+        "height": 439
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG047",
+      "image": {
+        "url": "/ecg/v3/assets/ECG047/ecg_principal.jpg",
+        "width": 781,
+        "height": 415
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.stemi_anterolateral",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG048",
+      "image": {
+        "url": "/ecg/v3/assets/ECG048/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.repolarization.nonspecific",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG049",
+      "image": {
+        "url": "/ecg/v3/assets/ECG049/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG050",
+      "image": {
+        "url": "/ecg/v3/assets/ECG050/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.avnrt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.svt",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG051",
+      "image": {
+        "url": "/ecg/v3/assets/ECG051/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.repolarization.nonspecific",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG052",
+      "image": {
+        "url": "/ecg/v3/assets/ECG052/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.sinus_tachycardia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.chamber.rvh",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.pulmonary.copd",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG053",
+      "image": {
+        "url": "/ecg/v3/assets/ECG053/ecg_principal.jpg",
+        "width": 781,
+        "height": 377
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.aneurysm",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG054",
+      "image": {
+        "url": "/ecg/v3/assets/ECG054/ecg_principal.jpg",
+        "width": 781,
+        "height": 439
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb3",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG055",
+      "image": {
+        "url": "/ecg/v3/assets/ECG055/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb2_mobitz2",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.bifascicular",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG056",
+      "image": {
+        "url": "/ecg/v3/assets/ECG056/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG057",
+      "image": {
+        "url": "/ecg/v3/assets/ECG057/ecg_principal.jpg",
+        "width": 781,
+        "height": 421
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.vf",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG058",
+      "image": {
+        "url": "/ecg/v3/assets/ECG058/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG059",
+      "image": {
+        "url": "/ecg/v3/assets/ECG059/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG060",
+      "image": {
+        "url": "/ecg/v3/assets/ECG060/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.pulmonary.copd",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG061",
+      "image": {
+        "url": "/ecg/v3/assets/ECG061/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.sinus_tachycardia",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG062",
+      "image": {
+        "url": "/ecg/v3/assets/ECG062/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.bifascicular",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG063",
+      "image": {
+        "url": "/ecg/v3/assets/ECG063/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.t_wave_variant",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG064",
+      "image": {
+        "url": "/ecg/v3/assets/ECG064/ecg_principal.jpg",
+        "width": 703,
+        "height": 392
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.wpw_b",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG065",
+      "image": {
+        "url": "/ecg/v3/assets/ECG065/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.flutter",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG066",
+      "image": {
+        "url": "/ecg/v3/assets/ECG066/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG067",
+      "image": {
+        "url": "/ecg/v3/assets/ECG067/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.junctional",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG068",
+      "image": {
+        "url": "/ecg/v3/assets/ECG068/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_anterolateral",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG069",
+      "image": {
+        "url": "/ecg/v3/assets/ECG069/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.atrial_tachycardia",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG070",
+      "image": {
+        "url": "/ecg/v3/assets/ECG070/ecg_principal.jpg",
+        "width": 781,
+        "height": 314
+      },
+      "concepts": [
+        {
+          "id": "ecg.channelopathy.long_qt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.channelopathy.torsades",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.metabolic.sotalol",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG071",
+      "image": {
+        "url": "/ecg/v3/assets/ECG071/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.metabolic.hypokalemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG072",
+      "image": {
+        "url": "/ecg/v3/assets/ECG072/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG073",
+      "image": {
+        "url": "/ecg/v3/assets/ECG073/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb2_2to1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.trifascicular",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG074",
+      "image": {
+        "url": "/ecg/v3/assets/ECG074/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG075",
+      "image": {
+        "url": "/ecg/v3/assets/ECG075/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.pacing.ventricular",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG076",
+      "image": {
+        "url": "/ecg/v3/assets/ECG076/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.normal.early_repolarization",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG077",
+      "image": {
+        "url": "/ecg/v3/assets/ECG077/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG078",
+      "image": {
+        "url": "/ecg/v3/assets/ECG078/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.normal.axis_right_variant",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG079",
+      "image": {
+        "url": "/ecg/v3/assets/ECG079/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb3",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG080",
+      "image": {
+        "url": "/ecg/v3/assets/ECG080/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.nstemi",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG081",
+      "image": {
+        "url": "/ecg/v3/assets/ECG081/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.svt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.avnrt",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG082",
+      "image": {
+        "url": "/ecg/v3/assets/ECG082/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.wpw_a",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG083",
+      "image": {
+        "url": "/ecg/v3/assets/ECG083/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.wide_complex_tachycardia",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG084",
+      "image": {
+        "url": "/ecg/v3/assets/ECG084/ecg_principal.jpg",
+        "width": 781,
+        "height": 415
+      },
+      "concepts": [
+        {
+          "id": "ecg.metabolic.hyperkalemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG085",
+      "image": {
+        "url": "/ecg/v3/assets/ECG085/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_inferior",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG086",
+      "image": {
+        "url": "/ecg/v3/assets/ECG086/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.svt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.preexcitation.wpw_b",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG087",
+      "image": {
+        "url": "/ecg/v3/assets/ECG087/ecg_principal.jpg",
+        "width": 781,
+        "height": 352
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG088",
+      "image": {
+        "url": "/ecg/v3/assets/ECG088/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.wide_complex_tachycardia",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG089",
+      "image": {
+        "url": "/ecg/v3/assets/ECG089/ecg_principal.jpg",
+        "width": 781,
+        "height": 428
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.avb1",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG090",
+      "image": {
+        "url": "/ecg/v3/assets/ECG090/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG091",
+      "image": {
+        "url": "/ecg/v3/assets/ECG091/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.nstemi",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG092",
+      "image": {
+        "url": "/ecg/v3/assets/ECG092/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.incomplete_rbbb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG093",
+      "image": {
+        "url": "/ecg/v3/assets/ECG093/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.nstemi",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.stemi_anterolateral",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG094",
+      "image": {
+        "url": "/ecg/v3/assets/ECG094/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG095",
+      "image": {
+        "url": "/ecg/v3/assets/ECG095/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.metabolic.hypothermia",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG096",
+      "image": {
+        "url": "/ecg/v3/assets/ECG096/ecg_principal.jpg",
+        "width": 781,
+        "height": 426
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.rvh",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.pulmonary.pe",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG097",
+      "image": {
+        "url": "/ecg/v3/assets/ECG097/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.bifascicular",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG098",
+      "image": {
+        "url": "/ecg/v3/assets/ECG098/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.cardiomyopathy.hcm",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG099",
+      "image": {
+        "url": "/ecg/v3/assets/ECG099/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.accelerated_idioventricular",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG100",
+      "image": {
+        "url": "/ecg/v3/assets/ECG100/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.normal.athlete",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG101",
+      "image": {
+        "url": "/ecg/v3/assets/ECG101/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_anterior",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG102",
+      "image": {
+        "url": "/ecg/v3/assets/ECG102/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.vf",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG103",
+      "image": {
+        "url": "/ecg/v3/assets/ECG103/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.junctional",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG104",
+      "image": {
+        "url": "/ecg/v3/assets/ECG104/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG105",
+      "image": {
+        "url": "/ecg/v3/assets/ECG105/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.avnrt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG106",
+      "image": {
+        "url": "/ecg/v3/assets/ECG106/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.posterior_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG107",
+      "image": {
+        "url": "/ecg/v3/assets/ECG107/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.normal.t_wave_variant",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG108",
+      "image": {
+        "url": "/ecg/v3/assets/ECG108/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.t_wave_variant",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG109",
+      "image": {
+        "url": "/ecg/v3/assets/ECG109/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.flutter",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG110",
+      "image": {
+        "url": "/ecg/v3/assets/ECG110/ecg_principal.jpg",
+        "width": 781,
+        "height": 439
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG111",
+      "image": {
+        "url": "/ecg/v3/assets/ECG111/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.lae",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG112",
+      "image": {
+        "url": "/ecg/v3/assets/ECG112/ecg_principal.jpg",
+        "width": 781,
+        "height": 403
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG113",
+      "image": {
+        "url": "/ecg/v3/assets/ECG113/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG114",
+      "image": {
+        "url": "/ecg/v3/assets/ECG114/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.pericardium.pericarditis",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG115",
+      "image": {
+        "url": "/ecg/v3/assets/ECG115/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.lgl",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG116",
+      "image": {
+        "url": "/ecg/v3/assets/ECG116/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.normal",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG117",
+      "image": {
+        "url": "/ecg/v3/assets/ECG117/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.vf",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG118",
+      "image": {
+        "url": "/ecg/v3/assets/ECG118/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.conduction.lafb",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG119",
+      "image": {
+        "url": "/ecg/v3/assets/ECG119/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.wide_complex_tachycardia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG120",
+      "image": {
+        "url": "/ecg/v3/assets/ECG120/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.metabolic.cns_t_wave",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG121",
+      "image": {
+        "url": "/ecg/v3/assets/ECG121/ecg_principal.jpg",
+        "width": 781,
+        "height": 377
+      },
+      "concepts": [
+        {
+          "id": "ecg.pericardium.effusion",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG122",
+      "image": {
+        "url": "/ecg/v3/assets/ECG122/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.metabolic.digitalis",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.metabolic.hypokalemia",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG123",
+      "image": {
+        "url": "/ecg/v3/assets/ECG123/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.wpw_b",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG124",
+      "image": {
+        "url": "/ecg/v3/assets/ECG124/ecg_principal.jpg",
+        "width": 781,
+        "height": 401
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.lvh",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG125",
+      "image": {
+        "url": "/ecg/v3/assets/ECG125/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.channelopathy.long_qt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.channelopathy.torsades",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG126",
+      "image": {
+        "url": "/ecg/v3/assets/ECG126/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG127",
+      "image": {
+        "url": "/ecg/v3/assets/ECG127/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.stemi_inferior",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.stemi",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG128",
+      "image": {
+        "url": "/ecg/v3/assets/ECG128/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.lvh",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG129",
+      "image": {
+        "url": "/ecg/v3/assets/ECG129/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.vf",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG130",
+      "image": {
+        "url": "/ecg/v3/assets/ECG130/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.preexcitation.wpw_a",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG131",
+      "image": {
+        "url": "/ecg/v3/assets/ECG131/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.cardiomyopathy.hcm",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG132",
+      "image": {
+        "url": "/ecg/v3/assets/ECG132/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.metabolic.hyperkalemia",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG133",
+      "image": {
+        "url": "/ecg/v3/assets/ECG133/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.accelerated_idioventricular",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG134",
+      "image": {
+        "url": "/ecg/v3/assets/ECG134/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.metabolic.digitalis",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.metabolic.hypokalemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG135",
+      "image": {
+        "url": "/ecg/v3/assets/ECG135/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.chamber.lvh",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG136",
+      "image": {
+        "url": "/ecg/v3/assets/ECG136/ecg_principal.jpg",
+        "width": 781,
+        "height": 365
+      },
+      "concepts": [
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.prinzmetal",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG137",
+      "image": {
+        "url": "/ecg/v3/assets/ECG137/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.wide_complex_tachycardia",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG138",
+      "image": {
+        "url": "/ecg/v3/assets/ECG138/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.pvc",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.rbbb",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.ischemia",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.ischemia.old_infarct",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG139",
+      "image": {
+        "url": "/ecg/v3/assets/ECG139/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.pericardium.pericarditis",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_elevation",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG140",
+      "image": {
+        "url": "/ecg/v3/assets/ECG140/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.chamber.rae",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.pulmonary.copd",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG141",
+      "image": {
+        "url": "/ecg/v3/assets/ECG141/ecg_principal.jpg",
+        "width": 781,
+        "height": 433
+      },
+      "concepts": [
+        {
+          "id": "ecg.channelopathy.long_qt",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.channelopathy.torsades",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG142",
+      "image": {
+        "url": "/ecg/v3/assets/ECG142/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.normal.artifact",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.preexcitation.wpw_a",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG143",
+      "image": {
+        "url": "/ecg/v3/assets/ECG143/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.metabolic.lithium",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.t_inversion",
+          "role": "secondary",
+          "weight": 0.55
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG144",
+      "image": {
+        "url": "/ecg/v3/assets/ECG144/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.channelopathy.brugada",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG145",
+      "image": {
+        "url": "/ecg/v3/assets/ECG145/ecg_principal.jpg",
+        "width": 781,
+        "height": 403
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.wpw_b",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG146",
+      "image": {
+        "url": "/ecg/v3/assets/ECG146/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.preexcitation.wpw_a",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG147",
+      "image": {
+        "url": "/ecg/v3/assets/ECG147/ecg_principal.jpg",
+        "width": 781,
+        "height": 377
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.vf",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG148",
+      "image": {
+        "url": "/ecg/v3/assets/ECG148/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.conduction.lbbb",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    },
+    {
+      "id": "ECG149",
+      "image": {
+        "url": "/ecg/v3/assets/ECG149/ecg_principal.jpg",
+        "width": 781,
+        "height": 390
+      },
+      "concepts": [
+        {
+          "id": "ecg.rhythm.sinus",
+          "role": "primary",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "ECG150",
+      "image": {
+        "url": "/ecg/v3/assets/ECG150/ecg_principal.jpg",
+        "width": 781,
+        "height": 440
+      },
+      "concepts": [
+        {
+          "id": "ecg.arrhythmia.af",
+          "role": "primary",
+          "weight": 1
+        },
+        {
+          "id": "ecg.repolarization.st_depression",
+          "role": "secondary",
+          "weight": 0.55
+        }
+      ]
+    }
+  ]
+}

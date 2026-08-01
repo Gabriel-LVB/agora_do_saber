@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "agora_ecg_cases_v3",
+  "rightsHolder": "Ágora do Saber",
+  "contentType": "proprietary_original_site_material",
+  "authorizationBasis": "owner_confirmation_recorded_in_project",
+  "authorizedUses": [
+    "ingestion_into_agora_do_saber",
+    "storage_in_access_controlled_infrastructure",
+    "display_to_authorized_platform_users",
+    "creation_of_internal_educational_metadata_and_study_features"
+  ],
+  "publicRedistributionAuthorized": false,
+  "externalAttributionRequired": false,
+  "note": "Registro operacional baseado na declaração do responsável pelo projeto de que o material é próprio do Ágora do Saber. Não substitui documentação jurídica externa quando esta for exigida.",
+  "confirmationRecord": "docs/ECG_RIGHTS_DECLARATION.md",
+  "confirmedOn": "2026-07-30",
+  "publicAssetDeliveryAuthorized": true,
+  "attributionCorrection": {
+    "invalidSourceLabels": [
+      "hampton",
+      "hamptom"
+    ],
+    "correction": "material próprio do Ágora do Saber"
+  }
+}

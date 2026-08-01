@@ -1,0 +1,202 @@
+[
+  {
+    "caseId": "ECG008",
+    "sourceDiagnosis": "Bloqueio posteroinferior com BRD – bloqueio bifascicular, seguido por bloqueio AV total (ver ECG adiante).",
+    "reasons": [
+      "há asset extra originado da página de resposta; revisar antes de exibir como pergunta"
+    ],
+    "primaryAssetId": "ecg008_asset_01"
+  },
+  {
+    "caseId": "ECG018",
+    "sourceDiagnosis": "Sobrecarga ventricular esquerda.",
+    "reasons": [
+      "há asset extra originado da página de resposta; revisar antes de exibir como pergunta"
+    ],
+    "primaryAssetId": "ecg018_asset_01"
+  },
+  {
+    "caseId": "ECG024",
+    "sourceDiagnosis": "Fibrilação atrial com resposta ventricular acentuada, provável isquemia e efeito digitálico.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg024_asset_01"
+  },
+  {
+    "caseId": "ECG034",
+    "sourceDiagnosis": "Bloqueio AV de segundo grau (2 : 1), bloqueio divisional anterossuperior esquerdo e um provável infarto anterior antigo.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg034_asset_01"
+  },
+  {
+    "caseId": "ECG035",
+    "sourceDiagnosis": "Sobrecarga ventricular esquerda apenas pelo “critério de amplitude”, mas, provavelmente, dentro da normalidade.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg035_asset_01"
+  },
+  {
+    "caseId": "ECG056",
+    "sourceDiagnosis": "Provável infarto do miocárdio inferior, extrassístoles ventriculares com fenômeno R sobre T e surto de TV/FV.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg056_asset_01"
+  },
+  {
+    "caseId": "ECG063",
+    "sourceDiagnosis": "Inversão difusa das ondas T, provavelmente normal em um homem negro.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg063_asset_01"
+  },
+  {
+    "caseId": "ECG081",
+    "sourceDiagnosis": "Taquicardia supraventricular (possivelmente atrial ou TRN) com BRD; defeito do septo atrial.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg081_asset_01"
+  },
+  {
+    "caseId": "ECG088",
+    "sourceDiagnosis": "Taquicardia de QRS largo de etiologia incerta.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg088_asset_01"
+  },
+  {
+    "caseId": "ECG098",
+    "sourceDiagnosis": "Provável cardiomiopatia hipertrófica.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg098_asset_01"
+  },
+  {
+    "caseId": "ECG106",
+    "sourceDiagnosis": "Provável infarto do miocárdio posterior.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg106_asset_01"
+  },
+  {
+    "caseId": "ECG109",
+    "sourceDiagnosis": "Provável flutter atrial com condução 1:1.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg109_asset_01"
+  },
+  {
+    "caseId": "ECG113",
+    "sourceDiagnosis": "Ritmo sinusal com taquicardia ventricular paroxística e provável isquemia.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg113_asset_01"
+  },
+  {
+    "caseId": "ECG117",
+    "sourceDiagnosis": "Taquicardia ventricular de provável origem na via de saída do ventrículo direito.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg117_asset_01"
+  },
+  {
+    "caseId": "ECG119",
+    "sourceDiagnosis": "Taquicardia com QRS largo, com padrão de BRD, provavelmente de origem supraventricular.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg119_asset_01"
+  },
+  {
+    "caseId": "ECG126",
+    "sourceDiagnosis": "Possível infarto do miocárdio antigo e/ou novo IAM inferior.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg126_asset_01"
+  },
+  {
+    "caseId": "ECG134",
+    "sourceDiagnosis": "Fibrilação atrial com extrassístoles ventriculares, provável intoxicação digitálica e hipocalemia.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg134_asset_01"
+  },
+  {
+    "caseId": "ECG135",
+    "sourceDiagnosis": "Provável isquemia lateral, mas possível sobrecarga ventricular esquerda.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg135_asset_01"
+  },
+  {
+    "caseId": "ECG137",
+    "sourceDiagnosis": "Taquicardia de QRS larga de origem incerta.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg137_asset_01"
+  },
+  {
+    "caseId": "ECG138",
+    "sourceDiagnosis": "Extrassístoles ventriculares multifocais, BRD e provável infarto do miocárdio inferior antigo.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg138_asset_01"
+  },
+  {
+    "caseId": "ECG142",
+    "sourceDiagnosis": "Artefatos musculares, possivelmente doença de Parkinson; síndrome WPW tipo A.",
+    "reasons": [
+      "diagnóstico-fonte contém incerteza explícita"
+    ],
+    "primaryAssetId": "ecg142_asset_01"
+  },
+  {
+    "caseId": "ECG145",
+    "sourceDiagnosis": "Síndrome WPW tipo B e coarctação da aorta.",
+    "reasons": [
+      "há asset extra originado da página de resposta; revisar antes de exibir como pergunta"
+    ],
+    "primaryAssetId": "ecg145_asset_01"
+  },
+  {
+    "caseId": "ECG148",
+    "sourceDiagnosis": "Fibrilação atrial com BRE; regurgitação aórtica devida a aortite sifilítica.",
+    "reasons": [
+      "há asset extra originado da página de resposta; revisar antes de exibir como pergunta"
+    ],
+    "primaryAssetId": "ecg148_asset_01"
+  },
+  {
+    "caseId": "ECG149",
+    "sourceDiagnosis": "Sobrecarga de câmaras direitas.",
+    "reasons": [
+      "há asset extra originado da página de resposta; revisar antes de exibir como pergunta"
+    ],
+    "primaryAssetId": "ecg149_asset_01"
+  },
+  {
+    "caseId": "ECG150",
+    "sourceDiagnosis": "Fibrilação atrial com alta resposta ventricular e alterações isquêmicas em uma paciente com estenose mitral.",
+    "reasons": [
+      "há asset extra originado da página de resposta; revisar antes de exibir como pergunta"
+    ],
+    "primaryAssetId": "ecg150_asset_01"
+  }
+]

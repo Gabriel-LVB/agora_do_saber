@@ -12,6 +12,10 @@ import {
 import { FAMED_PROGRAM } from './famedCatalog.js';
 import FamedScheduleView from './FamedScheduleView.jsx';
 import { FAMED_S5_SCHEDULE } from './famedSchedule.js';
+import {
+  buildFamedCourseCatalogExport,
+  resolveFamedCourseLessons,
+} from './famedCourseLessonMap.js';
 
 const AcademiaTopicView = React.lazy(() => import('../academia/AcademiaTopicView.jsx'));
 const AdminStudyMapTopicList = React.lazy(() => import('../admin/AdminStudyMapTopicList.jsx'));
@@ -42,6 +46,7 @@ export default function FamedPortalView() {
     academiaGenerating,
     academiaTopicAnswers,
     addToast,
+    appliedVideoaulasData,
     bulkActionMenu,
     bulkGenerateModal,
     bulkGenerateRun,
@@ -49,6 +54,7 @@ export default function FamedPortalView() {
     ChevronDown,
     darkMode,
     findErrorNotebookReviewsForSource,
+    flattenCourseLessons,
     generateAcademiaLesson,
     getBulkGenerateTargets,
     getKey,
@@ -66,6 +72,9 @@ export default function FamedPortalView() {
     setAcademiaExportModal,
     setAcademiaExtraModal,
     setAcademiaTopicAnswers,
+    setActiveAulaAndReset,
+    setActiveSubjectVid,
+    setActiveSubtopicVid,
     setBulkActionMenu,
     setOpenAnswerModal,
     setSettings,
@@ -89,6 +98,7 @@ export default function FamedPortalView() {
   const [favoritesByBlock, setFavoritesByBlock] = React.useState(()=>readStoredObject('agora_famed_favorites'));
   const [cleaningLegacy, setCleaningLegacy] = React.useState(false);
   const [savingContent, setSavingContent] = React.useState(false);
+  const [removingContentId, setRemovingContentId] = React.useState(null);
   React.useEffect(() => {
     window.dispatchEvent(new CustomEvent('agora-famed-detail-layout', {
       detail:{ active:activePanel !== 'schedule' },
@@ -113,6 +123,15 @@ export default function FamedPortalView() {
       .filter(item => item.semester === 'S5' && item.creationMode === 'academia')
       .map(item => [item.scheduleItemId, item]),
   ), [contentItems]);
+  const courseLessons = React.useMemo(
+    () => flattenCourseLessons(appliedVideoaulasData || {}),
+    [appliedVideoaulasData, flattenCourseLessons],
+  );
+  const courseLessonsByScheduleId = React.useMemo(() => Object.fromEntries(
+    FAMED_S5_SCHEDULE
+      .filter(item => item.kind === 'lesson')
+      .map(item => [item.id, resolveFamedCourseLessons(item.id, courseLessons)]),
+  ), [courseLessons]);
   const legacyContentItems = React.useMemo(() => contentItems.filter(item => item.creationMode !== 'academia'), [contentItems]);
   const activeContent = contentItems.find(item => item.id === activeContentId) || null;
   const activeSubject = React.useMemo(() => famedContentToAcademiaSubject(activeContent), [activeContent]);
@@ -142,6 +161,33 @@ export default function FamedPortalView() {
     setActiveTopicId(openSingleTopicDirectly ? subject.topics[0].id : null);
     setActivePanel(openSingleTopicDirectly ? 'topic' : 'subject');
     window.scrollTo?.({ top:0, behavior:'smooth' });
+  };
+  const openCourseLesson = lesson => {
+    if (!lesson) return;
+    setActiveSubjectVid(lesson.subject);
+    setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
+    setActiveAulaAndReset(lesson.aula);
+    setView('videoaulas');
+  };
+  const exportCourseCatalog = () => {
+    if (!courseLessons.length) {
+      addToast?.('O catálogo do curso ainda não terminou de carregar.', 'warning', 4500);
+      return;
+    }
+    const payload = buildFamedCourseCatalogExport({
+      courseLessons,
+      scheduleItems:FAMED_S5_SCHEDULE,
+    });
+    const blob = new Blob([JSON.stringify(payload,null,2)], { type:'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `agora-famed-catalogo-curso-${payload.exportedAt.slice(0,10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    addToast?.(`${payload.courseLessons.length} aulas exportadas na ordem do curso.`, 'success', 4500);
   };
   const saveAnswers = next => {
     setAnswersByBlock(next);
@@ -211,6 +257,22 @@ export default function FamedPortalView() {
       addToast?.(error?.message || 'Não foi possível apagar o conteúdo.', 'error', 5500);
     } finally {
       setSavingContent(false);
+    }
+  };
+  const removeScheduleContent = async content => {
+    if (!isAdmin || !content?.id || removingContentId) return;
+    const confirmed = window.confirm(
+      `Remover “${content.title}” da FAMED?\n\nIsso apagará a aula da Academia e suas questões. As videoaulas do Portal do Curso não serão alteradas, e o item continuará no cronograma para você poder criá-lo novamente.`
+    );
+    if (!confirmed) return;
+    setRemovingContentId(content.id);
+    try {
+      await deleteFamedContent(content.id);
+      addToast?.('Conteúdo removido da FAMED. As videoaulas do curso foram preservadas.', 'success', 5000);
+    } catch(error) {
+      addToast?.(error?.message || 'Não foi possível remover o conteúdo da FAMED.', 'error', 5500);
+    } finally {
+      setRemovingContentId(null);
     }
   };
   const cleanLegacyContent = async () => {
@@ -358,6 +420,10 @@ export default function FamedPortalView() {
     <section aria-label="Semestres" className="app-card famed-semesters rounded-2xl p-2 md:p-3"><div className="grid grid-cols-4 gap-2">{FAMED_PROGRAM.semesters.map(semester=><button key={semester.id} type="button" disabled={!semester.available} aria-current={semester.available?'page':undefined} className={`famed-semester flex min-h-[60px] w-full flex-col items-center justify-center rounded-xl border px-2 text-center md:min-h-[68px] ${semester.available?(darkMode?'border-yellow-800 bg-yellow-900/10 text-yellow-300':'border-yellow-400 bg-yellow-50 text-yellow-800'):(darkMode?'border-gray-800 bg-transparent text-gray-600':'border-gray-100 bg-gray-50 text-gray-300')} disabled:cursor-not-allowed`}><strong className="text-base md:text-lg">{semester.label}</strong><span className="mt-0.5 text-[10px] font-bold uppercase tracking-wide">{semester.available?'Atual':'Em breve'}</span></button>)}</div></section>
     {contentError&&isAdmin&&<p className={`rounded-xl border px-4 py-3 text-sm ${darkMode?'border-red-900 bg-red-900 bg-opacity-20 text-red-200':'border-red-200 bg-red-50 text-red-800'}`}>{contentError}</p>}
     {isAdmin&&legacyContentItems.length>0&&<section className={`rounded-2xl border p-4 md:p-5 ${darkMode?'border-red-900 bg-red-950/20':'border-red-200 bg-red-50'}`}><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Limpeza do fluxo antigo</p><p className={`mt-1 text-sm ${darkMode?'text-gray-300':'text-gray-700'}`}>{legacyContentItems.length} conteúdo(s) antigo(s) estão ocultos e prontos para exclusão.</p></div><button type="button" disabled={cleaningLegacy} onClick={cleanLegacyContent} className="min-h-[44px] rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-40">{cleaningLegacy?'Apagando…':'Apagar conteúdo antigo'}</button></div></section>}
-    <FamedScheduleView darkMode={darkMode} isAdmin={isAdmin} contentByScheduleId={contentByScheduleId} contentLoading={contentLoading} onOpenLesson={openSubject} onOpenQuestions={openAllQuestions} onCreate={startFamedAcademiaCreation}/>
+    <FamedScheduleView darkMode={darkMode} isAdmin={isAdmin} contentByScheduleId={contentByScheduleId} contentLoading={contentLoading}
+      courseCatalogReady={!!appliedVideoaulasData} courseLessonsByScheduleId={courseLessonsByScheduleId} onOpenCourseLesson={openCourseLesson}
+      onExportCourseCatalog={exportCourseCatalog}
+      removingContentId={removingContentId} onRemoveContent={removeScheduleContent}
+      onOpenLesson={openSubject} onOpenQuestions={openAllQuestions} onCreate={startFamedAcademiaCreation}/>
   </div>;
 }

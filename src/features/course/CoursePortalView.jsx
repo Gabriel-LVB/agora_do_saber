@@ -1,10 +1,13 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import { appendAdaptiveSupportToReviewSession } from '../../services/reviewScheduler.js';
+import { resolveScheduleSubjectOrder } from '../../services/courseSchedule.js';
 import { useCourseHeroJourney } from './useCourseHeroJourney.js';
 
 export default function CoursePortalView() {
   const {
     addToast,
+    appliedCourseSubjectOrder,
     appliedVideoaulasData,
     ArrowLeft,
     aulaDocId,
@@ -22,23 +25,22 @@ export default function CoursePortalView() {
     COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE,
     COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_MIX_PRESET,
-    COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
-    COURSE_SCHEDULE_DEFAULT_WEEKS,
-    COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_MIX_PRESETS,
     COURSE_SCHEDULE_PRESETS,
     courseLessonDisplayTitle,
     courseCycleSubjectBatchSize,
-    coursePlanLessonOrder,
-    coursePlanLocked,
     coursePlanSubjects,
+    courseScheduleCadence,
+    courseScheduleDayCursor,
+    courseScheduleEffortHours,
+    courseScheduleEndDate,
+    courseScheduleGoalMode,
     courseScheduleMixPreset,
     courseSchedulePreset,
     courseScheduleSettingsOpen,
-    courseScheduleSubjectBatchSize,
     courseScheduleSubjectsOpen,
+    courseScheduleStudyDays,
     courseScheduleWeeks,
-    cronograma,
     cronStartDate,
     cursoTab,
     curWeek,
@@ -50,7 +52,6 @@ export default function CoursePortalView() {
     flattenCourseLessons,
     formatCourseDuration,
     getAulaId,
-    getCurrentWeek,
     getDueReviews,
     getKey,
     getTodayKey,
@@ -68,7 +69,6 @@ export default function CoursePortalView() {
     reviewSession,
     saveCourseCycleReview,
     saveCourseCyclePrefs,
-    saveCoursePlanPrefs,
     saveCourseSchedulePrefs,
     saveCronStartDate,
     setActiveAula,
@@ -76,6 +76,7 @@ export default function CoursePortalView() {
     setActiveSubjectVid,
     setActiveSubtopicVid,
     setCourseScheduleSettingsOpen,
+    setCourseScheduleDayCursor,
     setCourseScheduleSubjectsOpen,
     setCursoTab,
     setCurWeek,
@@ -98,10 +99,12 @@ export default function CoursePortalView() {
   } = useFeatureContext();
 
           const dm = darkMode;
-          const heroJourney = useCourseHeroJourney({ enabled:true });
-          const currentWeek = getCurrentWeek();
-          const activeWeek = curWeek ?? currentWeek ?? 1;
-          const weekData = cronograma?.find(w=>w.week===activeWeek);
+          const scheduleJourney = useCourseHeroJourney({ enabled:true });
+          const heroJourney = scheduleJourney; // compatibilidade do bloco legado, mantido inacessível
+          React.useEffect(() => {
+            if (cursoTab === 'plano') setCursoTab('cronograma');
+          }, [cursoTab, setCursoTab]);
+          const currentWeek = scheduleJourney.scheduleCurrentWeek;
 
           // Progresso por tópico
           const watchedByTopic = {};
@@ -130,14 +133,11 @@ export default function CoursePortalView() {
           ];
           const plannedSubjectSet = new Set(effectivePlanSubjects);
           const plannedLessons = courseLessons.filter(lesson => plannedSubjectSet.has(lesson.subject));
-          const plannedWatched = plannedLessons.filter(lesson => watchedAulas[lesson.id]).length;
-          const planPct = plannedLessons.length ? Math.round(plannedWatched / plannedLessons.length * 100) : 0;
 
           const tabs = [
             {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
-            {id:'plano', label:'Ciclo de Estudos', icon:<Award className="w-4 h-4"/>},
             {id:'revisoes',   label:'Revisões',     icon:<RepeatIcon className="w-4 h-4"/>, badge: dueCount},
-            {id:'cronograma', label:'Cronograma', icon:<CalendarCheck className="w-4 h-4"/>},
+            {id:'cronograma', label:'Plano de estudos', icon:<CalendarCheck className="w-4 h-4"/>},
           ].filter(Boolean);
 
           return (
@@ -152,7 +152,7 @@ export default function CoursePortalView() {
                         <ArrowLeft className="w-3 h-3"/>Início
                       </button>
                       <h1 className="text-2xl md:text-3xl font-serif font-bold text-yellow-600 leading-tight">Portal do Curso</h1>
-                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Ciclo de Estudos · Cronograma</p>
+                      <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Videoaulas · Plano de estudos · Revisões</p>
                     </div>
                     {/* Progresso global */}
                     <div className={`flex-shrink-0 text-right`}>
@@ -161,8 +161,8 @@ export default function CoursePortalView() {
                         {totalWatched}/{totalAulas} aulas{totalCourseDuration?` · ${totalCourseDuration}`:''}
                       </div>
                       {plannedLessons.length>0
-                        ? <div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Ciclo {planPct}%</div>
-                        : currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek} de 46</div>}
+                        ? <div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Plano {scheduleJourney.progress.pct}%</div>
+                        : currentWeek&&<div className={`text-xs font-bold mt-1 ${dm?'text-yellow-500':'text-yellow-600'}`}>Semana {currentWeek}</div>}
                     </div>
                   </div>
                   {/* Barra de progresso global */}
@@ -286,10 +286,6 @@ export default function CoursePortalView() {
                   const dueItems = getDueReviews();
                   const dueFlashcardItems = dueItems.filter(item => item.question?.isFlashcard);
                   const dueQuestionItems = dueItems.filter(item => !item.question?.isFlashcard);
-                  const SR_LABELS = ['3d','7d','14d','30d','90d'];
-                  const intervalSummary = SR_LABELS
-                    .map((label, interval) => ({ label, count:dueItems.filter(item => item.item?.interval === interval).length }))
-                    .filter(item => item.count > 0);
 
                   if (!reviewSession) {
                     // Tela de lista de revisões pendentes
@@ -300,7 +296,7 @@ export default function CoursePortalView() {
                             darkMode={dm}
                             icon={<RepeatIcon className="w-7 h-7"/>}
                             title="Nenhuma revisão pendente"
-                            message="Quando terminar um bloco de questões, adicione-o à revisão espaçada."
+                            message="Quando terminar uma aula ou um bloco de questões, adicione-o à sua revisão."
                           />
                         ) : (
                           <div className="space-y-3">
@@ -324,15 +320,8 @@ export default function CoursePortalView() {
                               </div>
                             </div>
                             <div className={`rounded-2xl border p-4 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
-                              <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Distribuição da fila</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                                {(intervalSummary.length ? intervalSummary : [{label:'hoje', count:dueItems.length}]).map(item=>(
-                                  <div key={item.label} className={`rounded-xl border px-3 py-2 text-center ${dm?'bg-gray-950/60 border-gray-800':'bg-gray-50 border-gray-100'}`}>
-                                    <p className="text-lg font-serif font-bold text-yellow-600">{item.count}</p>
-                                    <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{item.label}</p>
-                                  </div>
-                                ))}
-                              </div>
+                              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Fila de hoje</p>
+                              <p className={`mt-1 text-sm ${dm?'text-gray-300':'text-gray-600'}`}>As questões de todas as aulas são misturadas para você revisar o que precisa agora.</p>
                             </div>
                           </div>
                         )}
@@ -343,6 +332,7 @@ export default function CoursePortalView() {
                   // Sessão de revisão ativa
                   const { items: sessionItems, index, sessionAnswers, sessionResults = {}, completed = false } = reviewSession;
                   const cur = sessionItems[index];
+                  const reviewSessionKey = item => item?.item?.cardKey || `${item?.aulaId}/${item?.blockId}/${item?.qId}`;
                   const total = sessionItems.length;
                   const done = Object.keys(sessionAnswers).length;
                   const finished = done === total;
@@ -392,13 +382,17 @@ export default function CoursePortalView() {
                             key={`${item.blockId}-${item.qId}`}
                             question={item.question}
                             index={i}
-                            selectedLetter={sessionAnswers[item.qId]}
+                            selectedLetter={sessionAnswers[reviewSessionKey(item)]}
                             onAnswer={async (letter)=>{
                               const correct = isAnswerCorrect(item.question, letter);
                               trackQuestionAnswered(`review:${item.aulaId}:${item.blockId}:${item.qId}:${item.item?.dueDate||getTodayKey()}`);
-                              setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [item.qId]: letter}, sessionResults:{...(p?.sessionResults||{}), [item.qId]:correct}}));
+                              const itemKey = reviewSessionKey(item);
+                              setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [itemKey]: letter}, sessionResults:{...(p?.sessionResults||{}), [itemKey]:correct}}));
                               if (canUseAdvancedFeatures && !correct) setReviewNotebook(item, 'add');
-                              await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
+                              const supportItem = await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
+                              if (supportItem) setReviewSession(previous =>
+                                appendAdaptiveSupportToReviewSession(previous, supportItem)
+                              );
                             }}
                             darkMode={dm}
                             isFavorite={isReviewItemFavorite(item)}
@@ -421,6 +415,7 @@ export default function CoursePortalView() {
 
                   // Questão atual da sessão com seed diferente para embaralhar alternativas
                   const item = cur;
+                  const itemKey = reviewSessionKey(item);
                   const q = item.question;
                   const seed = item.item.reviewSeed || 42;
                   const shuffleWithSeed = (arr, s) => {
@@ -448,13 +443,16 @@ export default function CoursePortalView() {
 	                      </div>
 	                      <QuestionCard
 	                        question={reviewQ} index={index}
-	                        selectedLetter={sessionAnswers[item.qId]}
+	                        selectedLetter={sessionAnswers[itemKey]}
 			                        onAnswer={async (letter)=>{
 			                          const correct = isAnswerCorrect(reviewQ, letter);
 			                          trackQuestionAnswered(`review:${item.aulaId}:${item.blockId}:${item.qId}:${item.item?.dueDate||getTodayKey()}`);
-			                          setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [item.qId]: letter}, sessionResults:{...(p?.sessionResults||{}), [item.qId]:correct}}));
+		                          setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [itemKey]: letter}, sessionResults:{...(p?.sessionResults||{}), [itemKey]:correct}}));
 			                          if (canUseAdvancedFeatures && !correct) setReviewNotebook(item, 'add');
-			                          await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
+			                          const supportItem = await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
+			                          if (supportItem) setReviewSession(previous =>
+			                            appendAdaptiveSupportToReviewSession(previous, supportItem)
+			                          );
 			                        }}
 	                        darkMode={dm}
 	                        isFavorite={isReviewItemFavorite(item)}
@@ -480,7 +478,7 @@ export default function CoursePortalView() {
                   );
                 })()}
 
-                {cursoTab==='plano'&&(()=>{
+                {false&&cursoTab==='plano'&&(()=>{
                   if(videoaulasLoading || !heroJourney.isReady) return <LoadingState darkMode={dm} label="Carregando ciclo de estudos..."/>;
                   if(!courseLessons.length) return (
                     <EmptyState
@@ -635,7 +633,7 @@ export default function CoursePortalView() {
                   );
                 })()}
 
-                {cursoTab==='cronograma'&&(()=>{
+                {(cursoTab==='cronograma'||cursoTab==='plano')&&(()=>{
                   if(videoaulasLoading) return <LoadingState darkMode={dm} label="Montando cronograma..."/>;
                   if(!courseLessons.length) return (
                     <EmptyState
@@ -646,163 +644,52 @@ export default function CoursePortalView() {
                     />
                   );
 
-                  const lessonOrderIndex = new Map((effectiveCoursePlanLessonOrder || []).map((id, index) => [String(id), index]));
-                  const lessonRank = (lesson) => {
-                    if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
-                    const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
-                    const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
-                    return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
-                  };
-                  const orderedSubjects = effectivePlanSubjects.filter(subject => courseSubjects.includes(subject));
-                  const subjectBatchSize = Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(courseScheduleSubjectBatchSize) || COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE));
-                  const activeMixPreset = COURSE_SCHEDULE_MIX_PRESETS.find(preset => preset.id === courseScheduleMixPreset) || null;
-                  const mixedScheduleActive = !!activeMixPreset;
-                  const lessonsBySubject = new Map(orderedSubjects.map(subject => [
-                    subject,
-                    courseLessons
-                      .filter(lesson => lesson.subject === subject)
-                      .sort((a, b) => {
-                        const byRank = lessonRank(a) - lessonRank(b);
-                        if (byRank) return byRank;
-                        return a.title.localeCompare(b.title, 'pt');
-                      }),
-                  ]));
-                  const getSubjectLessons = subject => lessonsBySubject.get(subject) || [];
-                  const interleaveSubjectBatch = (subjects) => {
-                    const queues = subjects.map(getSubjectLessons).filter(queue => queue.length);
-                    const max = queues.reduce((highest, queue) => Math.max(highest, queue.length), 0);
-                    const lessons = [];
-                    for (let index = 0; index < max; index += 1) {
-                      queues.forEach(queue => {
-                        if (queue[index]) lessons.push(queue[index]);
-                      });
-                    }
-                    return lessons;
-                  };
-                  const allOrderedSubjectLessons = orderedSubjects.flatMap(getSubjectLessons);
-                  const lessonText = (lesson) => normalizeTextKey([
-                    lesson.subject,
-                    lesson.topic,
-                    lesson.topicTitle,
-                    lesson.title,
-                    lesson.aula?.ai_catalog?.description,
-                  ].filter(Boolean).join(' '));
-                  const patternRank = (text, rules, fallback = rules.length) => {
-                    const hit = rules.findIndex(pattern => pattern.test(text));
-                    return hit >= 0 ? hit : fallback;
-                  };
-                  const subjectRankFrom = (subjects = []) => {
-                    const map = new Map(subjects.map((subject, index) => [normalizeTextKey(subject), index]));
-                    return (subject) => map.has(normalizeTextKey(subject)) ? map.get(normalizeTextKey(subject)) : subjects.length + orderedSubjects.indexOf(subject);
-                  };
-                  const sortLessonsByStrategy = (strategy) => {
-                    const ufcSubjectRank = subjectRankFrom(['Cardiologia','Pneumologia','Gastroenterologia','Endocrinologia','Nefrologia','Cirurgia','Obstetricia','Pediatria','Ginecologia','Infectologia','Dermatologia','Hematologia','Reumatologia','Ortopedia','Psiquiatria','Oftalmologia']);
-                    const defaultSubjectRank = subjectRankFrom(orderedSubjects);
-                    const ruleSets = {
-                      'importance-life': [
-                        /\b(sepse|choque|parada|pcr|trauma|traumatismo|hemorragia|sangramento|ave|iam|infarto|crise hipertensiva|ectopica|descolamento prematuro|hipercalemia|sdra|insuficiencia respiratoria)\b/,
-                        /\b(hipertensao|diabetes|pneumonia|asma|dpoc|tuberculose|hiv|dengue|itu|pre[- ]?natal|parto|puerperio|anticoncepcao|depressao|ansiedade|anemia|apendicite|colecistite|drge|cirrose)\b/,
-                        /\b(diagnostico|classificacao|rastreamento|prevencao|vacina|calendario|avaliacao)\b/,
-                        /\b(tratamento|manejo|terapia|profilaxia|conduta)\b/,
-                        /\b(neoplasia|tumor|cancer|transplante|cirurgias?|sindrome|hereditarias?|vasculites?)\b/,
-                      ],
-                      'basic-advanced': [
-                        /\b(introducao|conceitos?|fundamentos?|anatomia|fisiologia|historia natural|nocoes|classificacao|bases?)\b/,
-                        /\b(semiologia|diagnostico|avaliacao|rastreamento|achados|sorologia)\b/,
-                        /\b(tratamento|manejo|terapia|profilaxia|assistencia|conduta)\b/,
-                        /\b(complicacoes?|emergencias?|aguda|choque|hemorragia|insuficiencia|crise)\b/,
-                        /\b(neoplasia|tumor|cancer|transplante|cirurgias?|rar[ao]s?|sindrome|malign[ao])\b/,
-                      ],
-                      'high-yield': [
-                        /\b(sus|epidemiologia|testes diagnosticos|hipertensao|diabetes|pre[- ]?natal|parto|abortamento|ectopica|placenta previa|dpp|pneumonia|tuberculose|hiv|dengue|sepse|trauma|apendicite|colecistite|pancreatite|cirrose|anemia|leucemia|artrite reumatoide|lupus|vacinas?)\b/,
-                        /\b(diagnostico|tratamento|manejo|classificacao|rastreamento|prevencao|complicacoes?)\b/,
-                        /\b(anatomia|fisiologia|neoplasia|tumores?|rar[ao]s?|cirurgias?|transplante)\b/,
-                      ],
-                      'emergency-first': [
-                        /\b(sepse|choque|parada|pcr|trauma|traumatismo|tce|ave|hemorragia|sangramento|dpp|ectopica|hipercalemia|hipoglicemia|cetoacidose|sdra|pneumotorax|queimaduras|intoxicacoes?|sofrimento fetal|prematuridade|amniorrexe)\b/,
-                        /\b(aguda|crise|emergencia|urgencia|insuficiencia|obstrucao|isquemia|perfura[cç][aã]o)\b/,
-                        /\b(tratamento|manejo|conduta|suporte|monitorizacao|profilaxia)\b/,
-                        /\b(introducao|anatomia|fisiologia|neoplasia|tumor|cronica)\b/,
-                      ],
-                    };
-                    const rules = ruleSets[strategy] || ruleSets['importance-life'];
-                    const strategyLessons = strategy === 'medico-bicho'
-                      ? allOrderedSubjectLessons.filter(lesson => normalizeTextKey(lesson.subject) !== 'preventiva')
-                      : allOrderedSubjectLessons;
-                    return [...strategyLessons].sort((a, b) => {
-                      if (strategy === 'ufc-flow' || strategy === 'medico-bicho') {
-                        const ufcValue = (lesson) => strategy === 'ufc-flow' && normalizeTextKey(lesson.subject) === 'preventiva'
-                          ? lessonRank(lesson) * 250 + 1
-                          : ufcSubjectRank(lesson.subject) * 1000 + lessonRank(lesson) + 2;
-                        const ufcDiff = ufcValue(a) - ufcValue(b);
-                        if (ufcDiff) return ufcDiff;
-                        const subjectDiff = ufcSubjectRank(a.subject) - ufcSubjectRank(b.subject);
-                        if (subjectDiff) return subjectDiff;
-                        const rankDiff = lessonRank(a) - lessonRank(b);
-                        if (rankDiff) return rankDiff;
-                        return a.title.localeCompare(b.title, 'pt');
-                      }
-                      const textA = lessonText(a);
-                      const textB = lessonText(b);
-                      const ruleDiff = patternRank(textA, rules) - patternRank(textB, rules);
-                      if (ruleDiff) return ruleDiff;
-                      const subjectDiff = defaultSubjectRank(a.subject) - defaultSubjectRank(b.subject);
-                      if (subjectDiff) return subjectDiff;
-                      const rankDiff = lessonRank(a) - lessonRank(b);
-                      if (rankDiff) return rankDiff;
-                      return a.title.localeCompare(b.title, 'pt');
-                    });
-                  };
-                  const orderedLessons = mixedScheduleActive
-                    ? sortLessonsByStrategy(activeMixPreset.strategy)
-                    : (() => {
-                      const lessons = [];
-                      for (let index = 0; index < orderedSubjects.length; index += subjectBatchSize) {
-                        lessons.push(...interleaveSubjectBatch(orderedSubjects.slice(index, index + subjectBatchSize)));
-                      }
-                      return lessons;
-                    })();
-                  const weeksCount = Math.max(1, Math.min(104, Number(courseScheduleWeeks) || COURSE_SCHEDULE_DEFAULT_WEEKS));
-                  const baseLessonsPerWeek = orderedLessons.length ? Math.floor(orderedLessons.length / weeksCount) : 0;
-                  const extraLessonWeeks = orderedLessons.length ? orderedLessons.length % weeksCount : 0;
-                  const maxLessonsPerWeek = orderedLessons.length ? Math.ceil(orderedLessons.length / weeksCount) : 0;
-                  const lessonsPerWeekLabel = baseLessonsPerWeek === maxLessonsPerWeek
-                    ? String(maxLessonsPerWeek)
-                    : `${baseLessonsPerWeek}-${maxLessonsPerWeek}`;
-                  const scheduleWeeks = Array.from({ length:weeksCount }, (_, index) => {
-                    const start = index * baseLessonsPerWeek + Math.min(index, extraLessonWeeks);
-                    const count = baseLessonsPerWeek + (index < extraLessonWeeks ? 1 : 0);
-                    const lessons = orderedLessons.slice(start, start + count);
-                    const watched = lessons.filter(lesson => watchedAulas[lesson.id]).length;
-                    const subjects = [...new Set(lessons.map(lesson => lesson.subject))];
-                    return {
-                      week:index + 1,
-                      lessons,
-                      subjects,
-                      watched,
-                      pct:lessons.length ? Math.round(watched / lessons.length * 100) : 0,
-                    };
-                  }).filter(week => week.lessons.length || week.week <= weeksCount);
-                  const scheduleCurrentWeek = cronStartDate
-                    ? Math.max(1, Math.min(weeksCount, Math.floor((new Date() - new Date(cronStartDate)) / (7 * 24 * 60 * 60 * 1000)) + 1))
-                    : 1;
-                  const selectedWeek = Math.max(1, Math.min(weeksCount, curWeek || scheduleCurrentWeek || 1));
-                  const selectedWeekData = scheduleWeeks.find(week => week.week === selectedWeek) || scheduleWeeks[0];
-                  const openScheduleLesson = (lesson) => {
-                    if (!lesson) return;
-                    setActiveSubjectVid(lesson.subject);
-                    setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
-                    setActiveAulaAndReset(lesson.aula);
-                    setView('videoaulas');
-                  };
+                  const {
+                    activeMixPreset,
+                    backlogLessons,
+                    dailyScheduleActive,
+                    lessonWatched,
+                    lessonsPerDayLabel,
+                    lessonsPerWeekLabel,
+                    mixedScheduleActive,
+                    nextScheduleLesson,
+                    nextLessonStatus,
+                    nextLessonDay,
+                    nextLessonWeek,
+                    openLesson:openScheduleLesson,
+                    orderedLessons,
+                    orderedSubjects,
+                    plannedDailySeconds,
+                    plannedWeeklySeconds,
+                    progress:scheduleProgress,
+                    scheduleCurrentWeek,
+                    scheduleCurrentDay,
+                    scheduleDays,
+                    scheduleEndDate,
+                    scheduleHasStarted,
+                    scheduleWeeks,
+                    selectedWeek,
+                    selectedWeekData,
+                    selectedDayData,
+                    subjectBatchSize,
+                    totalEffortSeconds,
+                    weeksCount,
+                  } = scheduleJourney;
                   const applyPreset = async (preset) => {
-                    const ordered = [
-                      ...preset.subjects.filter(subject => courseSubjects.includes(subject)),
-                      ...courseSubjects.filter(subject => !preset.subjects.includes(subject)),
-                    ];
-                    await saveCoursePlanPrefs(ordered, coursePlanLocked, coursePlanLessonOrder);
+                    const lessonCounts = Object.fromEntries(courseSubjects.map(subject => [
+                      subject,
+                      courseLessons.filter(lesson => lesson.subject === subject).length,
+                    ]));
+                    const ordered = resolveScheduleSubjectOrder({
+                      availableSubjects:courseSubjects,
+                      lessonCounts,
+                      orderBy:preset.orderBy,
+                      preferredSubjects:preset.id === 'course-order'
+                        ? (appliedCourseSubjectOrder?.length ? appliedCourseSubjectOrder : courseSubjects)
+                        : preset.subjects,
+                    });
                     await saveCourseSchedulePrefs({ preset:preset.id, mixPreset:COURSE_SCHEDULE_DEFAULT_MIX_PRESET, subjects:ordered });
-                    addToast(`Preset "${preset.label}" aplicado ao cronograma.`, 'success', 2500);
+                    addToast(`Plano reorganizado: ${preset.label}.`, 'success', 2500);
                   };
                   const applyMixPreset = async (preset) => {
                     setCourseScheduleSubjectsOpen(false);
@@ -814,34 +701,80 @@ export default function CoursePortalView() {
                     const target = idx + dir;
                     if (target < 0 || target >= next.length) return;
                     [next[idx], next[target]] = [next[target], next[idx]];
-                    await saveCoursePlanPrefs(next, coursePlanLocked, coursePlanLessonOrder);
                     await saveCourseSchedulePrefs({ preset:'custom', mixPreset:COURSE_SCHEDULE_DEFAULT_MIX_PRESET, subjects:next });
                   };
                   const activePresetLabel = COURSE_SCHEDULE_PRESETS.find(preset => preset.id === courseSchedulePreset)?.label || 'Personalizado';
                   const activeMixLabel = activeMixPreset?.label || 'Ordem manual';
-                  const completedLessons = orderedLessons.filter(lesson => watchedAulas[lesson.id]).length;
-                  const schedulePct = orderedLessons.length ? Math.round(completedLessons / orderedLessons.length * 100) : 0;
-                  const nextScheduleLesson = orderedLessons.find(lesson => !watchedAulas[lesson.id]) || orderedLessons[0] || null;
-                  const currentWeekData = scheduleWeeks.find(week => week.week === selectedWeek) || selectedWeekData;
-                  const nearbyWeeks = scheduleWeeks;
+                  const completedLessons = scheduleProgress.completed;
+                  const schedulePct = scheduleProgress.pct;
+                  const currentAgendaData = dailyScheduleActive ? selectedDayData : selectedWeekData;
+                  const visibleOrderPresets = COURSE_SCHEDULE_PRESETS.filter(preset => !preset.legacy || preset.id === courseSchedulePreset);
+                  const visibleMixPresets = COURSE_SCHEDULE_MIX_PRESETS.filter(preset => !preset.legacy || preset.id === courseScheduleMixPreset);
+                  const weekdayOptions = [
+                    { id:1, label:'Seg' }, { id:2, label:'Ter' }, { id:3, label:'Qua' },
+                    { id:4, label:'Qui' }, { id:5, label:'Sex' }, { id:6, label:'Sáb' }, { id:7, label:'Dom' },
+                  ];
+                  const scheduleGoalOptions = [
+                    { id:'weeks', label:'Semanas' },
+                    { id:'effort', label:'Carga horária' },
+                    { id:'date', label:'Data final' },
+                  ];
+                  const minimumScheduleEndDate = [getTodayKey(), cronStartDate].filter(Boolean).sort().at(-1);
+                  const formatPlanDate = date => date
+                    ? date.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' }).replace('.', '')
+                    : '';
+                  const weekDateLabel = week => week?.startDate && week?.endDate
+                    ? `${formatPlanDate(week.startDate)} – ${formatPlanDate(week.endDate)}`
+                    : '';
+                  const finishDateLabel = formatPlanDate(scheduleEndDate);
+                  const nextLessonLabel = nextLessonStatus === 'backlog'
+                    ? dailyScheduleActive
+                      ? `Pendente de ${formatPlanDate(nextLessonDay?.date)}`
+                      : `Pendente da semana ${nextLessonWeek?.week || ''}`
+                    : nextLessonStatus === 'current'
+                      ? dailyScheduleActive ? 'Planejada para hoje' : 'Planejada para esta semana'
+                      : nextLessonStatus === 'future'
+                        ? dailyScheduleActive
+                          ? `Planejada para ${formatPlanDate(nextLessonDay?.date)}`
+                          : `Planejada para a semana ${nextLessonWeek?.week || ''}`
+                        : 'Plano concluído';
+                  const timelineEntries = dailyScheduleActive ? scheduleDays : scheduleWeeks;
+                  const selectedTimelineIndex = dailyScheduleActive
+                    ? Math.max(0, timelineEntries.findIndex(day => day.dateKey === selectedDayData?.dateKey))
+                    : Math.max(0, timelineEntries.findIndex(week => week.week === selectedWeek));
+                  const selectTimelineEntry = entry => dailyScheduleActive
+                    ? setCourseScheduleDayCursor(entry?.dateKey || null)
+                    : setCurWeek(entry?.week || scheduleCurrentWeek);
+                  const selectRelativePeriod = direction => selectTimelineEntry(
+                    timelineEntries[Math.max(0, Math.min(timelineEntries.length - 1, selectedTimelineIndex + direction))]
+                  );
+                  const selectCurrentPeriod = () => dailyScheduleActive
+                    ? setCourseScheduleDayCursor(scheduleCurrentDay?.dateKey || null)
+                    : setCurWeek(scheduleCurrentWeek);
+                  const toggleStudyDay = day => {
+                    const selected = courseScheduleStudyDays.includes(day);
+                    if (selected && courseScheduleStudyDays.length === 1) {
+                      addToast('Escolha pelo menos um dia de estudo.', 'info', 2500);
+                      return;
+                    }
+                    const next = selected
+                      ? courseScheduleStudyDays.filter(value => value !== day)
+                      : [...courseScheduleStudyDays, day].sort((left,right)=>left-right);
+                    setCourseScheduleDayCursor(null);
+                    saveCourseSchedulePrefs({ studyDays:next });
+                  };
 
                   return (
-                    <div className="space-y-5">
-                      <section className={`rounded-2xl border p-5 md:p-6 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                    <div className="flex flex-col gap-5">
+                      <section className={`order-1 rounded-2xl border p-5 md:p-6 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
                         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
                           <div className="min-w-0">
-                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Cronograma</p>
-                            <h2 className="text-2xl font-serif font-bold text-yellow-600 mt-1">Seu plano da semana</h2>
-                            <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>Acompanhe o avanço e abra a próxima aula sem mexer nas configurações.</p>
+                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Plano de estudos</p>
+                            <h2 className="text-2xl font-serif font-bold text-yellow-600 mt-1">Seu curso, em uma ordem clara</h2>
+                            <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-500'}`}>A carga semanal considera a duração das aulas. Ao concluir uma aula, a seleção pedagógica segue para Revisões.</p>
                           </div>
-                          <button onClick={()=>setCourseScheduleSettingsOpen(open => !open)}
-                            className={`px-4 py-3 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 ${dm?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                            <SettingsIcon className="w-4 h-4"/>
-                            Configurações
-                            {courseScheduleSettingsOpen?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
-                          </button>
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.25fr] gap-4 mt-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-4 mt-5">
                           <div className={`rounded-2xl border p-4 ${dm?'bg-gray-950/50 border-gray-800':'bg-gray-50 border-gray-100'}`}>
                             <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Progresso</p>
                             <div className="flex items-end justify-between gap-4 mt-2">
@@ -851,55 +784,133 @@ export default function CoursePortalView() {
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-center">
                                 <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
-                                  <p className="text-lg font-bold text-yellow-600">{weeksCount}</p>
-                                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>semanas</p>
+                                  <p className="text-lg font-bold text-yellow-600">{formatCourseDuration(dailyScheduleActive?plannedDailySeconds:plannedWeeklySeconds) || '—'}</p>
+                                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{dailyScheduleActive?'vídeo/dia':'vídeo/sem'}</p>
                                 </div>
                                 <div className={`rounded-xl border px-3 py-2 ${dm?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
-                                  <p className="text-lg font-bold text-yellow-600">{lessonsPerWeekLabel}</p>
-                                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>aulas/sem</p>
+                                  <p className="text-lg font-bold text-yellow-600">{dailyScheduleActive?lessonsPerDayLabel:lessonsPerWeekLabel}</p>
+                                  <p className={`text-[10px] font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>{dailyScheduleActive?'aulas/dia':'aulas/sem'}</p>
                                 </div>
                               </div>
                             </div>
                             <div className={`h-2 rounded-full overflow-hidden mt-4 ${dm?'bg-gray-800':'bg-gray-200'}`}>
                               <div className="h-full bg-yellow-500 rounded-full transition-all" style={{width:`${schedulePct}%`}}/>
                             </div>
+                            <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>
+                              <span>{formatCourseDuration(totalEffortSeconds) || 'Carga não informada'} de videoaulas</span>
+                              <span>{finishDateLabel ? `Previsão: ${finishDateLabel}` : `${weeksCount} semanas`}</span>
+                            </div>
                           </div>
                           <button onClick={()=>openScheduleLesson(nextScheduleLesson)} disabled={!nextScheduleLesson}
-                            className={`rounded-2xl border p-4 text-left transition-all disabled:opacity-50 ${dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-700':'bg-gray-50 border-gray-100 hover:border-yellow-300'}`}>
-                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Próxima aula</p>
+                            className={`rounded-2xl border p-4 text-left transition-all disabled:opacity-50 ${nextLessonStatus==='backlog'?(dm?'border-amber-800 bg-amber-950/20':'border-amber-200 bg-amber-50'):(dm?'bg-gray-950/50 border-gray-800 hover:border-yellow-700':'bg-gray-50 border-gray-100 hover:border-yellow-300')}`}>
+                            <div className="flex items-center justify-between gap-3">
+                              <p className={`text-xs font-bold uppercase tracking-widest ${nextLessonStatus==='backlog'?'text-amber-600':dm?'text-gray-500':'text-gray-400'}`}>Próxima aula</p>
+                              <span className={`text-[10px] font-bold ${nextLessonStatus==='backlog'?'text-amber-600':dm?'text-gray-500':'text-gray-400'}`}>{nextLessonLabel}</span>
+                            </div>
                             <h3 className="text-xl font-serif font-bold text-yellow-600 mt-2">{nextScheduleLesson?.title || 'Nenhuma aula pendente'}</h3>
                             <p className={`text-sm mt-2 ${dm?'text-gray-400':'text-gray-500'}`}>{nextScheduleLesson ? `${capitalizeDisplayLabel(nextScheduleLesson.subject)} · ${shortTopicName(nextScheduleLesson.topic)}` : 'Tudo certo por aqui.'}</p>
                             {nextScheduleLesson&&<p className={`text-xs font-bold mt-4 ${dm?'text-yellow-300':'text-yellow-700'}`}>Abrir aula</p>}
                           </button>
                         </div>
+                        {backlogLessons.length>0&&(
+                          <div className={`mt-4 flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center ${dm?'border-amber-900/70 bg-amber-950/15':'border-amber-200 bg-amber-50'}`}>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-amber-600">{backlogLessons.length} {backlogLessons.length===1
+                                ? `aula pendente de ${dailyScheduleActive?'dia anterior':'semana anterior'}`
+                                : `aulas pendentes de ${dailyScheduleActive?'dias anteriores':'semanas anteriores'}`}</p>
+                              <p className={`mt-0.5 text-xs ${dm?'text-gray-400':'text-gray-600'}`}>Elas entram antes das aulas futuras, sem alterar o que você já concluiu.</p>
+                            </div>
+                            <button onClick={()=>openScheduleLesson(backlogLessons[0])} className="min-h-[38px] rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700">Retomar pendência</button>
+                          </div>
+                        )}
                       </section>
 
-                      {courseScheduleSettingsOpen&&(
-                        <div className="space-y-5">
+                      <div className="order-3 space-y-5">
+                        <button onClick={()=>setCourseScheduleSettingsOpen(open => !open)}
+                          className={`flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${dm?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
+                          <SettingsIcon className="w-4 h-4"/>
+                          Configurar plano
+                          {courseScheduleSettingsOpen?<ChevronDown className="w-4 h-4"/>:<ChevronRight className="w-4 h-4"/>}
+                        </button>
+                        {courseScheduleSettingsOpen&&(<>
                           <section className={`rounded-2xl border p-5 ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'}`}>
+                            <div className="mb-4 grid grid-cols-2 gap-2">
+                              {[
+                                { id:'weekly', label:'Semanal', desc:'Organiza a carga por semana.' },
+                                { id:'daily', label:'Diário', desc:'Divide a carga nos dias escolhidos.' },
+                              ].map(option => (
+                                <button key={option.id} onClick={()=>{setCourseScheduleDayCursor(null);saveCourseSchedulePrefs({cadence:option.id});}}
+                                  className={`rounded-xl border p-3 text-left ${courseScheduleCadence===option.id?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-950/35':'border-gray-200 bg-gray-50')}`}>
+                                  <span className="block text-sm font-bold">{option.label}</span>
+                                  <span className={`mt-1 block text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>{option.desc}</span>
+                                </button>
+                              ))}
+                            </div>
+                            {dailyScheduleActive&&(
+                              <div className={`mb-4 rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
+                                <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Dias de estudo</label>
+                                <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                                  {weekdayOptions.map(day => {
+                                    const selected = courseScheduleStudyDays.includes(day.id);
+                                    return <button key={day.id} onClick={()=>toggleStudyDay(day.id)} aria-pressed={selected}
+                                      className={`h-14 rounded-xl border px-3 py-4 text-sm font-bold ${selected?(dm?'border-yellow-600 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-500':'border-gray-200 text-gray-500')}`}>{day.label}</button>;
+                                  })}
+                                </div>
+                                <p className={`mt-2 text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>A duração das aulas é distribuída somente nesses dias.</p>
+                              </div>
+                            )}
                             <div className={`grid grid-cols-1 ${mixedScheduleActive?'lg:grid-cols-[1fr_1.3fr]':'lg:grid-cols-[1fr_1.3fr_1fr]'} gap-4`}>
                               <div className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
                                 <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Data de início</label>
                                 <input type="date" value={cronStartDate||''} onChange={e=>saveCronStartDate(e.target.value)}
                                   className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-medium ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                                <p className={`mt-2 text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>{cronStartDate
+                                  ? `${scheduleHasStarted?'Semana atual':'Início programado'}: ${scheduleCurrentWeek}`
+                                  : dailyScheduleActive?'Sem data, o plano diário começa hoje.':'Sem data, o plano permanece na semana 1.'}</p>
                               </div>
                               <div className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
                                 <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Quero terminar em</label>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                  <input type="number" min="1" max="104" value={weeksCount} onChange={e=>saveCourseSchedulePrefs({ weeks:e.target.value })}
-                                    className={`w-full sm:w-28 p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
-                                  <div className="grid grid-cols-4 gap-1 flex-1 min-h-[46px]">
-                                    {[12,16,24,36].map(weeks => (
-                                      <button key={weeks} onClick={()=>saveCourseSchedulePrefs({ weeks })} className={`rounded-xl border text-xs font-bold ${weeksCount===weeks?(dm?'border-yellow-600 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
-                                        {weeks} semanas
-                                      </button>
-                                    ))}
-                                  </div>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  {scheduleGoalOptions.map(option => (
+                                    <button key={option.id} onClick={()=>saveCourseSchedulePrefs({ goalMode:option.id })}
+                                      className={`min-h-[42px] rounded-lg border px-2 py-2 text-[11px] font-bold ${courseScheduleGoalMode===option.id?(dm?'border-yellow-600 bg-yellow-900/30 text-yellow-300':'border-yellow-500 bg-yellow-50 text-yellow-700'):(dm?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50')}`}>
+                                      {option.label}
+                                    </button>
+                                  ))}
                                 </div>
+                                {courseScheduleGoalMode==='weeks'&&(
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <input key={`weeks-${courseScheduleWeeks}`} type="number" min="1" max="104" defaultValue={courseScheduleWeeks}
+                                      onBlur={e=>saveCourseSchedulePrefs({ weeks:e.target.value })}
+                                      onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}
+                                      className={`w-24 p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                                    <span className={`text-sm font-medium ${dm?'text-gray-300':'text-gray-600'}`}>semanas</span>
+                                  </div>
+                                )}
+                                {courseScheduleGoalMode==='effort'&&(
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <input key={`effort-${courseScheduleCadence}-${courseScheduleEffortHours}`} type="number" min="0.5" max="80" step="0.5" defaultValue={courseScheduleEffortHours}
+                                      onBlur={e=>saveCourseSchedulePrefs({ effortHours:e.target.value })}
+                                      onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}
+                                      className={`w-24 p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                                    <span className={`text-sm font-medium ${dm?'text-gray-300':'text-gray-600'}`}>{dailyScheduleActive?'horas por dia de estudo':'horas por semana'}</span>
+                                  </div>
+                                )}
+                                {courseScheduleGoalMode==='date'&&(
+                                  <input type="date" min={minimumScheduleEndDate} value={courseScheduleEndDate||''} onChange={e=>saveCourseSchedulePrefs({ endDate:e.target.value })}
+                                    className={`mt-3 w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${dm?'bg-gray-950 border-gray-700 text-white':'bg-gray-50 border-gray-200 text-gray-800'}`}/>
+                                )}
+                                <p className={`mt-2 text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>
+                                  {courseScheduleGoalMode==='date'
+                                    ? courseScheduleEndDate ? `Carga distribuída até ${new Date(`${courseScheduleEndDate}T12:00:00`).toLocaleDateString('pt-BR')}.` : 'Escolha a data em que pretende concluir o curso.'
+                                    : courseScheduleGoalMode==='effort'
+                                      ? `Essa carga distribui as videoaulas em cerca de ${weeksCount} ${weeksCount===1?'semana':'semanas'}.`
+                                      : `Estimativa média de ${formatCourseDuration(dailyScheduleActive?plannedDailySeconds:plannedWeeklySeconds) || 'carga não informada'} de videoaulas por ${dailyScheduleActive?'dia de estudo':'semana'}.`}
+                                </p>
                               </div>
                               {!mixedScheduleActive&&(
                                 <div className={`rounded-xl border p-3 ${dm?'border-gray-800 bg-gray-950/35':'border-gray-100 bg-gray-50/80'}`}>
-                                  <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Matérias em paralelo</label>
+                                  <label className={`block text-[11px] font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Matérias por bloco</label>
                                   <div className="grid grid-cols-6 gap-1 min-h-[46px]">
                                     {[1,2,3,4,5,6].map(size => (
                                       <button key={size} onClick={()=>saveCourseSchedulePrefs({ subjectBatchSize:size, mixPreset:COURSE_SCHEDULE_DEFAULT_MIX_PRESET })}
@@ -908,6 +919,7 @@ export default function CoursePortalView() {
                                       </button>
                                     ))}
                                   </div>
+                                  <p className={`mt-2 text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>Dentro do bloco, as aulas se alternam sem quebrar a ordem de cada matéria.</p>
                                 </div>
                               )}
                             </div>
@@ -926,7 +938,7 @@ export default function CoursePortalView() {
                                 <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>Mantém blocos de uma ou mais matérias por vez. Use quando quiser sentir que está fechando disciplinas.</p>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                                {COURSE_SCHEDULE_PRESETS.map(preset => {
+                                {visibleOrderPresets.map(preset => {
                                   const active = !mixedScheduleActive && courseSchedulePreset===preset.id;
                                   return (
                                     <button key={preset.id} onClick={()=>applyPreset(preset)}
@@ -943,10 +955,10 @@ export default function CoursePortalView() {
                               <div className="mb-3">
                                 <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Misturar aulas automaticamente</p>
                                 <h4 className="text-lg font-serif font-bold text-yellow-600">{activeMixLabel}</h4>
-                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>Ignora a ordem manual das matérias e mistura cada aula por prioridade, base, cobrança ou currículo.</p>
+                                <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>Reordena as aulas por objetivo. Apenas “Médico Bicho” deixa Preventiva fora, como indicado no próprio preset.</p>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                                {COURSE_SCHEDULE_MIX_PRESETS.map(preset => (
+                                {visibleMixPresets.map(preset => (
                                   <button key={preset.id} onClick={()=>applyMixPreset(preset)}
                                     className={`rounded-xl border p-4 text-left transition-all h-full ${courseScheduleMixPreset===preset.id?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-950/40 hover:border-gray-700':'border-gray-200 bg-white hover:bg-gray-50')}`}>
                                     <p className="text-sm font-bold">{preset.label}</p>
@@ -971,7 +983,7 @@ export default function CoursePortalView() {
                                 Esta trilha ordena as aulas automaticamente, então a ordem manual fica fechada.
                               </div>
                             ) : courseScheduleSubjectsOpen ? (
-                              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              <div className="mt-4 grid grid-cols-1 gap-2">
                                 {orderedSubjects.map((subject, idx) => {
                                   const total = courseLessons.filter(lesson => lesson.subject === subject).length;
                                   return (
@@ -995,28 +1007,42 @@ export default function CoursePortalView() {
                               </div>
                             )}
                           </aside>
-                        </div>
-                      )}
+                        </>)}
+                      </div>
 
-                      <section className="space-y-3">
-                          {currentWeekData&&(
+                      <section className="order-2 space-y-3">
+                          {currentAgendaData&&(
                             <div className={`rounded-2xl border-2 border-yellow-500 overflow-hidden ${dm?'bg-gray-900':'bg-white'}`}>
                               <div className={`p-4 border-b ${dm?'border-gray-800':'border-gray-100'}`}>
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Agenda da semana</p>
-                                    <h3 className="text-xl font-serif font-bold text-yellow-600">Semana {currentWeekData.week}</h3>
-                                    <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>{currentWeekData.subjects.join(' · ') || 'Sem aulas nessa semana'}</p>
+                                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>{dailyScheduleActive?'Agenda do dia':'Agenda da semana'}</p>
+                                      {(dailyScheduleActive?currentAgendaData.dateKey===scheduleCurrentDay?.dateKey:currentAgendaData.week===scheduleCurrentWeek)&&<span className="rounded-full bg-yellow-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-yellow-600">Atual</span>}
+                                    </div>
+                                    <h3 className="text-xl font-serif font-bold text-yellow-600">{dailyScheduleActive
+                                      ? currentAgendaData.date.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' })
+                                      : `Semana ${currentAgendaData.week}`}</h3>
+                                    <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>
+                                      {[dailyScheduleActive?`Semana ${currentAgendaData.week}`:weekDateLabel(currentAgendaData), currentAgendaData.subjects.join(' · ')].filter(Boolean).join(' · ') || `Sem aulas ${dailyScheduleActive?'neste dia':'nesta semana'}`}
+                                    </p>
                                   </div>
-                                  <div className="text-right">
-                                    <p className={`text-2xl font-serif font-bold ${currentWeekData.pct===100?'text-green-500':'text-yellow-600'}`}>{currentWeekData.pct}%</p>
-                                    <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{currentWeekData.watched}/{currentWeekData.lessons.length}</p>
+                                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                                    <div className="text-left sm:text-right">
+                                      <p className={`text-2xl font-serif font-bold ${currentAgendaData.pct===100?'text-green-500':'text-yellow-600'}`}>{currentAgendaData.pct}%</p>
+                                      <p className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{currentAgendaData.watched}/{currentAgendaData.lessons.length} · {formatCourseDuration(currentAgendaData.effortSeconds) || 'sem carga'}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <button onClick={()=>selectRelativePeriod(-1)} disabled={selectedTimelineIndex<=0} aria-label={dailyScheduleActive?'Dia anterior':'Semana anterior'} className={`h-10 w-10 rounded-lg border text-lg font-bold disabled:opacity-25 ${dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50'}`}>←</button>
+                                      <button onClick={selectCurrentPeriod} className={`h-10 rounded-lg border px-3 text-xs font-bold ${dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50'}`}>Hoje</button>
+                                      <button onClick={()=>selectRelativePeriod(1)} disabled={selectedTimelineIndex>=timelineEntries.length-1} aria-label={dailyScheduleActive?'Próximo dia':'Próxima semana'} className={`h-10 w-10 rounded-lg border text-lg font-bold disabled:opacity-25 ${dm?'border-gray-700 hover:bg-gray-800':'border-gray-200 hover:bg-gray-50'}`}>→</button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                               <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {currentWeekData.lessons.map((lesson, index) => {
-                                  const watched = !!watchedAulas[lesson.id];
+                                {currentAgendaData.lessons.map((lesson, index) => {
+                                  const watched = lessonWatched(lesson);
                                   return (
                                     <div key={`${lesson.id}-${index}`} onClick={()=>openScheduleLesson(lesson)} role="button" tabIndex={0}
                                       onKeyDown={event => {
@@ -1028,34 +1054,49 @@ export default function CoursePortalView() {
                                           {watched ? <CheckIcon className="w-3 h-3"/> : <PlayIcon className="w-3 h-3"/>}
                                         </span>
                                         <div className="min-w-0">
-                                          <p className="text-sm font-bold truncate">{lesson.title}</p>
-                                          <p className={`text-[11px] mt-1 truncate ${dm?'text-gray-500':'text-gray-500'}`}>{capitalizeDisplayLabel(lesson.subject)} · {shortTopicName(lesson.topic)}</p>
+                                          <p className="text-sm font-bold leading-snug line-clamp-2">{lesson.title}</p>
+                                          <p className={`text-[11px] mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>{capitalizeDisplayLabel(lesson.subject)} · {shortTopicName(lesson.topic)}{lesson.duration?` · ${lesson.duration}`:''}</p>
                                         </div>
                                       </div>
                                     </div>
                                   );
                                 })}
+                                {!currentAgendaData.lessons.length&&(
+                                  <div className={`sm:col-span-2 rounded-xl border border-dashed p-5 text-center text-sm ${dm?'border-gray-700 text-gray-500':'border-gray-300 text-gray-500'}`}>Nenhuma aula foi distribuída {dailyScheduleActive?'neste dia':'nesta semana'}. Reduza a duração total do plano para evitar períodos vazios.</div>
+                                )}
                               </div>
                             </div>
                           )}
 
-                          <div>
-                            <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dm?'text-gray-500':'text-gray-400'}`}>Agendas prévias e próximas</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {nearbyWeeks.map(week => {
-                              const isSelected = week.week === selectedWeek;
-                              const isCurrent = week.week === scheduleCurrentWeek;
+                          <div className="min-w-0">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-gray-500':'text-gray-400'}`}>Visão geral {dailyScheduleActive?'dos dias':'das semanas'}</p>
+                              <p className={`text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>Arraste para navegar</p>
+                            </div>
+                            <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
+                            {timelineEntries.map(entry => {
+                              const isSelected = dailyScheduleActive
+                                ? entry.dateKey === selectedDayData?.dateKey
+                                : entry.week === selectedWeek;
+                              const isCurrent = dailyScheduleActive
+                                ? entry.dateKey === scheduleCurrentDay?.dateKey
+                                : entry.week === scheduleCurrentWeek;
                               return (
-                                <button key={week.week} onClick={()=>setCurWeek(week.week)}
-                                  className={`rounded-2xl border p-4 text-left transition-all ${isSelected?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-900 hover:border-gray-700':'border-gray-200 bg-white hover:border-yellow-300')}`}>
+                                <button key={dailyScheduleActive?entry.dateKey:entry.week} onClick={()=>selectTimelineEntry(entry)}
+                                  className={`min-w-[138px] max-w-[138px] snap-start rounded-xl border p-3 text-left transition-all ${isSelected?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-900 hover:border-gray-700':'border-gray-200 bg-white hover:border-yellow-300')}`}>
                                   <div className="flex items-start justify-between gap-2 mb-2">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${week.pct===100?'bg-green-500 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 ring-1 ring-yellow-500':'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400'):(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                                      {week.pct===100?<CheckIcon className="w-3.5 h-3.5"/>:week.week}
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${entry.pct===100?'bg-green-500 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 ring-1 ring-yellow-500':'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400'):(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
+                                      {entry.pct===100?<CheckIcon className="w-3.5 h-3.5"/>:dailyScheduleActive?entry.date.getDate():entry.week}
                                     </div>
-                                    <span className={`text-[10px] font-bold ${week.pct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{week.pct}%</span>
+                                    <span className={`text-[10px] font-bold ${entry.pct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{entry.pct}%</span>
                                   </div>
-                                  <p className={`text-xs font-bold truncate mb-0.5 ${dm?'text-gray-300':'text-gray-700'}`}>{week.subjects.join(' + ') || 'Semana vazia'}</p>
-                                  <p className={`text-[10px] truncate ${dm?'text-gray-600':'text-gray-400'}`}>{week.lessons[0]?.title || 'Sem aulas'}{week.lessons.length>1?` +${week.lessons.length-1}`:''}</p>
+                                  <p className={`text-xs font-bold truncate ${dm?'text-gray-300':'text-gray-700'}`}>{dailyScheduleActive
+                                    ? entry.date.toLocaleDateString('pt-BR', { weekday:'short' }).replace('.', '')
+                                    : entry.subjects.join(' + ') || 'Semana vazia'}</p>
+                                  <p className={`mt-1 text-[10px] ${dm?'text-gray-600':'text-gray-400'}`}>{entry.lessons.length} aula{entry.lessons.length!==1?'s':''} · {formatCourseDuration(entry.effortSeconds) || '—'}</p>
+                                  <p className={`mt-0.5 truncate text-[10px] ${dm?'text-gray-600':'text-gray-400'}`}>{dailyScheduleActive
+                                    ? `${formatPlanDate(entry.date)} · sem. ${entry.week}`
+                                    : weekDateLabel(entry)}</p>
                                 </button>
                               );
                             })}

@@ -11,6 +11,7 @@ export default defineConfig({
           if (!id.includes('node_modules')) return;
           if (id.includes('/firebase/')) return 'firebase';
           if (id.includes('/react') || id.includes('/scheduler/')) return 'react-vendor';
+          if (id.includes('/ts-fsrs/')) return 'fsrs-vendor';
           return 'vendor';
         }
       }

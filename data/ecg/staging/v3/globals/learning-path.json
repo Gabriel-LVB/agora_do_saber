@@ -1,0 +1,453 @@
+[
+  {
+    "moduleId": "m01_fundamentos",
+    "title": "Fundamentos, normal e variantes",
+    "conceptIds": [
+      "ecg.normal",
+      "ecg.rhythm.sinus",
+      "ecg.normal.sinus_arrhythmia",
+      "ecg.normal.early_repolarization",
+      "ecg.normal.athlete",
+      "ecg.anatomy.dextrocardia"
+    ],
+    "prerequisiteModuleIds": [],
+    "caseIds": [
+      "ECG021",
+      "ECG041",
+      "ECG046",
+      "ECG063",
+      "ECG066",
+      "ECG076",
+      "ECG078",
+      "ECG087",
+      "ECG094",
+      "ECG100",
+      "ECG107",
+      "ECG108",
+      "ECG116",
+      "ECG142",
+      "ECG149"
+    ],
+    "recommendedCaseOrder": [
+      "ECG041",
+      "ECG046",
+      "ECG066",
+      "ECG087",
+      "ECG094",
+      "ECG116",
+      "ECG149",
+      "ECG021",
+      "ECG076",
+      "ECG078",
+      "ECG100",
+      "ECG107",
+      "ECG063",
+      "ECG108",
+      "ECG142"
+    ]
+  },
+  {
+    "moduleId": "m02_arritmias_supraventriculares",
+    "title": "Ritmos e arritmias supraventriculares",
+    "conceptIds": [
+      "ecg.arrhythmia.af",
+      "ecg.arrhythmia.flutter",
+      "ecg.arrhythmia.atrial_tachycardia",
+      "ecg.arrhythmia.svt",
+      "ecg.arrhythmia.avnrt",
+      "ecg.arrhythmia.pac"
+    ],
+    "prerequisiteModuleIds": [
+      "m01_fundamentos"
+    ],
+    "caseIds": [
+      "ECG005",
+      "ECG006",
+      "ECG010",
+      "ECG011",
+      "ECG013",
+      "ECG023",
+      "ECG024",
+      "ECG027",
+      "ECG039",
+      "ECG042",
+      "ECG043",
+      "ECG047",
+      "ECG050",
+      "ECG059",
+      "ECG060",
+      "ECG065",
+      "ECG069",
+      "ECG074",
+      "ECG081",
+      "ECG086",
+      "ECG095",
+      "ECG105",
+      "ECG109",
+      "ECG112",
+      "ECG122",
+      "ECG130",
+      "ECG134",
+      "ECG148",
+      "ECG150"
+    ],
+    "recommendedCaseOrder": [
+      "ECG013",
+      "ECG027",
+      "ECG039",
+      "ECG065",
+      "ECG069",
+      "ECG150",
+      "ECG005",
+      "ECG006",
+      "ECG010",
+      "ECG011",
+      "ECG042",
+      "ECG043",
+      "ECG050",
+      "ECG086",
+      "ECG095",
+      "ECG112",
+      "ECG130",
+      "ECG148",
+      "ECG023",
+      "ECG024",
+      "ECG047",
+      "ECG059",
+      "ECG060",
+      "ECG074",
+      "ECG081",
+      "ECG105",
+      "ECG109",
+      "ECG122",
+      "ECG134"
+    ]
+  },
+  {
+    "moduleId": "m03_conducao",
+    "title": "Bloqueios AV e intraventriculares",
+    "conceptIds": [
+      "ecg.conduction"
+    ],
+    "prerequisiteModuleIds": [
+      "m01_fundamentos"
+    ],
+    "caseIds": [
+      "ECG003",
+      "ECG008",
+      "ECG012",
+      "ECG016",
+      "ECG019",
+      "ECG020",
+      "ECG026",
+      "ECG029",
+      "ECG034",
+      "ECG038",
+      "ECG044",
+      "ECG045",
+      "ECG054",
+      "ECG055",
+      "ECG062",
+      "ECG072",
+      "ECG073",
+      "ECG079",
+      "ECG089",
+      "ECG090",
+      "ECG092",
+      "ECG097",
+      "ECG118"
+    ],
+    "recommendedCaseOrder": [
+      "ECG016",
+      "ECG019",
+      "ECG026",
+      "ECG045",
+      "ECG072",
+      "ECG003",
+      "ECG029",
+      "ECG054",
+      "ECG055",
+      "ECG073",
+      "ECG079",
+      "ECG090",
+      "ECG092",
+      "ECG008",
+      "ECG012",
+      "ECG020",
+      "ECG034",
+      "ECG038",
+      "ECG044",
+      "ECG062",
+      "ECG089",
+      "ECG097",
+      "ECG118"
+    ]
+  },
+  {
+    "moduleId": "m04_preexcitacao_canalopatias",
+    "title": "Pré-excitação e canalopatias",
+    "conceptIds": [
+      "ecg.preexcitation",
+      "ecg.channelopathy"
+    ],
+    "prerequisiteModuleIds": [
+      "m02_arritmias_supraventriculares",
+      "m03_conducao"
+    ],
+    "caseIds": [
+      "ECG015",
+      "ECG064",
+      "ECG070",
+      "ECG082",
+      "ECG115",
+      "ECG123",
+      "ECG125",
+      "ECG141",
+      "ECG144",
+      "ECG145",
+      "ECG146"
+    ],
+    "recommendedCaseOrder": [
+      "ECG015",
+      "ECG064",
+      "ECG082",
+      "ECG115",
+      "ECG123",
+      "ECG145",
+      "ECG125",
+      "ECG141",
+      "ECG144",
+      "ECG146",
+      "ECG070"
+    ]
+  },
+  {
+    "moduleId": "m05_arritmias_ventriculares",
+    "title": "Arritmias ventriculares e QRS largo",
+    "conceptIds": [
+      "ecg.arrhythmia.pvc",
+      "ecg.arrhythmia.vt",
+      "ecg.arrhythmia.vf",
+      "ecg.arrhythmia.wide_complex_tachycardia",
+      "ecg.rhythm.accelerated_idioventricular"
+    ],
+    "prerequisiteModuleIds": [
+      "m01_fundamentos",
+      "m03_conducao"
+    ],
+    "caseIds": [
+      "ECG001",
+      "ECG031",
+      "ECG052",
+      "ECG056",
+      "ECG057",
+      "ECG083",
+      "ECG088",
+      "ECG099",
+      "ECG102",
+      "ECG104",
+      "ECG113",
+      "ECG117",
+      "ECG119",
+      "ECG129",
+      "ECG133",
+      "ECG137",
+      "ECG138",
+      "ECG147"
+    ],
+    "recommendedCaseOrder": [
+      "ECG001",
+      "ECG104",
+      "ECG133",
+      "ECG057",
+      "ECG102",
+      "ECG129",
+      "ECG147",
+      "ECG031",
+      "ECG052",
+      "ECG056",
+      "ECG099",
+      "ECG113",
+      "ECG117",
+      "ECG138",
+      "ECG083",
+      "ECG088",
+      "ECG119",
+      "ECG137"
+    ]
+  },
+  {
+    "moduleId": "m06_isquemia_infarto",
+    "title": "Isquemia, infarto e ST-T",
+    "conceptIds": [
+      "ecg.ischemia",
+      "ecg.repolarization"
+    ],
+    "prerequisiteModuleIds": [
+      "m01_fundamentos"
+    ],
+    "caseIds": [
+      "ECG002",
+      "ECG004",
+      "ECG007",
+      "ECG014",
+      "ECG017",
+      "ECG022",
+      "ECG025",
+      "ECG030",
+      "ECG032",
+      "ECG033",
+      "ECG036",
+      "ECG037",
+      "ECG048",
+      "ECG049",
+      "ECG051",
+      "ECG053",
+      "ECG058",
+      "ECG068",
+      "ECG077",
+      "ECG080",
+      "ECG085",
+      "ECG091",
+      "ECG093",
+      "ECG101",
+      "ECG106",
+      "ECG110",
+      "ECG126",
+      "ECG127",
+      "ECG135",
+      "ECG136"
+    ],
+    "recommendedCaseOrder": [
+      "ECG004",
+      "ECG002",
+      "ECG007",
+      "ECG014",
+      "ECG017",
+      "ECG022",
+      "ECG025",
+      "ECG030",
+      "ECG032",
+      "ECG033",
+      "ECG036",
+      "ECG049",
+      "ECG077",
+      "ECG080",
+      "ECG091",
+      "ECG101",
+      "ECG127",
+      "ECG037",
+      "ECG048",
+      "ECG051",
+      "ECG053",
+      "ECG058",
+      "ECG068",
+      "ECG085",
+      "ECG093",
+      "ECG106",
+      "ECG110",
+      "ECG126",
+      "ECG135",
+      "ECG136"
+    ]
+  },
+  {
+    "moduleId": "m07_sobrecargas_pulmao",
+    "title": "Sobrecargas, coração direito e pulmão",
+    "conceptIds": [
+      "ecg.chamber",
+      "ecg.pulmonary",
+      "ecg.cardiomyopathy"
+    ],
+    "prerequisiteModuleIds": [
+      "m01_fundamentos"
+    ],
+    "caseIds": [
+      "ECG009",
+      "ECG018",
+      "ECG028",
+      "ECG035",
+      "ECG096",
+      "ECG098",
+      "ECG111",
+      "ECG124",
+      "ECG128",
+      "ECG131",
+      "ECG140"
+    ],
+    "recommendedCaseOrder": [
+      "ECG009",
+      "ECG018",
+      "ECG111",
+      "ECG128",
+      "ECG131",
+      "ECG028",
+      "ECG096",
+      "ECG140",
+      "ECG035",
+      "ECG098",
+      "ECG124"
+    ]
+  },
+  {
+    "moduleId": "m08_metabolico_pericardio",
+    "title": "Metabólico, drogas, pericárdio e sistêmicas",
+    "conceptIds": [
+      "ecg.metabolic",
+      "ecg.pericardium"
+    ],
+    "prerequisiteModuleIds": [
+      "m01_fundamentos",
+      "m06_isquemia_infarto"
+    ],
+    "caseIds": [
+      "ECG071",
+      "ECG084",
+      "ECG114",
+      "ECG120",
+      "ECG121",
+      "ECG132",
+      "ECG139",
+      "ECG143"
+    ],
+    "recommendedCaseOrder": [
+      "ECG071",
+      "ECG120",
+      "ECG139",
+      "ECG143",
+      "ECG084",
+      "ECG114",
+      "ECG121",
+      "ECG132"
+    ]
+  },
+  {
+    "moduleId": "m09_integracao",
+    "title": "Integração e armadilhas",
+    "conceptIds": [
+      "ecg.arrhythmia.wide_complex_tachycardia",
+      "ecg.normal.artifact",
+      "ecg.pacing"
+    ],
+    "prerequisiteModuleIds": [
+      "m02_arritmias_supraventriculares",
+      "m03_conducao",
+      "m05_arritmias_ventriculares",
+      "m06_isquemia_infarto"
+    ],
+    "caseIds": [
+      "ECG040",
+      "ECG061",
+      "ECG067",
+      "ECG075",
+      "ECG103"
+    ],
+    "recommendedCaseOrder": [
+      "ECG040",
+      "ECG061",
+      "ECG067",
+      "ECG103",
+      "ECG075"
+    ]
+  }
+]

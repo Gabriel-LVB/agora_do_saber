@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "agora_ecg_cases_v3",
+  "importMode": "staging",
+  "structuralImportAllowed": true,
+  "runtimeTrainingGloballyEnabled": false,
+  "managementQuestionGenerationEnabled": false,
+  "questionImageMatchingGloballyEnabled": false,
+  "reason": "Ground truth diagnóstico aguarda validação independente caso a caso.",
+  "activationRule": "Um caso só pode ativar diagnóstico, microtarefas, matching e revisão após medicalValidation.status=validated e legacyContentReviewFlag=false.",
+  "highPriorityHumanReviewCount": 25,
+  "totalPendingMedicalValidation": 150,
+  "publicAssetDeliveryEnabled": true
+}

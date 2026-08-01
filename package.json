@@ -5,19 +5,25 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "npm run test:unit && npm run test:rules && npm run build && npm run budget",
+    "check": "npm run test:unit && npm run test:rules && npm run validate:ecg-staging && npm run build && npm run budget",
     "audit:moderate": "npm audit --audit-level=moderate",
     "budget": "node --no-warnings scripts/build-budget.mjs",
     "test:preflight": "npm run check",
     "test:unit": "node --no-warnings scripts/unit-smoke.mjs",
     "test:rules": "node --no-warnings scripts/firestore-rules-smoke.mjs",
     "test:rules:emulator": "npx firebase-tools@13.35.1 emulators:exec --only firestore \"node --no-warnings scripts/firestore-emulator-rules-test.mjs\"",
+    "import:ecg-site-pack": "node --no-warnings scripts/import-ecg-site-pack.mjs",
+    "import:ecg-staging": "node --no-warnings scripts/import-ecg-staging.mjs",
+    "build:ecg-question-index": "node --no-warnings scripts/build-ecg-question-index.mjs",
+    "validate:ecg": "node --no-warnings scripts/validate-ecg-pack.mjs",
+    "validate:ecg-staging": "node --no-warnings scripts/validate-ecg-staging.mjs",
     "ux:smoke": "node scripts/ux-smoke.mjs"
   },
   "dependencies": {
     "firebase": "^12.12.0",
     "react": "^17.0.2",
-    "react-dom": "^17.0.2"
+    "react-dom": "^17.0.2",
+    "ts-fsrs": "5.4.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",

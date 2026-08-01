@@ -1,0 +1,769 @@
+[
+  {
+    "clusterId": "cluster_ecg_anatomy_dextrocardia",
+    "conceptId": "ecg.anatomy.dextrocardia",
+    "canonicalCaseId": "ECG041",
+    "caseIds": [
+      "ECG041"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_af",
+    "conceptId": "ecg.arrhythmia.af",
+    "canonicalCaseId": "ECG039",
+    "caseIds": [
+      "ECG005",
+      "ECG010",
+      "ECG023",
+      "ECG024",
+      "ECG039",
+      "ECG042",
+      "ECG043",
+      "ECG047",
+      "ECG059",
+      "ECG060",
+      "ECG074",
+      "ECG095",
+      "ECG112",
+      "ECG122",
+      "ECG130",
+      "ECG134",
+      "ECG148",
+      "ECG150"
+    ],
+    "variationCaseIds": [
+      "ECG005",
+      "ECG010",
+      "ECG023",
+      "ECG024",
+      "ECG042",
+      "ECG043",
+      "ECG047",
+      "ECG059",
+      "ECG060",
+      "ECG074",
+      "ECG095",
+      "ECG112",
+      "ECG122",
+      "ECG130",
+      "ECG134",
+      "ECG148",
+      "ECG150"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_atrial_tachycardia",
+    "conceptId": "ecg.arrhythmia.atrial_tachycardia",
+    "canonicalCaseId": "ECG069",
+    "caseIds": [
+      "ECG011",
+      "ECG069"
+    ],
+    "variationCaseIds": [
+      "ECG011"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_avnrt",
+    "conceptId": "ecg.arrhythmia.avnrt",
+    "canonicalCaseId": "ECG006",
+    "caseIds": [
+      "ECG006",
+      "ECG050",
+      "ECG105"
+    ],
+    "variationCaseIds": [
+      "ECG050",
+      "ECG105"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_flutter",
+    "conceptId": "ecg.arrhythmia.flutter",
+    "canonicalCaseId": "ECG013",
+    "caseIds": [
+      "ECG013",
+      "ECG027",
+      "ECG065",
+      "ECG109"
+    ],
+    "variationCaseIds": [
+      "ECG027",
+      "ECG065",
+      "ECG109"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_pvc",
+    "conceptId": "ecg.arrhythmia.pvc",
+    "canonicalCaseId": "ECG001",
+    "caseIds": [
+      "ECG001",
+      "ECG056",
+      "ECG104",
+      "ECG138"
+    ],
+    "variationCaseIds": [
+      "ECG056",
+      "ECG104",
+      "ECG138"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_svt",
+    "conceptId": "ecg.arrhythmia.svt",
+    "canonicalCaseId": "ECG086",
+    "caseIds": [
+      "ECG081",
+      "ECG086"
+    ],
+    "variationCaseIds": [
+      "ECG081"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_vf",
+    "conceptId": "ecg.arrhythmia.vf",
+    "canonicalCaseId": "ECG147",
+    "caseIds": [
+      "ECG147"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_vt",
+    "conceptId": "ecg.arrhythmia.vt",
+    "canonicalCaseId": "ECG057",
+    "caseIds": [
+      "ECG031",
+      "ECG057",
+      "ECG102",
+      "ECG113",
+      "ECG117",
+      "ECG129"
+    ],
+    "variationCaseIds": [
+      "ECG031",
+      "ECG102",
+      "ECG113",
+      "ECG117",
+      "ECG129"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_arrhythmia_wide_complex_tachycardia",
+    "conceptId": "ecg.arrhythmia.wide_complex_tachycardia",
+    "canonicalCaseId": "ECG083",
+    "caseIds": [
+      "ECG083",
+      "ECG088",
+      "ECG119",
+      "ECG137"
+    ],
+    "variationCaseIds": [
+      "ECG088",
+      "ECG119",
+      "ECG137"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_cardiomyopathy_hcm",
+    "conceptId": "ecg.cardiomyopathy.hcm",
+    "canonicalCaseId": "ECG131",
+    "caseIds": [
+      "ECG098",
+      "ECG131"
+    ],
+    "variationCaseIds": [
+      "ECG098"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_chamber_lae",
+    "conceptId": "ecg.chamber.lae",
+    "canonicalCaseId": "ECG111",
+    "caseIds": [
+      "ECG111"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_chamber_lvh",
+    "conceptId": "ecg.chamber.lvh",
+    "canonicalCaseId": "ECG128",
+    "caseIds": [
+      "ECG018",
+      "ECG035",
+      "ECG124",
+      "ECG128"
+    ],
+    "variationCaseIds": [
+      "ECG018",
+      "ECG035",
+      "ECG124"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_chamber_rae",
+    "conceptId": "ecg.chamber.rae",
+    "canonicalCaseId": "ECG140",
+    "caseIds": [
+      "ECG140"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_chamber_rvh",
+    "conceptId": "ecg.chamber.rvh",
+    "canonicalCaseId": "ECG009",
+    "caseIds": [
+      "ECG009",
+      "ECG096"
+    ],
+    "variationCaseIds": [
+      "ECG096"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_channelopathy_brugada",
+    "conceptId": "ecg.channelopathy.brugada",
+    "canonicalCaseId": "ECG144",
+    "caseIds": [
+      "ECG144"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_channelopathy_long_qt",
+    "conceptId": "ecg.channelopathy.long_qt",
+    "canonicalCaseId": "ECG125",
+    "caseIds": [
+      "ECG070",
+      "ECG125",
+      "ECG141"
+    ],
+    "variationCaseIds": [
+      "ECG070",
+      "ECG141"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_avb1",
+    "conceptId": "ecg.conduction.avb1",
+    "canonicalCaseId": "ECG016",
+    "caseIds": [
+      "ECG016",
+      "ECG029",
+      "ECG044",
+      "ECG072",
+      "ECG089"
+    ],
+    "variationCaseIds": [
+      "ECG029",
+      "ECG044",
+      "ECG072",
+      "ECG089"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_avb2_2to1",
+    "conceptId": "ecg.conduction.avb2_2to1",
+    "canonicalCaseId": "ECG073",
+    "caseIds": [
+      "ECG034",
+      "ECG073"
+    ],
+    "variationCaseIds": [
+      "ECG034"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_avb2_mobitz2",
+    "conceptId": "ecg.conduction.avb2_mobitz2",
+    "canonicalCaseId": "ECG055",
+    "caseIds": [
+      "ECG055"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_avb2_wenckebach",
+    "conceptId": "ecg.conduction.avb2_wenckebach",
+    "canonicalCaseId": "ECG038",
+    "caseIds": [
+      "ECG020",
+      "ECG038"
+    ],
+    "variationCaseIds": [
+      "ECG020"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_avb3",
+    "conceptId": "ecg.conduction.avb3",
+    "canonicalCaseId": "ECG003",
+    "caseIds": [
+      "ECG003",
+      "ECG054",
+      "ECG079"
+    ],
+    "variationCaseIds": [
+      "ECG054",
+      "ECG079"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_incomplete_rbbb",
+    "conceptId": "ecg.conduction.incomplete_rbbb",
+    "canonicalCaseId": "ECG092",
+    "caseIds": [
+      "ECG092"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_lafb",
+    "conceptId": "ecg.conduction.lafb",
+    "canonicalCaseId": "ECG097",
+    "caseIds": [
+      "ECG012",
+      "ECG062",
+      "ECG097",
+      "ECG118"
+    ],
+    "variationCaseIds": [
+      "ECG012",
+      "ECG062",
+      "ECG118"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_lbbb",
+    "conceptId": "ecg.conduction.lbbb",
+    "canonicalCaseId": "ECG019",
+    "caseIds": [
+      "ECG019",
+      "ECG090"
+    ],
+    "variationCaseIds": [
+      "ECG090"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_lpfb",
+    "conceptId": "ecg.conduction.lpfb",
+    "canonicalCaseId": "ECG008",
+    "caseIds": [
+      "ECG008"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_conduction_rbbb",
+    "conceptId": "ecg.conduction.rbbb",
+    "canonicalCaseId": "ECG026",
+    "caseIds": [
+      "ECG026",
+      "ECG045"
+    ],
+    "variationCaseIds": [
+      "ECG045"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_ischemia",
+    "conceptId": "ecg.ischemia.ischemia",
+    "canonicalCaseId": "ECG033",
+    "caseIds": [
+      "ECG007",
+      "ECG033",
+      "ECG058",
+      "ECG135",
+      "ECG136"
+    ],
+    "variationCaseIds": [
+      "ECG007",
+      "ECG058",
+      "ECG135",
+      "ECG136"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_nstemi",
+    "conceptId": "ecg.ischemia.nstemi",
+    "canonicalCaseId": "ECG022",
+    "caseIds": [
+      "ECG022",
+      "ECG080",
+      "ECG091",
+      "ECG093"
+    ],
+    "variationCaseIds": [
+      "ECG080",
+      "ECG091",
+      "ECG093"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_old_infarct",
+    "conceptId": "ecg.ischemia.old_infarct",
+    "canonicalCaseId": "ECG030",
+    "caseIds": [
+      "ECG002",
+      "ECG025",
+      "ECG030",
+      "ECG036",
+      "ECG053",
+      "ECG077",
+      "ECG110",
+      "ECG126"
+    ],
+    "variationCaseIds": [
+      "ECG002",
+      "ECG025",
+      "ECG036",
+      "ECG053",
+      "ECG077",
+      "ECG110",
+      "ECG126"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_posterior_infarct",
+    "conceptId": "ecg.ischemia.posterior_infarct",
+    "canonicalCaseId": "ECG106",
+    "caseIds": [
+      "ECG106"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_stemi",
+    "conceptId": "ecg.ischemia.stemi",
+    "canonicalCaseId": "ECG049",
+    "caseIds": [
+      "ECG049"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_stemi_anterior",
+    "conceptId": "ecg.ischemia.stemi_anterior",
+    "canonicalCaseId": "ECG101",
+    "caseIds": [
+      "ECG004",
+      "ECG101"
+    ],
+    "variationCaseIds": [
+      "ECG004"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_stemi_anterolateral",
+    "conceptId": "ecg.ischemia.stemi_anterolateral",
+    "canonicalCaseId": "ECG017",
+    "caseIds": [
+      "ECG017",
+      "ECG068"
+    ],
+    "variationCaseIds": [
+      "ECG068"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_ischemia_stemi_inferior",
+    "conceptId": "ecg.ischemia.stemi_inferior",
+    "canonicalCaseId": "ECG032",
+    "caseIds": [
+      "ECG014",
+      "ECG032",
+      "ECG085",
+      "ECG127"
+    ],
+    "variationCaseIds": [
+      "ECG014",
+      "ECG085",
+      "ECG127"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_metabolic_cns_t_wave",
+    "conceptId": "ecg.metabolic.cns_t_wave",
+    "canonicalCaseId": "ECG120",
+    "caseIds": [
+      "ECG120"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_metabolic_hyperkalemia",
+    "conceptId": "ecg.metabolic.hyperkalemia",
+    "canonicalCaseId": "ECG132",
+    "caseIds": [
+      "ECG084",
+      "ECG132"
+    ],
+    "variationCaseIds": [
+      "ECG084"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_metabolic_hypokalemia",
+    "conceptId": "ecg.metabolic.hypokalemia",
+    "canonicalCaseId": "ECG071",
+    "caseIds": [
+      "ECG071"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_metabolic_lithium",
+    "conceptId": "ecg.metabolic.lithium",
+    "canonicalCaseId": "ECG143",
+    "caseIds": [
+      "ECG143"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_normal_artifact",
+    "conceptId": "ecg.normal.artifact",
+    "canonicalCaseId": "ECG142",
+    "caseIds": [
+      "ECG142"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_normal_normal",
+    "conceptId": "ecg.normal.normal",
+    "canonicalCaseId": "ECG066",
+    "caseIds": [
+      "ECG021",
+      "ECG046",
+      "ECG066",
+      "ECG076",
+      "ECG078",
+      "ECG087",
+      "ECG094",
+      "ECG100",
+      "ECG107",
+      "ECG116"
+    ],
+    "variationCaseIds": [
+      "ECG021",
+      "ECG046",
+      "ECG076",
+      "ECG078",
+      "ECG087",
+      "ECG094",
+      "ECG100",
+      "ECG107",
+      "ECG116"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_normal_t_wave_variant",
+    "conceptId": "ecg.normal.t_wave_variant",
+    "canonicalCaseId": "ECG108",
+    "caseIds": [
+      "ECG063",
+      "ECG108"
+    ],
+    "variationCaseIds": [
+      "ECG063"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_pacing_ventricular",
+    "conceptId": "ecg.pacing.ventricular",
+    "canonicalCaseId": "ECG075",
+    "caseIds": [
+      "ECG075"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_pericardium_effusion",
+    "conceptId": "ecg.pericardium.effusion",
+    "canonicalCaseId": "ECG121",
+    "caseIds": [
+      "ECG121"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_pericardium_pericarditis",
+    "conceptId": "ecg.pericardium.pericarditis",
+    "canonicalCaseId": "ECG139",
+    "caseIds": [
+      "ECG114",
+      "ECG139"
+    ],
+    "variationCaseIds": [
+      "ECG114"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_preexcitation_lgl",
+    "conceptId": "ecg.preexcitation.lgl",
+    "canonicalCaseId": "ECG115",
+    "caseIds": [
+      "ECG115"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_preexcitation_wpw_a",
+    "conceptId": "ecg.preexcitation.wpw_a",
+    "canonicalCaseId": "ECG015",
+    "caseIds": [
+      "ECG015",
+      "ECG082",
+      "ECG146"
+    ],
+    "variationCaseIds": [
+      "ECG082",
+      "ECG146"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_preexcitation_wpw_b",
+    "conceptId": "ecg.preexcitation.wpw_b",
+    "canonicalCaseId": "ECG064",
+    "caseIds": [
+      "ECG064",
+      "ECG123",
+      "ECG145"
+    ],
+    "variationCaseIds": [
+      "ECG123",
+      "ECG145"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_repolarization_nonspecific",
+    "conceptId": "ecg.repolarization.nonspecific",
+    "canonicalCaseId": "ECG048",
+    "caseIds": [
+      "ECG037",
+      "ECG048",
+      "ECG051"
+    ],
+    "variationCaseIds": [
+      "ECG037",
+      "ECG051"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_rhythm_accelerated_idioventricular",
+    "conceptId": "ecg.rhythm.accelerated_idioventricular",
+    "canonicalCaseId": "ECG133",
+    "caseIds": [
+      "ECG099",
+      "ECG133"
+    ],
+    "variationCaseIds": [
+      "ECG099"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_rhythm_atrial_ectopic",
+    "conceptId": "ecg.rhythm.atrial_ectopic",
+    "canonicalCaseId": "ECG040",
+    "caseIds": [
+      "ECG040"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_rhythm_junctional",
+    "conceptId": "ecg.rhythm.junctional",
+    "canonicalCaseId": "ECG067",
+    "caseIds": [
+      "ECG067",
+      "ECG103"
+    ],
+    "variationCaseIds": [
+      "ECG103"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_rhythm_sinus",
+    "conceptId": "ecg.rhythm.sinus",
+    "canonicalCaseId": "ECG149",
+    "caseIds": [
+      "ECG149"
+    ],
+    "variationCaseIds": [],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  },
+  {
+    "clusterId": "cluster_ecg_rhythm_sinus_tachycardia",
+    "conceptId": "ecg.rhythm.sinus_tachycardia",
+    "canonicalCaseId": "ECG061",
+    "caseIds": [
+      "ECG028",
+      "ECG052",
+      "ECG061"
+    ],
+    "variationCaseIds": [
+      "ECG028",
+      "ECG052"
+    ],
+    "selectionRationale": "Canônico selecionado por menor necessidade de revisão, menor número de achados secundários e dificuldade mais didática."
+  }
+]

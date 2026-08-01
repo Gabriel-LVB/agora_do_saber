@@ -1,6 +1,8 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
-import { useCourseHeroJourney } from './useCourseHeroJourney.js';
+import { isReviewQueueItemScheduled } from '../../services/reviewScheduler.js';
+
+const activeReviewCount = qMap => Object.values(qMap || {}).filter(isReviewQueueItemScheduled).length;
 
 export default function VideoQuestionsView() {
   const {
@@ -36,7 +38,6 @@ export default function VideoQuestionsView() {
     isAnswerCorrect,
     isFinalObjectiveAnswer,
     LayersIcon,
-    looksLikeClinicalVignette,
     MoreIcon,
     openBizuario,
     openErrorNotebookReviewResult,
@@ -69,7 +70,6 @@ export default function VideoQuestionsView() {
     setVqExpandedSubj,
     setVqExpandedTopic,
     setVqGenModal,
-    setVqQuestionParity,
     setVqSubject,
     setVqTopic,
     shortTopicName,
@@ -87,13 +87,11 @@ export default function VideoQuestionsView() {
     vqExpandedSubj,
     vqExpandedTopic,
     vqLoading,
-    vqQuestionParity,
     vqSubject,
     vqTopic,
   } = useFeatureContext();
 
           const dm = darkMode;
-          const courseCycle = useCourseHeroJourney({ enabled:true });
           const data     = parseVideoaulasData(appliedVideoaulasData || {});
           const subjects = sortCourseSubjectsForDisplay(Object.keys(data));
 
@@ -144,7 +142,7 @@ export default function VideoQuestionsView() {
 	            const backFromCourseQuestions = () => {
 	              if (vqActiveBlockView?.fromPlan) {
 	                setVqActiveBlockView(null);
-	                setCursoTab('plano');
+	                setCursoTab('cronograma');
 	                setView('curso');
 	                return;
 	              }
@@ -153,41 +151,9 @@ export default function VideoQuestionsView() {
 
             // ── VIEW COMPLETA DE UM BLOCO ── usa o mesmo QuestionView do topic
             if(vqActiveBlockView) {
-              const { blockId, cycleStage } = vqActiveBlockView;
-              const block = blocks[blockId] || {};
-              const qs      = Array.isArray(block.questions) ? block.questions : [];
-	              const journeyStage = (() => {
-	                if (cycleStage === 'direct-odd') return { type:'direct', parity:'odd', label:'Fixação · Ímpares diretas' };
-	                if (cycleStage === 'direct-even') return { type:'direct', parity:'even', label:'Fixação · Pares diretas' };
-	                if (cycleStage === 'clinical-odd') return { type:'clinical', parity:'odd', label:'Clínicas · Ímpares' };
-	                if (cycleStage === 'clinical-even') return { type:'clinical', parity:'even', label:'Clínicas · Pares' };
-	                return null;
-	              })();
-	              const isClinicalVqQuestion = (question = {}) =>
-	                question.libraryQuestionKind === 'clinical' || looksLikeClinicalVignette(question);
-	              const blockQuestionOffset = blockList.slice(0, Math.max(0, blockList.findIndex(([id])=>id===blockId)))
-	                .reduce((sum, [, item])=>sum + (Array.isArray(item.questions) ? item.questions.length : 0), 0);
-	              const stageQuestionOffset = journeyStage
-	                ? blockList.slice(0, Math.max(0, blockList.findIndex(([id])=>id===blockId))).reduce((sum, [, item]) => {
-	                    const questions = Array.isArray(item.questions) ? item.questions : [];
-	                    return sum + questions.filter(question => {
-	                      const type = isClinicalVqQuestion(question) ? 'clinical' : 'direct';
-	                      return type === journeyStage.type;
-	                    }).length;
-	                  }, 0)
-	                : 0;
-	              let stageQuestionNumber = stageQuestionOffset;
-	              const parityQuestions = journeyStage
-	                ? qs.filter(question => {
-	                    const type = isClinicalVqQuestion(question) ? 'clinical' : 'direct';
-	                    if (type !== journeyStage.type) return false;
-	                    stageQuestionNumber += 1;
-	                    return journeyStage.parity === 'odd' ? stageQuestionNumber % 2 === 1 : stageQuestionNumber % 2 === 0;
-	                  })
-	                : (vqQuestionParity === 'all' ? qs : qs.filter((question, index)=>{
-	                    const lessonNumber = blockQuestionOffset + index + 1;
-	                    return vqQuestionParity === 'odd' ? lessonNumber % 2 === 1 : lessonNumber % 2 === 0;
-	                  }));
+	              const { blockId } = vqActiveBlockView;
+	              const block = blocks[blockId] || {};
+	              const qs      = Array.isArray(block.questions) ? block.questions : [];
 	              const ans     = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
 	              const blockFavs = Array.isArray(block.favorites) ? block.favorites : [];
 	              const blockNotebook = Array.isArray(block.errorNotebook) ? block.errorNotebook : [];
@@ -195,44 +161,14 @@ export default function VideoQuestionsView() {
               const currentBlockIndex = blockList.findIndex(([id]) => id === blockId);
               const nextBlockEntry = currentBlockIndex >= 0 ? blockList[currentBlockIndex + 1] : null;
               const nextBlockTitle = nextBlockEntry?.[1]?.title || (nextBlockEntry ? `Bloco ${nextBlockEntry[0].replace('block','')}` : '');
-              const missedQuestions = parityQuestions.filter(q => ans[q.id] && !isAnswerCorrect(q, ans[q.id]));
-              const clinicalReviewQuestions = parityQuestions.filter(question => isClinicalVqQuestion(question));
-              const cycleBaseQuestions = cycleStage === 'r10'
-                ? clinicalReviewQuestions
-                : cycleStage === 'r3'
-                  ? (missedQuestions.length ? missedQuestions : parityQuestions)
-                  : parityQuestions;
-              const visibleQuestions = cycleStage === 'r10'
-                ? cycleBaseQuestions.map(q => {
-                    const correct = (q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || '';
-                    return {
-                      ...q,
-                      id:`${q.id}__cycle_r10`,
-                      statement:`Explique de forma objetiva: ${String(q.statement || '').replace(/\s+/g, ' ').trim()}`,
-                      options:[],
-                      expectedAnswer:[correct, q.explanation].filter(Boolean).join('. '),
-                      explanation:q.explanation || correct,
-                      isOpen:true,
-                      isEssay:false,
-                    };
-                  })
-                : cycleStage === 'r3'
-                  ? cycleBaseQuestions.map(q => ({...q, id:`${q.id}__cycle_r3`}))
-                  : parityQuestions;
+              const visibleQuestions = qs;
               const visibleAnswers = Object.fromEntries(Object.entries(ans).filter(([id]) => visibleQuestions.some(q => sameId(q.id, id))));
-              const visibleTitle = cycleStage === 'r10'
-                ? `${blockTitle} · Revisão +10`
-                : cycleStage === 'r3'
-                  ? `${blockTitle} · Revisão +3`
-                  : journeyStage
-                    ? `${blockTitle} · ${journeyStage.label}`
-                    : `${blockTitle}${vqQuestionParity==='odd'?' · Ímpares':vqQuestionParity==='even'?' · Pares':''}`;
+              const visibleTitle = blockTitle;
               const blockErrorReviews = findErrorNotebookReviewsForSource({
                 subjectTitle:vqAula.title,
                 topicTitle:blockTitle,
                 questionIds:visibleQuestions.map(q=>q.id),
               });
-              const cycleContinueStep = cycleStage && courseCycle.isReady ? courseCycle.heroJourneyStep?.step : null;
 
   const handleVqAnswer = async (qId, letter) => {
     trackQuestionAnswered(`curso:${aulaIdNew}:${blockId}:${qId}`);
@@ -273,12 +209,6 @@ export default function VideoQuestionsView() {
 	                );
               };
               const handleVqReset = async () => {
-                if (cycleStage || vqQuestionParity !== 'all') {
-                  const visibleIds = new Set(visibleQuestions.map(q => q.id));
-                  const nextAnswers = Object.fromEntries(Object.entries(ans).filter(([id]) => !visibleIds.has(id)));
-                  await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:nextAnswers}}});
-                  return;
-                }
                 await saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}});
               };
 
@@ -287,7 +217,7 @@ export default function VideoQuestionsView() {
                   <QuestionView
                     title={visibleTitle}
                     onBack={backFromCourseQuestions}
-                    backLabel={vqActiveBlockView?.fromPlan ? 'Voltar ao Ciclo' : 'Voltar à aula'}
+                    backLabel={vqActiveBlockView?.fromPlan ? 'Voltar ao plano' : 'Voltar à aula'}
                     questions={visibleQuestions}
                     answers={visibleAnswers}
 	                    favorites={blockFavs}
@@ -297,7 +227,7 @@ export default function VideoQuestionsView() {
 	                    showErrorNotebook={canUseAdvancedFeatures}
 	                    onToggleErrorNotebook={handleVqNotebook}
                     onReset={visibleQuestions.length>0?handleVqReset:null}
-                    onRegenerate={!meta.readOnly&&!cycleStage&&qs.length>0?()=>generateVqBlock(aulaIdNew,blockId):null}
+                    onRegenerate={!meta.readOnly&&qs.length>0?()=>generateVqBlock(aulaIdNew,blockId):null}
                     onExport={visibleQuestions.length>0?()=>setExportModal({topic:{title:`${vqAula.title} — ${visibleTitle}`,questions:visibleQuestions},subject:null}):null}
                     isGenerating={!!block.generating}
                     streamCount={streamCount}
@@ -333,13 +263,11 @@ export default function VideoQuestionsView() {
                     })) : null}
                     onOpenErrorReviewResult={blockErrorReviews.length ? (()=>openErrorNotebookReviewResult(blockErrorReviews[0])) : null}
                     errorReviewResultCount={blockErrorReviews.length}
-                    inReviewCount={Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length}
+                    inReviewCount={activeReviewCount(reviewQueue[aulaIdNew]?.[blockId])}
                     onGoToAula={openCurrentCourseAulaFromVq}
-                    onNextUnit={cycleStage
-                      ? (cycleContinueStep?.action || (()=>{setVqActiveBlockView(null); setCursoTab('plano'); setView('curso');}))
-                      : (nextBlockEntry ? (()=>setVqActiveBlockView({blockId:nextBlockEntry[0],showWrong:false,fromPlan:vqActiveBlockView?.fromPlan||false})) : (nextCourseLesson ? (()=>openCourseLessonFromVq(nextCourseLesson)) : null))}
-                    nextUnitLabel={cycleStage ? 'Continuar ciclo' : (nextBlockEntry ? 'Próximo tópico' : 'Próxima aula')}
-                    nextUnitHelper={cycleStage ? (cycleContinueStep ? `${cycleContinueStep.label} · ${cycleContinueStep.detail}` : 'Continuar o roteiro guiado') : (nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência'))}
+                    onNextUnit={nextBlockEntry ? (()=>setVqActiveBlockView({blockId:nextBlockEntry[0],showWrong:false,fromPlan:vqActiveBlockView?.fromPlan||false})) : (nextCourseLesson ? (()=>openCourseLessonFromVq(nextCourseLesson)) : null)}
+                    nextUnitLabel={nextBlockEntry ? 'Próximo tópico' : 'Próxima aula'}
+                    nextUnitHelper={nextBlockEntry ? nextBlockTitle : (nextCourseLesson?.aula ? courseLessonDisplayTitle(nextCourseLesson.aula) : 'Continuar sequência')}
                     generateLabel="Gerar Questões"
                     onGenerate={meta.readOnly?null:()=>generateVqBlock(aulaIdNew,blockId)}
                     subtopics={block.subtopics||[]}
@@ -399,21 +327,6 @@ export default function VideoQuestionsView() {
                   </div>
                 </div>
 
-                {totalLessonQuestions>1&&(
-                  <div className={`mb-6 rounded-2xl border p-2 ${dm?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
-                    <div className="grid grid-cols-3 gap-1">
-                      {[
-                        {id:'all',label:`Todas (${totalLessonQuestions})`},
-                        {id:'odd',label:`Ímpares (${Math.ceil(totalLessonQuestions/2)})`},
-                        {id:'even',label:`Pares (${Math.floor(totalLessonQuestions/2)})`},
-                      ].map(option=><button key={option.id} onClick={()=>setVqQuestionParity(option.id)}
-                        className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-colors ${vqQuestionParity===option.id?(dm?'bg-yellow-900/40 text-yellow-300':'bg-yellow-100 text-yellow-800'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
-                        {option.label}
-                      </button>)}
-                    </div>
-                  </div>
-                )}
-
                 {/* Vazio */}
                 {!hasSetup&&blockList.length===0&&(
                   <EmptyState
@@ -439,12 +352,12 @@ export default function VideoQuestionsView() {
 	                          <div>
 	                            <p className={`text-xs font-bold uppercase tracking-widest ${dm?'text-green-400':'text-green-700'}`}>Aula concluída</p>
 	                            <h3 className={`text-lg font-serif font-bold mt-1 ${dm?'text-white':'text-gray-900'}`}>Questões de fixação finalizadas</h3>
-	                            <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-600'}`}>Agora siga o próximo comando do plano ou avance para a próxima aula.</p>
+	                            <p className={`text-sm mt-1 ${dm?'text-gray-400':'text-gray-600'}`}>Você pode voltar ao plano ou avançar para a próxima aula.</p>
 	                          </div>
 	                          <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
-	                            <button onClick={()=>{setCursoTab('plano');setView('curso');}}
+	                            <button onClick={()=>{setCursoTab('cronograma');setView('curso');}}
 	                              className={`px-4 py-3 rounded-xl font-bold text-sm border ${dm?'border-gray-700 text-gray-200 hover:bg-gray-800':'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
-	                              Voltar ao Ciclo
+	                              Voltar ao plano
 	                            </button>
 	                            <button onClick={()=>openCourseLessonFromVq(nextCourseLesson)} disabled={!nextCourseLesson}
 	                              className={`px-4 py-3 rounded-xl font-bold text-sm disabled:opacity-40 ${nextCourseLesson?'bg-yellow-600 hover:bg-yellow-700 text-white':(dm?'bg-gray-800 text-gray-500':'bg-gray-100 text-gray-400')}`}>
@@ -457,11 +370,7 @@ export default function VideoQuestionsView() {
 	                    <p className="text-xs font-bold uppercase opacity-40 mb-1">{blockList.length} bloco(s) · {aulaQCount(vqAula)} questões</p>
                     {blockList.map(([blockId, block], blockIndex)=>{
                       const allBlockQuestions = Array.isArray(block.questions) ? block.questions : [];
-                      const blockOffset = blockList.slice(0, blockIndex).reduce((sum, [, item])=>sum + (Array.isArray(item.questions) ? item.questions.length : 0), 0);
-                      const qs = vqQuestionParity === 'all' ? allBlockQuestions : allBlockQuestions.filter((question, index)=>{
-                        const lessonNumber = blockOffset + index + 1;
-                        return vqQuestionParity === 'odd' ? lessonNumber % 2 === 1 : lessonNumber % 2 === 0;
-                      });
+                      const qs = allBlockQuestions;
                       if (!qs.length && allBlockQuestions.length) return null;
                       const ans = (block.answers && typeof block.answers==='object' && !Array.isArray(block.answers)) ? block.answers : {};
                       const answered = qs.filter(q => Object.prototype.hasOwnProperty.call(ans, q.id)).length;
@@ -488,7 +397,7 @@ export default function VideoQuestionsView() {
                         {label:'Assistir aula', icon:<VideoIcon className="w-4 h-4"/>, fn:()=>{setView('videoaulas'); setActiveSubjectVid(vqSubject); setActiveSubtopicVid(`${vqTopic}::main`); setActiveAulaAndReset(vqAula);}},
                         {label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:()=>setExportModal({topic:{title:`${vqAula.title} — ${blockTitle}`,questions:qs},subject:null})},
                         {label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:openBlockBizuario},
-                        {label:Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length>0?`Gerenciar revisão (${Object.keys(reviewQueue[aulaIdNew]?.[blockId]||{}).length})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle, questions:qs, answers:ans, notebookIds:Array.isArray(block.errorNotebook)?block.errorNotebook:[], meta:{source:'curso',aulaTitle:vqAula.title,blockTitle}})},
+                        {label:activeReviewCount(reviewQueue[aulaIdNew]?.[blockId])>0?`Gerenciar revisão (${activeReviewCount(reviewQueue[aulaIdNew]?.[blockId])})`:'Adicionar à revisão', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle, questions:qs, answers:ans, notebookIds:Array.isArray(block.errorNotebook)?block.errorNotebook:[], meta:{source:'curso',aulaTitle:vqAula.title,blockTitle}})},
                         blockErrorReviews.length ? {label:blockErrorReviews.length>1?`Abrir revisões geradas (${blockErrorReviews.length})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:()=>openErrorNotebookReviewResult(blockErrorReviews[0])} : null,
                         !meta.readOnly ? {label:'Recriar', icon:<RotateCcw className="w-4 h-4"/>, fn:()=>generateVqBlock(aulaIdNew,blockId)} : null,
                         {label:'Limpar respostas', icon:<Eraser className="w-4 h-4"/>, fn:()=>saveVqBlock(aulaIdNew, {...aulaData, blocks:{...blocks,[blockId]:{...block,answers:{}}}}), danger:true},

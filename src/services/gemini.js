@@ -28,6 +28,9 @@ const buildGeminiPayload = ({ prompt, systemPrompt, images = [], opts = {} }) =>
     generationConfig:{
       thinkingConfig:{ thinkingBudget:opts.thinkingBudget ?? opts.thinking ?? GEMINI_THINKING_BUDGET_OFF },
       ...(opts.maxTokens ? { maxOutputTokens:opts.maxTokens } : {}),
+      ...(opts.responseMimeType ? { responseMimeType:opts.responseMimeType } : {}),
+      ...(opts.responseSchema ? { responseSchema:opts.responseSchema } : {}),
+      ...(Number.isFinite(Number(opts.temperature)) ? { temperature:Number(opts.temperature) } : {}),
     },
   };
 };

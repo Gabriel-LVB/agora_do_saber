@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
-import { useCourseHeroJourney } from './useCourseHeroJourney.js';
 
 export default function VideoaulasView() {
   const {
+    addCourseLessonToReview,
     darkMode,
     appliedVideoaulasData,
     parseVideoaulasData,
@@ -22,6 +22,8 @@ export default function VideoaulasView() {
     expandedSubjectsVid,
     setExpandedSubjectsVid,
     canUseCourseOrganization,
+    coursePrefsLoaded,
+    courseReviewLessonStates,
     effectiveCoursePlanLessonOrder,
     displayCourseOrgProposal,
     vqBlocks,
@@ -32,8 +34,13 @@ export default function VideoaulasView() {
     isAdmin,
     markAulaWatched,
     mobileNavOpen,
+    pauseCourseLessonReview,
+    reviewLoaded,
+    reviewQueue,
+    resetCourseLessonReview,
+    resolveCourseLessonReviewId,
+    resumeCourseLessonReview,
     setMobileNavOpen,
-    setVqQuestionParity,
     setVqSubject,
     setVqTopic,
     setVqAula,
@@ -69,8 +76,10 @@ export default function VideoaulasView() {
     videoSeek,
   } = useFeatureContext();
 
+  const [reviewRemovalModal, setReviewRemovalModal] = useState(null);
+  const [reviewActionBusy, setReviewActionBusy] = useState(false);
+
           const dm = darkMode;
-          const courseCycle = useCourseHeroJourney({ enabled:!videoaulasLoading });
           // DEMO_DATA usa o novo formato: Assunto → Tópico → { "Aulas Principais": [], "Bônus": [] }
           const DEMO_DATA = {
             "Ginecologia": {
@@ -125,33 +134,57 @@ export default function VideoaulasView() {
           const activeAulaId = getAulaId(activeAula);
           const effAula     = (activeAulaId ? effAulas.find(aula => getAulaId(aula) === activeAulaId) : null) || effAulas[0] || null;
 	          const effDescription = effAula?.description || effAula?.ai_catalog?.description || '';
-	          const effIdx      = effAulas.findIndex(a=>getAulaId(a)===getAulaId(effAula));
-	          const prevAula    = effIdx>0 ? effAulas[effIdx-1] : null;
-	          const nextAula    = effIdx<effAulas.length-1 ? effAulas[effIdx+1] : null;
+	          const courseNavEntries = subjects.flatMap(subject => Object.entries(data[subject] || {}).flatMap(([topic, groups]) => [
+	            ...(groups.main || []).map(aula => ({ subject, topic, cat:'main', aula })),
+	            ...(groups.bonus || []).map(aula => ({ subject, topic, cat:'bonus', aula })),
+	          ]));
+	          const effNavIdx = courseNavEntries.findIndex(entry => getAulaId(entry.aula) === getAulaId(effAula));
+	          const prevNavEntry = effNavIdx > 0 ? courseNavEntries[effNavIdx - 1] : null;
+	          const nextNavEntry = effNavIdx >= 0 && effNavIdx < courseNavEntries.length - 1 ? courseNavEntries[effNavIdx + 1] : null;
+	          const prevAula = prevNavEntry?.aula || null;
+	          const nextAula = nextNavEntry?.aula || null;
 	          const sideBorder  = dm?'border-gray-700':'border-gray-200';
 	          const sideBg      = dm?'bg-gray-800/50':'bg-white';
 	          const textMuted   = dm?'text-gray-400':'text-gray-500';
 	          const useIntegratedCourseNav = canUseCourseOrganization && effectiveCoursePlanLessonOrder.length && displayCourseOrgProposal?.mode === 'integrated';
 	          const effQuestionData = effAula ? vqBlocks[aulaVqKey(effAula)] : null;
 	          const effQuestionBlocks = blockValues(effQuestionData?.blocks);
+	          const effQuestions = effQuestionBlocks.flatMap(block => Array.isArray(block.questions) ? block.questions : []);
 	          const effQuestionTotal = effQuestionBlocks.reduce((sum, block) => sum + (block.questions?.length || 0), 0);
 	          const effQuestionAnswered = effQuestionBlocks.reduce((sum, block) => sum + Object.keys(block.answers || {}).length, 0);
 	          const effWatched = !!watchedAulas[getAulaId(effAula)];
 	          const effQuestionComplete = effQuestionTotal > 0 && effQuestionAnswered >= effQuestionTotal;
+	          const effAulaId = getAulaId(effAula);
+	          const effReviewAulaId = resolveCourseLessonReviewId(effAula);
+	          const effReviewItems = Object.values(reviewQueue?.[effReviewAulaId] || {})
+	            .flatMap(block => Object.values(block || {}))
+	            .filter(item => item && typeof item === 'object');
+	          const effReviewPreference = courseReviewLessonStates?.[effReviewAulaId] || null;
+	          const effReviewPaused = effReviewPreference === 'paused'
+	            || effReviewItems.some(item => item.adaptiveState === 'paused');
+	          const effHasStoredReview = effReviewItems.some(item =>
+	            !['awaiting-curation', 'disabled'].includes(item.adaptiveState)
+	          );
+	          const effReviewActive = !effReviewPaused
+	            && effReviewPreference !== 'reset'
+	            && (effReviewPreference === 'active' || effHasStoredReview);
+	          const effHasPublishedCuration = effQuestions.some(question => question?.learningPolicy);
+	          const effReviewButtonLabel = effReviewPaused
+	            ? 'Retomar Revisão'
+	            : effReviewActive ? 'Remover da Revisão' : 'Adicionar à Revisão';
+	          const effReviewDisabled = reviewActionBusy
+	            || !reviewLoaded
+	            || !coursePrefsLoaded
+	            || !effQuestionTotal
+	            || (!effHasPublishedCuration && !effReviewActive && !effReviewPaused);
 	          const effQuestionActionLabel = effQuestionTotal === 0
 	            ? 'Gerar questões de fixação'
-	            : effQuestionAnswered < effQuestionTotal
-	              ? `Responder questões (${effQuestionAnswered}/${effQuestionTotal})`
-	              : 'Rever questões';
-	          const cycleContinueStep = courseCycle.isReady ? courseCycle.heroJourneyStep?.step : null;
-	          const cycleContinueItem = courseCycle.heroJourneyStep?.item;
-	          const isCurrentCycleLesson = !!(cycleContinueStep?.lesson && getAulaId(cycleContinueStep.lesson.aula) === getAulaId(effAula));
-	          const showCycleContinue = !!cycleContinueStep && (!isCurrentCycleLesson || cycleContinueStep.label !== 'Assistir aula');
-	          const cycleContinueText = cycleContinueStep
-	            ? `${cycleContinueStep.label} · ${capitalizeDisplayLabel(cycleContinueItem?.subject || effSubject)}`
-	            : '';
-	          const openEffAulaQuestions = (parity = 'all') => {
-	            setVqQuestionParity(parity);
+	            : effQuestionAnswered === 0
+	              ? `Fazer questões da aula (${effQuestionTotal})`
+	              : effQuestionAnswered < effQuestionTotal
+	                ? `Continuar questões (${effQuestionAnswered}/${effQuestionTotal})`
+	                : 'Rever banco da aula';
+	          const openEffAulaQuestions = () => {
 	            if (aulaHasVqData(effAula)) {
 	              const availableBlocks = Object.entries(Array.isArray(effQuestionData?.blocks) ? {} : (effQuestionData?.blocks || {}))
 	                .filter(([, block])=>(block?.questions || []).length > 0);
@@ -160,6 +193,32 @@ export default function VideoaulasView() {
 	              setView('videoquestions');
 	            } else {
 	              gerarQuestoesDireto(effAula, effSubject, effTopic);
+	            }
+	          };
+	          const handleEffLessonReview = async () => {
+	            if (effReviewDisabled) return;
+	            if (effReviewActive) {
+	              setReviewRemovalModal({ aula:effAula, subject:effSubject, topic:effTopic });
+	              return;
+	            }
+	            setReviewActionBusy(true);
+	            try {
+	              if (effReviewPaused) await resumeCourseLessonReview(effAula, effSubject, effTopic);
+	              else await addCourseLessonToReview(effAula, effSubject, effTopic);
+	            } finally {
+	              setReviewActionBusy(false);
+	            }
+	          };
+	          const handleReviewRemovalChoice = async (mode) => {
+	            if (!reviewRemovalModal || reviewActionBusy) return;
+	            setReviewActionBusy(true);
+	            try {
+	              const changed = mode === 'pause'
+	                ? await pauseCourseLessonReview(reviewRemovalModal.aula)
+	                : await resetCourseLessonReview(reviewRemovalModal.aula);
+	              if (changed) setReviewRemovalModal(null);
+	            } finally {
+	              setReviewActionBusy(false);
 	            }
 	          };
 	          const downloadEffTranscript = async () => {
@@ -183,6 +242,12 @@ export default function VideoaulasView() {
             setActiveSubjectVid(subject);
             setActiveSubtopicVid(`${topic}::${cat}`);
             setActiveAula(data[subject]?.[topic]?.[cat]?.[0] || null);
+          };
+          const openCourseNavEntry = entry => {
+            if (!entry) return;
+            setActiveSubjectVid(entry.subject);
+            setActiveSubtopicVid(`${entry.topic}::${entry.cat}`);
+            setActiveAulaAndReset(entry.aula);
           };
 
           return (
@@ -396,18 +461,18 @@ export default function VideoaulasView() {
                     <div className={`${dm?'bg-gray-900':'bg-white'}`}>
                       {/* MOBILE: Navegação anterior/próxima */}
                       <div className={`flex items-center gap-2 px-3 py-2 md:hidden border-b ${sideBorder}`}>
-                        <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
+                        <button onClick={()=>openCourseNavEntry(prevNavEntry)} disabled={!prevAula}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
                           <SkipBack className="w-4 h-4 flex-shrink-0"/>
                           <div className="min-w-0 text-left">
-                            <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Anterior</p>
+                            <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Anterior{prevNavEntry?` · ${capitalizeDisplayLabel(prevNavEntry.subject)}`:''}</p>
                             <p className="truncate">{prevAula?courseLessonDisplayTitle(prevAula):'—'}</p>
                           </div>
                         </button>
-                        <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
+                        <button onClick={()=>openCourseNavEntry(nextNavEntry)} disabled={!nextAula}
                           className={`flex items-center gap-2 flex-1 min-w-0 px-3 py-3 rounded-xl border font-bold text-xs transition-colors disabled:opacity-25 justify-end text-right ${dm?'border-gray-700 text-gray-300 active:bg-gray-700':'border-gray-200 text-gray-700 active:bg-gray-100'}`}>
                           <div className="min-w-0 text-right">
-                            <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Próxima</p>
+                            <p className="text-[9px] uppercase opacity-40 font-bold leading-none mb-0.5">Próxima{nextNavEntry?` · ${capitalizeDisplayLabel(nextNavEntry.subject)}`:''}</p>
                             <p className="truncate">{nextAula?courseLessonDisplayTitle(nextAula):'—'}</p>
                           </div>
                           <SkipForward className="w-4 h-4 flex-shrink-0"/>
@@ -424,28 +489,20 @@ export default function VideoaulasView() {
                           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="opacity-40 flex-shrink-0"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
                         {effDescription&&<p className={`px-1 text-xs leading-relaxed ${dm?'text-gray-500':'text-gray-500'}`}>{effDescription}</p>}
-	                        <div className="grid grid-cols-[auto_1fr] gap-2">
+	                        <div className="space-y-2">
 	                          <button onClick={()=>!isDemo&&markAulaWatched(getAulaId(effAula), effAula)}
-	                            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effWatched?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-700 bg-gray-800 text-gray-300 active:bg-gray-700':'border-gray-200 bg-white text-gray-700 active:bg-gray-50')}`}>
+	                            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effWatched?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-700 bg-gray-800 text-gray-300 active:bg-gray-700':'border-gray-200 bg-white text-gray-700 active:bg-gray-50')}`}>
 	                            <CheckIcon className="w-4 h-4"/>{effWatched?'Assistida':'Marcar assistida'}
 	                          </button>
-	                          <button onClick={()=>openEffAulaQuestions('all')}
-	                            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-600 bg-gray-800 text-gray-100 active:bg-gray-700':'border-gray-300 bg-white text-gray-800 active:bg-gray-50')}`}>
+	                          <button onClick={handleEffLessonReview} disabled={effReviewDisabled}
+	                            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${effReviewPaused?(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-300':'border-yellow-300 bg-yellow-50 text-yellow-800'):effReviewActive?(dm?'border-red-900 bg-red-950/20 text-red-300':'border-red-200 bg-red-50 text-red-700'):(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-200':'border-yellow-300 bg-yellow-50 text-yellow-800')}`}>
+	                            <RepeatIcon className="h-4 w-4"/>{effReviewButtonLabel}
+	                          </button>
+	                          <button onClick={openEffAulaQuestions}
+	                            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-600 bg-gray-800 text-gray-100 active:bg-gray-700':'border-gray-300 bg-white text-gray-800 active:bg-gray-50')}`}>
 	                            <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
 	                          </button>
 	                        </div>
-	                        {effQuestionTotal>1&&(
-	                          <div className="grid grid-cols-2 gap-2 pl-[7.25rem]">
-	                            <button onClick={()=>openEffAulaQuestions('odd')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${dm?'border-gray-700 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-600'}`}>Fazer ímpares</button>
-	                            <button onClick={()=>openEffAulaQuestions('even')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${dm?'border-gray-700 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-600'}`}>Fazer pares</button>
-	                          </div>
-	                        )}
-	                        {showCycleContinue&&(
-	                          <button onClick={cycleContinueStep.action} title={cycleContinueText}
-	                            className={`w-full flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-200 active:bg-gray-700':'border-gray-200 bg-white text-gray-700 active:bg-gray-50'}`}>
-	                            <RepeatIcon className="w-4 h-4 text-yellow-500"/>Continuar ciclo
-	                          </button>
-	                        )}
 	                        {!aulaHasVqData(effAula)&&isAdmin&&(
 	                          <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
 	                            className={`ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold ${dm?'text-gray-400 hover:bg-gray-800':'text-gray-500 hover:bg-gray-50'}`}>
@@ -454,27 +511,27 @@ export default function VideoaulasView() {
 	                        )}
                       </div>
 
-                      {/* MOBILE: scrollable aula list */}
-                      <div className={`md:hidden border-b ${sideBorder} overflow-y-auto`} style={{maxHeight:'38vh'}}>
-                        <div className={`px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider sticky top-0 ${dm?'bg-gray-900 text-gray-500':'bg-white text-gray-400'}`}>
+                      {/* MOBILE: faixa compacta das aulas do tópico */}
+                      <div className={`md:hidden border-b ${sideBorder}`}>
+                        <div className={`px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider ${dm?'bg-gray-900 text-gray-500':'bg-white text-gray-400'}`}>
                           {shortTopicName(effTopic||'')} {effCat==='bonus'?'— Bônus':'— Aulas'}
                         </div>
-                        {effAulas.map((aula)=>{
+                        <div className="flex snap-x gap-2 overflow-x-auto px-3 pb-3 pt-2">
+                        {effAulas.map((aula,index)=>{
                           const id = getAulaId(aula);
                           const isAct = id===getAulaId(effAula);
                           const watched = watchedAulas[id];
                           return (
                             <button key={id||aula.path} onClick={()=>setActiveAulaAndReset(aula)}
-                              className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b transition-colors ${isAct?(dm?'bg-yellow-900/25':'bg-yellow-50'):(dm?'hover:bg-gray-800':'hover:bg-gray-50')} ${dm?'border-gray-700/40':'border-gray-100'}`}>
+                              className={`flex w-56 flex-shrink-0 snap-start items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${isAct?(dm?'border-yellow-700 bg-yellow-900/25':'border-yellow-300 bg-yellow-50'):(dm?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50')}`}>
                               <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${watched?'bg-green-500 text-white':(isAct?'bg-yellow-500 text-white':'border '+(dm?'border-gray-600':'border-gray-300'))}`}>
                                 {watched?<CheckIcon className="w-3 h-3"/>:isAct?<PlayIcon className="w-2.5 h-2.5" style={{marginLeft:'1px'}}/>:null}
                               </div>
-                              <span className={`text-sm truncate ${isAct?'font-semibold '+(dm?'text-yellow-300':'text-yellow-700'):(watched?'text-gray-400':(dm?'text-gray-300':'text-gray-700'))}`}>
-                                {courseLessonDisplayTitle(aula)}
-                              </span>
+                              <span className="min-w-0"><span className="block text-[9px] font-bold uppercase opacity-40">Aula {index + 1}</span><span className={`block truncate text-xs ${isAct?'font-bold '+(dm?'text-yellow-300':'text-yellow-700'):(watched?'text-gray-400':(dm?'text-gray-300':'text-gray-700'))}`}>{courseLessonDisplayTitle(aula)}</span></span>
                             </button>
                           );
                         })}
+                        </div>
                       </div>
 
                       {/* MOBILE BOTTOM SHEET: 3 níveis */}
@@ -521,16 +578,30 @@ export default function VideoaulasView() {
                                             {shortTopicName(topic)} <span className="opacity-40 font-normal">({tW}/{topicAulas.length}{topicDuration?` · ${topicDuration}`:''})</span>
                                           </div>
                                           {main.length>0&&(
-                                            <button onClick={()=>{setTopicCat(subj,topic,'main');setMobileNavOpen(false);}}
-                                              className={`w-full flex items-center justify-between px-4 py-2 pl-10 text-left ${isActT&&effCat==='main'?(dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
-                                              <span className="text-xs">📖 Aulas ({main.length}{mainDuration?` · ${mainDuration}`:''})</span>
-                                            </button>
+                                            <div className="pb-1">
+                                              <p className={`px-4 py-1.5 pl-10 text-[10px] font-bold uppercase tracking-wider ${dm?'text-gray-500':'text-gray-400'}`}>Aulas principais · {main.length}{mainDuration?` · ${mainDuration}`:''}</p>
+                                              {main.map((aula,index)=>{
+                                                const active = isActT && effCat === 'main' && getAulaId(aula) === getAulaId(effAula);
+                                                const watched = watchedAulas[getAulaId(aula)];
+                                                return <button key={getAulaId(aula)||index} onClick={()=>{openCourseNavEntry({subject:subj,topic,cat:'main',aula});setMobileNavOpen(false);}} className={`flex w-full items-center gap-3 px-4 py-2.5 pl-10 text-left ${active?(dm?'bg-yellow-900/30 text-yellow-300':'bg-yellow-50 text-yellow-800'):(dm?'text-gray-300 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
+                                                  <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${watched?'bg-green-500 text-white':active?'bg-yellow-500 text-white':dm?'border border-gray-600 text-gray-500':'border border-gray-300 text-gray-400'}`}>{watched?<CheckIcon className="h-3 w-3"/>:index + 1}</span>
+                                                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{courseLessonDisplayTitle(aula)}</span>
+                                                </button>;
+                                              })}
+                                            </div>
                                           )}
                                           {bonus.length>0&&(
-                                            <button onClick={()=>{setTopicCat(subj,topic,'bonus');setMobileNavOpen(false);}}
-                                              className={`w-full flex items-center justify-between px-4 py-2 pl-10 text-left ${isActT&&effCat==='bonus'?(dm?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'):(dm?'text-gray-400 hover:bg-gray-700':'text-gray-500 hover:bg-gray-50')}`}>
-                                              <span className="text-xs">⭐ Bônus ({bonus.length}{bonusDuration?` · ${bonusDuration}`:''})</span>
-                                            </button>
+                                            <div className="pb-1">
+                                              <p className={`px-4 py-1.5 pl-10 text-[10px] font-bold uppercase tracking-wider ${dm?'text-gray-500':'text-gray-400'}`}>Bônus · {bonus.length}{bonusDuration?` · ${bonusDuration}`:''}</p>
+                                              {bonus.map((aula,index)=>{
+                                                const active = isActT && effCat === 'bonus' && getAulaId(aula) === getAulaId(effAula);
+                                                const watched = watchedAulas[getAulaId(aula)];
+                                                return <button key={getAulaId(aula)||index} onClick={()=>{openCourseNavEntry({subject:subj,topic,cat:'bonus',aula});setMobileNavOpen(false);}} className={`flex w-full items-center gap-3 px-4 py-2.5 pl-10 text-left ${active?(dm?'bg-yellow-900/30 text-yellow-300':'bg-yellow-50 text-yellow-800'):(dm?'text-gray-300 hover:bg-gray-700':'text-gray-700 hover:bg-gray-50')}`}>
+                                                  <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${watched?'bg-green-500 text-white':active?'bg-yellow-500 text-white':dm?'border border-gray-600 text-gray-500':'border border-gray-300 text-gray-400'}`}>{watched?<CheckIcon className="h-3 w-3"/>:index + 1}</span>
+                                                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{courseLessonDisplayTitle(aula)}</span>
+                                                </button>;
+                                              })}
+                                            </div>
                                           )}
                                         </div>
                                       );
@@ -557,19 +628,13 @@ export default function VideoaulasView() {
 		                                <CheckIcon className="w-4 h-4"/>
 		                                {effWatched?'Assistida':'Marcar assistida'}
 		                              </button>
-		                              <button onClick={()=>openEffAulaQuestions('all')} className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm transition-all border ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300 hover:bg-green-900/35':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700':'border-gray-300 bg-white text-gray-800 hover:bg-gray-50')}`}>
+	                                <button onClick={handleEffLessonReview} disabled={effReviewDisabled}
+	                                  className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${effReviewPaused?(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-300':'border-yellow-300 bg-yellow-50 text-yellow-800'):effReviewActive?(dm?'border-red-900 bg-red-950/20 text-red-300':'border-red-200 bg-red-50 text-red-700'):(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-200':'border-yellow-300 bg-yellow-50 text-yellow-800')}`}>
+	                                  <RepeatIcon className="h-4 w-4"/>{effReviewButtonLabel}
+	                                </button>
+	                              <button onClick={openEffAulaQuestions} className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm transition-all border ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300 hover:bg-green-900/35':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700':'border-gray-300 bg-white text-gray-800 hover:bg-gray-50')}`}>
 		                                <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
 		                              </button>
-		                              {effQuestionTotal>1&&<div className="grid grid-cols-2 gap-2">
-		                                <button onClick={()=>openEffAulaQuestions('odd')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-600 hover:border-yellow-400'}`}>Ímpares</button>
-		                                <button onClick={()=>openEffAulaQuestions('even')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-600 hover:border-yellow-400'}`}>Pares</button>
-		                              </div>}
-	                                {showCycleContinue&&(
-	                                  <button onClick={cycleContinueStep.action} title={cycleContinueText}
-	                                    className={`w-full flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${dm?'border-gray-700 bg-gray-800 text-gray-200 hover:border-yellow-700':'border-gray-200 bg-white text-gray-700 hover:border-yellow-400'}`}>
-	                                    <RepeatIcon className="w-4 h-4 text-yellow-500"/>Continuar ciclo
-	                                  </button>
-	                                )}
 	                                {!aulaHasVqData(effAula)&&(
 	                                  <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
 	                                    title="Configurações das questões"
@@ -580,7 +645,7 @@ export default function VideoaulasView() {
 	                            </div>
 	                          </div>
 	                          <div className={`mt-5 pt-4 border-t grid grid-cols-2 gap-3 ${dm?'border-gray-800':'border-gray-200'}`}>
-	                            <button onClick={()=>prevAula&&setActiveAulaAndReset(prevAula)} disabled={!prevAula}
+	                            <button onClick={()=>openCourseNavEntry(prevNavEntry)} disabled={!prevAula}
 	                              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-30 ${dm?'border-gray-800 hover:bg-gray-900 text-gray-300':'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'}`}>
 	                              <SkipBack className="w-4 h-4 flex-shrink-0"/>
 	                              <div className="text-left min-w-0">
@@ -588,7 +653,7 @@ export default function VideoaulasView() {
 	                                <p className="truncate text-xs">{prevAula?courseLessonDisplayTitle(prevAula):'—'}</p>
 	                              </div>
 	                            </button>
-	                            <button onClick={()=>nextAula&&setActiveAulaAndReset(nextAula)} disabled={!nextAula}
+	                            <button onClick={()=>openCourseNavEntry(nextNavEntry)} disabled={!nextAula}
 	                              className={`flex items-center justify-end gap-3 px-4 py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-30 text-right ${dm?'border-gray-800 hover:bg-gray-900 text-gray-300':'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'}`}>
 	                              <div className="min-w-0">
 	                                <p className="text-[10px] opacity-40 uppercase font-bold leading-none mb-1">Próxima</p>
@@ -603,6 +668,33 @@ export default function VideoaulasView() {
                   </div>
                 )}
               </div>
+
+              {reviewRemovalModal&&(
+                <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 p-4" onClick={()=>!reviewActionBusy&&setReviewRemovalModal(null)}>
+                  <div className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${dm?'border-gray-700 bg-gray-900 text-gray-100':'border-gray-200 bg-white text-gray-900'}`} onClick={event=>event.stopPropagation()}>
+                    <h2 className="font-serif text-2xl font-bold">Remover da Revisão</h2>
+                    <p className={`mt-2 text-sm leading-relaxed ${dm?'text-gray-400':'text-gray-600'}`}>
+                      O que você quer fazer com a revisão de <strong>{courseLessonDisplayTitle(reviewRemovalModal.aula)}</strong>?
+                    </p>
+                    <div className="mt-5 space-y-2">
+                      <button type="button" onClick={()=>handleReviewRemovalChoice('pause')} disabled={reviewActionBusy}
+                        className={`w-full rounded-xl border px-4 py-3 text-left disabled:opacity-50 ${dm?'border-yellow-800 bg-yellow-950/20 hover:bg-yellow-950/35':'border-yellow-300 bg-yellow-50 hover:bg-yellow-100'}`}>
+                        <strong className="block text-sm text-yellow-600">Pausar Revisão</strong>
+                        <span className={`mt-1 block text-xs ${dm?'text-gray-400':'text-gray-600'}`}>As questões param de aparecer, mas o histórico e as datas são preservados.</span>
+                      </button>
+                      <button type="button" onClick={()=>handleReviewRemovalChoice('reset')} disabled={reviewActionBusy}
+                        className={`w-full rounded-xl border px-4 py-3 text-left disabled:opacity-50 ${dm?'border-red-900 bg-red-950/20 hover:bg-red-950/35':'border-red-200 bg-red-50 hover:bg-red-100'}`}>
+                        <strong className="block text-sm text-red-500">Zerar Revisão</strong>
+                        <span className={`mt-1 block text-xs ${dm?'text-gray-400':'text-gray-600'}`}>Apaga o histórico de revisão desta aula. Para voltar, será preciso adicioná-la novamente.</span>
+                      </button>
+                    </div>
+                    <button type="button" onClick={()=>setReviewRemovalModal(null)} disabled={reviewActionBusy}
+                      className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-bold disabled:opacity-50 ${dm?'bg-gray-800 text-gray-300 hover:bg-gray-700':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
 }

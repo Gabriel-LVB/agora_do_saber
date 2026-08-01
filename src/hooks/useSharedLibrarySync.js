@@ -38,7 +38,6 @@ export const useSharedLibrarySync = ({
   const [sharedLibraryConfig, setSharedLibraryConfig] = useState({ subjectOrder:[], enabledSubjects:null });
   const [sharedLibraryRun, setSharedLibraryRun] = useState({ running:false, paused:false, stopping:false, stage:null, current:0, total:0, logs:[] });
   const [sharedLibraryPurging, setSharedLibraryPurging] = useState(false);
-  const [sharedLibraryAudienceMode, setSharedLibraryAudienceMode] = useState('student');
   const [sharedLibraryRepairing, setSharedLibraryRepairing] = useState(false);
   const [sharedLibraryGenerationStages, setSharedLibraryGenerationStages] = useState(['summary','direct','clinical']);
   const [sharedLibraryGenerationSubject, setSharedLibraryGenerationSubject] = useState('all');
@@ -158,7 +157,6 @@ export const useSharedLibrarySync = ({
   return {
     refreshSharedLibrary,
     setSharedLibraryActiveItemId,
-    setSharedLibraryAudienceMode,
     setSharedLibraryConfig,
     setSharedLibraryGenerationLesson,
     setSharedLibraryGenerationStages,
@@ -172,7 +170,6 @@ export const useSharedLibrarySync = ({
     setSharedLibrarySubject,
     setSharedLibraryTab,
     sharedLibraryActiveItemId,
-    sharedLibraryAudienceMode,
     sharedLibraryConfig,
     sharedLibraryControlRef,
     sharedLibraryError,

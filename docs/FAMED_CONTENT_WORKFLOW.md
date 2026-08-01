@@ -17,7 +17,17 @@ O conteúdo é criado dentro do site usando exatamente o mesmo fluxo da Academia
 
 Enquanto estiver em preparação, o conteúdo fica como rascunho e aparece apenas para o administrador. **Refazer estrutura** reabre o criador da Academia para aquela aula do cronograma. **Apagar tudo** remove a estrutura, as aulas e as questões vinculadas.
 
+O administrador também pode remover o conteúdo diretamente no card pelo ícone de lixeira ao lado do estado de publicação. Essa ação apaga somente o documento e a Academia da FAMED; preserva integralmente as videoaulas do Portal do Curso e mantém o item do cronograma disponível para uma criação futura.
+
 Não há ZIP, importador externo, script de banco nem dependência do Firebase Storage nesse fluxo.
+
+## Vínculo com as aulas do curso
+
+Os atalhos exibidos nos cards da FAMED não são inferidos pelo título ou pela descrição das videoaulas. Cada item do cronograma só mostra aulas explicitamente ligadas por IDs estáveis em `src/features/famed/famedCourseLessonMap.js`, sempre na ordem efetiva do Portal do Curso (`courseIndex`).
+
+O administrador pode usar **Exportar aulas do curso** no topo da lista. O JSON contém a ordem aplicada, matéria, tópico, títulos, duração e IDs estáveis, mas deliberadamente não inclui transcrições nem URLs. O snapshot conferido fica em `data/famed/course-catalog.snapshot.json`, e os vínculos aprovados ficam no mapa versionado do projeto. Se ainda não houver vínculo curado, o aluno não recebe uma conclusão automática de que o curso não cobre aquele assunto.
+
+O snapshot de 1º de agosto de 2026 contém 488 aulas. A curadoria atual cobre diretamente 15 dos 19 itens de aula do cronograma FAMED. Quatro permanecem conscientemente sem substituto aproximado: estratificação de risco cardiovascular, cirurgia cardíaca, cardiopatias congênitas e tomografia do tórax. Esse estado está registrado em `FAMED_COURSE_LESSON_MAP.unmapped` e deve ser revisto quando o catálogo ganhar novas aulas.
 
 ## Regras editoriais
 

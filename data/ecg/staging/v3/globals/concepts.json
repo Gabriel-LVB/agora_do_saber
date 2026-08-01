@@ -1,0 +1,694 @@
+[
+  {
+    "id": "ecg",
+    "label": "Eletrocardiograma",
+    "parentId": null,
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal",
+    "label": "ECG normal e variantes",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.normal",
+    "label": "ECG normal",
+    "parentId": "ecg.normal",
+    "aliases": [
+      "normal"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.sinus_arrhythmia",
+    "label": "Arritmia sinusal",
+    "parentId": "ecg.normal",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.early_repolarization",
+    "label": "Repolarização precoce",
+    "parentId": "ecg.normal",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.athlete",
+    "label": "ECG do atleta",
+    "parentId": "ecg.normal",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.axis_right_variant",
+    "label": "Eixo à direita como variante",
+    "parentId": "ecg.normal",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.t_wave_variant",
+    "label": "Variação normal de onda T",
+    "parentId": "ecg.normal",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.normal.artifact",
+    "label": "Artefato eletrocardiográfico",
+    "parentId": "ecg.normal",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.rhythm",
+    "label": "Ritmo e frequência",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.rhythm.sinus",
+    "label": "Ritmo sinusal",
+    "parentId": "ecg.rhythm",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.rhythm.sinus_tachycardia",
+    "label": "Taquicardia sinusal",
+    "parentId": "ecg.rhythm",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.rhythm.atrial_ectopic",
+    "label": "Ritmo/taquicardia atrial ectópica",
+    "parentId": "ecg.rhythm",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.rhythm.junctional",
+    "label": "Ritmo/escape juncional",
+    "parentId": "ecg.rhythm",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.rhythm.accelerated_idioventricular",
+    "label": "Ritmo idioventricular acelerado",
+    "parentId": "ecg.rhythm",
+    "aliases": [
+      "RIVA"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia",
+    "label": "Arritmias",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.af",
+    "label": "Fibrilação atrial",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [
+      "FA"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.flutter",
+    "label": "Flutter atrial",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.atrial_tachycardia",
+    "label": "Taquicardia atrial",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.svt",
+    "label": "Taquicardia supraventricular",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [
+      "TSV"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.avnrt",
+    "label": "Taquicardia por reentrada nodal",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [
+      "TRN",
+      "AVNRT"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.pac",
+    "label": "Extrassístole atrial",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.pvc",
+    "label": "Extrassístole ventricular",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [
+      "EV",
+      "PVC"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.vt",
+    "label": "Taquicardia ventricular",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [
+      "TV"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.vf",
+    "label": "Fibrilação ventricular",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [
+      "FV"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.arrhythmia.wide_complex_tachycardia",
+    "label": "Taquicardia de QRS largo",
+    "parentId": "ecg.arrhythmia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction",
+    "label": "Distúrbios de condução",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.avb1",
+    "label": "Bloqueio AV de primeiro grau",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "BAV 1º"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.avb2_wenckebach",
+    "label": "Bloqueio AV de segundo grau Mobitz I/Wenckebach",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "Mobitz I"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.avb2_mobitz2",
+    "label": "Bloqueio AV de segundo grau Mobitz II",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "Mobitz II"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.avb2_2to1",
+    "label": "Bloqueio AV 2:1",
+    "parentId": "ecg.conduction",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.avb3",
+    "label": "Bloqueio AV total/terceiro grau",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "BAVT"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.rbbb",
+    "label": "Bloqueio de ramo direito",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "BRD",
+      "RBBB"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.incomplete_rbbb",
+    "label": "Bloqueio de ramo direito incompleto",
+    "parentId": "ecg.conduction",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.lbbb",
+    "label": "Bloqueio de ramo esquerdo",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "BRE",
+      "LBBB"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.lafb",
+    "label": "Bloqueio divisional anterossuperior",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "BDAIS",
+      "BDAS",
+      "LAFB"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.lpfb",
+    "label": "Bloqueio divisional posteroinferior",
+    "parentId": "ecg.conduction",
+    "aliases": [
+      "BDPI",
+      "LPFB"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.bifascicular",
+    "label": "Bloqueio bifascicular",
+    "parentId": "ecg.conduction",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.conduction.trifascicular",
+    "label": "Bloqueio trifascicular",
+    "parentId": "ecg.conduction",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.preexcitation",
+    "label": "Pré-excitação",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.preexcitation.wpw_a",
+    "label": "Wolff-Parkinson-White tipo A",
+    "parentId": "ecg.preexcitation",
+    "aliases": [
+      "WPW A"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.preexcitation.wpw_b",
+    "label": "Wolff-Parkinson-White tipo B",
+    "parentId": "ecg.preexcitation",
+    "aliases": [
+      "WPW B"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.preexcitation.lgl",
+    "label": "Síndrome de Lown-Ganong-Levine",
+    "parentId": "ecg.preexcitation",
+    "aliases": [
+      "LGL"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.channelopathy",
+    "label": "Canalopatias",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.channelopathy.long_qt",
+    "label": "Síndrome/intervalo QT longo",
+    "parentId": "ecg.channelopathy",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.channelopathy.torsades",
+    "label": "Torsades de pointes",
+    "parentId": "ecg.channelopathy",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.channelopathy.brugada",
+    "label": "Síndrome de Brugada",
+    "parentId": "ecg.channelopathy",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia",
+    "label": "Isquemia e infarto",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.stemi",
+    "label": "IAM com supradesnível de ST",
+    "parentId": "ecg.ischemia",
+    "aliases": [
+      "IAMST",
+      "STEMI"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.stemi_anterior",
+    "label": "IAM com supra anterior",
+    "parentId": "ecg.ischemia.stemi",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.stemi_inferior",
+    "label": "IAM com supra inferior",
+    "parentId": "ecg.ischemia.stemi",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.stemi_anterolateral",
+    "label": "IAM com supra anterolateral",
+    "parentId": "ecg.ischemia.stemi",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.nstemi",
+    "label": "SCA/IAM sem supradesnível de ST",
+    "parentId": "ecg.ischemia",
+    "aliases": [
+      "IAMSST",
+      "NSTEMI"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.ischemia",
+    "label": "Isquemia miocárdica",
+    "parentId": "ecg.ischemia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.old_infarct",
+    "label": "Infarto antigo/ondas Q",
+    "parentId": "ecg.ischemia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.posterior_infarct",
+    "label": "Infarto posterior",
+    "parentId": "ecg.ischemia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.prinzmetal",
+    "label": "Angina variante de Prinzmetal",
+    "parentId": "ecg.ischemia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.ischemia.aneurysm",
+    "label": "Aneurisma ventricular pós-infarto",
+    "parentId": "ecg.ischemia",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.repolarization",
+    "label": "Alterações de repolarização",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.repolarization.st_elevation",
+    "label": "Elevação do segmento ST",
+    "parentId": "ecg.repolarization",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.repolarization.st_depression",
+    "label": "Depressão do segmento ST",
+    "parentId": "ecg.repolarization",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.repolarization.t_inversion",
+    "label": "Inversão de onda T",
+    "parentId": "ecg.repolarization",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.repolarization.nonspecific",
+    "label": "Alterações inespecíficas de ST-T",
+    "parentId": "ecg.repolarization",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.chamber",
+    "label": "Sobrecargas de câmaras",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.chamber.lvh",
+    "label": "Sobrecarga/hipertrofia ventricular esquerda",
+    "parentId": "ecg.chamber",
+    "aliases": [
+      "SVE",
+      "HVE"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.chamber.rvh",
+    "label": "Sobrecarga/hipertrofia ventricular direita",
+    "parentId": "ecg.chamber",
+    "aliases": [
+      "SVD",
+      "HVD"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.chamber.lae",
+    "label": "Sobrecarga atrial esquerda",
+    "parentId": "ecg.chamber",
+    "aliases": [
+      "SAE"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.chamber.rae",
+    "label": "Sobrecarga atrial direita",
+    "parentId": "ecg.chamber",
+    "aliases": [
+      "SAD"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.cardiomyopathy",
+    "label": "Cardiomiopatias",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.cardiomyopathy.hcm",
+    "label": "Cardiomiopatia hipertrófica",
+    "parentId": "ecg.cardiomyopathy",
+    "aliases": [
+      "CMH"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.cardiomyopathy.dcm",
+    "label": "Cardiomiopatia dilatada",
+    "parentId": "ecg.cardiomyopathy",
+    "aliases": [
+      "CMD"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic",
+    "label": "Metabólico, drogas e sistêmico",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.hyperkalemia",
+    "label": "Hipercalemia",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.hypokalemia",
+    "label": "Hipocalemia",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.digitalis",
+    "label": "Efeito/intoxicação digitálica",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.hypothermia",
+    "label": "Hipotermia",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.lithium",
+    "label": "Efeito do lítio",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.sotalol",
+    "label": "Efeito do sotalol",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.metabolic.cns_t_wave",
+    "label": "Alterações de onda T por evento neurológico",
+    "parentId": "ecg.metabolic",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.pericardium",
+    "label": "Pericárdio",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.pericardium.pericarditis",
+    "label": "Pericardite",
+    "parentId": "ecg.pericardium",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.pericardium.effusion",
+    "label": "Derrame pericárdico",
+    "parentId": "ecg.pericardium",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.pulmonary",
+    "label": "Pulmão e coração direito",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.pulmonary.pe",
+    "label": "Embolia pulmonar",
+    "parentId": "ecg.pulmonary",
+    "aliases": [
+      "TEP"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.pulmonary.copd",
+    "label": "DPOC/cor pulmonale",
+    "parentId": "ecg.pulmonary",
+    "aliases": [
+      "DPOC"
+    ],
+    "description": ""
+  },
+  {
+    "id": "ecg.pacing",
+    "label": "Estimulação cardíaca",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.pacing.ventricular",
+    "label": "Marca-passo ventricular",
+    "parentId": "ecg.pacing",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.anatomy",
+    "label": "Posição/anatomia",
+    "parentId": "ecg",
+    "aliases": [],
+    "description": ""
+  },
+  {
+    "id": "ecg.anatomy.dextrocardia",
+    "label": "Dextrocardia",
+    "parentId": "ecg.anatomy",
+    "aliases": [],
+    "description": ""
+  }
+]

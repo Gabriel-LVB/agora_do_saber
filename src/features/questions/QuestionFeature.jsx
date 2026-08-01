@@ -647,7 +647,7 @@ const QuestionView = ({
     } : null,
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
     showBizuario&&onBizuario ? { label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:onBizuario } : null,
-    onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Revisão Espaçada', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
+    onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Adicionar à revisão', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
 	    onReviewErrorNotebook && errorNotebook.length > 0 ? { label:`Revisar caderno (${errorNotebook.length})`, icon:<BookOpen className="w-4 h-4"/>, fn:onReviewErrorNotebook } : null,
 	    onOpenErrorReviewResult && errorReviewResultCount > 0 ? { label:errorReviewResultCount>1?`Abrir revisões geradas (${errorReviewResultCount})`:'Abrir revisão gerada', icon:<BookOpen className="w-4 h-4"/>, fn:onOpenErrorReviewResult } : null,
 	    allFlashcards && onExportAnki ? { label:'Enviar para Anki', icon:<Send className="w-4 h-4"/>, fn:()=>onExportAnki(questions) } : null,
@@ -774,7 +774,7 @@ const QuestionView = ({
       fn:onNextUnit,
     } : null;
     const spacedReviewAction = onAddToReview ? {
-      label:inReviewCount>0?`Gerenciar revisão espaçada (${inReviewCount})`:'Adicionar à revisão espaçada',
+      label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Adicionar à revisão',
       helper:inReviewCount>0?'Ajustar as questões que já estão no ciclo.':'Colocar este bloco no ciclo de retenção.',
       icon:<RepeatIcon className="w-5 h-5"/>,
       fn:()=>onAddToReview(questions, answers),
@@ -839,7 +839,7 @@ const QuestionView = ({
         <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Bloco concluído</h3>
         <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
         <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correctCount}/{questions.length} corretas · {wrongCount} para reforçar</p>
-        <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} Adicione as questões à revisão espaçada para transformar esse resultado em ciclo de retenção.</p>
+        <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} Adicione as questões à revisão para transformar esse resultado em ciclo de retenção.</p>
         <div className="grid grid-cols-2 gap-3 mb-8 text-left">
           <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
             <p className="text-2xl font-serif font-bold text-green-500">{correctCount}</p>
@@ -1707,6 +1707,9 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         : question.libraryQuestionKind === 'direct'
           ? 'Fixação'
           : 'Questão';
+  const unresolvedRequiredEcg = question.visualRequirement?.type === 'ecg'
+    && question.visualRequirement?.status === 'unresolved'
+    && !(question.images || []).some(image => image?.type === 'ecg');
   const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
   const iconBtnBase = 'question-icon-button h-8 w-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
@@ -1842,7 +1845,12 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         </>}
 
 	      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
-	      {question.isFlashcard ? (
+	      {unresolvedRequiredEcg ? (
+          <div className={`mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed ${darkMode?'border-yellow-800 bg-yellow-900/15 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-900'}`}>
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0"/>
+            <span>O traçado desta questão ainda não pôde ser associado com segurança.</span>
+          </div>
+        ) : question.isFlashcard ? (
 	        <FlashcardInline
 	          question={question}
 	          darkMode={darkMode}

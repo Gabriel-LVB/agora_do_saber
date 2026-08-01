@@ -18,6 +18,66 @@ service cloud.firestore {
         );
     }
 
+    function emailInCourseList(data) {
+      return signedIn()
+        && request.auth.token.email is string
+        && (
+          (
+            data.keys().hasAny(['courseEmails'])
+            && data.courseEmails is list
+            && request.auth.token.email in data.courseEmails
+          )
+          || (
+            data.keys().hasAny(['course'])
+            && data.course is list
+            && request.auth.token.email in data.course
+          )
+          || (
+            data.keys().hasAny(['emails'])
+            && data.emails is list
+            && request.auth.token.email in data.emails
+          )
+        );
+    }
+
+    function emailInSiteOnlyList(data) {
+      return signedIn()
+        && request.auth.token.email is string
+        && (
+          (
+            data.keys().hasAny(['siteOnlyEmails'])
+            && data.siteOnlyEmails is list
+            && request.auth.token.email in data.siteOnlyEmails
+          )
+          || (
+            data.keys().hasAny(['appEmails'])
+            && data.appEmails is list
+            && request.auth.token.email in data.appEmails
+          )
+          || (
+            data.keys().hasAny(['noCourseEmails'])
+            && data.noCourseEmails is list
+            && request.auth.token.email in data.noCourseEmails
+          )
+        );
+    }
+
+    function hasCourseAccess() {
+      return isAdmin()
+        || (
+          exists(/databases/$(database)/documents/config/access_whitelist)
+          && emailInCourseList(
+            get(/databases/$(database)/documents/config/access_whitelist).data
+          )
+        )
+        || (
+          exists(/databases/$(database)/documents/config/videoaulas_whitelist)
+          && emailInCourseList(
+            get(/databases/$(database)/documents/config/videoaulas_whitelist).data
+          )
+        );
+    }
+
     function ownsIncomingData() {
       return signedIn()
         && request.resource.data.uid is string
@@ -33,36 +93,62 @@ service cloud.firestore {
     }
 
     match /config/{docId} {
-      allow read: if signedIn();
+      // O cliente precisa ler estas listas para descobrir sua própria modalidade
+      // de acesso. Os demais documentos de configuração pertencem ao curso.
+      allow read: if isAdmin()
+        || (
+          signedIn()
+          && docId == 'site_ui'
+        )
+        || (
+          signedIn()
+          && docId == 'access_whitelist'
+          && (
+            emailInCourseList(resource.data)
+            || emailInSiteOnlyList(resource.data)
+          )
+        )
+        || (
+          signedIn()
+          && docId == 'videoaulas_whitelist'
+          && emailInCourseList(resource.data)
+        )
+        || hasCourseAccess();
       allow write: if isAdmin();
     }
 
     match /lessons/{lessonId} {
-      allow read: if signedIn();
+      allow read: if hasCourseAccess();
       allow write: if isAdmin();
     }
 
     match /cronograma/{weekId} {
-      allow read: if signedIn();
+      allow read: if hasCourseAccess();
       allow write: if isAdmin();
     }
 
     match /shared_library/{itemId} {
-      allow read: if isAdmin() || (signedIn() && resource.data.published == true);
+      allow read: if isAdmin() || (hasCourseAccess() && resource.data.published == true);
       allow write: if isAdmin();
 
       match /chunks/{chunkId} {
         allow read: if isAdmin()
           || (
-            signedIn()
+            hasCourseAccess()
             && get(/databases/$(database)/documents/shared_library/$(itemId)).data.published == true
           );
         allow write: if isAdmin();
       }
+
+      // A curadoria completa permanece interna. O aluno recebe somente o snapshot
+      // compacto learningSelection publicado no documento pai da aula.
+      match /metadata_chunks/{chunkId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     match /famed_content/{lessonId} {
-      allow read: if isAdmin() || (signedIn() && resource.data.published == true);
+      allow read: if isAdmin() || (hasCourseAccess() && resource.data.published == true);
       allow write: if isAdmin();
     }
 

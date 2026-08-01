@@ -923,7 +923,7 @@ export default function SettingsView() {
                 className={`border-2 border-dashed rounded-2xl p-6 ${darkMode?'border-red-800/50':'border-red-200'}`}
                 titleClassName={darkMode?'text-red-400':'text-red-600'}
               >
-                <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>Apaga todo o progresso do Portal do Curso: aulas assistidas, questões geradas e fila de revisão espaçada. A biblioteca do Oráculo não é afetada.</p>
+                <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-600'}`}>Apaga todo o progresso do Portal do Curso: aulas assistidas, questões geradas e agenda de revisões. A biblioteca do Oráculo não é afetada.</p>
                 <button onClick={()=>{setResetCourseModal(true);setResetCourseInput('');}}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${darkMode?'border-red-700 text-red-400 hover:bg-red-900/20':'border-red-300 text-red-600 hover:bg-red-50'}`}>
                   <Trash2 className="w-4 h-4"/>Apagar progresso do curso

@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 
+import { executeGeminiRotation } from '../services/geminiRotation.js';
+
 export const useGeminiRuntime = ({
   callGemini,
   errorConfigs,
@@ -61,22 +63,67 @@ export const useGeminiRuntime = ({
     withGeminiKeys,
   ]);
 
-  const callWithRotation = useCallback(async (prompt, sys) => {
-    const orderedKeys = getOrderedKeys();
-    let lastErr;
-    for (const { k } of orderedKeys) {
-      try {
-        const result = await callGemini(prompt, sys, k, [], getGeminiOptions());
-        await rotateKey();
-        return result;
-      } catch(error) {
-        lastErr = error;
-        await rotateKey();
-        throw error;
-      }
-    }
-    throw lastErr;
-  }, [callGemini, getGeminiOptions, getOrderedKeys, rotateKey]);
+  const callWithRotation = useCallback(async (prompt, sys, options = {}) => {
+    const {
+      keyCursorRef,
+      keyPool,
+      minimumAttempts = 1,
+      onAttempt,
+      onError,
+      onSuccess,
+      retryableErrors,
+      retryDelayMs = 700,
+      validateResult,
+      ...geminiOptions
+    } = options || {};
+    const hasExternalPool = Array.isArray(keyPool);
+    const externalKeys = hasExternalPool
+      ? keyPool.map((entry, index) => ({
+        ...entry,
+        id:entry?.id || `pool-${index}`,
+        k:String(entry?.k || entry?.value || '').trim(),
+        keyLabel:entry?.keyLabel
+          || (entry?.fingerprint ? `Chave ${entry.fingerprint}` : `Chave ${index + 1}/${keyPool.length}`),
+      })).filter(entry => entry.k)
+      : [];
+    const configuredKeys = hasExternalPool ? externalKeys : getOrderedKeys();
+    const fallbackKey = getKey();
+    const baseKeys = configuredKeys.length
+      ? configuredKeys
+      : !hasExternalPool && fallbackKey
+        ? [{ id:'fallback', k:fallbackKey }]
+        : [];
+    const startIndex = hasExternalPool && baseKeys.length
+      ? Math.max(0, Number(keyCursorRef?.current) || 0) % baseKeys.length
+      : 0;
+    const orderedKeys = startIndex
+      ? [...baseKeys.slice(startIndex), ...baseKeys.slice(0, startIndex)]
+      : baseKeys;
+    if (!orderedKeys.length) throw new Error('API_KEY_MISSING');
+    return executeGeminiRotation({
+      keys:orderedKeys,
+      minimumAttempts,
+      onAttempt,
+      onError,
+      onSuccess,
+      retryableErrors,
+      retryDelayMs,
+      rotate:hasExternalPool ? undefined : rotateKey,
+      validateResult,
+      invoke:async ({ k }, attemptInfo) => {
+        try {
+          return await callGemini(prompt, sys, k, [], {
+            ...getGeminiOptions(),
+            ...geminiOptions,
+          });
+        } finally {
+          if (hasExternalPool && keyCursorRef && baseKeys.length) {
+            keyCursorRef.current = (startIndex + attemptInfo.attempt) % baseKeys.length;
+          }
+        }
+      },
+    });
+  }, [callGemini, getGeminiOptions, getKey, getOrderedKeys, rotateKey]);
 
   return {
     callWithRotation,

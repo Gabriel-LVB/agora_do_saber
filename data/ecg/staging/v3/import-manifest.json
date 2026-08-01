@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "agora_ecg_import_staging_v3",
+  "sourceSchemaVersion": 3,
+  "sourceZipSha256": "BEBFEDD81026596CDDF8FEC771A56432855F2A31ADC8B06A88CB7D65C5E127A2",
+  "preparedOn": "2026-07-30",
+  "importMode": "staging",
+  "batchSize": 15,
+  "batchCount": 10,
+  "caseCount": 150,
+  "assetCount": 158,
+  "publicBasePath": "/ecg/v3",
+  "publicCatalogPath": "/ecg/v3/catalog.json",
+  "publicAssetInventoryPath": "/ecg/v3/assets.json",
+  "rightsConfirmation": "docs/ECG_RIGHTS_DECLARATION.md",
+  "provenanceCorrection": "Hampton/Hamptom foi uma inferência incorreta de IA; material próprio do Ágora do Saber.",
+  "medicalValidationComplete": false,
+  "runtimeTrainingEnabled": false,
+  "excludedNonEcgFindingCount": 21,
+  "batches": [
+    {
+      "batchId": "batch_000",
+      "path": "batches/batch_000.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG001",
+      "lastCaseId": "ECG015",
+      "sha256": "ac5b64ce864b8e3aa572fce62e7b8fc1d1d5469727df280dda0c8cb4eaf4aa15",
+      "byteLength": 196681
+    },
+    {
+      "batchId": "batch_001",
+      "path": "batches/batch_001.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG016",
+      "lastCaseId": "ECG030",
+      "sha256": "b2d11a8f2180b140c64ffbba98e695a584f751a7437177dfde39ac371182d161",
+      "byteLength": 197965
+    },
+    {
+      "batchId": "batch_002",
+      "path": "batches/batch_002.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG031",
+      "lastCaseId": "ECG045",
+      "sha256": "36162f44805fb23f701abd63d3fb58a111878c5e4cddb3b08a623a71c754e713",
+      "byteLength": 198738
+    },
+    {
+      "batchId": "batch_003",
+      "path": "batches/batch_003.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG046",
+      "lastCaseId": "ECG060",
+      "sha256": "97aaa2b1770b72acb4060f5bd502d5eb544dee8dae981df06c432bf2949d53bb",
+      "byteLength": 202779
+    },
+    {
+      "batchId": "batch_004",
+      "path": "batches/batch_004.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG061",
+      "lastCaseId": "ECG075",
+      "sha256": "24ead786fcde6f8006657e395350bfeafa0440e530357e25527909533e6edd0e",
+      "byteLength": 191233
+    },
+    {
+      "batchId": "batch_005",
+      "path": "batches/batch_005.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG076",
+      "lastCaseId": "ECG090",
+      "sha256": "044ec6cde6bc456d0f66e3b3c629c01ec7e9da85b41cedd7c1210027d5a5cfaf",
+      "byteLength": 197969
+    },
+    {
+      "batchId": "batch_006",
+      "path": "batches/batch_006.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG091",
+      "lastCaseId": "ECG105",
+      "sha256": "17109c12ded1d078cf213947d9f35b361b99d9bae709ebf3733c7a1c6ec4b73b",
+      "byteLength": 194245
+    },
+    {
+      "batchId": "batch_007",
+      "path": "batches/batch_007.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG106",
+      "lastCaseId": "ECG120",
+      "sha256": "62e8ea065e74893286a1952a3296d26a3f726db06c4312b2dfc39ef793023cbd",
+      "byteLength": 202247
+    },
+    {
+      "batchId": "batch_008",
+      "path": "batches/batch_008.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG121",
+      "lastCaseId": "ECG135",
+      "sha256": "dbd4f3f4c479bf87e61ac77b485984d32cf1fc00b70b52ffa6c0861976551519",
+      "byteLength": 198710
+    },
+    {
+      "batchId": "batch_009",
+      "path": "batches/batch_009.json",
+      "caseCount": 15,
+      "firstCaseId": "ECG136",
+      "lastCaseId": "ECG150",
+      "sha256": "95b56cd9be35ba30601a5b5cc50096830050c99173660f94a0e56221c3b5abaa",
+      "byteLength": 192897
+    }
+  ]
+}

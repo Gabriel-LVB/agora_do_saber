@@ -19,6 +19,69 @@ import {
   getQuestionCorrectAnswer,
   normalizeAuditText,
 } from '../src/services/questionAudit.js';
+import {
+  applyQuestionMetadataOverrides,
+  buildConceptAnalysisPrompt,
+  buildLearningSelectionSnapshot,
+  buildQuestionMetadataBatches,
+  buildQuestionMetadataPrompt,
+  LEARNING_SELECTION_VERSION,
+  normalizeConcepts,
+  normalizeQuestionMetadata,
+  QUESTION_METADATA_ANALYSIS_VERSION,
+  QUESTION_METADATA_BATCH_SIZE,
+  QUESTION_METADATA_VERSION,
+  questionSetSignature,
+  selectLearningQuestions,
+} from '../src/services/questionMetadata.js';
+import {
+  appendAdaptiveSupportToReviewSession,
+  buildReviewForecast,
+  buildReviewCardKey,
+  createReviewQueueItem,
+  pauseReviewLesson,
+  REVIEW_DAY_MS,
+  REVIEW_SCHEDULER_VERSION,
+  resumeReviewLesson,
+  scheduleReviewOutcome,
+  selectLessonReviewSeed,
+  summarizeReviewQueue,
+} from '../src/services/reviewScheduler.js';
+import {
+  buildWatchedLessonsIndividualPlan,
+  activateAdaptiveSupportQuestion,
+  FSRS_PENDING_SCHEDULER_VERSION,
+} from '../src/services/reviewMigration.js';
+import {
+  advanceFsrsCard,
+  compareFsrsWithLegacy,
+  FSRS_SCHEDULER_VERSION,
+} from '../src/services/fsrsScheduler.js';
+import { executeGeminiRotation } from '../src/services/geminiRotation.js';
+import {
+  buildFamedCourseCatalogExport,
+  FAMED_COURSE_LESSON_MAP,
+  resolveFamedCourseLessons,
+} from '../src/features/famed/famedCourseLessonMap.js';
+import {
+  buildDailyEffortSchedule,
+  buildEffortBalancedSchedule,
+  buildScheduleDaySlots,
+  calculateScheduleEffort,
+  interleaveLongitudinalScheduleLessons,
+  interleaveScheduleSubjectBatches,
+  resolveScheduleWeeksCount,
+  resolveScheduleSubjectOrder,
+} from '../src/services/courseSchedule.js';
+import {
+  enrichQuestionWithEcgImage,
+  enrichVqBlocksWithEcgImages,
+  ECG_QUESTION_MATCH_VERSION,
+} from '../src/services/ecgQuestionMatcher.js';
+import {
+  questionHasEcgImage,
+  questionRequestsEcgImage,
+} from '../src/services/questionVisual.js';
 
 const traverse = traverseModule.default;
 const assertNoFreeIdentifiers = (source, label) => {
@@ -158,6 +221,720 @@ const auditInput = {
     },
   },
 };
+
+assert.deepEqual(resolveScheduleSubjectOrder({
+  availableSubjects:['Obstetrícia', 'Cardiologia', 'Pneumologia'],
+  preferredSubjects:['Cardiologia', 'Obstetricia'],
+}), ['Cardiologia', 'Obstetrícia', 'Pneumologia']);
+assert.deepEqual(resolveScheduleSubjectOrder({
+  availableSubjects:['Cardiologia', 'Pneumologia', 'Cirurgia'],
+  lessonCounts:{ Cardiologia:8, Pneumologia:3, Cirurgia:12 },
+  orderBy:'lesson-count-desc',
+}), ['Cirurgia', 'Cardiologia', 'Pneumologia']);
+assert.deepEqual(interleaveScheduleSubjectBatches({
+  orderedSubjects:['Cardio', 'Pneumo', 'Cirurgia'],
+  lessonsBySubject:new Map([
+    ['Cardio', ['c1', 'c2']],
+    ['Pneumo', ['p1']],
+    ['Cirurgia', ['s1', 's2']],
+  ]),
+  batchSize:2,
+}), ['c1', 'p1', 'c2', 's1', 's2']);
+const balancedCourseSchedule = buildEffortBalancedSchedule({
+  lessons:[
+    { id:'a', durationSeconds:3600 },
+    { id:'b', durationSeconds:3600 },
+    { id:'c', durationSeconds:900 },
+    { id:'d', durationSeconds:900 },
+  ],
+  weeksCount:2,
+});
+assert.deepEqual(balancedCourseSchedule.weeks.map(week => week.lessons.map(lesson => lesson.id)), [
+  ['a'],
+  ['b', 'c', 'd'],
+]);
+assert.equal(balancedCourseSchedule.weeks.flatMap(week => week.lessons).length, 4);
+assert.equal(buildEffortBalancedSchedule({
+  lessons:[{ id:'unknown' }],
+  weeksCount:2,
+}).totalEffortSeconds, 45 * 60);
+assert.deepEqual(interleaveLongitudinalScheduleLessons(
+  ['clinica-1', 'clinica-2', 'clinica-3', 'clinica-4'],
+  ['prev-1', 'prev-2'],
+), ['clinica-1', 'prev-1', 'clinica-2', 'clinica-3', 'prev-2', 'clinica-4']);
+const dailySlots = buildScheduleDaySlots({
+  startDate:'2026-08-03',
+  studyDays:[1,3,5],
+  weeksCount:2,
+});
+assert.equal(dailySlots.slots.length, 6);
+assert.deepEqual([...new Set(dailySlots.slots.map(slot => slot.weekday))], [1,3,5]);
+const dailyEffortSchedule = buildDailyEffortSchedule({
+  lessons:Array.from({ length:6 }, (_, index) => ({ id:`daily-${index}`, durationSeconds:1800 })),
+  startDate:'2026-08-03',
+  studyDays:[1,3,5],
+  weeksCount:2,
+});
+assert.equal(dailyEffortSchedule.days.length, 6);
+assert.equal(dailyEffortSchedule.days.flatMap(day => day.lessons).length, 6);
+const scheduleEffortFixture = Array.from({ length:4 }, (_, index) => ({ id:`effort-${index}`, durationSeconds:5 * 3600 }));
+const scheduleEffort = calculateScheduleEffort(scheduleEffortFixture);
+assert.equal(scheduleEffort.totalEffortSeconds, 20 * 3600);
+assert.equal(resolveScheduleWeeksCount({
+  effortHours:5,
+  fallbackWeeks:24,
+  goalMode:'effort',
+  totalEffortSeconds:scheduleEffort.totalEffortSeconds,
+}), 4);
+assert.equal(resolveScheduleWeeksCount({
+  cadence:'daily',
+  effortHours:2,
+  fallbackWeeks:24,
+  goalMode:'effort',
+  studyDays:[1,2,3,4,5],
+  totalEffortSeconds:scheduleEffort.totalEffortSeconds,
+}), 2);
+assert.equal(resolveScheduleWeeksCount({
+  endDate:'2026-08-30',
+  fallbackWeeks:24,
+  goalMode:'date',
+  startDate:'2026-08-03',
+}), 4);
+const deadlineDailySlots = buildScheduleDaySlots({
+  endDate:'2026-08-12',
+  startDate:'2026-08-03',
+  studyDays:[1,3,5],
+  weeksCount:2,
+});
+assert.equal(deadlineDailySlots.slots.length, 5);
+assert.equal(deadlineDailySlots.slots.at(-1).dateKey, '2026-08-12');
+const famedCourseLessonsFixture = [
+  { id:'asma', docId:'asma-doc', subject:'Pneumologia', title:'Asma: diagnóstico e manejo', courseIndex:2, aula:{ bunny_id:'bunny-asma' } },
+  { id:'dpoc', docId:'dpoc-doc', subject:'Pneumologia', title:'DPOC', courseIndex:1, aula:{} },
+  { id:'asma-ped', subject:'Pediatria', title:'Asma na infância', courseIndex:0, aula:{} },
+];
+assert.deepEqual(resolveFamedCourseLessons(
+  'pneumo-dpoc-asma',
+  famedCourseLessonsFixture,
+  { links:{ 'pneumo-dpoc-asma':['bunny-asma','dpoc-doc'] } },
+).map(lesson => lesson.id), ['dpoc', 'asma']);
+assert.deepEqual(resolveFamedCourseLessons(
+  'pneumo-dpoc-asma',
+  [
+    { id:'asma', subject:'Pneumologia', title:'Asma: diagnóstico e manejo', courseIndex:2 },
+    { id:'dpoc', subject:'Pneumologia', title:'DPOC', courseIndex:1 },
+  ],
+).map(lesson => lesson.id), []);
+const famedCatalogExportFixture = buildFamedCourseCatalogExport({
+  courseLessons:famedCourseLessonsFixture,
+  scheduleItems:[{ id:'pneumo-dpoc-asma', discipline:'Pneumologia', sequence:1, kind:'lesson', title:'DPOC e asma' }],
+  exportedAt:'2026-08-01T12:00:00.000Z',
+});
+assert.equal(famedCatalogExportFixture.schema, 'agora-famed-course-catalog-v1');
+assert.deepEqual(famedCatalogExportFixture.courseLessons.map(lesson => lesson.title), ['Asma na infância', 'DPOC', 'Asma: diagnóstico e manejo']);
+assert.deepEqual(famedCatalogExportFixture.courseLessons[2].stableIds, ['asma-doc','asma','bunny-asma']);
+assert.equal('transcript' in famedCatalogExportFixture.courseLessons[0], false);
+const famedCourseCatalogSnapshot = JSON.parse(await readFile(
+  new URL('../data/famed/course-catalog.snapshot.json', import.meta.url),
+  'utf8',
+));
+assert.equal(famedCourseCatalogSnapshot.schema, 'agora-famed-course-catalog-v1');
+assert.equal(famedCourseCatalogSnapshot.courseLessons.length, FAMED_COURSE_LESSON_MAP.catalogSnapshot.lessons);
+assert.equal(famedCourseCatalogSnapshot.exportedAt, FAMED_COURSE_LESSON_MAP.catalogSnapshot.exportedAt);
+const famedSnapshotIds = new Set(famedCourseCatalogSnapshot.courseLessons.flatMap(lesson => lesson.stableIds || []).map(String));
+Object.values(FAMED_COURSE_LESSON_MAP.links).flat().forEach(lessonId => {
+  assert.equal(famedSnapshotIds.has(String(lessonId)), true, `Vínculo FAMED ausente do snapshot: ${lessonId}`);
+});
+const famedSnapshotScheduleLessons = famedCourseCatalogSnapshot.famedSchedule
+  .filter(item => item.kind === 'lesson')
+  .map(item => item.scheduleItemId)
+  .sort();
+const famedClassifiedScheduleLessons = [
+  ...Object.keys(FAMED_COURSE_LESSON_MAP.links),
+  ...Object.keys(FAMED_COURSE_LESSON_MAP.unmapped),
+].sort();
+assert.deepEqual(famedClassifiedScheduleLessons, famedSnapshotScheduleLessons);
+const famedSnapshotLessonByStableId = new Map(famedCourseCatalogSnapshot.courseLessons.flatMap(lesson =>
+  (lesson.stableIds || []).map(stableId => [String(stableId), lesson])
+));
+const famedSnapshotScheduleById = new Map(famedCourseCatalogSnapshot.famedSchedule.map(item => [item.scheduleItemId, item]));
+Object.entries(FAMED_COURSE_LESSON_MAP.links).forEach(([scheduleItemId, lessonIds]) => {
+  const scheduleItem = famedSnapshotScheduleById.get(scheduleItemId);
+  const linkedLessons = lessonIds.map(lessonId => famedSnapshotLessonByStableId.get(String(lessonId)));
+  assert.equal(linkedLessons.every(lesson => lesson?.subject === scheduleItem?.discipline), true, `Matéria divergente no vínculo ${scheduleItemId}`);
+  assert.deepEqual(
+    linkedLessons.map(lesson => lesson.courseIndex),
+    linkedLessons.map(lesson => lesson.courseIndex).sort((left,right) => left - right),
+    `Ordem divergente no vínculo ${scheduleItemId}`,
+  );
+});
+
+const ecgQuestionIndex = JSON.parse(await readFile(
+  new URL('../public/ecg/v3/question-match-index.json', import.meta.url),
+  'utf8',
+));
+assert.equal(ecgQuestionIndex.matchingVersion, ECG_QUESTION_MATCH_VERSION);
+assert.equal(ecgQuestionIndex.cases.length, 150);
+assert.equal(ecgQuestionIndex.concepts.length, 89);
+const ecgUsage = new Map();
+const visualAfQuestion = {
+  id:'ecg-fa-1',
+  statement:'Analise o ECG abaixo e assinale o diagnóstico mais provável.',
+  options:[
+    { letter:'A', text:'Fibrilação atrial', isCorrect:true },
+    { letter:'B', text:'Flutter atrial', isCorrect:false },
+  ],
+};
+const visualAfMatch = enrichQuestionWithEcgImage(visualAfQuestion, ecgQuestionIndex, {
+  usageByConcept:ecgUsage,
+});
+assert.equal(visualAfMatch.status, 'matched');
+assert.equal(visualAfMatch.match.conceptId, 'ecg.arrhythmia.af');
+assert.equal(visualAfMatch.question.ecgMatch.confidence, 'high');
+assert.equal(questionHasEcgImage(visualAfMatch.question), true);
+assert.deepEqual(Object.keys(visualAfMatch.question.images[0]).sort(), [
+  'altText', 'height', 'id', 'phase', 'role', 'type', 'url', 'width',
+]);
+assert.equal('diagnosis' in visualAfMatch.question.images[0], false);
+assert.equal('fullAnswer' in visualAfMatch.question.images[0], false);
+const combinedEcgMatch = enrichQuestionWithEcgImage({
+  id:'ecg-sinus-lbbb',
+  statement:'Interprete o ECG apresentado e assinale o diagnóstico.',
+  options:[{ letter:'A', text:'Ritmo sinusal com BRE', isCorrect:true }],
+}, ecgQuestionIndex);
+assert.equal(combinedEcgMatch.status, 'matched');
+const combinedConceptIds = new Set(combinedEcgMatch.match.case.concepts.map(concept => concept.id));
+assert.equal(combinedConceptIds.has('ecg.rhythm.sinus'), true);
+assert.equal(combinedConceptIds.has('ecg.conduction.lbbb'), true);
+assert.equal(enrichQuestionWithEcgImage({
+  id:'ecg-ambiguous-infarct',
+  statement:'Analise o ECG abaixo e indique o diagnóstico.',
+  options:[{ letter:'A', text:'IAM anterior', isCorrect:true }],
+}, ecgQuestionIndex).status, 'unresolved');
+const secondVisualAfMatch = enrichQuestionWithEcgImage({
+  ...visualAfQuestion,
+  id:'ecg-fa-2',
+}, ecgQuestionIndex, { usageByConcept:ecgUsage });
+assert.equal(secondVisualAfMatch.status, 'matched');
+assert.notEqual(secondVisualAfMatch.match.case.id, visualAfMatch.match.case.id);
+assert.equal(questionRequestsEcgImage({
+  id:'ecg-exam-request',
+  statement:'Qual exame deve ser solicitado neste caso?',
+  options:[{ letter:'A', text:'Eletrocardiograma', isCorrect:true }],
+}), false);
+const unresolvedVisual = enrichQuestionWithEcgImage({
+  id:'ecg-unresolved',
+  statement:'Observe o ECG abaixo e escolha a alternativa correta.',
+  options:[{ letter:'A', text:'Alteração não classificada', isCorrect:true }],
+}, ecgQuestionIndex);
+assert.equal(unresolvedVisual.status, 'unresolved');
+assert.equal(unresolvedVisual.question.visualRequirement.status, 'unresolved');
+assert.equal(questionHasEcgImage(unresolvedVisual.question), false);
+const preexistingVisualQuestion = {
+  ...visualAfQuestion,
+  images:[{ id:'existing', type:'ecg', url:'/custom/ecg.jpg' }],
+};
+assert.equal(
+  enrichQuestionWithEcgImage(preexistingVisualQuestion, ecgQuestionIndex).question,
+  preexistingVisualQuestion,
+);
+const enrichedVqFixture = enrichVqBlocksWithEcgImages({
+  cardio:{
+    meta:{ source:'shared-library' },
+    blocks:{ main:{ questions:[visualAfQuestion, unresolvedVisual.question] } },
+  },
+}, ecgQuestionIndex);
+assert.equal(enrichedVqFixture.changed, true);
+assert.equal(enrichedVqFixture.report.required, 2);
+assert.equal(enrichedVqFixture.report.matched, 1);
+assert.equal(enrichedVqFixture.report.unresolved, 1);
+assert.equal(enrichedVqFixture.vqBlocks.cardio.meta.ecgQuestionMatchVersion, ECG_QUESTION_MATCH_VERSION);
+const [ecgRuntimeDataset, ecgCaseConceptMatrix] = await Promise.all([
+  readFile(new URL('../public/ecg/v3/cases.json', import.meta.url), 'utf8').then(JSON.parse),
+  readFile(new URL('../data/ecg/staging/v3/globals/case-concept-matrix.json', import.meta.url), 'utf8').then(JSON.parse),
+]);
+const ecgPrimaryConceptByCase = new Map(ecgCaseConceptMatrix
+  .filter(relation => relation.role === 'primary')
+  .map(relation => [relation.caseId, relation.conceptId]));
+let canonicalEcgMatches = 0;
+let canonicalPrimarySupported = 0;
+ecgRuntimeDataset.cases.forEach(item => {
+  const result = enrichQuestionWithEcgImage({
+    id:`canonical-${item.id}`,
+    statement:'Analise o ECG abaixo e indique o diagnóstico.',
+    options:[{ letter:'A', text:item.shortAnswer, isCorrect:true }],
+  }, ecgQuestionIndex);
+  if (result.status !== 'matched') return;
+  canonicalEcgMatches += 1;
+  if (result.match.case.concepts.some(concept =>
+    concept.id === ecgPrimaryConceptByCase.get(item.id)
+  )) canonicalPrimarySupported += 1;
+});
+assert.ok(canonicalEcgMatches >= 140, `Cobertura ECG canônica insuficiente: ${canonicalEcgMatches}/150`);
+assert.equal(
+  canonicalPrimarySupported,
+  canonicalEcgMatches,
+  `Um ECG associado não sustenta o conceito principal canônico: ${canonicalPrimarySupported}/${canonicalEcgMatches}`,
+);
+
+const metadataQuestions = Array.from({ length:81 }, (_, index) => ({
+  id:`metadata-q-${index + 1}`,
+  statement:`Questão de teste ${index + 1}`,
+  options:[
+    { letter:'A', text:'Correta', isCorrect:true },
+    { letter:'B', text:'Incorreta', isCorrect:false },
+  ],
+}));
+const metadataBatches = buildQuestionMetadataBatches(metadataQuestions);
+assert.equal(QUESTION_METADATA_BATCH_SIZE, 30);
+assert.deepEqual(metadataBatches.map(batch => batch.length), [30, 30, 21]);
+assert.equal(questionSetSignature(metadataQuestions), questionSetSignature(metadataQuestions));
+assert.notEqual(
+  questionSetSignature(metadataQuestions),
+  questionSetSignature([...metadataQuestions, { id:'nova', statement:'Nova questão' }]),
+);
+
+const metadataConcepts = normalizeConcepts([
+  { id:'conduta', label:'Conduta', importance:5 },
+  { id:'diagnostico', label:'Diagnóstico', importance:4 },
+]);
+const normalizedMetadata = normalizeQuestionMetadata({
+  raw:{
+    questionId:'metadata-q-1',
+    conceptIds:['conduta'],
+    primaryConceptId:'conduta',
+    importance:5,
+    learningRole:'core',
+    qualityScore:92,
+  },
+  question:metadataQuestions[0],
+  concepts:metadataConcepts,
+  existing:{ manualOverrides:{ status:'reserve' } },
+});
+assert.equal(normalizedMetadata.status, 'reserve');
+assert.equal(applyQuestionMetadataOverrides(normalizedMetadata).status, 'reserve');
+
+const selectionMetadata = Object.fromEntries(metadataQuestions.slice(0, 4).map((question, index) => [
+  question.id,
+  {
+    ...normalizedMetadata,
+    questionId:question.id,
+    conceptIds:[index % 2 ? 'diagnostico' : 'conduta'],
+    primaryConceptId:index % 2 ? 'diagnostico' : 'conduta',
+    qualityScore:90 - index,
+    status:index === 3 ? 'deprecated' : 'active',
+    manualOverrides:{},
+  },
+]));
+const metadataSelection = selectLearningQuestions({
+  questions:metadataQuestions.slice(0, 4),
+  metadataByQuestion:selectionMetadata,
+  concepts:metadataConcepts,
+});
+assert.ok(metadataSelection.essential.length >= 2);
+assert.equal(metadataSelection.disabled.length, 1);
+assert.equal(metadataSelection.totals.available, 4);
+assert.equal(QUESTION_METADATA_VERSION, 2);
+assert.equal(QUESTION_METADATA_ANALYSIS_VERSION, 'agora-question-metadata-v2');
+assert.equal(LEARNING_SELECTION_VERSION, 'agora-learning-selection-v2');
+const calibrationQuestions = Array.from({ length:20 }, (_, index) => ({
+  ...metadataQuestions[index],
+  id:`calibration-${index + 1}`,
+}));
+const calibrationConcepts = Array.from({ length:4 }, (_, index) => ({
+  id:`concept-${index + 1}`,
+  label:`Conceito ${index + 1}`,
+  importance:5,
+}));
+const calibrationMetadata = Object.fromEntries(calibrationQuestions.map((question, index) => [
+  question.id,
+  {
+    ...normalizedMetadata,
+    questionId:question.id,
+    conceptIds:[calibrationConcepts[index % calibrationConcepts.length].id],
+    primaryConceptId:calibrationConcepts[index % calibrationConcepts.length].id,
+    learningRole:index === calibrationQuestions.length - 1 ? 'variation' : 'core',
+    status:'active',
+    manualOverrides:{},
+  },
+]));
+const calibratedSelection = selectLearningQuestions({
+  questions:calibrationQuestions,
+  metadataByQuestion:calibrationMetadata,
+  concepts:calibrationConcepts,
+});
+assert.equal(calibratedSelection.essential.length, 5);
+assert.ok(calibratedSelection.reserve.some(row => row.question.id === 'calibration-20'));
+assert.match(buildConceptAnalysisPrompt({ title:'Aula' }), /no máximo 25% dos conceitos/);
+assert.match(buildQuestionMetadataPrompt({ item:{}, concepts:[], questions:[], batchIndex:0, batchCount:1 }), /Não use core como padrão/);
+const protectedReserveSelection = selectLearningQuestions({
+  questions:metadataQuestions.slice(4, 6),
+  metadataByQuestion:{
+    'metadata-q-5':{ ...normalizedMetadata, questionId:'metadata-q-5', status:'reserve', manualOverrides:{} },
+    'metadata-q-6':{ ...normalizedMetadata, questionId:'metadata-q-6', status:'active', learningRole:'exam_only', manualOverrides:{} },
+  },
+  concepts:metadataConcepts,
+});
+assert.equal(protectedReserveSelection.essential.length, 0);
+assert.equal(protectedReserveSelection.reserve.length, 2);
+const learningSelectionSnapshot = buildLearningSelectionSnapshot({
+  selection:metadataSelection,
+  questionSignature:questionSetSignature(metadataQuestions.slice(0, 4)),
+  publishedAt:12345,
+});
+assert.equal(learningSelectionSnapshot.publishedAt, 12345);
+assert.equal(Object.keys(learningSelectionSnapshot.questionPolicies).length, 4);
+assert.equal(learningSelectionSnapshot.questionPolicies['metadata-q-4'].tier, 'disabled');
+
+const rotatedKeyCalls = [];
+let rotateCount = 0;
+const rotatedResult = await executeGeminiRotation({
+  keys:[{ k:'key-a' }, { k:'key-b' }],
+  retryDelayMs:0,
+  rotate:async () => { rotateCount += 1; },
+  invoke:async key => {
+    rotatedKeyCalls.push(key.k);
+    if (key.k === 'key-a') throw new Error('QUOTA_EXCEEDED');
+    return 'ok';
+  },
+});
+assert.equal(rotatedResult, 'ok');
+assert.deepEqual(rotatedKeyCalls, ['key-a', 'key-b']);
+assert.equal(rotateCount, 2);
+
+let invalidJsonAttempts = 0;
+const validatedRotationResult = await executeGeminiRotation({
+  keys:[{ k:'key-a' }, { k:'key-b' }],
+  retryDelayMs:0,
+  retryableErrors:['METADATA_JSON_INVALID'],
+  invoke:async () => (++invalidJsonAttempts === 1 ? 'cortado' : '{"ok":true}'),
+  validateResult:text => {
+    try {
+      return JSON.parse(text);
+    } catch(error) {
+      throw new Error('METADATA_JSON_INVALID');
+    }
+  },
+});
+assert.deepEqual(validatedRotationResult, { ok:true });
+assert.equal(invalidJsonAttempts, 2);
+
+let nonRetryableAttempts = 0;
+await assert.rejects(() => executeGeminiRotation({
+  keys:[{ k:'key-a' }, { k:'key-b' }],
+  retryDelayMs:0,
+  invoke:async () => {
+    nonRetryableAttempts += 1;
+    throw new Error('REQUEST_INVALID');
+  },
+}), /REQUEST_INVALID/);
+assert.equal(nonRetryableAttempts, 1);
+
+let singleKeyAttempts = 0;
+const singleKeyResult = await executeGeminiRotation({
+  keys:[{ k:'only-key' }],
+  minimumAttempts:2,
+  retryDelayMs:0,
+  invoke:async () => {
+    singleKeyAttempts += 1;
+    if (singleKeyAttempts === 1) throw new Error('REQUEST_TIMEOUT');
+    return 'recovered';
+  },
+});
+assert.equal(singleKeyResult, 'recovered');
+assert.equal(singleKeyAttempts, 2);
+
+let externalPoolLabel = '';
+await executeGeminiRotation({
+  keys:[{ k:'site-key', keyLabel:'Chave gk_test_8' }],
+  retryDelayMs:0,
+  onAttempt:({ keyLabel }) => { externalPoolLabel = keyLabel; },
+  invoke:async () => 'ok',
+});
+assert.equal(externalPoolLabel, 'Chave gk_test_8');
+
+const reviewNow = Date.UTC(2026, 6, 31, 12);
+const reviewCard = createReviewQueueItem({
+  source:'curso', aulaId:'aula-1', blockId:'diretas', qId:'q-1',
+  question:{ id:'q-1', statement:'Questão' }, now:reviewNow,
+});
+reviewCard.learningPolicy = { tier:'essential', reviewEligible:true, status:'active' };
+reviewCard.adaptiveState = 'core';
+assert.equal(reviewCard.cardKey, buildReviewCardKey({ source:'curso', aulaId:'aula-1', qId:'q-1' }));
+assert.equal(reviewCard.schedulerVersion, REVIEW_SCHEDULER_VERSION);
+assert.equal(reviewCard.dueDate, reviewNow + 3 * REVIEW_DAY_MS);
+const advancedReviewCard = scheduleReviewOutcome({ item:reviewCard, correct:true, now:reviewCard.dueDate });
+assert.equal(advancedReviewCard.interval, 1);
+assert.equal(advancedReviewCard.reps, 1);
+assert.equal(advancedReviewCard.dueDate, reviewCard.dueDate + 7 * REVIEW_DAY_MS);
+const failedReviewCard = scheduleReviewOutcome({ item:advancedReviewCard, correct:false, now:advancedReviewCard.dueDate });
+assert.equal(failedReviewCard.interval, 0);
+assert.equal(failedReviewCard.lapses, 1);
+const lessonSeed = selectLessonReviewSeed([
+  { blockId:'a', questions:[{id:'a1'},{id:'a2'},{id:'a3'}], answers:{} },
+  { blockId:'b', questions:[{id:'b1'},{id:'b2'}], answers:{} },
+], 4);
+assert.deepEqual(lessonSeed.map(row => row.question.id), ['a1','b1','a2','b2']);
+const reviewQueueSummary = summarizeReviewQueue({ aula:{ block:{ q1:reviewCard, q2:advancedReviewCard } } }, reviewNow);
+assert.equal(reviewQueueSummary.total, 2);
+assert.equal(reviewQueueSummary.due, 0);
+assert.equal(reviewQueueSummary.nextDue, reviewCard.dueDate);
+assert.equal(reviewQueueSummary.fsrs.compared, 0);
+const firstFsrsState = advanceFsrsCard({
+  correct:true,
+  legacyDue:reviewNow + 7 * REVIEW_DAY_MS,
+  now:reviewNow,
+});
+assert.equal(firstFsrsState.version, FSRS_SCHEDULER_VERSION);
+assert.equal(firstFsrsState.mode, 'active');
+assert.equal(firstFsrsState.intervalDays, 3);
+assert.equal(firstFsrsState.nextDue, reviewNow + 3 * REVIEW_DAY_MS);
+const secondFsrsState = advanceFsrsCard({
+  previous:firstFsrsState,
+  correct:true,
+  legacyDue:firstFsrsState.nextDue + 14 * REVIEW_DAY_MS,
+  now:firstFsrsState.nextDue,
+});
+assert.ok(secondFsrsState.intervalDays > firstFsrsState.intervalDays);
+assert.equal(secondFsrsState.card.reps, 2);
+assert.equal(compareFsrsWithLegacy({ legacyDue:reviewNow + 7 * REVIEW_DAY_MS, fsrsState:firstFsrsState }).deltaDays, -4);
+const fsrsSummary = summarizeReviewQueue({ aula:{ block:{ q1:{...advancedReviewCard,fsrs:firstFsrsState} } } }, reviewNow);
+assert.equal(fsrsSummary.fsrs.compared, 1);
+assert.equal(fsrsSummary.fsrs.earlier, 1);
+
+const migrationQuestion = id => ({
+  id,
+  statement:`Questão ${id}`,
+  options:[
+    { letter:'A', text:'Certa', isCorrect:true },
+    { letter:'B', text:'Errada', isCorrect:false },
+  ],
+});
+const individualPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[
+    {
+      aulaId:'watched-1', aulaTitle:'Aula 1', subject:'Cardiologia', topic:'ECG',
+      aulaData:{ blocks:{ main:{
+        questions:[migrationQuestion('w1'), migrationQuestion('u1'), migrationQuestion('c1')],
+        answers:{ w1:'B', c1:'A' },
+        errorNotebook:['w1'],
+      } } },
+    },
+    {
+      aulaId:'watched-2', aulaTitle:'Aula 2', subject:'Clínica', topic:'Choque',
+      aulaData:{ blocks:{ main:{ questions:[migrationQuestion('u2'), migrationQuestion('c2')], answers:{ c2:'A' } } } },
+    },
+  ],
+});
+assert.equal(individualPlan.added, 0);
+assert.equal(individualPlan.adaptive.awaitingCuration, 5);
+assert.deepEqual(individualPlan.counts, { wrong:0, unseen:0, correct:0 });
+assert.equal(individualPlan.queue['watched-1'], undefined);
+assert.equal(individualPlan.queue['watched-2'], undefined);
+const repeatedIndividualPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{ aulaId:'watched-1', aulaData:{ blocks:{ main:{
+    questions:[migrationQuestion('w1')],
+    answers:{ w1:'B' },
+    errorNotebook:['w1'],
+  } } } }],
+  existingQueue:individualPlan.queue,
+});
+assert.equal(repeatedIndividualPlan.added, 0);
+assert.equal(repeatedIndividualPlan.changed, 0);
+const parkedLegacyPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{ aulaId:'watched-legacy', aulaData:{ blocks:{ main:{ questions:[migrationQuestion('legacy')] } } } }],
+  existingQueue:{ 'watched-legacy':{ main:{ legacy:{
+    source:'curso',
+    cardKey:'course/watched-legacy/legacy',
+    dueDate:reviewNow + 1234,
+    adaptiveState:'core',
+  } } } },
+});
+assert.equal(parkedLegacyPlan.queue['watched-legacy'].main.legacy.dueDate, null);
+assert.equal(parkedLegacyPlan.queue['watched-legacy'].main.legacy.parkedDueDate, reviewNow + 1234);
+assert.equal(parkedLegacyPlan.queue['watched-legacy'].main.legacy.adaptiveState, 'awaiting-curation');
+const curatedPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{
+    aulaId:'curated-1',
+    aulaTitle:'Aula curada',
+    subject:'Cardiologia',
+    topic:'Arritmias',
+    aulaData:{ blocks:{ main:{
+      questions:[
+        { ...migrationQuestion('essential'), learningPolicy:{ tier:'essential', conceptIds:['ritmo'], importance:5 } },
+        { ...migrationQuestion('support'), learningPolicy:{ tier:'complementary', conceptIds:['ritmo'], importance:4 } },
+        { ...migrationQuestion('reserve'), learningPolicy:{ tier:'reserve', conceptIds:['ritmo'], importance:2 } },
+        { ...migrationQuestion('disabled'), learningPolicy:{ tier:'disabled', conceptIds:['ritmo'], reviewEligible:false } },
+        { ...migrationQuestion('prior-wrong'), learningPolicy:{ tier:'complementary', conceptIds:['bloqueio'], importance:4 } },
+      ],
+      answers:{ 'prior-wrong':'B' },
+      errorNotebook:['prior-wrong'],
+    } } },
+  }],
+});
+assert.equal(curatedPlan.added, 2);
+assert.equal(curatedPlan.adaptive.essential, 1);
+assert.equal(curatedPlan.adaptive.remediation, 1);
+assert.equal(curatedPlan.adaptive.complementaryWaiting, 1);
+assert.equal(curatedPlan.adaptive.reserveWaiting, 1);
+assert.equal(curatedPlan.adaptive.disabled, 1);
+assert.equal(curatedPlan.queue['curated-1'].main.support.dueDate, null);
+const visualWaitingPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{
+    aulaId:'visual-waiting',
+    aulaData:{ blocks:{ main:{ questions:[{
+      ...unresolvedVisual.question,
+      learningPolicy:{ tier:'essential', conceptIds:['ecg'], importance:5 },
+    }] } } },
+  }],
+});
+assert.equal(visualWaitingPlan.adaptive.awaitingVisual, 1);
+assert.equal(visualWaitingPlan.queue['visual-waiting'].main['ecg-unresolved'].adaptiveState, 'awaiting-visual');
+assert.equal(visualWaitingPlan.queue['visual-waiting'].main['ecg-unresolved'].dueDate, null);
+assert.equal(summarizeReviewQueue(visualWaitingPlan.queue, reviewNow).total, 0);
+const visualResolvedPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow + 1000,
+  existingQueue:visualWaitingPlan.queue,
+  lessons:[{
+    aulaId:'visual-waiting',
+    aulaData:{ blocks:{ main:{ questions:[{
+      ...unresolvedVisual.question,
+      visualRequirement:{ type:'ecg', status:'resolved' },
+      ecgMatch:{ version:ECG_QUESTION_MATCH_VERSION, status:'resolved', caseId:'ECG005' },
+      images:[visualAfMatch.question.images[0]],
+      learningPolicy:{ tier:'essential', conceptIds:['ecg'], importance:5 },
+    }] } } },
+  }],
+});
+assert.equal(visualResolvedPlan.adaptive.essential, 1);
+assert.equal(visualResolvedPlan.queue['visual-waiting'].main['ecg-unresolved'].adaptiveState, 'core');
+assert.equal(questionHasEcgImage(visualResolvedPlan.queue['visual-waiting'].main['ecg-unresolved'].question), true);
+const essentialDueBeforePause = curatedPlan.queue['curated-1'].main.essential.dueDate;
+const pausedLesson = pauseReviewLesson({ queue:curatedPlan.queue, aulaId:'curated-1', now:reviewNow + 500 });
+assert.equal(pausedLesson.changed, true);
+assert.equal(pausedLesson.queue['curated-1'].main.essential.adaptiveState, 'paused');
+assert.equal(pausedLesson.queue['curated-1'].main.essential.dueDate, null);
+assert.equal(pausedLesson.queue['curated-1'].main.essential.parkedDueDate, essentialDueBeforePause);
+assert.equal(summarizeReviewQueue(pausedLesson.queue, reviewNow).total, 0);
+const pausedReconciledPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow + 1000,
+  lessons:[{
+    aulaId:'curated-1',
+    aulaData:{ blocks:{ main:{ questions:[
+      { ...migrationQuestion('essential'), learningPolicy:{ tier:'essential', conceptIds:['ritmo'] } },
+      { ...migrationQuestion('support'), learningPolicy:{ tier:'complementary', conceptIds:['ritmo'] } },
+      { ...migrationQuestion('new-essential'), learningPolicy:{ tier:'essential', conceptIds:['ritmo'] } },
+    ] } } },
+  }],
+  existingQueue:pausedLesson.queue,
+});
+assert.equal(pausedReconciledPlan.queue['curated-1'].main.essential.adaptiveState, 'paused');
+assert.equal(pausedReconciledPlan.queue['curated-1'].main.essential.dueDate, null);
+assert.equal(pausedReconciledPlan.queue['curated-1'].main['new-essential'].adaptiveState, 'paused');
+assert.equal(pausedReconciledPlan.queue['curated-1'].main['new-essential'].dueDate, null);
+const resumedLesson = resumeReviewLesson({ queue:pausedReconciledPlan.queue, aulaId:'curated-1', now:reviewNow + 1500 });
+assert.equal(resumedLesson.changed, true);
+assert.equal(resumedLesson.queue['curated-1'].main.essential.adaptiveState, 'core');
+assert.equal(resumedLesson.queue['curated-1'].main.essential.dueDate, essentialDueBeforePause);
+assert.equal(resumedLesson.queue['curated-1'].main.support.adaptiveState, 'dormant');
+assert.equal(resumedLesson.queue['curated-1'].main.support.dueDate, null);
+const restoredCuratedPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{
+    aulaId:'curated-restore',
+    aulaData:{ blocks:{ main:{ questions:[
+      { ...migrationQuestion('essential'), learningPolicy:{ tier:'essential', conceptIds:['ritmo'] } },
+    ] } } },
+  }],
+  existingQueue:{
+    'curated-restore':{ main:{ essential:{
+      source:'curso',
+      cardKey:'course/curated-restore/essential',
+      dueDate:null,
+      parkedDueDate:reviewNow - 5000,
+      adaptiveState:'awaiting-curation',
+      learningPolicy:{ tier:'unclassified', reviewEligible:false },
+    } } },
+  },
+});
+assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.dueDate, reviewNow - 5000);
+assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.parkedDueDate, null);
+assert.equal(curatedPlan.queue['curated-1'].main.disabled.adaptiveState, 'disabled');
+const supportActivation = activateAdaptiveSupportQuestion({
+  queue:curatedPlan.queue,
+  aulaId:'curated-1',
+  answeredItem:curatedPlan.queue['curated-1'].main.essential,
+  now:reviewNow,
+});
+assert.equal(supportActivation.activated?.qId, 'support');
+assert.equal(supportActivation.activated?.item.adaptiveState, 'remediation');
+assert.equal(supportActivation.activated?.item.dueDate, reviewNow + 1000);
+const activeReviewSession = {
+  items:[{
+    aulaId:'curated-1',
+    blockId:'main',
+    qId:'essential',
+    item:curatedPlan.queue['curated-1'].main.essential,
+    question:migrationQuestion('essential'),
+  }],
+  index:0,
+  sessionAnswers:{ 'course/curated-1/essential':'B' },
+  sessionResults:{ 'course/curated-1/essential':false },
+  completed:true,
+};
+const supportSessionItem = {
+  ...supportActivation.activated,
+  question:migrationQuestion('support'),
+};
+const sessionWithSupport = appendAdaptiveSupportToReviewSession(activeReviewSession, supportSessionItem);
+assert.equal(sessionWithSupport.items.length, 2);
+assert.equal(sessionWithSupport.items[1].qId, 'support');
+assert.equal(sessionWithSupport.index, 1);
+assert.equal(sessionWithSupport.completed, false);
+assert.equal(sessionWithSupport.adaptiveSupportAdded, 1);
+assert.equal(
+  appendAdaptiveSupportToReviewSession(sessionWithSupport, supportSessionItem),
+  sessionWithSupport,
+);
+assert.equal(
+  appendAdaptiveSupportToReviewSession(activeReviewSession, {
+    ...supportSessionItem,
+    qId:'support-flashcard',
+    item:{ ...supportSessionItem.item, cardKey:'course/curated-1/support-flashcard' },
+    question:{ ...supportSessionItem.question, id:'support-flashcard', isFlashcard:true },
+  }),
+  activeReviewSession,
+);
+const reconciledActivation = buildWatchedLessonsIndividualPlan({
+  now:reviewNow + 500,
+  lessons:[{
+    aulaId:'curated-1',
+    aulaData:{ blocks:{ main:{
+      questions:[
+        { ...migrationQuestion('essential'), learningPolicy:{ tier:'essential', conceptIds:['ritmo'], importance:5 } },
+        { ...migrationQuestion('support'), learningPolicy:{ tier:'complementary', conceptIds:['ritmo'], importance:4 } },
+      ],
+    } } },
+  }],
+  existingQueue:supportActivation.queue,
+});
+assert.equal(reconciledActivation.queue['curated-1'].main.support.adaptiveState, 'remediation');
+assert.equal(reconciledActivation.queue['curated-1'].main.support.dueDate, reviewNow + 1000);
+const individualForecast = buildReviewForecast(individualPlan.queue, { now:reviewNow, days:7 });
+assert.equal(individualForecast.total, 0);
+assert.equal(individualForecast.dueNow, 0);
+assert.equal(individualForecast.adaptive.awaitingCuration, 0);
+assert.equal(individualForecast.days[0].total, 0);
+assert.equal(individualForecast.days[0].unseen, 0);
+assert.equal(individualForecast.days[0].review, 0);
+assert.equal(individualForecast.days[1].total, 0);
+assert.equal(individualForecast.fsrsActive, 0);
+assert.equal(individualForecast.awaitingFirstFsrsReview, 0);
 const auditableQuestions = collectAuditableQuestions(auditInput);
 assert.equal(auditableQuestions.length, 4);
 const auditReport = auditQuestionCollection(auditInput);
@@ -179,11 +956,16 @@ assert.match(firestoreRules, /match \/\{document=\*\*\}/);
 assert.match(firestoreRules, /allow read, write: if false;/);
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-assert.equal(packageJson.scripts?.check, 'npm run test:unit && npm run test:rules && npm run build && npm run budget');
+assert.equal(packageJson.scripts?.check, 'npm run test:unit && npm run test:rules && npm run validate:ecg-staging && npm run build && npm run budget');
 assert.equal(packageJson.scripts?.['audit:moderate'], 'npm audit --audit-level=moderate');
 assert.equal(packageJson.scripts?.budget, 'node --no-warnings scripts/build-budget.mjs');
+assert.equal(packageJson.scripts?.['import:ecg-site-pack'], 'node --no-warnings scripts/import-ecg-site-pack.mjs');
+assert.equal(packageJson.scripts?.['import:ecg-staging'], 'node --no-warnings scripts/import-ecg-staging.mjs');
+assert.equal(packageJson.scripts?.['validate:ecg'], 'node --no-warnings scripts/validate-ecg-pack.mjs');
+assert.equal(packageJson.scripts?.['validate:ecg-staging'], 'node --no-warnings scripts/validate-ecg-staging.mjs');
 assert.equal(packageJson.scripts?.['test:rules'], 'node --no-warnings scripts/firestore-rules-smoke.mjs');
 assert.equal(packageJson.scripts?.['test:rules:emulator'], 'npx firebase-tools@13.35.1 emulators:exec --only firestore "node --no-warnings scripts/firestore-emulator-rules-test.mjs"');
+assert.equal(packageJson.dependencies?.['ts-fsrs'], '5.4.1');
 for (const removedDependency of ['@heroicons/react', 'framer-motion', 'lucide-react']) {
   assert.equal(packageJson.dependencies?.[removedDependency], undefined);
   assert.equal(packageJson.devDependencies?.[removedDependency], undefined);
@@ -201,7 +983,8 @@ assert.match(envExampleSource, /VITE_GEMINI_BACKEND_URL=/);
 const geminiBackendDocSource = await readFile(new URL('../docs/GEMINI_BACKEND.md', import.meta.url), 'utf8');
 assert.match(geminiBackendDocSource, /POST \/generate/);
 
-const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const appSource = (await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8'))
+  .replace(/\r\n/g, '\n');
 assert.doesNotMatch(appSource, /from ['"]\.\/agora_prompts\.js['"]/);
 assert.match(appSource, /import\(['"]\.\/agora_prompts\.js['"]\)/);
 assert.match(appSource, /import \{ FeatureProvider \} from ['"]\.\/features\/FeatureContext\.jsx['"]/);
@@ -275,7 +1058,7 @@ assert.match(appSource, /setTimeout\(\(\) => setBackgroundPrefetchStage\(stage =
 assert.match(appSource, /const foregroundVideoaulasData = canSeeVideoaulas && courseDataViews\.includes\(view\);/);
 assert.match(appSource, /const needsVideoaulasData = foregroundVideoaulasData \|\| \(canSeeVideoaulas && backgroundPrefetchStage >= 2\);/);
 assert.match(appSource, /const needsVqBlocksData = foregroundVqBlocksData \|\| \(canSeeVideoaulas && backgroundPrefetchStage >= 3\);/);
-assert.match(appSource, /const needsReviewQueueData = foregroundReviewQueueData \|\| \(canUseAdvancedFeatures && backgroundPrefetchStage >= 2\);/);
+assert.match(appSource, /const needsReviewQueueData = foregroundReviewQueueData \|\| \(canSeeVideoaulas && backgroundPrefetchStage >= 2\);/);
 assert.match(appSource, /const foregroundPersonalLibraryData = \[/);
 assert.match(appSource, /const needsPersonalLibraryData = foregroundPersonalLibraryData \|\| backgroundPrefetchStage >= 1;/);
 assert.match(appSource, /cached\.fresh \|\| !needsPersonalLibraryData/);
@@ -325,6 +1108,17 @@ const geminiRuntimeSource = await readFile(new URL('../src/hooks/useGeminiRuntim
 assert.match(geminiRuntimeSource, /export const useGeminiRuntime/);
 assert.match(geminiRuntimeSource, /callWithRotation/);
 assert.match(geminiRuntimeSource, /rotateKey/);
+assert.match(geminiRuntimeSource, /options = \{\}/);
+assert.match(geminiRuntimeSource, /\.\.\.geminiOptions/);
+assert.match(geminiRuntimeSource, /validateResult/);
+assert.match(geminiRuntimeSource, /executeGeminiRotation/);
+assert.match(geminiRuntimeSource, /hasExternalPool/);
+assert.match(geminiRuntimeSource, /keyCursorRef\.current/);
+assert.match(geminiRuntimeSource, /entry\?\.fingerprint/);
+
+const geminiRotationSource = await readFile(new URL('../src/services/geminiRotation.js', import.meta.url), 'utf8');
+assert.match(geminiRotationSource, /retryable\.has/);
+assert.match(geminiRotationSource, /attempt % keys\.length/);
 
 const geminiServiceSource = await readFile(new URL('../src/services/gemini.js', import.meta.url), 'utf8');
 assert.match(geminiServiceSource, /VITE_GEMINI_BACKEND_URL/);
@@ -332,6 +1126,8 @@ assert.match(geminiServiceSource, /callGeminiBackend/);
 assert.match(geminiServiceSource, /\/generate/);
 assert.match(geminiServiceSource, /resolveGeminiTimeout/);
 assert.match(geminiServiceSource, /REQUEST_TIMEOUT/);
+assert.match(geminiServiceSource, /responseMimeType/);
+assert.match(geminiServiceSource, /responseSchema/);
 
 const sharedLibrarySyncSource = await readFile(new URL('../src/hooks/useSharedLibrarySync.js', import.meta.url), 'utf8');
 assert.match(sharedLibrarySyncSource, /export const useSharedLibrarySync/);
@@ -351,6 +1147,7 @@ const studyMapPreviewSource = await readFile(new URL('../src/features/study-map/
 assert.match(studyMapPreviewSource, /export default function StudyMapPreview/);
 
 const questionFeatureSource = await readFile(new URL('../src/features/questions/QuestionFeature.jsx', import.meta.url), 'utf8');
+assert.match(questionFeatureSource, /O traçado desta questão ainda não pôde ser associado com segurança/);
 assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenAnswerModal \}/);
 assert.match(questionFeatureSource, /const isAnswerCorrect = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /const isFinalObjectiveAnswer = \(question, answer\) =>/);
@@ -378,8 +1175,70 @@ assert.match(bulkGenerateModalSource, /bulkGenerateModal\.subject/);
 const sharedLibraryViewSource = await readFile(new URL('../src/features/shared-library/SharedLibraryView.jsx', import.meta.url), 'utf8');
 assert.match(sharedLibraryViewSource, /export default function SharedLibraryView/);
 assert.match(sharedLibraryViewSource, /useFeatureContext/);
-assert.match(sharedLibraryViewSource, /showSharedLibraryAdminTools = isAdmin && sharedLibraryAudienceMode === 'admin'/);
+assert.match(sharedLibraryViewSource, /showSharedLibraryAdminTools = isAdmin/);
+assert.match(sharedLibraryViewSource, /if \(!isAdmin\) return null/);
+assert.match(sharedLibraryViewSource, /EcgCaseBankView/);
+assert.match(sharedLibraryViewSource, /id:'ecg', label:'Banco de ECG'/);
+assert.match(sharedLibraryViewSource, /QuestionCurationView = React\.lazy/);
+assert.doesNotMatch(sharedLibraryViewSource, /QuestionSelectionView|id:'selection'|label:'Seleção'/);
+assert.doesNotMatch(sharedLibraryViewSource, /sharedLibraryAudienceMode|Prévia aluno|setSharedLibraryAudienceMode/);
 assert.doesNotMatch(sharedLibraryViewSource, /id:'exams'|id:'pharmacology'|id:'famed'/);
+
+const ecgCaseBankViewSource = await readFile(new URL('../src/features/question-factory/EcgCaseBankView.jsx', import.meta.url), 'utf8');
+assert.match(ecgCaseBankViewSource, /export default function EcgCaseBankView/);
+assert.match(ecgCaseBankViewSource, /\/ecg\/v3\/cases\.json/);
+assert.match(ecgCaseBankViewSource, /Curso prático de ECG/);
+assert.match(ecgCaseBankViewSource, /Revelar gabarito e comparar/);
+assert.match(ecgCaseBankViewSource, /Preciso rever/);
+assert.match(ecgCaseBankViewSource, /agora_ecg_practical_progress_v1/);
+assert.match(ecgCaseBankViewSource, /Caso clínico/);
+assert.match(ecgCaseBankViewSource, /Interpretação clínica/);
+
+const questionCurationViewSource = await readFile(new URL('../src/features/question-factory/QuestionCurationView.jsx', import.meta.url), 'utf8');
+assert.match(questionCurationViewSource, /Metadados por matéria, em lotes otimizados/);
+assert.match(questionCurationViewSource, /Atualizar metadados/);
+assert.match(questionCurationViewSource, /Clique em Atualizar metadados/);
+assert.match(questionCurationViewSource, /analysisRead/);
+assert.doesNotMatch(questionCurationViewSource, /refreshAnalyses\(\);/);
+assert.doesNotMatch(questionCurationViewSource, /await refreshAnalyses\(\)\.catch/);
+assert.match(questionCurationViewSource, /lotes retomáveis de até 30 questões/);
+assert.match(questionCurationViewSource, /maxTokens:24000/);
+assert.match(questionCurationViewSource, /minimumAttempts:2/);
+assert.match(questionCurationViewSource, /collectLikelySiteGeminiKeys/);
+assert.match(questionCurationViewSource, /keyPool:keyPoolRef\.current/);
+assert.match(questionCurationViewSource, /responseMimeType:'application\/json'/);
+assert.match(questionCurationViewSource, /thinkingBudget:0/);
+assert.match(questionCurationViewSource, /timeoutMs:180000/);
+assert.match(questionCurationViewSource, /pool administrativo/);
+assert.match(questionCurationViewSource, /METADATA_BATCH_INCOMPLETE/);
+assert.match(questionCurationViewSource, /processAnalysisItem/);
+assert.match(questionCurationViewSource, /nenhuma chamada ao Gemini foi necessária/);
+assert.match(questionCurationViewSource, /A fila seguirá para a próxima aula/);
+assert.match(questionCurationViewSource, /Registro da fila/);
+assert.match(questionCurationViewSource, /pauseRun/);
+assert.match(questionCurationViewSource, /stopRun/);
+assert.doesNotMatch(questionCurationViewSource, /stopRef/);
+assert.match(questionCurationViewSource, /Todas as aulas da matéria/);
+assert.match(questionCurationViewSource, /Curar e publicar \{selectedScopeLabel\}/);
+assert.match(questionCurationViewSource, /publishCompletedAnalysis\(item\)/);
+assert.match(questionCurationViewSource, /buildLearningSelectionSnapshot/);
+assert.match(questionCurationViewSource, /Exportar auditoria/);
+assert.match(questionCurationViewSource, /agora-question-curation-audit-v1/);
+assert.match(questionCurationViewSource, /analysisMatchesItem/);
+assert.match(questionCurationViewSource, /LEARNING_SELECTION_VERSION/);
+assert.match(questionCurationViewSource, /for \(let itemIndex = 0; itemIndex < analysisItems\.length/);
+assert.match(questionCurationViewSource, /Aulas assistidas aguardando curadoria/);
+assert.match(questionCurationViewSource, /Atualizar prioridades/);
+assert.match(questionCurationViewSource, /Clique em Atualizar prioridades/);
+assert.match(questionCurationViewSource, /loaded:false/);
+assert.doesNotMatch(questionCurationViewSource, /refreshWatchedDemand\(\);/);
+assert.doesNotMatch(questionCurationViewSource, /await refreshWatchedDemand\(\)\.catch/);
+assert.match(questionCurationViewSource, /Curar e publicar todas/);
+assert.doesNotMatch(questionCurationViewSource, /Fazer curadoria desta aula|Abrir Seleção e publicar/);
+
+const questionMetadataStoreSource = await readFile(new URL('../src/services/questionMetadataStore.js', import.meta.url), 'utf8');
+assert.match(questionMetadataStoreSource, /belongsToManifest/);
+assert.match(questionMetadataStoreSource, /batchIndex < expectedBatchCount/);
 
 const famedPortalViewSource = await readFile(new URL('../src/features/famed/FamedPortalView.jsx', import.meta.url), 'utf8');
 assert.match(famedPortalViewSource, /export default function FamedPortalView/);
@@ -392,6 +1251,12 @@ assert.match(famedPortalViewSource, /startFamedAcademiaCreation/);
 assert.match(famedPortalViewSource, /Geração em lote/);
 assert.match(famedPortalViewSource, /openBulkGenerateModal/);
 assert.match(famedPortalViewSource, /subscribeFamedContent/);
+assert.match(famedPortalViewSource, /buildFamedCourseCatalogExport/);
+assert.match(famedPortalViewSource, /resolveFamedCourseLessons/);
+assert.match(famedPortalViewSource, /agora-famed-catalogo-curso-/);
+assert.match(famedPortalViewSource, /removeScheduleContent/);
+assert.match(famedPortalViewSource, /As videoaulas do Portal do Curso não serão alteradas/);
+assert.doesNotMatch(famedPortalViewSource, /matchFamedScheduleCourseLessons/);
 assert.doesNotMatch(famedPortalViewSource, /FamedManualEditor|FamedPackageImporter|\.zip/i);
 assert.doesNotMatch(famedPortalViewSource, /const TABS|activeTab/);
 
@@ -413,6 +1278,14 @@ const famedScheduleViewSource = await readFile(new URL('../src/features/famed/Fa
 assert.match(famedScheduleViewSource, /Aulas e provas/);
 assert.match(famedScheduleViewSource, /Aula da Academia/);
 assert.match(famedScheduleViewSource, /onOpenQuestions/);
+assert.match(famedScheduleViewSource, /Exportar aulas do curso/);
+assert.match(famedScheduleViewSource, />No curso</);
+assert.match(famedScheduleViewSource, /linkedLessonsDuration/);
+assert.match(famedScheduleViewSource, /lesson\.duration/);
+assert.match(famedScheduleViewSource, /onRemoveContent/);
+assert.match(famedScheduleViewSource, /Remover conteúdo da FAMED/);
+assert.doesNotMatch(famedScheduleViewSource, /courseIndex \?\?|Ver mais|expandedCourseLinks/);
+assert.doesNotMatch(famedScheduleViewSource, /Nenhuma correspondência direta encontrada/);
 assert.doesNotMatch(famedScheduleViewSource, /Cronograma interativo|Sequência de referência/);
 assert.doesNotMatch(famedScheduleViewSource, /Fontes, avaliação de Pneumo e observações|FAMED_S5_SCHEDULE_META/);
 assert.doesNotMatch(famedScheduleViewSource, /formatScheduleDate|item\.date|item\.time|item\.instructor/);
@@ -453,8 +1326,33 @@ assert.match(appSource, /REQUEST_TIMEOUT/);
 const videoaulasViewSource = await readFile(new URL('../src/features/course/VideoaulasView.jsx', import.meta.url), 'utf8');
 assert.match(videoaulasViewSource, /export default function VideoaulasView/);
 assert.match(videoaulasViewSource, /useFeatureContext/);
-assert.match(videoaulasViewSource, /useCourseHeroJourney\(\{ enabled:!videoaulasLoading \}\)/);
-assert.match(videoaulasViewSource, /Continuar ciclo/);
+assert.doesNotMatch(videoaulasViewSource, /Continuar ciclo|Fazer ímpares|Fazer pares/);
+assert.match(videoaulasViewSource, /Adicionar à Revisão/);
+assert.match(videoaulasViewSource, /Remover da Revisão/);
+assert.match(videoaulasViewSource, /Retomar Revisão/);
+assert.match(videoaulasViewSource, /Pausar Revisão/);
+assert.match(videoaulasViewSource, /Zerar Revisão/);
+assert.doesNotMatch(videoaulasViewSource, /Concluir aula e ativar revisão|Longo prazo: essenciais|Revisão aguardando curadoria/);
+assert.match(videoaulasViewSource, /addCourseLessonToReview/);
+assert.match(videoaulasViewSource, /pauseCourseLessonReview/);
+assert.match(videoaulasViewSource, /resetCourseLessonReview/);
+assert.match(videoaulasViewSource, /resumeCourseLessonReview/);
+assert.match(videoaulasViewSource, /disabled:cursor-not-allowed disabled:opacity-35/);
+assert.ok(
+  videoaulasViewSource.indexOf("{effWatched?'Assistida':'Marcar assistida'}")
+    < videoaulasViewSource.indexOf('{effReviewButtonLabel}'),
+  'o controle de revisão deve ficar abaixo de Marcar assistida',
+);
+assert.match(appSource, /if \(reviewState === 'reset'\) return \[\];/);
+assert.ok(
+  appSource.indexOf('const [courseReviewLessonStates, setCourseReviewLessonStates]')
+    < appSource.indexOf('courseReviewLessonStatesRef.current = courseReviewLessonStates || {}'),
+  'o estado de revisão por aula deve existir antes do efeito que sincroniza sua ref',
+);
+assert.match(videoaulasViewSource, /const courseNavEntries = subjects\.flatMap/);
+assert.match(videoaulasViewSource, /openCourseNavEntry\(prevNavEntry\)/);
+assert.match(videoaulasViewSource, /openCourseNavEntry\(nextNavEntry\)/);
+assert.match(videoaulasViewSource, /faixa compacta das aulas do tópico/);
 assertNoFreeIdentifiers(videoaulasViewSource, 'VideoaulasView');
 assert.match(videoaulasViewSource, /\bClock,\s*[\s\S]*\} = useFeatureContext\(\)/);
 assert.match(videoaulasViewSource, /\bvideoMainScrollRef,\s*[\s\S]*\} = useFeatureContext\(\)/);
@@ -467,7 +1365,20 @@ assert.match(coursePortalViewSource, /useCourseHeroJourney/);
 assert.match(coursePortalViewSource, /useCourseHeroJourney\(\{ enabled:true \}\)/);
 assert.doesNotMatch(coursePortalViewSource, /id:'questoes'/);
 assert.doesNotMatch(coursePortalViewSource, /cursoTab==='plano'&&isAdmin/);
-assert.match(coursePortalViewSource, /Ciclo de Estudos/);
+assert.match(coursePortalViewSource, /Plano de estudos/);
+assert.match(coursePortalViewSource, /Configurar plano/);
+assert.match(coursePortalViewSource, /Dias de estudo/);
+assert.match(coursePortalViewSource, /courseScheduleCadence/);
+assert.match(coursePortalViewSource, /Carga horária/);
+assert.match(coursePortalViewSource, /Data final/);
+assert.match(coursePortalViewSource, /horas por dia de estudo/);
+assert.match(coursePortalViewSource, /h-14 rounded-xl border px-3 py-4/);
+assert.doesNotMatch(coursePortalViewSource, /\[12,16,24,36\]/);
+assert.doesNotMatch(coursePortalViewSource, /Cirurgia \+ GO primeiro/);
+assert.doesNotMatch(coursePortalViewSource, />Recomendado</);
+assert.match(coursePortalViewSource, /appendAdaptiveSupportToReviewSession/);
+assert.match(coursePortalViewSource, /progress:scheduleProgress/);
+assert.doesNotMatch(coursePortalViewSource, /const lessonOrderIndex = new Map/);
 assertNoFreeIdentifiers(coursePortalViewSource, 'CoursePortalView');
 assert.doesNotMatch(coursePortalViewSource, /const journeyInfoForLesson =/);
 assert.doesNotMatch(coursePortalViewSource, /const firstQuestionBlockForLesson =/);
@@ -476,18 +1387,28 @@ assert.match(coursePortalViewSource, /role="button"[\s\S]{0,260}setVqExpandedSub
 const videoQuestionsViewSource = await readFile(new URL('../src/features/course/VideoQuestionsView.jsx', import.meta.url), 'utf8');
 assert.match(videoQuestionsViewSource, /export default function VideoQuestionsView/);
 assert.match(videoQuestionsViewSource, /useFeatureContext/);
-assert.match(videoQuestionsViewSource, /useCourseHeroJourney\(\{ enabled:true \}\)/);
+assert.doesNotMatch(videoQuestionsViewSource, /Ímpares|Pares|Continuar ciclo/);
 
 const homeViewSource = await readFile(new URL('../src/features/home/HomeView.jsx', import.meta.url), 'utf8');
 assert.match(homeViewSource, /export default function HomeView/);
 assert.match(homeViewSource, /useFeatureContext/);
 assert.match(homeViewSource, /useCourseHeroJourney/);
 assert.match(homeViewSource, /useCourseHeroJourney\(\{ enabled:homeCanSeeVideoaulas \}\)/);
-assert.match(homeViewSource, /setCursoTab\('plano'\);setView\('curso'\)/);
+assert.match(homeViewSource, /setCursoTab\('cronograma'\);setView\('curso'\)/);
 assertNoFreeIdentifiers(homeViewSource, 'HomeView');
 assert.doesNotMatch(homeViewSource, /buildHomeJourneyState/);
 assert.doesNotMatch(homeViewSource, /const journeyInfo =/);
 assert.match(homeViewSource, /BrandIdentity variant="hero" showMark=\{false\}/);
+assert.match(homeViewSource, /Prioridade de hoje/);
+assert.match(homeViewSource, /Revisar agora/);
+assert.match(appSource, /\['curso','videoaulas','videoquestions','spaced-review'\]\.includes\(view\)/);
+assert.match(appSource, /const foregroundReviewQueueData = canSeeVideoaulas &&/);
+assert.match(appSource, /const needsReviewQueueData = foregroundReviewQueueData \|\| \(canSeeVideoaulas && backgroundPrefetchStage >= 2\)/);
+assert.match(appSource, /homeCanSeeVideoaulas \? \{label:'Revisões'/);
+assert.match(appSource, /view==='spaced-review'&&canSeeVideoaulas&&<SpacedReviewView\/>/);
+assert.match(appSource, /setSrModal=\{canSeeVideoaulas \? setSrModal : null\}/);
+assert.match(homeViewSource, /homeCanSeeVideoaulas&&dueCount>0/);
+assert.doesNotMatch(homeViewSource, /homeCanUseAdvancedFeatures&&dueCount>0/);
 assert.doesNotMatch(homeViewSource, /Pórtico da academia do Gabigol/);
 assert.doesNotMatch(homeViewSource, /Conhecimento organizado\. Estudo com propósito\./);
 assert.doesNotMatch(homeViewSource, /Todo o seu conteúdo organizado em um único lugar/);
@@ -495,6 +1416,14 @@ assert.doesNotMatch(homeViewSource, /home-goals/);
 assert.match(homeViewSource, /home-progress-card/);
 assert.doesNotMatch(famedPortalViewSource, /Foco atual|Aulas e questões em uma única sequência/);
 assert.match(famedScheduleViewSource, /supplementaryTopics/);
+assert.match(famedScheduleViewSource, />No curso</);
+assert.match(famedPortalViewSource, /resolveFamedCourseLessons/);
+assert.match(appSource, /courseScheduleCadence:cleanCadence/);
+assert.match(appSource, /courseScheduleStudyDays:cleanStudyDays/);
+assert.match(appSource, /courseScheduleGoalMode:cleanGoalMode/);
+assert.match(appSource, /courseScheduleEffortHours:cleanEffortHours/);
+assert.match(appSource, /courseScheduleEndDate:cleanEndDate/);
+assert.doesNotMatch(appSource, /Plano alinhado à curadoria/);
 assert.match(appSource, /action:toggleMobileMenu/);
 
 const brandIdentitySource = await readFile(new URL('../src/components/BrandIdentity.jsx', import.meta.url), 'utf8');
@@ -523,31 +1452,21 @@ assert.doesNotMatch(appSource, /data:image\/svg\+xml;base64/);
 const courseHeroJourneySource = await readFile(new URL('../src/features/course/useCourseHeroJourney.js', import.meta.url), 'utf8');
 assert.match(courseHeroJourneySource, /export const useCourseHeroJourney/);
 assert.match(courseHeroJourneySource, /coursePrefsLoaded/);
-assert.match(courseHeroJourneySource, /vqBlocksLoaded/);
-assert.match(courseHeroJourneySource, /interleavedCycleLessons/);
-assert.match(courseHeroJourneySource, /cycleReviewOffsetsForLessonCount/);
-assert.match(courseHeroJourneySource, /totalLessons <= 10/);
-assert.match(courseHeroJourneySource, /totalLessons <= 40/);
-assert.match(courseHeroJourneySource, /totalLessons <= 70/);
-assert.match(courseHeroJourneySource, /position:index \+ offsets\.directEven/);
-assert.match(courseHeroJourneySource, /position:index \+ offsets\.clinicalOdd/);
-assert.match(courseHeroJourneySource, /position:index \+ offsets\.clinicalEven/);
-assert.match(courseHeroJourneySource, /primaryCompleteThroughSubjectOffset\(event\.lesson, event\.offset\)/);
-assert.doesNotMatch(courseHeroJourneySource, /primaryCompleteThrough\(event\.position\)/);
-assert.match(courseHeroJourneySource, /openQuestions\(event\.lesson, 'direct-even'\)/);
-assert.match(courseHeroJourneySource, /openQuestions\(event\.lesson, 'clinical-odd'\)/);
-assert.match(courseHeroJourneySource, /openQuestions\(event\.lesson, 'clinical-even'\)/);
-assert.doesNotMatch(courseHeroJourneySource, /completedAfter/);
-assert.match(courseHeroJourneySource, /Fazer pares diretas/);
-assert.match(courseHeroJourneySource, /Fazer clínicas ímpares/);
-assert.match(courseHeroJourneySource, /Fazer clínicas pares/);
+assert.match(courseHeroJourneySource, /scheduleWeeks/);
+assert.match(courseHeroJourneySource, /scheduleCurrentWeek/);
+assert.match(courseHeroJourneySource, /nextScheduleLesson/);
+assert.match(courseHeroJourneySource, /label:'Próxima aula'/);
+assert.match(courseHeroJourneySource, /buildEffortBalancedSchedule/);
+assert.match(courseHeroJourneySource, /buildDailyEffortSchedule/);
+assert.match(courseHeroJourneySource, /courseIndex/);
+assert.match(courseHeroJourneySource, /interleaveLongitudinalScheduleLessons\(clinicalLessons, preventiveLessons\)/);
+assert.match(courseHeroJourneySource, /strategy === 'medico-bicho'/);
+assert.doesNotMatch(courseHeroJourneySource, /vqBlocksLoaded|interleavedCycleLessons|direct-even|clinical-odd|clinical-even/);
 assertNoFreeIdentifiers(courseHeroJourneySource, 'useCourseHeroJourney');
 
-assert.match(videoQuestionsViewSource, /cycleStage === 'direct-odd'/);
-assert.match(videoQuestionsViewSource, /cycleStage === 'direct-even'/);
-assert.match(videoQuestionsViewSource, /if \(type !== journeyStage\.type\) return false;/);
-assert.match(videoQuestionsViewSource, /const clinicalReviewQuestions = parityQuestions\.filter\(question => isClinicalVqQuestion\(question\)\);/);
-assert.match(videoQuestionsViewSource, /nextUnitLabel=\{cycleStage \? 'Continuar ciclo'/);
+assert.match(videoQuestionsViewSource, /Voltar ao plano/);
+assert.match(videoQuestionsViewSource, /setCursoTab\('cronograma'\)/);
+assert.doesNotMatch(videoQuestionsViewSource, /cycleStage|direct-odd|direct-even|clinical-odd|clinical-even|Continuar ciclo/);
 
 const settingsViewSource = await readFile(new URL('../src/features/settings/SettingsView.jsx', import.meta.url), 'utf8');
 assert.match(settingsViewSource, /export default function SettingsView/);
@@ -560,6 +1479,27 @@ assert.match(favoritesViewSource, /useFeatureContext/);
 const spacedReviewViewSource = await readFile(new URL('../src/features/review/SpacedReviewView.jsx', import.meta.url), 'utf8');
 assert.match(spacedReviewViewSource, /export default function SpacedReviewView/);
 assert.match(spacedReviewViewSource, /useFeatureContext/);
+assert.match(spacedReviewViewSource, />Revisões</);
+assert.match(spacedReviewViewSource, /reviewScheduledCount/);
+assert.match(spacedReviewViewSource, /Responder questões/);
+assert.match(spacedReviewViewSource, /appendAdaptiveSupportToReviewSession/);
+assert.match(spacedReviewViewSource, /reforço\{adaptiveSupportAdded===1/);
+assert.match(spacedReviewViewSource, /Revisar flashcards/);
+assert.match(spacedReviewViewSource, /Carga prevista/);
+assert.match(spacedReviewViewSource, /max-w-5xl/);
+assert.match(spacedReviewViewSource, /reviewForecast/);
+assert.match(spacedReviewViewSource, /forecastRange >= 14/);
+assert.match(spacedReviewViewSource, /day:'2-digit', month:'2-digit'/);
+assert.doesNotMatch(spacedReviewViewSource, /mais cedo que o modelo antigo|adoção do FSRS|calculad[oa] pelo FSRS/i);
+assert.match(appSource, /import\('\.\/services\/fsrsScheduler\.js'\)/);
+assert.doesNotMatch(appSource, /from ['"]\.\/services\/fsrsScheduler/);
+assert.match(appSource, /import\('\.\/services\/reviewMigration\.js'\)/);
+assert.doesNotMatch(appSource, /from ['"]\.\/services\/reviewMigration/);
+assert.match(appSource, /import\('\.\/services\/ecgQuestionMatcher\.js'\)/);
+assert.doesNotMatch(appSource, /from ['"]\.\/services\/ecgQuestionMatcher/);
+assert.match(appSource, /ecgQuestionMatchVersion/);
+assert.match(appSource, /trackReviewOutcome/);
+assert.match(appSource, /reviewEvents/);
 
 const quickViewSource = await readFile(new URL('../src/features/quick/QuickView.jsx', import.meta.url), 'utf8');
 assert.match(quickViewSource, /export default function QuickView/);
@@ -573,6 +1513,8 @@ assert.match(quickTopicViewSource, /export default function QuickTopicView/);
 assert.match(quickTopicViewSource, /useFeatureContext/);
 assert.match(quickTopicViewSource, /availableTabs/);
 assert.match(quickTopicViewSource, /QuickLessonContent/);
+assert.match(quickTopicViewSource, /onAddToReview=\{canSeeVideoaulas \?/);
+assert.doesNotMatch(quickTopicViewSource, /onAddToReview=\{canUseAdvancedFeatures \?/);
 
 const quickLessonContentSource = await readFile(new URL('../src/features/quick/QuickLessonContent.jsx', import.meta.url), 'utf8');
 assert.match(quickLessonContentSource, /export default function QuickLessonContent/);

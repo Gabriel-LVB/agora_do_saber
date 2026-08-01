@@ -1,0 +1,122 @@
+[
+  {
+    "id": "rhythm_sinus",
+    "label": "Rhythm Sinus",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "premature_ventricular_complex",
+    "label": "Premature Ventricular Complex",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "t_wave_inversion",
+    "label": "T Wave Inversion",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "q_waves_pathologic",
+    "label": "Q Waves Pathologic",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "wide_qrs",
+    "label": "Wide Qrs",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "av_dissociation",
+    "label": "Av Dissociation",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "st_elevation",
+    "label": "St Elevation",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "atrial_fibrillation",
+    "label": "Atrial Fibrillation",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "st_depression",
+    "label": "St Depression",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "u_wave_prominent",
+    "label": "U Wave Prominent",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "irregular_rhythm",
+    "label": "Irregular Rhythm",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "right_bundle_pattern",
+    "label": "Right Bundle Pattern",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "right_axis_deviation",
+    "label": "Right Axis Deviation",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "right_ventricular_dominance",
+    "label": "Right Ventricular Dominance",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "left_bundle_pattern",
+    "label": "Left Bundle Pattern",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "left_axis_deviation",
+    "label": "Left Axis Deviation",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "premature_atrial_complex",
+    "label": "Premature Atrial Complex",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "left_ventricular_voltage",
+    "label": "Left Ventricular Voltage",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "atrial_flutter",
+    "label": "Atrial Flutter",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "delta_wave_preexcitation",
+    "label": "Delta Wave Preexcitation",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "prolonged_pr",
+    "label": "Prolonged Pr",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "paced_qrs",
+    "label": "Paced Qrs",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "long_qt",
+    "label": "Long Qt",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  },
+  {
+    "id": "low_voltage",
+    "label": "Low Voltage",
+    "description": "Tag derivada dos achados textuais do caso; validar visualmente antes de uso como anotação de ensino."
+  }
+]

@@ -19,6 +19,15 @@ import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiA
 import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
 import {
+  buildReviewForecast,
+  createReviewQueueItem,
+  isReviewQueueItemScheduled,
+  pauseReviewLesson,
+  resumeReviewLesson,
+  scheduleReviewOutcome,
+  summarizeReviewQueue,
+} from './services/reviewScheduler.js';
+import {
   prepareSharedLibraryContentForWrite,
   SHARED_LIBRARY_CHUNKED_FIELDS,
   SHARED_LIBRARY_CHUNKS_COLLECTION,
@@ -86,7 +95,7 @@ const BulkGenerateModal = () => (
   </React.Suspense>
 );
 const SharedLibraryView = () => (
-  <React.Suspense fallback={<LoadingState message="Abrindo a Biblioteca..."/>}>
+  <React.Suspense fallback={<LoadingState message="Abrindo a Fábrica de Questões..."/>}>
     <LazySharedLibraryView/>
   </React.Suspense>
 );
@@ -240,6 +249,7 @@ const Feather     = ic('<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z
 const CheckCircle2= ic('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>');
 const XCircle     = ic('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>');
 const BookOpen    = ic('<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>');
+const FactoryIcon = ic('<path d="M3 21V9l6 4V9l6 4V5h6v16H3z"/><path d="M7 21v-4h3v4"/><path d="M15 17h2"/><path d="M15 14h2"/>');
 const ArrowLeft   = ic('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>');
 const ChevronDown = ic('<polyline points="6 9 12 15 18 9"/>');
 const ChevronLeft = ic('<polyline points="15 18 9 12 15 6"/>');
@@ -2539,11 +2549,21 @@ const COURSE_ORG_SOURCE_MODE = 'firestore-subject-manual-corrections-v3';
 const COURSE_SCHEDULE_DEFAULT_WEEKS = 24;
 const COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE = 2;
 const COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE = 6;
+const COURSE_SCHEDULE_DEFAULT_CADENCE = 'weekly';
+const COURSE_SCHEDULE_DEFAULT_STUDY_DAYS = [1,2,3,4,5];
+const COURSE_SCHEDULE_DEFAULT_GOAL_MODE = 'weeks';
+const COURSE_SCHEDULE_DEFAULT_EFFORT_HOURS = 5;
 const COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE = 4;
 const COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE = 8;
-const COURSE_SCHEDULE_DEFAULT_ORDER_PRESET = 'systems-flow';
+const COURSE_SCHEDULE_DEFAULT_ORDER_PRESET = 'course-order';
 const COURSE_SCHEDULE_DEFAULT_MIX_PRESET = 'subject-batches';
 const COURSE_SCHEDULE_PRESETS = [
+  {
+    id:'course-order',
+    label:'Ordem do curso',
+    desc:'Respeita a organização pedagógica publicada e a sequência interna de cada módulo.',
+    subjects:[],
+  },
   {
     id:'systems-flow',
     label:'Por sistemas',
@@ -2563,22 +2583,18 @@ const COURSE_SCHEDULE_PRESETS = [
     subjects:['Cardiologia','Pneumologia','Gastroenterologia','Nefrologia','Endocrinologia','Infectologia','Hematologia','Reumatologia','Psiquiatria','Preventiva','Cirurgia','Ginecologia','Obstetricia','Pediatria','Ortopedia','Dermatologia','Oftalmologia'],
   },
   {
-    id:'surgical-go',
-    label:'Cirurgia + GO primeiro',
-    desc:'Acelera cirurgia, gineco-obstetrícia e pediatria.',
-    subjects:['Cirurgia','Ginecologia','Obstetricia','Pediatria','Preventiva','Gastroenterologia','Cardiologia','Pneumologia','Nefrologia','Endocrinologia','Infectologia','Reumatologia','Hematologia','Psiquiatria','Ortopedia','Dermatologia','Oftalmologia'],
-  },
-  {
     id:'big-first',
-    label:'Grandes primeiro',
-    desc:'Ataca logo as matérias mais longas e densas.',
-    subjects:['Gastroenterologia','Cirurgia','Nefrologia','Pediatria','Ginecologia','Obstetricia','Reumatologia','Cardiologia','Infectologia','Preventiva','Endocrinologia','Hematologia','Pneumologia','Psiquiatria','Oftalmologia','Ortopedia','Dermatologia'],
+    label:'Mais extensas primeiro',
+    desc:'Usa a quantidade real de aulas do catálogo atual, sem depender de uma lista fixa.',
+    orderBy:'lesson-count-desc',
+    subjects:[],
   },
   {
     id:'small-first',
-    label:'Pequenos primeiro',
-    desc:'Fecha matérias curtas antes das grandes.',
-    subjects:['Dermatologia','Oftalmologia','Ortopedia','Psiquiatria','Pneumologia','Hematologia','Endocrinologia','Preventiva','Infectologia','Cardiologia','Ginecologia','Obstetricia','Reumatologia','Pediatria','Nefrologia','Cirurgia','Gastroenterologia'],
+    label:'Mais curtas primeiro',
+    desc:'Fecha primeiro as matérias com menos aulas no catálogo atual.',
+    orderBy:'lesson-count-asc',
+    subjects:[],
   },
 ];
 const COURSE_SCHEDULE_MIX_PRESETS = [
@@ -2597,13 +2613,13 @@ const COURSE_SCHEDULE_MIX_PRESETS = [
   {
     id:'ufc-flow',
     label:'Ordem UFC',
-    desc:'Segue a matriz curricular UFC Medicina 2018.1 do ciclo básico ao 8º semestre.',
+    desc:'Segue as grandes áreas da formação médica e distribui Preventiva ao longo de todo o plano.',
     strategy:'ufc-flow',
   },
   {
     id:'medico-bicho',
     label:'Médico Bicho',
-    desc:'Segue a lógica da Ordem UFC, mas sem as aulas de Preventiva.',
+    desc:'Segue a sequência clínica da Ordem UFC sem incluir as aulas de Preventiva.',
     strategy:'medico-bicho',
   },
   {
@@ -3690,7 +3706,7 @@ export default function QuestionBankApp() {
   const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
   const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
   useEffect(() => {
-    if (!canSeeVideoaulas && ['curso','videoaulas','videoquestions'].includes(view)) setView('library');
+    if (!canSeeVideoaulas && ['curso','videoaulas','videoquestions','spaced-review'].includes(view)) setView('library');
   }, [canSeeVideoaulas, view]);
 
   // Exam
@@ -3737,6 +3753,7 @@ export default function QuestionBankApp() {
   const [vqAula, setVqAula]         = useState(null);
   const [vqBlocks, setVqBlocks]     = useState({});
   const vqBlocksRef = useRef({});
+  const ecgQuestionMatchRunRef = useRef('');
   const vqSaveQueueRef = useRef(Promise.resolve());
   const [vqLoading, setVqLoading]   = useState(false);   // carregamento do Firestore
   const [vqSyllabusLoading, setVqSyllabusLoading] = useState(false); // geração do sumário
@@ -3750,7 +3767,7 @@ export default function QuestionBankApp() {
   };
   const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
   const updateToast = (id, msg, type) => setToasts(p => p.map(t => t.id===id ? {...t, msg, type} : t));
-  const [dailyStats, setDailyStats] = useState({date:getTodayKey(),questionKeys:{},lessonIntervals:{}});
+  const [dailyStats, setDailyStats] = useState({date:getTodayKey(),questionKeys:{},lessonIntervals:{},reviewEvents:{}});
   const dailyStatsRef = useRef(dailyStats);
   const dailyStatsSaveTimer = useRef(null);
   const academiaOracleMigratedRef = useRef(false);
@@ -3766,7 +3783,6 @@ export default function QuestionBankApp() {
   const {
     refreshSharedLibrary,
     setSharedLibraryActiveItemId,
-    setSharedLibraryAudienceMode,
     setSharedLibraryConfig,
     setSharedLibraryGenerationLesson,
     setSharedLibraryGenerationStages,
@@ -3780,7 +3796,6 @@ export default function QuestionBankApp() {
     setSharedLibrarySubject,
     setSharedLibraryTab,
     sharedLibraryActiveItemId,
-    sharedLibraryAudienceMode,
     sharedLibraryConfig,
     sharedLibraryControlRef,
     sharedLibraryError,
@@ -3821,6 +3836,7 @@ export default function QuestionBankApp() {
   const [cursoTab, setCursoTab]           = useState('videoaulas');
   const [reviewQueue, setReviewQueue]     = useState({});  // { aulaId: { blockId: { qId: { interval, dueDate, seed } } } }
   const reviewQueueRef = useRef({});
+  const reviewLoadStartedRef = useRef(false);
   const [reviewLoaded, setReviewLoaded]   = useState(false);
   const [resetCourseModal, setResetCourseModal] = useState(false);
   const [resetCourseInput, setResetCourseInput] = useState('');
@@ -3836,8 +3852,19 @@ export default function QuestionBankApp() {
   const [coursePlanLessonOrder, setCoursePlanLessonOrder] = useState([]);
   const [coursePlanLocked, setCoursePlanLocked] = useState(false);
   const [coursePrefsLoaded, setCoursePrefsLoaded] = useState(false);
+  const [courseReviewLessonStates, setCourseReviewLessonStates] = useState({});
+  const courseReviewLessonStatesRef = useRef({});
+  useEffect(() => {
+    courseReviewLessonStatesRef.current = courseReviewLessonStates || {};
+  }, [courseReviewLessonStates]);
   const [courseScheduleWeeks, setCourseScheduleWeeks] = useState(COURSE_SCHEDULE_DEFAULT_WEEKS);
   const [courseScheduleSubjectBatchSize, setCourseScheduleSubjectBatchSize] = useState(COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE);
+  const [courseScheduleCadence, setCourseScheduleCadence] = useState(COURSE_SCHEDULE_DEFAULT_CADENCE);
+  const [courseScheduleStudyDays, setCourseScheduleStudyDays] = useState(COURSE_SCHEDULE_DEFAULT_STUDY_DAYS);
+  const [courseScheduleGoalMode, setCourseScheduleGoalMode] = useState(COURSE_SCHEDULE_DEFAULT_GOAL_MODE);
+  const [courseScheduleEffortHours, setCourseScheduleEffortHours] = useState(COURSE_SCHEDULE_DEFAULT_EFFORT_HOURS);
+  const [courseScheduleEndDate, setCourseScheduleEndDate] = useState('');
+  const [courseScheduleDayCursor, setCourseScheduleDayCursor] = useState(null);
   const [courseSchedulePreset, setCourseSchedulePreset] = useState(COURSE_SCHEDULE_DEFAULT_ORDER_PRESET);
   const [courseScheduleMixPreset, setCourseScheduleMixPreset] = useState(COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
   const [courseScheduleSubjectsOpen, setCourseScheduleSubjectsOpen] = useState(false);
@@ -3891,7 +3918,7 @@ export default function QuestionBankApp() {
   }, [courseCatalogRun.logs.length]);
 
   useEffect(() => {
-    if (cursoTab === 'questoes') setCursoTab('plano');
+    if (cursoTab === 'questoes' || cursoTab === 'plano') setCursoTab('cronograma');
   }, [cursoTab]);
 
   useEffect(() => {
@@ -3986,9 +4013,20 @@ export default function QuestionBankApp() {
   };
 
   const openSpacedReview = (items = null) => {
+    if (!canSeeVideoaulas) {
+      setReviewSession(null);
+      setView('library');
+      return;
+    }
     openViewWithReturn('spaced-review');
     if (items) setReviewSession({ items, index:0, sessionAnswers:{} });
   };
+
+  useEffect(() => {
+    if (canSeeVideoaulas) return;
+    setSrModal(null);
+    setReviewSession(null);
+  }, [canSeeVideoaulas]);
 
   useEffect(() => {
     if (!user || user.isAnonymous) {
@@ -4004,7 +4042,7 @@ export default function QuestionBankApp() {
     return () => timers.forEach(clearTimeout);
   }, [user?.uid, user?.isAnonymous]);
 
-  const courseDataViews = ['curso', 'videoaulas', 'videoquestions', 'shared-library'];
+  const courseDataViews = ['curso', 'videoaulas', 'videoquestions', 'shared-library', 'famed'];
   const foregroundVideoaulasData = canSeeVideoaulas && courseDataViews.includes(view);
   const needsVideoaulasData = foregroundVideoaulasData || (canSeeVideoaulas && backgroundPrefetchStage >= 2);
   const needsCourseScheduleData = canSeeVideoaulas && (
@@ -4017,15 +4055,15 @@ export default function QuestionBankApp() {
     || (isAdmin && view === 'shared-library')
     || !!vqAula
     || !!vqActiveBlockView
-    || (view === 'spaced-review' && canUseAdvancedFeatures)
+    || view === 'spaced-review'
   );
   const needsVqBlocksData = foregroundVqBlocksData || (canSeeVideoaulas && backgroundPrefetchStage >= 3);
-  const foregroundReviewQueueData = canUseAdvancedFeatures && (
-    ['curso', 'videoquestions', 'spaced-review'].includes(view)
+  const foregroundReviewQueueData = canSeeVideoaulas && (
+    ['curso', 'videoaulas', 'videoquestions', 'spaced-review'].includes(view)
     || !!srModal
     || !!reviewSession
   );
-  const needsReviewQueueData = foregroundReviewQueueData || (canUseAdvancedFeatures && backgroundPrefetchStage >= 2);
+  const needsReviewQueueData = foregroundReviewQueueData || (canSeeVideoaulas && backgroundPrefetchStage >= 2);
   const foregroundPersonalLibraryData = [
     'sub-library',
     'subject',
@@ -4035,8 +4073,7 @@ export default function QuestionBankApp() {
     'exam',
     'quick',
     'quick-topic',
-    'spaced-review',
-  ].includes(view) || !!activeSubjectId || !!examSetup || !!activeExam || !!folderReviewModal || !!errorReviewModal;
+  ].includes(view) || (canSeeVideoaulas && view === 'spaced-review') || !!activeSubjectId || !!examSetup || !!activeExam || !!folderReviewModal || !!errorReviewModal;
   const needsPersonalLibraryData = foregroundPersonalLibraryData || backgroundPrefetchStage >= 1;
 
   // Load videoaulas sob demanda e usa localStorage como cache entre sessões.
@@ -4244,8 +4281,9 @@ export default function QuestionBankApp() {
       date: today,
       questionKeys: cur.questionKeys || {},
       lessonIntervals: cur.lessonIntervals || {},
+      reviewEvents: cur.reviewEvents || {},
     };
-    const fresh = {date:today, questionKeys:{}, lessonIntervals:{}};
+    const fresh = {date:today, questionKeys:{}, lessonIntervals:{}, reviewEvents:{}};
     persistDailyStats(fresh, false);
     return fresh;
   };
@@ -4255,6 +4293,25 @@ export default function QuestionBankApp() {
     const cur = ensureTodayStats();
     if (cur.questionKeys?.[key]) return;
     persistDailyStats({...cur, questionKeys:{...(cur.questionKeys||{}), [key]:Date.now()}}, true);
+  };
+
+  const trackReviewOutcome = ({ eventKey, correct, wasUnseen, intervalDays, schedulerVersion }) => {
+    if (!canUseAdvancedFeatures || !eventKey) return;
+    const cur = ensureTodayStats();
+    if (cur.reviewEvents?.[eventKey]) return;
+    persistDailyStats({
+      ...cur,
+      reviewEvents:{
+        ...(cur.reviewEvents || {}),
+        [eventKey]:{
+          at:Date.now(),
+          correct:!!correct,
+          wasUnseen:!!wasUnseen,
+          intervalDays:Number(intervalDays) || 0,
+          schedulerVersion:schedulerVersion || null,
+        },
+      },
+    }, true);
   };
 
   const recordLessonInterval = (aulaId, fromSec, toSec, allowLong=false) => {
@@ -4271,7 +4328,7 @@ export default function QuestionBankApp() {
 
   useEffect(() => {
     const today = getTodayKey();
-    const empty = {date:today, questionKeys:{}, lessonIntervals:{}};
+    const empty = {date:today, questionKeys:{}, lessonIntervals:{}, reviewEvents:{}};
     if (!user || user.isAnonymous) {
       dailyStatsRef.current = empty;
       setDailyStats(empty);
@@ -4281,7 +4338,7 @@ export default function QuestionBankApp() {
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
       if (cached?.date === today) {
-        dailyStatsRef.current = {...empty, ...cached, questionKeys:cached.questionKeys||{}, lessonIntervals:cached.lessonIntervals||{}};
+        dailyStatsRef.current = {...empty, ...cached, questionKeys:cached.questionKeys||{}, lessonIntervals:cached.lessonIntervals||{}, reviewEvents:cached.reviewEvents||{}};
         setDailyStats(dailyStatsRef.current);
       }
     } catch(e) {}
@@ -4290,7 +4347,7 @@ export default function QuestionBankApp() {
         const snap = await getDoc(doc(db, 'users', user.uid, 'daily_stats', today));
         if (snap.exists()) {
           const data = snap.data() || {};
-          const loaded = {...empty, ...data, questionKeys:data.questionKeys||{}, lessonIntervals:data.lessonIntervals||{}};
+          const loaded = {...empty, ...data, questionKeys:data.questionKeys||{}, lessonIntervals:data.lessonIntervals||{}, reviewEvents:data.reviewEvents||{}};
           dailyStatsRef.current = loaded;
           setDailyStats(loaded);
           try { localStorage.setItem(cacheKey, JSON.stringify(loaded)); } catch(e) {}
@@ -4363,6 +4420,12 @@ export default function QuestionBankApp() {
     if (includeSubjects && Array.isArray(prefs.coursePlanSubjects)) setCoursePlanSubjects(prefs.coursePlanSubjects);
     if (Array.isArray(prefs.coursePlanLessonOrder)) setCoursePlanLessonOrder(prefs.coursePlanLessonOrder);
     if (typeof prefs.coursePlanLocked === 'boolean') setCoursePlanLocked(prefs.coursePlanLocked);
+    if (prefs.courseReviewLessonStates && typeof prefs.courseReviewLessonStates === 'object' && !Array.isArray(prefs.courseReviewLessonStates)) {
+      const nextReviewStates = Object.fromEntries(Object.entries(prefs.courseReviewLessonStates)
+        .filter(([lessonId, state]) => lessonId && ['active', 'paused', 'reset'].includes(state)));
+      courseReviewLessonStatesRef.current = nextReviewStates;
+      setCourseReviewLessonStates(nextReviewStates);
+    }
     if (prefs.courseOrgProposal && typeof prefs.courseOrgProposal === 'object') {
       setCourseOrgProposal(repairCourseOrgProposalWithManualOverrides(prefs.courseOrgProposal));
     }
@@ -4370,6 +4433,15 @@ export default function QuestionBankApp() {
       if (prefs.startDate) setCronStartDate(prefs.startDate);
       if (Number(prefs.courseScheduleWeeks) > 0) setCourseScheduleWeeks(Math.max(1, Math.min(104, Number(prefs.courseScheduleWeeks))));
       if (Number(prefs.courseScheduleSubjectBatchSize) > 0) setCourseScheduleSubjectBatchSize(Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(prefs.courseScheduleSubjectBatchSize))));
+      if (['weekly','daily'].includes(prefs.courseScheduleCadence)) setCourseScheduleCadence(prefs.courseScheduleCadence);
+      if (['weeks','effort','date'].includes(prefs.courseScheduleGoalMode)) setCourseScheduleGoalMode(prefs.courseScheduleGoalMode);
+      if (Number(prefs.courseScheduleEffortHours) > 0) setCourseScheduleEffortHours(Math.max(0.5, Math.min(80, Number(prefs.courseScheduleEffortHours))));
+      if (typeof prefs.courseScheduleEndDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(prefs.courseScheduleEndDate)) {
+        setCourseScheduleEndDate(prefs.courseScheduleEndDate);
+      }
+      if (Array.isArray(prefs.courseScheduleStudyDays) && prefs.courseScheduleStudyDays.length) {
+        setCourseScheduleStudyDays([...new Set(prefs.courseScheduleStudyDays.map(Number).filter(day => day >= 1 && day <= 7))].sort((a,b)=>a-b));
+      }
       if (Number(prefs.courseCycleSubjectBatchSize) > 0) setCourseCycleSubjectBatchSize(Math.max(1, Math.min(COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE, Number(prefs.courseCycleSubjectBatchSize))));
       if (prefs.courseSchedulePreset) setCourseSchedulePreset(String(prefs.courseSchedulePreset));
       if (prefs.courseScheduleMixPreset) setCourseScheduleMixPreset(String(prefs.courseScheduleMixPreset));
@@ -4388,50 +4460,28 @@ export default function QuestionBankApp() {
     }
   };
 
-  // Load cronograma sob demanda com cache localStorage.
+  // O Plano de estudos atual é calculado a partir do catálogo e das preferências.
+  // A coleção cronograma pertence ao fluxo legado e não participa mais desse cálculo.
   const cronLoadedRef = useRef(false);
   useEffect(() => {
     if (!user || user.isAnonymous || !needsCourseScheduleData || cronLoadedRef.current) return;
     cronLoadedRef.current = true;
     setCoursePrefsLoaded(false);
-
-    const cacheKey = `agora_cronograma_${user.uid}`;
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        setCronograma(JSON.parse(cached));
-        // Carregar prefs do usuário (data de início) em background
-        getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main')).then(async prefSnap => {
-          const prefs = prefSnap.exists() ? (prefSnap.data() || {}) : {};
-          const hasUserSubjects = Array.isArray(prefs.coursePlanSubjects) && prefs.coursePlanSubjects.length;
-          applyCoursePrefsPayload(prefs);
-          await loadGlobalCourseOrganizationPrefs({ includeSubjects:!hasUserSubjects });
-        }).catch(()=>{ loadGlobalCourseOrganizationPrefs(); })
-          .finally(()=>setCoursePrefsLoaded(true));
-        return;
-      }
-    } catch(e) {}
-
-    // Sem cache — carrega do Firestore
     setCronLoading(true);
     (async () => {
       try {
-        const snap = await getDocs(collection(db, 'cronograma'));
-        const weeks = [];
-        snap.forEach(d => weeks.push(d.data()));
-        weeks.sort((a,b) => a.week - b.week);
-        setCronograma(weeks);
-        try { localStorage.setItem(cacheKey, JSON.stringify(weeks)); } catch(e) {}
         const prefSnap = await getDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'));
-        let hasUserSubjects = false;
-        if (prefSnap.exists()) {
-          const prefs = prefSnap.data() || {};
-          hasUserSubjects = Array.isArray(prefs.coursePlanSubjects) && prefs.coursePlanSubjects.length;
-          applyCoursePrefsPayload(prefs);
-        }
+        const prefs = prefSnap.exists() ? (prefSnap.data() || {}) : {};
+        const hasUserSubjects = Array.isArray(prefs.coursePlanSubjects) && prefs.coursePlanSubjects.length;
+        applyCoursePrefsPayload(prefs);
         await loadGlobalCourseOrganizationPrefs({ includeSubjects:!hasUserSubjects });
-      } catch(e) { setCronograma([]); }
-      finally { setCronLoading(false); setCoursePrefsLoaded(true); }
+      } catch(e) {
+        await loadGlobalCourseOrganizationPrefs();
+      } finally {
+        setCronograma([]);
+        setCronLoading(false);
+        setCoursePrefsLoaded(true);
+      }
     })();
   }, [user, needsCourseScheduleData]); // eslint-disable-line
 
@@ -4450,8 +4500,16 @@ export default function QuestionBankApp() {
       setCoursePlanSubjects([]);
       setCoursePlanLessonOrder([]);
       setCoursePlanLocked(false);
+      courseReviewLessonStatesRef.current = {};
+      setCourseReviewLessonStates({});
       setCourseScheduleWeeks(COURSE_SCHEDULE_DEFAULT_WEEKS);
       setCourseScheduleSubjectBatchSize(COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE);
+      setCourseScheduleCadence(COURSE_SCHEDULE_DEFAULT_CADENCE);
+      setCourseScheduleStudyDays(COURSE_SCHEDULE_DEFAULT_STUDY_DAYS);
+      setCourseScheduleGoalMode(COURSE_SCHEDULE_DEFAULT_GOAL_MODE);
+      setCourseScheduleEffortHours(COURSE_SCHEDULE_DEFAULT_EFFORT_HOURS);
+      setCourseScheduleEndDate('');
+      setCourseScheduleDayCursor(null);
       setCourseSchedulePreset(COURSE_SCHEDULE_DEFAULT_ORDER_PRESET);
       setCourseScheduleMixPreset(COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
       setCourseScheduleSubjectsOpen(false);
@@ -4466,14 +4524,18 @@ export default function QuestionBankApp() {
 
   // Load reviewQueue sob demanda quando revisão/curso precisam da fila.
   useEffect(() => {
-    if (!user || user.isAnonymous || !needsReviewQueueData || reviewLoaded) return;
-    setReviewLoaded(true);
+    if (!user || user.isAnonymous || !needsReviewQueueData || reviewLoadStartedRef.current) return;
+    reviewLoadStartedRef.current = true;
+    setReviewLoaded(false);
     const cacheKey = userReviewQueueCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.reviewQueue, null);
     if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
       reviewQueueRef.current = cached.value;
       setReviewQueue(cached.value);
-      if (cached.fresh) return;
+      if (cached.fresh) {
+        setReviewLoaded(true);
+        return;
+      }
     }
     (async () => {
       try {
@@ -4483,22 +4545,51 @@ export default function QuestionBankApp() {
         reviewQueueRef.current = loaded;
         setReviewQueue(loaded);
         writeTimedCache(cacheKey, loaded);
-      } catch(e) {}
+      } catch(e) {
+        console.warn('review queue load failed:', e?.code || e?.message || e);
+      } finally {
+        setReviewLoaded(true);
+      }
     })();
   }, [user, needsReviewQueueData]); // eslint-disable-line
 
   useEffect(() => {
-    if (!user) { setReviewLoaded(false); reviewQueueRef.current = {}; setReviewQueue({}); }
+    if (!user) { reviewLoadStartedRef.current = false; setReviewLoaded(false); reviewQueueRef.current = {}; setReviewQueue({}); }
   }, [user]);
 
   const saveCronStartDate = async (dateStr) => {
     setCronStartDate(dateStr);
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), { startDate: dateStr }, { merge: true });
-    } catch(e) {}
+    } catch(e) {
+      addToast('Mantive a nova data na tela, mas não consegui sincronizá-la agora.', 'info', 3500);
+    }
   };
 
-  const saveCoursePlanPrefs = async (nextSubjects = coursePlanSubjects, nextLocked = coursePlanLocked, nextLessonOrder = coursePlanLessonOrder) => {
+  const saveCourseReviewLessonState = async (aulaId, state) => {
+    const id = String(aulaId || '');
+    if (!id || (state !== null && !['active', 'paused', 'reset'].includes(state))) return false;
+    const previous = courseReviewLessonStatesRef.current || {};
+    const next = { ...previous };
+    if (state === null) delete next[id];
+    else next[id] = state;
+    courseReviewLessonStatesRef.current = next;
+    setCourseReviewLessonStates(next);
+    if (!user || user.isAnonymous) return true;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
+        courseReviewLessonStates:next,
+      }, { merge:true });
+      return true;
+    } catch(error) {
+      courseReviewLessonStatesRef.current = previous;
+      setCourseReviewLessonStates(previous);
+      addToast('Não consegui sincronizar essa alteração na revisão.', 'warning', 4200);
+      return false;
+    }
+  };
+
+  const saveCoursePlanPrefs = async (nextSubjects = coursePlanSubjects, nextLocked = coursePlanLocked, nextLessonOrder = coursePlanLessonOrder, options = {}) => {
     const cleanSubjects = [...new Set((nextSubjects || []).filter(Boolean))];
     const cleanLessonOrder = [...new Set((nextLessonOrder || []).filter(Boolean).map(String))];
     setCoursePlanSubjects(cleanSubjects);
@@ -4511,20 +4602,32 @@ export default function QuestionBankApp() {
         coursePlanLocked:!!nextLocked,
       }, { merge:true });
     } catch(e) {
-      addToast('Não consegui sincronizar o plano agora, mas mantive na tela.', 'info', 3500);
+      if (options.silent) console.warn('automatic course plan sync failed:', e?.code || e?.message || e);
+      else addToast('Não consegui sincronizar o plano agora, mas mantive na tela.', 'info', 3500);
     }
   };
 
-  const saveCourseSchedulePrefs = async ({ weeks = courseScheduleWeeks, subjectBatchSize = courseScheduleSubjectBatchSize, preset = courseSchedulePreset, mixPreset = courseScheduleMixPreset, subjects = coursePlanSubjects } = {}) => {
+  const saveCourseSchedulePrefs = async ({ weeks = courseScheduleWeeks, subjectBatchSize = courseScheduleSubjectBatchSize, preset = courseSchedulePreset, mixPreset = courseScheduleMixPreset, subjects = coursePlanSubjects, cadence = courseScheduleCadence, studyDays = courseScheduleStudyDays, goalMode = courseScheduleGoalMode, effortHours = courseScheduleEffortHours, endDate = courseScheduleEndDate } = {}) => {
     const cleanWeeks = Math.max(1, Math.min(104, Number(weeks) || COURSE_SCHEDULE_DEFAULT_WEEKS));
     const cleanSubjectBatchSize = Math.max(1, Math.min(COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE, Number(subjectBatchSize) || COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE));
     const cleanPreset = String(preset || 'custom');
     const cleanMixPreset = String(mixPreset || COURSE_SCHEDULE_DEFAULT_MIX_PRESET);
+    const cleanCadence = cadence === 'daily' ? 'daily' : 'weekly';
+    const cleanGoalMode = ['weeks','effort','date'].includes(goalMode) ? goalMode : COURSE_SCHEDULE_DEFAULT_GOAL_MODE;
+    const cleanEffortHours = Math.max(0.5, Math.min(80, Number(effortHours) || COURSE_SCHEDULE_DEFAULT_EFFORT_HOURS));
+    const cleanEndDate = /^\d{4}-\d{2}-\d{2}$/.test(String(endDate || '')) ? String(endDate) : '';
+    const cleanStudyDays = [...new Set((studyDays || []).map(Number).filter(day => day >= 1 && day <= 7))].sort((a,b)=>a-b);
+    if (!cleanStudyDays.length) cleanStudyDays.push(...COURSE_SCHEDULE_DEFAULT_STUDY_DAYS);
     const cleanSubjects = [...new Set((subjects || []).filter(Boolean))];
     setCourseScheduleWeeks(cleanWeeks);
     setCourseScheduleSubjectBatchSize(cleanSubjectBatchSize);
     setCourseSchedulePreset(cleanPreset);
     setCourseScheduleMixPreset(cleanMixPreset);
+    setCourseScheduleCadence(cleanCadence);
+    setCourseScheduleStudyDays(cleanStudyDays);
+    setCourseScheduleGoalMode(cleanGoalMode);
+    setCourseScheduleEffortHours(cleanEffortHours);
+    setCourseScheduleEndDate(cleanEndDate);
     if (cleanSubjects.length) setCoursePlanSubjects(cleanSubjects);
     if (user && !user.isAnonymous) try {
       await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
@@ -4532,6 +4635,11 @@ export default function QuestionBankApp() {
         courseScheduleSubjectBatchSize:cleanSubjectBatchSize,
         courseSchedulePreset:cleanPreset,
         courseScheduleMixPreset:cleanMixPreset,
+        courseScheduleCadence:cleanCadence,
+        courseScheduleStudyDays:cleanStudyDays,
+        courseScheduleGoalMode:cleanGoalMode,
+        courseScheduleEffortHours:cleanEffortHours,
+        courseScheduleEndDate:cleanEndDate,
         ...(cleanSubjects.length ? { coursePlanSubjects:cleanSubjects } : {}),
       }, { merge:true });
     } catch(e) {
@@ -4572,8 +4680,8 @@ export default function QuestionBankApp() {
       coursePlanLocked:true,
       updatedAt:Date.now(),
       updatedBy:user?.email || null,
-    }, { merge:true }).catch(() => {
-      addToast('Não consegui publicar automaticamente a organização global.', 'info', 4500);
+    }, { merge:true }).catch(error => {
+      console.warn('automatic course organization publish failed:', error?.code || error?.message || error);
     });
   }, [isAdmin, user?.uid, courseOrgProposal, coursePlanLessonOrder.length]); // eslint-disable-line
 
@@ -4600,14 +4708,17 @@ export default function QuestionBankApp() {
           updatedBy:user?.email || null,
         }, { merge:true });
       } catch(e) {
-        addToast('Apliquei para você, mas não consegui publicar a organização global.', 'info', 4500);
+        if (options.silent) console.warn('automatic global course organization sync failed:', e?.code || e?.message || e);
+        else addToast('Apliquei para você, mas não consegui publicar a organização global.', 'info', 4500);
       }
     }
-    await saveCoursePlanPrefs(subjects, true, lessonOrder);
-    setCursoTab('plano');
+    await saveCoursePlanPrefs(subjects, true, lessonOrder, options);
+    setCursoTab('cronograma');
     setView('curso');
     const movedCount = proposal.manualCorrections?.length || 0;
-    addToast(options.auto ? `Lista corrigida manualmente e aplicada (${movedCount} aula${movedCount!==1?'s':''} movida${movedCount!==1?'s':''}).` : 'Proposta corrigida e aplicada ao Ciclo de Estudos.', 'success', 4500);
+    if (!options.silent) {
+      addToast(options.auto ? `Lista corrigida manualmente e aplicada (${movedCount} aula${movedCount!==1?'s':''} movida${movedCount!==1?'s':''}).` : 'Proposta corrigida e aplicada ao Ciclo de Estudos.', 'success', 4500);
+    }
   };
 
   useEffect(() => {
@@ -4621,8 +4732,8 @@ export default function QuestionBankApp() {
       || (repaired.moduleCorrections?.length || 0) > 0;
     if (!needsRepair) return;
     courseManualRepairAppliedRef.current = true;
-    applyCourseOrgProposalToPlan(repaired, { auto:true }).catch(() => {
-      addToast('Não consegui aplicar a correção manual automaticamente.', 'error', 5000);
+    applyCourseOrgProposalToPlan(repaired, { auto:true, silent:true }).catch(error => {
+      console.warn('automatic course organization repair failed:', error?.code || error?.message || error);
     });
   }, [isAdmin, user?.uid, courseOrgProposal, courseOrgRun.running]); // eslint-disable-line
 
@@ -4654,9 +4765,6 @@ export default function QuestionBankApp() {
   };
 
   // ── Revisão Espaçada ───────────────────────────────────────────────────────
-  const SR_INTERVALS = [3, 7, 14, 30, 90]; // dias
-  const MS_DAY = 86400000;
-
   const saveReviewQueue = async (updated) => {
     const previous = reviewQueueRef.current || {};
     const compacted = {};
@@ -4674,15 +4782,17 @@ export default function QuestionBankApp() {
     reviewQueueRef.current = compacted;
     setReviewQueue(compacted);
     persistReviewQueueCache(compacted);
-    if (!user || user.isAnonymous) return;
+    if (!user || user.isAnonymous) return true;
     try {
       await persistReviewQueueChanges({ userId:user.uid, changedEntries:changedAulaEntries, removedAulaIds });
+      return true;
     } catch(e) {
       reviewQueueRef.current = previous;
       setReviewQueue(previous);
       persistReviewQueueCache(previous);
-      addToast('Não consegui sincronizar a revisão espaçada agora.', 'warning', 4500);
+      addToast('Não consegui sincronizar sua agenda de revisão agora.', 'warning', 4500);
       console.warn('review queue sync failed:', e?.code || e?.message || e);
+      return false;
     }
   };
 
@@ -4898,6 +5008,7 @@ export default function QuestionBankApp() {
 
   // Adiciona questões selecionadas à fila de revisão
   const addToReview = async (aulaId, blockId, selectedQIds, questions, meta = {}) => {
+    if (!canSeeVideoaulas) return;
     const now = Date.now();
     const queue = reviewQueueRef.current || {};
     const cur = queue[aulaId] || {};
@@ -4906,23 +5017,19 @@ export default function QuestionBankApp() {
     selectedQIds.forEach(qId => {
       const q = questions.find(x => x.id === qId);
       if (!updated[blockId][qId]) {
-        updated[blockId][qId] = {
-          interval: 0,
-          dueDate: now + SR_INTERVALS[0] * MS_DAY,
-          reviewSeed: Math.floor(Math.random() * 999999),
-          source: meta.source || 'curso',
-          subjectId: meta.subjectId || null,
-          topicId: meta.topicId || null,
-          aulaTitle: meta.aulaTitle || meta.subjectTitle || null,
-          blockTitle: meta.blockTitle || null,
-          question: q ? { ...q } : null,
-        };
+        updated[blockId][qId] = createReviewQueueItem({
+          source:meta.source || 'curso', aulaId, blockId, qId, question:q,
+          subjectId:meta.subjectId || null, topicId:meta.topicId || null,
+          aulaTitle:meta.aulaTitle || meta.subjectTitle || null,
+          blockTitle:meta.blockTitle || null, now,
+        });
       }
     });
     await saveReviewQueue({ ...queue, [aulaId]: updated });
   };
 
   const updateReviewMembership = async (aulaId, blockId, selectedQIds = [], removeQIds = [], questions = [], meta = {}) => {
+    if (!canSeeVideoaulas) return;
     const now = Date.now();
     const queue = reviewQueueRef.current || {};
     const cur = queue[aulaId] || {};
@@ -4931,38 +5038,230 @@ export default function QuestionBankApp() {
     removeQIds.forEach(qId => delete nextBlock[qId]);
     selectedQIds.forEach(qId => {
       const q = questions.find(x => x.id === qId);
-      if (!nextBlock[qId]) {
-        nextBlock[qId] = {
-          interval: 0,
-          dueDate: now + SR_INTERVALS[0] * MS_DAY,
-          reviewSeed: Math.floor(Math.random() * 999999),
-          source: meta.source || 'curso',
-          subjectId: meta.subjectId || null,
-          topicId: meta.topicId || null,
-          aulaTitle: meta.aulaTitle || meta.subjectTitle || null,
-          blockTitle: meta.blockTitle || null,
-          question: q ? { ...q } : null,
-        };
+      const policy = q?.learningPolicy;
+      if ((meta.source || 'curso') === 'curso' && !policy) return;
+      if (policy && (
+        policy.tier === 'disabled'
+        || policy.reviewEligible === false
+        || ['deprecated', 'review_required'].includes(policy.status)
+      )) return;
+      if (!nextBlock[qId] || ['dormant', 'disabled', 'awaiting-curation'].includes(nextBlock[qId]?.adaptiveState)) {
+        const freshItem = createReviewQueueItem({
+          source:meta.source || 'curso', aulaId, blockId, qId, question:q,
+          subjectId:meta.subjectId || null, topicId:meta.topicId || null,
+          aulaTitle:meta.aulaTitle || meta.subjectTitle || null,
+          blockTitle:meta.blockTitle || null, now,
+        });
+        nextBlock[qId] = nextBlock[qId]
+          ? {
+              ...nextBlock[qId],
+              adaptiveState:'manual',
+              dueDate:freshItem.dueDate,
+              reviewSeed:freshItem.reviewSeed,
+            }
+          : freshItem;
       }
     });
     await saveReviewQueue({ ...queue, [aulaId]: { ...cur, [blockId]: nextBlock } });
   };
 
-  // Atualiza após responder uma questão na revisão (acerto avança, erro volta)
+  // Atualiza após responder e devolve um eventual reforço para a sessão ativa.
   const updateReviewItem = async (aulaId, blockId, qId, correct) => {
     const queue = reviewQueueRef.current || {};
     const cur = queue[aulaId] || {};
     const item = cur[blockId]?.[qId];
     if (!item) return;
-    const newInterval = correct
-      ? Math.min(item.interval + 1, SR_INTERVALS.length - 1)
-      : 0;
-    const newDue = Date.now() + SR_INTERVALS[newInterval] * MS_DAY;
+    const reviewAt = Date.now();
+    const legacyItem = scheduleReviewOutcome({ item, correct, now:reviewAt });
+    let nextItem = legacyItem;
+    try {
+      const { advanceFsrsCard } = await import('./services/fsrsScheduler.js');
+      const fsrsState = advanceFsrsCard({
+        previous:item.fsrs || item.fsrsShadow,
+        correct,
+        legacyDue:legacyItem.dueDate,
+        now:reviewAt,
+      });
+      nextItem = {
+        ...legacyItem,
+        dueDate:fsrsState.nextDue,
+        intervalDays:fsrsState.intervalDays,
+        schedulerVersion:fsrsState.version,
+        fsrs:fsrsState,
+        legacyFallback:{
+          dueDate:legacyItem.dueDate,
+          interval:legacyItem.interval,
+          schedulerVersion:legacyItem.schedulerVersion,
+          calculatedAt:reviewAt,
+        },
+      };
+    } catch(error) {
+      console.warn('FSRS scheduling failed; legacy fallback used:', error?.message || error);
+    }
+    trackReviewOutcome({
+      eventKey:`${item.cardKey || `${aulaId}/${blockId}/${qId}`}@${Number(item.dueDate) || reviewAt}`,
+      correct,
+      wasUnseen:item.migration?.priorOutcome === 'unseen' && !item.fsrs,
+      intervalDays:nextItem.intervalDays,
+      schedulerVersion:nextItem.schedulerVersion,
+    });
     const updated = {
       ...cur,
-      [blockId]: { ...cur[blockId], [qId]: { ...item, interval: newInterval, dueDate: newDue, reviewSeed: Math.floor(Math.random() * 999999) } }
+      [blockId]: { ...cur[blockId], [qId]:nextItem }
     };
-    await saveReviewQueue({ ...queue, [aulaId]: updated });
+    let nextQueue = { ...queue, [aulaId]:updated };
+    let activatedReviewItem = null;
+    if (!correct) {
+      try {
+        const { activateAdaptiveSupportQuestion } = await import('./services/reviewMigration.js');
+        const activation = activateAdaptiveSupportQuestion({
+          queue:nextQueue,
+          aulaId,
+          answeredItem:nextItem,
+          now:reviewAt,
+        });
+        nextQueue = activation.queue;
+        if (activation.activated) {
+          const activated = activation.activated;
+          const aulaData = vqBlocksRef.current?.[activated.aulaId];
+          const block = aulaData?.blocks?.[activated.blockId];
+          const question = (block?.questions || []).find(candidate =>
+            String(candidate?.id) === String(activated.qId)
+          ) || activated.item?.question;
+          if (question) {
+            activatedReviewItem = {
+              ...activated,
+              question,
+              aulaTitle:activated.item?.aulaTitle || aulaData?.meta?.aulaTitle || null,
+              blockTitle:activated.item?.blockTitle || block?.title || null,
+              source:activated.item?.source || 'curso',
+              subjectId:activated.item?.subjectId || null,
+              topicId:activated.item?.topicId || null,
+            };
+          }
+        }
+      } catch(error) {
+        console.warn('Adaptive reinforcement activation skipped:', error?.message || error);
+      }
+    }
+    // A fila local é atualizada de forma otimista dentro de saveReviewQueue.
+    // Não segure a sessão aberta esperando a escrita remota: o reforço precisa
+    // aparecer no fim da lista assim que for identificado.
+    saveReviewQueue(nextQueue);
+    return activatedReviewItem;
+  };
+
+  const resolveCourseLessonReviewId = (aula) => {
+    const preferredId = getAulaId(aula);
+    const candidates = [aula?.bunny_id, preferredId, aulaDocId(aula)].filter(Boolean).map(String);
+    return candidates.find(candidate => reviewQueueRef.current?.[candidate] || vqBlocksRef.current?.[candidate])
+      || candidates[0]
+      || '';
+  };
+
+  const addCourseLessonToReview = async (aula, subject, topic) => {
+    const { buildWatchedLessonsIndividualPlan } = await import('./services/reviewMigration.js');
+    const aulaId = resolveCourseLessonReviewId(aula);
+    const aulaData = vqBlocksRef.current?.[aulaId];
+    const blockEntries = Array.isArray(aulaData?.blocks)
+      ? aulaData.blocks.map((block, index) => [String(block?.id || `block_${index}`), block])
+      : Object.entries(aulaData?.blocks || {});
+    if (!aulaData || !blockEntries.some(([, block]) => (block?.questions || []).length)) {
+      addToast('Esta aula ainda não possui questões para entrar na revisão.', 'info', 4000);
+      return 0;
+    }
+    const hasPublishedCuration = blockEntries.some(([, block]) =>
+      (block?.questions || []).some(question => question?.learningPolicy)
+    );
+    if (!hasPublishedCuration) {
+      addToast('A revisão desta aula será liberada depois que a curadoria for publicada.', 'info', 4200);
+      return 0;
+    }
+    const previousReviewState = courseReviewLessonStatesRef.current?.[aulaId] || null;
+    if (!await saveCourseReviewLessonState(aulaId, 'active')) return 0;
+    const queue = reviewQueueRef.current || {};
+    const plan = buildWatchedLessonsIndividualPlan({
+      existingQueue:queue,
+      isCorrect:isAnswerCorrect,
+      lessons:[{
+        aulaId,
+        aulaData,
+        aulaTitle:courseLessonDisplayTitle(aula),
+        subject,
+        topic,
+        blockTitles:Object.fromEntries(blockEntries.map(([blockId, block]) => [blockId, block?.title || 'Questões da aula'])),
+      }],
+    });
+    if (!plan.changed) {
+      if (plan.adaptive.awaitingCuration) {
+        addToast('As questões desta aula serão liberadas após a curadoria ser publicada.', 'info', 4200);
+        return 0;
+      }
+      addToast('Esta aula já está na sua revisão.', 'info', 3200);
+      return 0;
+    }
+    if (!await saveReviewQueue(plan.queue)) {
+      await saveCourseReviewLessonState(aulaId, previousReviewState);
+      return 0;
+    }
+    if (plan.adaptive.awaitingCuration && !plan.adaptive.essential && !plan.adaptive.remediation) {
+      addToast('Aula concluída. As questões serão liberadas após a curadoria ser publicada.', 'info', 4200);
+      return 0;
+    }
+    const waiting = plan.adaptive.complementaryWaiting + plan.adaptive.reserveWaiting;
+    addToast(
+      `${plan.added} questões entraram no plano${waiting ? ` · ${waiting} reforços ficaram em espera adaptativa` : ''}.`,
+      'success',
+      5200,
+    );
+    return plan.added;
+  };
+
+  const pauseCourseLessonReview = async (aula) => {
+    const aulaId = resolveCourseLessonReviewId(aula);
+    const result = pauseReviewLesson({ queue:reviewQueueRef.current || {}, aulaId });
+    if (!result.changed) return false;
+    const previousReviewState = courseReviewLessonStatesRef.current?.[aulaId] || null;
+    if (!await saveCourseReviewLessonState(aulaId, 'paused')) return false;
+    if (!await saveReviewQueue(result.queue)) {
+      await saveCourseReviewLessonState(aulaId, previousReviewState);
+      return false;
+    }
+    addToast('Revisão da aula pausada.', 'success', 3200);
+    return true;
+  };
+
+  const resumeCourseLessonReview = async (aula, subject, topic) => {
+    const aulaId = resolveCourseLessonReviewId(aula);
+    const previousReviewState = courseReviewLessonStatesRef.current?.[aulaId] || null;
+    if (!await saveCourseReviewLessonState(aulaId, 'active')) return false;
+    const result = resumeReviewLesson({ queue:reviewQueueRef.current || {}, aulaId });
+    if (!result.changed) {
+      await addCourseLessonToReview(aula, subject, topic);
+      if (reviewQueueRef.current?.[aulaId]) return true;
+      await saveCourseReviewLessonState(aulaId, previousReviewState);
+      return false;
+    }
+    if (!await saveReviewQueue(result.queue)) {
+      await saveCourseReviewLessonState(aulaId, previousReviewState);
+      return false;
+    }
+    addToast('Revisão da aula retomada.', 'success', 3200);
+    return true;
+  };
+
+  const resetCourseLessonReview = async (aula) => {
+    const aulaId = resolveCourseLessonReviewId(aula);
+    const queue = reviewQueueRef.current || {};
+    const previousReviewState = courseReviewLessonStatesRef.current?.[aulaId] || null;
+    if (!await saveCourseReviewLessonState(aulaId, 'reset')) return false;
+    const { [aulaId]:_removedLesson, ...nextQueue } = queue;
+    if (!await saveReviewQueue(nextQueue)) {
+      await saveCourseReviewLessonState(aulaId, previousReviewState);
+      return false;
+    }
+    addToast('Revisão da aula zerada.', 'success', 3200);
+    return true;
   };
 
   // Remove questão da fila de revisão
@@ -5007,10 +5306,19 @@ export default function QuestionBankApp() {
         const block = aulaData?.blocks?.[blockId];
         const questions = Array.isArray(block?.questions) ? block.questions : [];
         Object.entries(qMap).forEach(([qId, item]) => {
-          if (item.dueDate <= now) {
+          if (isReviewQueueItemScheduled(item) && Number(item.dueDate) <= now) {
             const itemSource = item.source || (queueLooksLikeCourse ? 'curso' : 'oraculo');
             if (itemSource === 'curso' && !canSeeVideoaulas) return;
-            const q = questions.find(x => x.id === qId) || resolveFromLibrary(item, qId);
+            const currentQuestion = questions.find(x => x.id === qId) || null;
+            const storedQuestion = resolveFromLibrary(item, qId);
+            const q = currentQuestion && !currentQuestion.images?.length && storedQuestion?.images?.length
+              ? {
+                ...currentQuestion,
+                images:storedQuestion.images,
+                ecgMatch:storedQuestion.ecgMatch || currentQuestion.ecgMatch,
+                visualRequirement:storedQuestion.visualRequirement || currentQuestion.visualRequirement,
+              }
+              : currentQuestion || storedQuestion;
             if (q) due.push({
               aulaId,
               blockId,
@@ -5099,6 +5407,10 @@ export default function QuestionBankApp() {
 
   // Total de revisões pendentes (para badge)
   const dueCount = getDueReviews().length;
+  const reviewSummary = useMemo(() => summarizeReviewQueue(reviewQueue), [reviewQueue]);
+  const reviewForecast = useMemo(() => buildReviewForecast(reviewQueue, { days:30 }), [reviewQueue]);
+  const reviewScheduledCount = reviewSummary.total;
+  const nextReviewAt = reviewSummary.nextDue;
   // Load vqBlocks — carrega sob demanda quando curso/questoes/revisao precisam.
   const [vqBlocksLoaded, setVqBlocksLoaded] = useState(false);
   const vqBlocksLoadedRef = useRef(false);
@@ -5131,8 +5443,60 @@ export default function QuestionBankApp() {
 
   // Resetar o cache quando o usuário faz logout
   useEffect(() => {
-    if (!user) { vqBlocksLoadedRef.current = false; setVqBlocksLoaded(false); setVqBlocks({}); }
+    if (!user) {
+      vqBlocksLoadedRef.current = false;
+      ecgQuestionMatchRunRef.current = '';
+      setVqBlocksLoaded(false);
+      setVqBlocks({});
+    }
   }, [user]);
+
+  // Alinhamento incremental: somente aulas já ativadas pelo aluno continuam
+  // acompanhando a curadoria. Marcar uma aula como assistida não cria dívida de
+  // revisão por conta própria; cartões legados já existentes são preservados.
+  useEffect(() => {
+    if (!user || user.isAnonymous || !canUseAdvancedFeatures || !canSeeVideoaulas) return;
+    if (!reviewLoaded || !vqBlocksLoaded || !videoaulasData) return;
+    const sources = flattenCourseLessons(videoaulasData).flatMap(lesson => {
+      const compactTitle = (lesson.aula?.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100);
+      const spacedTitle = (lesson.aula?.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_ ]/g, '').trim().substring(0, 100);
+      const candidates = [lesson.aula?.bunny_id, lesson.docId, lesson.id, compactTitle, spacedTitle]
+        .filter(Boolean)
+        .map(String);
+      const aulaId = candidates.find(candidate => vqBlocksRef.current?.[candidate]);
+      const aulaData = aulaId ? vqBlocksRef.current?.[aulaId] : null;
+      if (!aulaData) return [];
+      const reviewState = courseReviewLessonStatesRef.current?.[aulaId];
+      const hasExistingReview = !!reviewQueueRef.current?.[aulaId]
+        && Object.keys(reviewQueueRef.current[aulaId] || {}).length > 0;
+      if (reviewState === 'reset') return [];
+      if (reviewState === 'paused' && !hasExistingReview) return [];
+      if (!hasExistingReview && reviewState !== 'active') return [];
+      const entries = Array.isArray(aulaData.blocks)
+        ? aulaData.blocks.map((block, index) => [String(block?.id || `block_${index}`), block])
+        : Object.entries(aulaData.blocks || {});
+      return [{
+        aulaId,
+        aulaData,
+        aulaTitle:lesson.title,
+        subject:lesson.subject,
+        topic:lesson.topic,
+        blockTitles:Object.fromEntries(entries.map(([blockId, block]) => [blockId, block?.title || 'Questões da aula'])),
+      }];
+    });
+    let cancelled = false;
+    import('./services/reviewMigration.js').then(({ buildWatchedLessonsIndividualPlan }) => {
+      if (cancelled) return;
+      const plan = buildWatchedLessonsIndividualPlan({
+        lessons:sources,
+        existingQueue:reviewQueueRef.current || {},
+        isCorrect:isAnswerCorrect,
+      });
+      if (!plan.changed) return;
+      return saveReviewQueue(plan.queue);
+    }).catch(error => console.warn('review migration load failed:', error?.message || error));
+    return () => { cancelled = true; };
+  }, [user?.uid, canUseAdvancedFeatures, canSeeVideoaulas, reviewLoaded, vqBlocksLoaded, videoaulasData, watchedAulas, vqBlocks]); // eslint-disable-line
 
   // Save a single aula's vqBlock data to Firestore
   const resetCourseProgress = async () => {
@@ -5157,6 +5521,11 @@ export default function QuestionBankApp() {
       reviewQueueRef.current = {};
       setReviewQueue({});
       persistReviewQueueCache({});
+      courseReviewLessonStatesRef.current = {};
+      setCourseReviewLessonStates({});
+      await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
+        courseReviewLessonStates:{},
+      }, { merge:true });
 
       setResetCourseModal(false);
       setResetCourseInput('');
@@ -5326,11 +5695,24 @@ export default function QuestionBankApp() {
           && !!item.clinicalCompletedAt
           && supportsSharedLibraryClinicalVersion(item.clinicalGenerationVersion)
           && item.clinicalSummaryVersion === item.summaryVersion;
-        const publishKey = `${directComplete ? item.directCompletedAt : 'direct-pending'}|${clinicalComplete ? item.clinicalCompletedAt : 'clinical-pending'}`;
+        const selectionKey = item.learningSelection?.questionSignature
+          ? `${item.learningSelection.version}:${item.learningSelection.questionSignature}:${item.learningSelection.publishedAt}`
+          : 'selection-pending';
+        const publishKey = `${directComplete ? item.directCompletedAt : 'direct-pending'}|${clinicalComplete ? item.clinicalCompletedAt : 'clinical-pending'}|${selectionKey}`;
         const currentQuestionCount = Object.values(current?.blocks || {}).reduce((total, block) => total + (Array.isArray(block?.questions) ? block.questions.length : 0), 0);
         if (currentQuestionCount > 0 && current?.meta?.source === 'shared-library' && current.meta?.sharedLibraryPublishKey === publishKey) return;
-        const directQuestions = directComplete ? (item.directQuestions || []).map(question => ({ ...question, libraryQuestionKind:'direct' })) : [];
-        const clinicalQuestions = clinicalComplete ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : [];
+        const learningPolicies = item.learningSelection?.questionPolicies || {};
+        const withLearningPolicy = (question, libraryQuestionKind) => ({
+          ...question,
+          libraryQuestionKind,
+          learningPolicy:learningPolicies[String(question.id)] || null,
+        });
+        const directQuestions = directComplete
+          ? (item.directQuestions || []).map(question => withLearningPolicy(question, 'direct'))
+          : [];
+        const clinicalQuestions = clinicalComplete
+          ? (item.clinicalQuestions || []).map(question => withLearningPolicy(question, 'clinical'))
+          : [];
         if (!directQuestions.length && !clinicalQuestions.length) return;
         const previousAnswers = Object.values(current?.blocks || {}).reduce((answers, block) => ({ ...answers, ...(block?.answers || {}) }), {});
         const previousFavorites = Object.values(current?.blocks || {}).flatMap(block => Array.isArray(block?.favorites) ? block.favorites : []);
@@ -5369,6 +5751,48 @@ export default function QuestionBankApp() {
       return next;
     });
   }, [canSeeVideoaulas, sharedLibraryItems, videoaulasData, vqLoading]); // eslint-disable-line
+
+  // Associa automaticamente apenas ECGs com correspondencia conceitual segura.
+  // O indice publico contem somente a ontologia e a imagem da fase de questao;
+  // diagnostico e gabarito nunca sao anexados ao objeto exibido ao aluno.
+  useEffect(() => {
+    if (!user || user.isAnonymous || !canSeeVideoaulas || !vqBlocksLoaded) return;
+    const signature = Object.entries(vqBlocks || {}).sort(([left], [right]) => left.localeCompare(right))
+      .map(([aulaId, aulaData]) => {
+        const questionCount = Object.values(aulaData?.blocks || {}).reduce(
+          (total, block) => total + (Array.isArray(block?.questions) ? block.questions.length : 0),
+          0,
+        );
+        return [
+          aulaId,
+          aulaData?.meta?.sharedLibraryPublishKey || '',
+          aulaData?.meta?.createdAt || '',
+          aulaData?.meta?.updatedAt || aulaData?.meta?.sharedLibraryUpdatedAt || '',
+          questionCount,
+          aulaData?.meta?.ecgQuestionMatchVersion || 'pending',
+        ].join(':');
+      }).join('|');
+    if (!signature || ecgQuestionMatchRunRef.current === signature) return;
+    ecgQuestionMatchRunRef.current = signature;
+    import('./services/ecgQuestionMatcher.js').then(async ({
+      enrichVqBlocksWithEcgImages,
+      loadEcgQuestionIndex,
+    }) => {
+      const index = await loadEcgQuestionIndex();
+      if (ecgQuestionMatchRunRef.current !== signature) return;
+      const result = enrichVqBlocksWithEcgImages(vqBlocksRef.current || {}, index);
+      if (!result.changed) return;
+      vqBlocksRef.current = result.vqBlocks;
+      setVqBlocks(result.vqBlocks);
+      persistVqBlocksCache(result.vqBlocks);
+      if (result.report.required) {
+        console.info('[ECG] associacao automatica concluida', result.report);
+      }
+    }).catch(error => {
+      ecgQuestionMatchRunRef.current = '';
+      console.warn('ECG question matching failed:', error?.message || error);
+    });
+  }, [user?.uid, canSeeVideoaulas, vqBlocksLoaded, vqBlocks]); // eslint-disable-line
 
 
 
@@ -5517,7 +5941,7 @@ export default function QuestionBankApp() {
       if (view === 'videoquestions') {
         if (vqActiveBlockView?.fromPlan) {
           setVqActiveBlockView(null);
-          setCursoTab('plano');
+          setCursoTab('cronograma');
           setView('curso');
           return true;
         }
@@ -7622,7 +8046,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     refreshCourseCatalogStats();
   }, [isAdmin]); // eslint-disable-line
 
-  const collectLikelySiteGeminiKeys = async () => {
+  const collectLikelySiteGeminiKeys = async ({ onError } = {}) => {
     const byValue = new Map();
     const addKey = (value, label='Chave', ownerLabel=label) => {
       const clean = String(value || '').trim();
@@ -7641,7 +8065,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         normalizeGeminiKeys({ geminiKeysBackup:data.settings?.geminiKeysBackup || [] }).forEach(key => addKey(key.value, label, label));
       });
     } catch(e) {
-      addCourseCatalogLog('error', 'Não consegui buscar as chaves dos usuários; usando apenas as suas.');
+      const message = 'Não consegui buscar as chaves dos usuários; usando apenas as suas.';
+      if (onError) onError(message, e);
+      else addCourseCatalogLog('error', message);
     }
     return [...byValue.values()];
   };
@@ -12437,6 +12863,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   const {
+    appliedCourseSubjectOrder,
     appliedVideoaulasData,
     canUseCourseOrganization,
     courseOrgProposalUsesOriginalSubjects,
@@ -12594,6 +13021,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     activeSubjectVid,
     activeSubtopicVid,
     activeTopic,
+    addCourseLessonToReview,
     addToast,
     addToList,
     addToSiteOnlyWhitelist,
@@ -12602,6 +13030,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     adminHomeMode,
     AlertTriangle,
     appliedVideoaulasData,
+    appliedCourseSubjectOrder,
     applyCourseOrgProposalToPlan,
     ArrowLeft,
     aulaDocId,
@@ -12619,6 +13048,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     bulkGenerateRun,
     CalendarCheck,
     callWithRotation,
+    collectLikelySiteGeminiKeys,
     canSeeVideoaulas,
     canUseAcademia,
     canUseAdvancedFeatures,
@@ -12640,6 +13070,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     COURSE_CYCLE_DEFAULT_SUBJECT_BATCH_SIZE,
     COURSE_CYCLE_MAX_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_MIX_PRESET,
+    COURSE_SCHEDULE_DEFAULT_CADENCE,
+    COURSE_SCHEDULE_DEFAULT_STUDY_DAYS,
     COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
     COURSE_SCHEDULE_DEFAULT_WEEKS,
     COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE,
@@ -12658,11 +13090,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     coursePlanLocked,
     coursePlanSubjects,
     coursePrefsLoaded,
+    courseReviewLessonStates,
     courseScheduleMixPreset,
+    courseScheduleCadence,
+    courseScheduleDayCursor,
+    courseScheduleEffortHours,
+    courseScheduleEndDate,
+    courseScheduleGoalMode,
     courseSchedulePreset,
     courseScheduleSettingsOpen,
     courseScheduleSubjectBatchSize,
     courseScheduleSubjectsOpen,
+    courseScheduleStudyDays,
     courseScheduleWeeks,
     createQuickSession,
     cronograma,
@@ -12688,6 +13127,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     extractAulas,
     Feather,
     FamedIcon,
+    FactoryIcon,
     fetchTranscript,
     FileText,
     findErrorNotebookReviewsForSource,
@@ -12776,6 +13216,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     newWhitelistEmail,
     normalizeGeminiKeys,
     normalizeTextKey,
+    nextReviewAt,
     openBizuario,
     openBulkGenerateModal,
     openAcademiaRegenModal,
@@ -12791,6 +13232,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     parseVideoaulasData,
     parseHtmlText,
     pauseCourseCatalogAnalysis,
+    pauseCourseLessonReview,
     pauseSharedLibraryAutomation,
     PillIcon,
     PlayIcon,
@@ -12817,14 +13259,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     repairSharedLibraryIncompleteQuestions,
     RepeatIcon,
     resetQuickSessionAnswers,
+    resetCourseLessonReview,
     resetSharedLibraryAnswers,
     restartSharedLibraryItem,
     restartSharedLibrarySubjectQuestions,
     restoreReturnTarget,
     resumeCourseCatalogAnalysis,
+    resumeCourseLessonReview,
     resumeSharedLibraryAutomation,
+    resolveCourseLessonReviewId,
     reviewLoaded,
     reviewQueue,
+    reviewScheduledCount,
+    reviewForecast,
     reviewSession,
     RotateCcw,
     sameId,
@@ -12857,6 +13304,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setBulkGenerateModal,
     setCourseOrgSelectedSubject,
     setCourseScheduleSettingsOpen,
+    setCourseScheduleDayCursor,
     setCourseScheduleSubjectsOpen,
     setCreatorSetupStep,
     setCreatorStep,
@@ -12891,7 +13339,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setReviewSession,
     setSettings,
     setSharedLibraryActiveItemId,
-    setSharedLibraryAudienceMode,
     setSharedLibraryGenerationLesson,
     setSharedLibraryGenerationStages,
     setSharedLibraryGenerationSubject,
@@ -12915,7 +13362,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setVqTopic,
     SHARED_LIBRARY_STAGE_LABELS,
     sharedLibraryActiveItemId,
-    sharedLibraryAudienceMode,
     sharedLibraryConfig,
     sharedLibraryDocIdForLesson,
     sharedLibraryError,
@@ -13627,7 +14073,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <nav className="space-y-1" aria-label="Navegação principal">
               {[
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
-                homeCanSeeSharedLibrary ? {label:'Biblioteca', desc:'Questões do curso', icon:<BookOpen className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
+                homeCanSeeSharedLibrary ? {label:'Fábrica de Questões', desc:isAdmin?'Produção e curadoria':'Questões do curso', icon:<FactoryIcon className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
                 homeCanSeeFamed ? {label:'FAMED', desc:'Conteúdo da faculdade', icon:<FamedIcon className="w-5 h-5"/>, active:view==='famed', action:()=>setView('famed')} : null,
                 {label:'Meus materiais', desc:'Acessar, criar e importar', icon:<FolderIcon className="w-5 h-5"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic','creator','academia-creator','paste'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}},
                 homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Aulas e mais', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
@@ -13647,7 +14093,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <div className="space-y-1">
               {[
                 canUseAdvancedFeatures ? {label:'Dúvida Rápida', icon:<Flame className="w-5 h-5"/>, action:()=>openViewWithReturn('quick'), active:['quick','quick-topic'].includes(view)} : null,
-                canUseAdvancedFeatures ? {label:'Revisão espaçada', icon:<RepeatIcon className="w-5 h-5"/>, action:()=>openSpacedReview(), badge:dueCount} : null,
+                homeCanSeeVideoaulas ? {label:'Revisões', icon:<RepeatIcon className="w-5 h-5"/>, action:()=>openSpacedReview(), badge:dueCount} : null,
                 {label:'Modo prova', icon:<Zap className="w-5 h-5"/>, action:()=>setExamSetup({}), active:view==='exam'},
                 {label:'Favoritos', icon:<Heart className="w-5 h-5"/>, action:()=>setView('favorites'), active:view==='favorites'},
               ].filter(Boolean).map(item=>(
@@ -13695,8 +14141,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <div className="grid grid-cols-1 gap-2 mb-3">
                 {isAdmin&&homeCanSeeSharedLibrary ? (
                   <button onClick={()=>closeMobileMenu(()=>{setSharedLibraryActiveItemId(null);setView('shared-library');})} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
-                    <BookOpen className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
-                    <strong className="block truncate text-sm">Biblioteca</strong>
+                    <FactoryIcon className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
+                    <strong className="block truncate text-sm">Fábrica de Questões</strong>
                   </button>
                 ) : (
                   <button onClick={()=>closeMobileMenu(()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');})} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
@@ -14124,7 +14570,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 )};
                 updateSubject(updated);
 	              }:null}
-              onAddToReview={canUseAdvancedFeatures && !isShuffledSubjectTopic ? ((qs, ans)=>setSrModal({
+              onAddToReview={canSeeVideoaulas && !isShuffledSubjectTopic ? ((qs, ans)=>setSrModal({
                 aulaId:`lib_${activeSubject.id}`,
                 blockId:`topic_${activeTopic.id}`,
                 blockTitle:activeTopic.title,
@@ -14150,7 +14596,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               onNextUnit={activeAcademiaOrigin?.nextTopic ? ()=>openAcademiaTopicView(activeAcademiaOrigin.subject, activeAcademiaOrigin.nextTopic) : null}
               nextUnitLabel="Próxima aula"
               nextUnitHelper={activeAcademiaOrigin?.nextTopic?.title || 'Continuar no assunto'}
-              inReviewCount={canUseAdvancedFeatures ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}
+              inReviewCount={canSeeVideoaulas ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}
             />
           </div>
         )}
@@ -14187,7 +14633,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             parseHtmlText={parseHtmlText}
             onBack={()=>setView('subject')}
             reviewQueue={reviewQueue}
-            setSrModal={setSrModal}
+            setSrModal={canSeeVideoaulas ? setSrModal : null}
             trackQuestionAnswered={trackQuestionAnswered}
             onOpenAcademiaQuestions={openAcademiaQuestionsInOracle}
             findErrorNotebookReviewsForSource={findErrorNotebookReviewsForSource}
@@ -14554,7 +15000,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         {view==='favorites'&&<FavoritesView/>}
 
 	        {/* ── REVISÃO ESPAÇADA GLOBAL ── */}
-	        {view==='spaced-review'&&canUseAdvancedFeatures&&<SpacedReviewView/>}
+	        {view==='spaced-review'&&canSeeVideoaulas&&<SpacedReviewView/>}
 
 	        {/* ── PORTAL DO CURSO ── */}
         {view==='curso'&&canSeeVideoaulas&&<CoursePortalView/>}
@@ -14900,7 +15346,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           {[
             {label:'Início', icon:<Landmark className="w-6 h-6"/>, active:view==='library', action:()=>setView('library')},
             isAdmin ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
-            homeCanSeeSharedLibrary&&!isAdmin ? {label:'Biblioteca', icon:<BookOpen className="w-6 h-6"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
+            homeCanSeeSharedLibrary&&!isAdmin ? {label:'Questões', icon:<FactoryIcon className="w-6 h-6"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
             homeCanSeeFamed ? {label:'FAMED', icon:<FamedIcon className="w-6 h-6"/>, active:view==='famed', action:()=>setView('famed')} : null,
             !isAdmin&&(!homeCanSeeSharedLibrary || !homeCanSeeVideoaulas) ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
             homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-6 h-6"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
@@ -14962,16 +15408,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      {['topic','academia-topic','videoquestions','curso','favorites'].includes(view)&&!hideBackToTop&&<BackToTopButton darkMode={darkMode}/>}
 
 	      {/* Spaced Review Modal */}
-      {srModal&&<SRModal
+      {srModal&&canSeeVideoaulas&&<SRModal
         questions={srModal.questions}
         answers={srModal.answers}
         aulaId={srModal.aulaId}
         blockId={srModal.blockId}
         blockTitle={srModal.blockTitle}
 	        darkMode={darkMode}
-	        currentReview={reviewQueue[srModal.aulaId]?.[srModal.blockId] || {}}
+	        currentReview={Object.fromEntries(Object.entries(reviewQueue[srModal.aulaId]?.[srModal.blockId] || {})
+	          .filter(([, item])=>isReviewQueueItemScheduled(item)))}
 	        notebookIds={srModal.notebookIds || []}
 	        isAdmin={canUseAdvancedFeatures}
+	        source={srModal.meta?.source || 'personal'}
 	        onClose={()=>setSrModal(null)}
 	        onConfirm={async(selectedIds, removeIds=[])=>{
 	          if (selectedIds.length > 0 || removeIds.length > 0) {
@@ -15124,7 +15572,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               Isso vai apagar permanentemente:<br/>
               • Todas as aulas marcadas como assistidas<br/>
               • Todas as questões geradas no curso<br/>
-              • Toda a fila de revisão espaçada<br/><br/>
+              • Toda a agenda de revisões<br/><br/>
               <strong>A biblioteca do Oráculo não será afetada.</strong>
             </p>
             <p className={`text-xs font-bold mb-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>

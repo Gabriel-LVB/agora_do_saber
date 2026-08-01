@@ -1,0 +1,1011 @@
+[
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG005",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG010",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG023",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG024",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG042",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG043",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG047",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG059",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG060",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG074",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG095",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG112",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.af"
+    ]
+  },
+  {
+    "sourceId": "ECG069",
+    "targetId": "ECG011",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.atrial_tachycardia"
+    ]
+  },
+  {
+    "sourceId": "ECG006",
+    "targetId": "ECG050",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.avnrt"
+    ]
+  },
+  {
+    "sourceId": "ECG006",
+    "targetId": "ECG105",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.avnrt"
+    ]
+  },
+  {
+    "sourceId": "ECG013",
+    "targetId": "ECG027",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.flutter"
+    ]
+  },
+  {
+    "sourceId": "ECG013",
+    "targetId": "ECG065",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.flutter"
+    ]
+  },
+  {
+    "sourceId": "ECG013",
+    "targetId": "ECG109",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.flutter"
+    ]
+  },
+  {
+    "sourceId": "ECG001",
+    "targetId": "ECG056",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.pvc"
+    ]
+  },
+  {
+    "sourceId": "ECG001",
+    "targetId": "ECG104",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.pvc"
+    ]
+  },
+  {
+    "sourceId": "ECG001",
+    "targetId": "ECG138",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.pvc"
+    ]
+  },
+  {
+    "sourceId": "ECG086",
+    "targetId": "ECG081",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.svt"
+    ]
+  },
+  {
+    "sourceId": "ECG057",
+    "targetId": "ECG031",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt"
+    ]
+  },
+  {
+    "sourceId": "ECG057",
+    "targetId": "ECG102",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt"
+    ]
+  },
+  {
+    "sourceId": "ECG057",
+    "targetId": "ECG113",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt"
+    ]
+  },
+  {
+    "sourceId": "ECG057",
+    "targetId": "ECG117",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt"
+    ]
+  },
+  {
+    "sourceId": "ECG057",
+    "targetId": "ECG129",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt"
+    ]
+  },
+  {
+    "sourceId": "ECG083",
+    "targetId": "ECG088",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.wide_complex_tachycardia"
+    ]
+  },
+  {
+    "sourceId": "ECG083",
+    "targetId": "ECG119",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.wide_complex_tachycardia"
+    ]
+  },
+  {
+    "sourceId": "ECG083",
+    "targetId": "ECG137",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.arrhythmia.wide_complex_tachycardia"
+    ]
+  },
+  {
+    "sourceId": "ECG131",
+    "targetId": "ECG098",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.cardiomyopathy.hcm"
+    ]
+  },
+  {
+    "sourceId": "ECG128",
+    "targetId": "ECG018",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.chamber.lvh"
+    ]
+  },
+  {
+    "sourceId": "ECG128",
+    "targetId": "ECG035",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.chamber.lvh"
+    ]
+  },
+  {
+    "sourceId": "ECG128",
+    "targetId": "ECG124",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.chamber.lvh"
+    ]
+  },
+  {
+    "sourceId": "ECG009",
+    "targetId": "ECG096",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.chamber.rvh"
+    ]
+  },
+  {
+    "sourceId": "ECG125",
+    "targetId": "ECG070",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.channelopathy.long_qt"
+    ]
+  },
+  {
+    "sourceId": "ECG125",
+    "targetId": "ECG141",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.channelopathy.long_qt"
+    ]
+  },
+  {
+    "sourceId": "ECG016",
+    "targetId": "ECG029",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb1"
+    ]
+  },
+  {
+    "sourceId": "ECG016",
+    "targetId": "ECG044",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb1"
+    ]
+  },
+  {
+    "sourceId": "ECG016",
+    "targetId": "ECG072",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb1"
+    ]
+  },
+  {
+    "sourceId": "ECG016",
+    "targetId": "ECG089",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb1"
+    ]
+  },
+  {
+    "sourceId": "ECG073",
+    "targetId": "ECG034",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb2_2to1"
+    ]
+  },
+  {
+    "sourceId": "ECG038",
+    "targetId": "ECG020",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb2_wenckebach"
+    ]
+  },
+  {
+    "sourceId": "ECG003",
+    "targetId": "ECG054",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb3"
+    ]
+  },
+  {
+    "sourceId": "ECG003",
+    "targetId": "ECG079",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.avb3"
+    ]
+  },
+  {
+    "sourceId": "ECG097",
+    "targetId": "ECG012",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.lafb"
+    ]
+  },
+  {
+    "sourceId": "ECG097",
+    "targetId": "ECG062",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.lafb"
+    ]
+  },
+  {
+    "sourceId": "ECG097",
+    "targetId": "ECG118",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.lafb"
+    ]
+  },
+  {
+    "sourceId": "ECG019",
+    "targetId": "ECG090",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.lbbb"
+    ]
+  },
+  {
+    "sourceId": "ECG026",
+    "targetId": "ECG045",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.conduction.rbbb"
+    ]
+  },
+  {
+    "sourceId": "ECG033",
+    "targetId": "ECG007",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.ischemia"
+    ]
+  },
+  {
+    "sourceId": "ECG033",
+    "targetId": "ECG058",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.ischemia"
+    ]
+  },
+  {
+    "sourceId": "ECG033",
+    "targetId": "ECG135",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.ischemia"
+    ]
+  },
+  {
+    "sourceId": "ECG033",
+    "targetId": "ECG136",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.ischemia"
+    ]
+  },
+  {
+    "sourceId": "ECG022",
+    "targetId": "ECG080",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.nstemi"
+    ]
+  },
+  {
+    "sourceId": "ECG022",
+    "targetId": "ECG091",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.nstemi"
+    ]
+  },
+  {
+    "sourceId": "ECG022",
+    "targetId": "ECG093",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.nstemi"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG002",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG025",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG036",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG053",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG077",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG110",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG030",
+    "targetId": "ECG126",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.old_infarct"
+    ]
+  },
+  {
+    "sourceId": "ECG101",
+    "targetId": "ECG004",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.stemi_anterior"
+    ]
+  },
+  {
+    "sourceId": "ECG017",
+    "targetId": "ECG068",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.stemi_anterolateral"
+    ]
+  },
+  {
+    "sourceId": "ECG032",
+    "targetId": "ECG014",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.stemi_inferior"
+    ]
+  },
+  {
+    "sourceId": "ECG032",
+    "targetId": "ECG085",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.stemi_inferior"
+    ]
+  },
+  {
+    "sourceId": "ECG032",
+    "targetId": "ECG127",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.ischemia.stemi_inferior"
+    ]
+  },
+  {
+    "sourceId": "ECG132",
+    "targetId": "ECG084",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.metabolic.hyperkalemia"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG021",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG046",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG076",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG078",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG087",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG094",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG100",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG107",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG066",
+    "targetId": "ECG116",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.normal"
+    ]
+  },
+  {
+    "sourceId": "ECG108",
+    "targetId": "ECG063",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.normal.t_wave_variant"
+    ]
+  },
+  {
+    "sourceId": "ECG139",
+    "targetId": "ECG114",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.pericardium.pericarditis"
+    ]
+  },
+  {
+    "sourceId": "ECG015",
+    "targetId": "ECG082",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.preexcitation.wpw_a"
+    ]
+  },
+  {
+    "sourceId": "ECG015",
+    "targetId": "ECG146",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.preexcitation.wpw_a"
+    ]
+  },
+  {
+    "sourceId": "ECG064",
+    "targetId": "ECG123",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.preexcitation.wpw_b"
+    ]
+  },
+  {
+    "sourceId": "ECG064",
+    "targetId": "ECG145",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.preexcitation.wpw_b"
+    ]
+  },
+  {
+    "sourceId": "ECG048",
+    "targetId": "ECG037",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.repolarization.nonspecific"
+    ]
+  },
+  {
+    "sourceId": "ECG048",
+    "targetId": "ECG051",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.repolarization.nonspecific"
+    ]
+  },
+  {
+    "sourceId": "ECG133",
+    "targetId": "ECG099",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.rhythm.accelerated_idioventricular"
+    ]
+  },
+  {
+    "sourceId": "ECG067",
+    "targetId": "ECG103",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.rhythm.junctional"
+    ]
+  },
+  {
+    "sourceId": "ECG061",
+    "targetId": "ECG028",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.rhythm.sinus_tachycardia"
+    ]
+  },
+  {
+    "sourceId": "ECG061",
+    "targetId": "ECG052",
+    "relation": "same_diagnosis_different_appearance",
+    "reason": "Variação do mesmo conceito para reduzir memorização da imagem.",
+    "conceptIds": [
+      "ecg.rhythm.sinus_tachycardia"
+    ]
+  },
+  {
+    "sourceId": "ECG026",
+    "targetId": "ECG019",
+    "relation": "contrast",
+    "reason": "Contrastar padrões de bloqueio de ramo direito e esquerdo.",
+    "conceptIds": [
+      "ecg.conduction.rbbb",
+      "ecg.conduction.lbbb"
+    ]
+  },
+  {
+    "sourceId": "ECG019",
+    "targetId": "ECG026",
+    "relation": "contrast",
+    "reason": "Contrastar padrões de bloqueio de ramo direito e esquerdo.",
+    "conceptIds": [
+      "ecg.conduction.rbbb",
+      "ecg.conduction.lbbb"
+    ]
+  },
+  {
+    "sourceId": "ECG038",
+    "targetId": "ECG055",
+    "relation": "contrast",
+    "reason": "Diferenciar Mobitz I de Mobitz II.",
+    "conceptIds": [
+      "ecg.conduction.avb2_wenckebach",
+      "ecg.conduction.avb2_mobitz2"
+    ]
+  },
+  {
+    "sourceId": "ECG055",
+    "targetId": "ECG038",
+    "relation": "contrast",
+    "reason": "Diferenciar Mobitz I de Mobitz II.",
+    "conceptIds": [
+      "ecg.conduction.avb2_wenckebach",
+      "ecg.conduction.avb2_mobitz2"
+    ]
+  },
+  {
+    "sourceId": "ECG039",
+    "targetId": "ECG013",
+    "relation": "contrast",
+    "reason": "Diferenciar fibrilação atrial de flutter atrial.",
+    "conceptIds": [
+      "ecg.arrhythmia.af",
+      "ecg.arrhythmia.flutter"
+    ]
+  },
+  {
+    "sourceId": "ECG013",
+    "targetId": "ECG039",
+    "relation": "contrast",
+    "reason": "Diferenciar fibrilação atrial de flutter atrial.",
+    "conceptIds": [
+      "ecg.arrhythmia.af",
+      "ecg.arrhythmia.flutter"
+    ]
+  },
+  {
+    "sourceId": "ECG057",
+    "targetId": "ECG086",
+    "relation": "contrast",
+    "reason": "Contrastar taquicardia ventricular com taquicardia supraventricular.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt",
+      "ecg.arrhythmia.svt"
+    ]
+  },
+  {
+    "sourceId": "ECG086",
+    "targetId": "ECG057",
+    "relation": "contrast",
+    "reason": "Contrastar taquicardia ventricular com taquicardia supraventricular.",
+    "conceptIds": [
+      "ecg.arrhythmia.vt",
+      "ecg.arrhythmia.svt"
+    ]
+  },
+  {
+    "sourceId": "ECG049",
+    "targetId": "ECG139",
+    "relation": "contrast",
+    "reason": "Diferenciar elevação de ST por IAM e pericardite.",
+    "conceptIds": [
+      "ecg.ischemia.stemi",
+      "ecg.pericardium.pericarditis"
+    ]
+  },
+  {
+    "sourceId": "ECG139",
+    "targetId": "ECG049",
+    "relation": "contrast",
+    "reason": "Diferenciar elevação de ST por IAM e pericardite.",
+    "conceptIds": [
+      "ecg.ischemia.stemi",
+      "ecg.pericardium.pericarditis"
+    ]
+  },
+  {
+    "sourceId": "ECG015",
+    "targetId": "ECG064",
+    "relation": "contrast",
+    "reason": "Comparar padrões WPW tipo A e tipo B.",
+    "conceptIds": [
+      "ecg.preexcitation.wpw_a",
+      "ecg.preexcitation.wpw_b"
+    ]
+  },
+  {
+    "sourceId": "ECG064",
+    "targetId": "ECG015",
+    "relation": "contrast",
+    "reason": "Comparar padrões WPW tipo A e tipo B.",
+    "conceptIds": [
+      "ecg.preexcitation.wpw_a",
+      "ecg.preexcitation.wpw_b"
+    ]
+  },
+  {
+    "sourceId": "ECG009",
+    "targetId": "ECG026",
+    "relation": "contrast",
+    "reason": "Diferenciar sobrecarga ventricular direita de padrões de condução à direita.",
+    "conceptIds": [
+      "ecg.chamber.rvh",
+      "ecg.conduction.rbbb"
+    ]
+  },
+  {
+    "sourceId": "ECG026",
+    "targetId": "ECG009",
+    "relation": "contrast",
+    "reason": "Diferenciar sobrecarga ventricular direita de padrões de condução à direita.",
+    "conceptIds": [
+      "ecg.chamber.rvh",
+      "ecg.conduction.rbbb"
+    ]
+  },
+  {
+    "sourceId": "ECG033",
+    "targetId": "ECG128",
+    "relation": "contrast",
+    "reason": "Contrastar alterações de ST-T por isquemia e sobrecarga ventricular esquerda.",
+    "conceptIds": [
+      "ecg.ischemia.ischemia",
+      "ecg.chamber.lvh"
+    ]
+  },
+  {
+    "sourceId": "ECG128",
+    "targetId": "ECG033",
+    "relation": "contrast",
+    "reason": "Contrastar alterações de ST-T por isquemia e sobrecarga ventricular esquerda.",
+    "conceptIds": [
+      "ecg.ischemia.ischemia",
+      "ecg.chamber.lvh"
+    ]
+  },
+  {
+    "sourceId": "ECG016",
+    "targetId": "ECG038",
+    "relation": "progression",
+    "reason": "Progressão pedagógica entre graus/padrões de bloqueio AV.",
+    "conceptIds": [
+      "ecg.conduction.avb1",
+      "ecg.conduction.avb2_wenckebach"
+    ]
+  },
+  {
+    "sourceId": "ECG038",
+    "targetId": "ECG055",
+    "relation": "progression",
+    "reason": "Progressão pedagógica entre graus/padrões de bloqueio AV.",
+    "conceptIds": [
+      "ecg.conduction.avb2_wenckebach",
+      "ecg.conduction.avb2_mobitz2"
+    ]
+  },
+  {
+    "sourceId": "ECG055",
+    "targetId": "ECG003",
+    "relation": "progression",
+    "reason": "Progressão pedagógica entre graus/padrões de bloqueio AV.",
+    "conceptIds": [
+      "ecg.conduction.avb2_mobitz2",
+      "ecg.conduction.avb3"
+    ]
+  }
+]

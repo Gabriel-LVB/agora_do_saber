@@ -276,15 +276,18 @@ function AcademiaTopicView({
     updateSubject(updSubj);
   };
 
-  const openAcademiaReview = (questions, blockId, blockTitle) => setSrModal({
-    aulaId:`lib_${liveSubject.id}`,
-    blockId,
-    blockTitle,
-    questions,
-    answers:savedAnswers,
-    notebookIds:liveTopic.errorNotebook||[],
-    meta:{source:'academia',subjectId:liveSubject.id,topicId:liveTopic.id,subjectTitle:liveSubject.title,blockTitle},
-  });
+  const openAcademiaReview = (questions, blockId, blockTitle) => {
+    if (!setSrModal) return;
+    setSrModal({
+      aulaId:`lib_${liveSubject.id}`,
+      blockId,
+      blockTitle,
+      questions,
+      answers:savedAnswers,
+      notebookIds:liveTopic.errorNotebook||[],
+      meta:{source:'academia',subjectId:liveSubject.id,topicId:liveTopic.id,subjectTitle:liveSubject.title,blockTitle},
+    });
+  };
 
   const reviewCount = (blockId) => Object.keys(reviewQueue?.[`lib_${liveSubject.id}`]?.[blockId] || {}).length;
 
@@ -337,7 +340,7 @@ function AcademiaTopicView({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
               <Printer className="w-3.5 h-3.5"/>Exportar
             </button>
-            {canUseAcademia && fixReviewCount > 0 && (
+            {!!setSrModal && fixReviewCount > 0 && (
               <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                 <RepeatIcon className="w-3.5 h-3.5"/>Gerenciar ({fixReviewCount})
@@ -448,10 +451,10 @@ function AcademiaTopicView({
             <div className={`mt-4 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
               <div className="flex items-center justify-between mb-8 gap-3">
                 <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Questões de fixação</p>
-                {canUseAcademia && (allFixAnswered || fixReviewCount>0) && (
+                {!!setSrModal && (allFixAnswered || fixReviewCount>0) && (
                   <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                    <RepeatIcon className="w-3.5 h-3.5"/>{fixReviewCount>0?`Gerenciar (${fixReviewCount})`:'Revisão Espaçada'}
+                    <RepeatIcon className="w-3.5 h-3.5"/>{fixReviewCount>0?`Gerenciar (${fixReviewCount})`:'Revisão'}
                   </button>
                 )}
               </div>
@@ -468,11 +471,11 @@ function AcademiaTopicView({
                   </button>
                 )}
               </div>
-              {canUseAcademia && (allFixAnswered || fixReviewCount>0) && (
+              {!!setSrModal && (allFixAnswered || fixReviewCount>0) && (
                 <div className="text-center mt-4">
                   <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
                     className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                    <RepeatIcon className="w-4 h-4"/>{fixReviewCount>0?`Gerenciar revisão (${fixReviewCount})`:'Adicionar à revisão espaçada'}
+                    <RepeatIcon className="w-4 h-4"/>{fixReviewCount>0?`Gerenciar revisão (${fixReviewCount})`:'Adicionar à revisão'}
                   </button>
                 </div>
               )}
@@ -507,11 +510,11 @@ function AcademiaTopicView({
                     <GraduationCap className="w-4 h-4"/>Abrir bloco
                   </button>
                 </div>
-	                {canUseAcademia && (blocoDone || reviewCount(reviewBlockId)>0) && (
+	                {!!setSrModal && (blocoDone || reviewCount(reviewBlockId)>0) && (
 	                  <div className="text-center mt-8">
 	                    <button onClick={()=>openAcademiaReview(blocoQs, reviewBlockId, blocoTitle)}
 	                      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-	                      <RepeatIcon className="w-4 h-4"/>{reviewCount(reviewBlockId)>0?`Gerenciar revisão (${reviewCount(reviewBlockId)})`:'Revisão Espaçada'}
+	                      <RepeatIcon className="w-4 h-4"/>{reviewCount(reviewBlockId)>0?`Gerenciar revisão (${reviewCount(reviewBlockId)})`:'Revisão'}
 	                    </button>
 	                  </div>
 	                )}

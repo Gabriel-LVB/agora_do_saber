@@ -1,0 +1,1586 @@
+{
+  "schemaVersion": 3,
+  "datasetId": "agora_ecg_import_staging_v3",
+  "assets": [
+    {
+      "assetId": "ecg001_asset_01",
+      "caseId": "ECG001",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG001/ecg_principal.jpg",
+      "sha256": "46a0f948fcf7c424393ffd90f1c696860ad3a31afd02b49fbdd398d999e5fb80",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG001, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg002_asset_01",
+      "caseId": "ECG002",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG002/ecg_principal.jpg",
+      "sha256": "1771324f8227dd603a8742101b37a7eae4fe0dfaa9031eee8561613c9e745cf5",
+      "width": 781,
+      "height": 347,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG002, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg003_asset_01",
+      "caseId": "ECG003",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG003/ecg_principal.jpg",
+      "sha256": "52d51bc87afc63d74356c64b5de1863efd176539da9bff1fb0fc8dff68662ffa",
+      "width": 781,
+      "height": 458,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG003, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg004_asset_01",
+      "caseId": "ECG004",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG004/ecg_principal.jpg",
+      "sha256": "08e9a4b7865db21ab5f4a40de9c29030559d4fe7620267264a4bd709e15cd290",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG004, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg005_asset_01",
+      "caseId": "ECG005",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG005/ecg_principal.jpg",
+      "sha256": "efe319c1722b4bbeac76d180105d82bd2fca6eb3c2e064873fcc55da71bff01e",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG005, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg006_asset_01",
+      "caseId": "ECG006",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG006/ecg_principal.jpg",
+      "sha256": "05c15077cfac6f3c2e8444c4d81e4fff0ca607eb57ffb1565ce5ff1fc1283d39",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG006, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg007_asset_01",
+      "caseId": "ECG007",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG007/ecg_principal.jpg",
+      "sha256": "37c7f9dd5f08513cdf4ad5ab8515b2324f7a1c63607c79b584c34ee195553566",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG007, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg008_asset_01",
+      "caseId": "ECG008",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG008/ecg_principal.jpg",
+      "sha256": "7cbd821f63d8c905162969fa5099d01c7c944e6a3f7fd3339b0d5b210940ff05",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG008, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg009_asset_01",
+      "caseId": "ECG009",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG009/ecg_principal.jpg",
+      "sha256": "4203fbfcee67c2e680c86906dfb47dd10e25ff56241cd08b9afb3323c90e37ec",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG009, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg010_asset_01",
+      "caseId": "ECG010",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG010/ecg_principal.jpg",
+      "sha256": "e46856084b3c9261b8601cd33a3d2173b8dc00cade3a745b916ff9a4f1a76314",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG010, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg011_asset_01",
+      "caseId": "ECG011",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG011/ecg_principal.jpg",
+      "sha256": "aa1e68373c9323dcb2368cb7799ce5d32a63b3b12370ab0b0b4692e9dd0d15f6",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG011, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg012_asset_01",
+      "caseId": "ECG012",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG012/ecg_principal.jpg",
+      "sha256": "1bc9782db4924ccbc24f7c8d7109fd306269d8bd45c8746cd391e48088e6ea8b",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG012, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg013_asset_01",
+      "caseId": "ECG013",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG013/ecg_principal.jpg",
+      "sha256": "070c1bfb652286ff0729c18b374808c87271bd6e20b4a09975b4d6e685d724da",
+      "width": 781,
+      "height": 441,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG013, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg014_asset_01",
+      "caseId": "ECG014",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG014/ecg_principal.jpg",
+      "sha256": "705a64d8dbf1a4deaa0f563a1abb0213a76a9f34944315d9cc6471fda04851af",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG014, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg015_asset_01",
+      "caseId": "ECG015",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG015/ecg_principal.jpg",
+      "sha256": "a2577d71b22e41ff5f238c61d88147a2db1769974e5795539721905c239423d8",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG015, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg016_asset_01",
+      "caseId": "ECG016",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG016/ecg_principal.jpg",
+      "sha256": "84689d9daa892f2d84763a0be3edd3d8a973fcc5111debbf87986143d2bbb1d2",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG016, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg017_asset_01",
+      "caseId": "ECG017",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG017/ecg_principal.jpg",
+      "sha256": "f18b197277b38634a28d9ea244876a36dfb9f158922e276c32efce1d0d6c543f",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG017, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg018_asset_01",
+      "caseId": "ECG018",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG018/ecg_principal.jpg",
+      "sha256": "a3cbfe054bce8868e2d08cd30293e79a9138e907e14f71275cf7c4874fa4ccc5",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG018, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg019_asset_01",
+      "caseId": "ECG019",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG019/ecg_principal.jpg",
+      "sha256": "361205cc7a27f834a09396ccc98f4fe7b7fd6dc1cebded9277f88558ba1c13ec",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG019, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg020_asset_01",
+      "caseId": "ECG020",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG020/ecg_principal.jpg",
+      "sha256": "120032175c3983a94ecc0e93319b5f5eb9669f9f1c080655b89586c9ddc6931a",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG020, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg021_asset_01",
+      "caseId": "ECG021",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG021/ecg_principal.jpg",
+      "sha256": "0e9f72fa92c6ef2244c48bbcb9d3a4305d04b1352f8329f08389383684efb82f",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG021, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg022_asset_01",
+      "caseId": "ECG022",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG022/ecg_principal.jpg",
+      "sha256": "521dc642193790a0a1e60a36107606d727db07ddae4254059df843d390400545",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG022, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg023_asset_01",
+      "caseId": "ECG023",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG023/ecg_principal.jpg",
+      "sha256": "17d1d780ccc286dcf7d5e2e8431282856f08baeac94ff3f25606b6c02825d71e",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG023, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg024_asset_01",
+      "caseId": "ECG024",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG024/ecg_principal.jpg",
+      "sha256": "be3364d1821c65415b4541eedf54fe54674e0d7501b99d584e993746faf1c993",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG024, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg025_asset_01",
+      "caseId": "ECG025",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG025/ecg_principal.jpg",
+      "sha256": "3656a286212286c209619602016b2ca2c28f9799f76c22efffd8e641d02cae0c",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG025, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg026_asset_01",
+      "caseId": "ECG026",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG026/ecg_principal.jpg",
+      "sha256": "d9aa8f75eb48991ca1a06ef2f27ac1484852cbaa821c29695ce9de0efd5ea8d7",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG026, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg027_asset_01",
+      "caseId": "ECG027",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG027/ecg_principal.jpg",
+      "sha256": "9067135a846106fa94b9f0ac5a181b43c5e72ad3627025ce91b7c99513444716",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG027, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg028_asset_01",
+      "caseId": "ECG028",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG028/ecg_principal.jpg",
+      "sha256": "afb7272389590d2953a3153c71ba9ed50ae3a330244234eeb5ae379e2b03abb1",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG028, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg029_asset_01",
+      "caseId": "ECG029",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG029/ecg_principal.jpg",
+      "sha256": "3804619a9ae590ecff22a7f0863418727fbd57ba500cc7fe5ecc2ec485458ef6",
+      "width": 781,
+      "height": 439,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG029, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg030_asset_01",
+      "caseId": "ECG030",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG030/ecg_principal.jpg",
+      "sha256": "d07306b83d2160c8db0af2373f8d83fe181dd69bc426498cd05bf92b0629a0a2",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG030, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg031_asset_01",
+      "caseId": "ECG031",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG031/ecg_principal.jpg",
+      "sha256": "fa0c7196e6b3d7171b6efd0580f4edcc96e84b47bd2e4dd99c4aedfb339bb5ef",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG031, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg032_asset_01",
+      "caseId": "ECG032",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG032/ecg_principal.jpg",
+      "sha256": "fceb39c735a34ecdd3782e9c242f6868b20a88d3fd46dbdc53f5d11069cded3c",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG032, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg033_asset_01",
+      "caseId": "ECG033",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG033/ecg_principal.jpg",
+      "sha256": "5ccb947f7e424c22d5382103210d6c09a029399d42926763a437e327575777f5",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG033, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg034_asset_01",
+      "caseId": "ECG034",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG034/ecg_principal.jpg",
+      "sha256": "f41e6c81de601c8586a081ccaad40c4b3450daeb4121b0a97e04046f544569e0",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG034, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg035_asset_01",
+      "caseId": "ECG035",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG035/ecg_principal.jpg",
+      "sha256": "605a75f71e26aa407253489e8368583e002186e21cb117a95915767a4f890380",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG035, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg036_asset_01",
+      "caseId": "ECG036",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG036/ecg_principal.jpg",
+      "sha256": "98ff5ac8539857c37c4a8b986f75f2eab0939b14f95cad778bc349342fcf53b8",
+      "width": 781,
+      "height": 377,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG036, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg037_asset_01",
+      "caseId": "ECG037",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG037/ecg_principal.jpg",
+      "sha256": "16b4c2a8f47a9c6d43eec834a7bd5d3247f11a4580e78cce203d4f67a85bdbc5",
+      "width": 781,
+      "height": 365,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG037, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg037_asset_02",
+      "caseId": "ECG037",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG037/ecg_questao_extra_02.jpg",
+      "sha256": "3d844e1e1e50fddce01ca5975a97ae3d1dd0d413f6d8640e8bee872f64db3160",
+      "width": 781,
+      "height": 327,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG037, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg038_asset_01",
+      "caseId": "ECG038",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG038/ecg_principal.jpg",
+      "sha256": "edae8894aaf491d69839fadd6a4541af865b2fe59fd2c74f4c3c40fa86e9a2fd",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG038, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg039_asset_01",
+      "caseId": "ECG039",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG039/ecg_principal.jpg",
+      "sha256": "8f4270fc94df8cfa8c9c0b0f62b5a70efccb50f06c19b10be68abc2030ae9376",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG039, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg040_asset_01",
+      "caseId": "ECG040",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG040/ecg_principal.jpg",
+      "sha256": "015bc002a034999ee9422b55a829e6b4754de5215dcda58f5a34acf94f21a620",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG040, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg041_asset_01",
+      "caseId": "ECG041",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG041/ecg_principal.jpg",
+      "sha256": "9fd3b0d5248fcc7a6925d3c239794c86ee0032ba96fa9e8dbede9ab0f4f49eb7",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG041, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg042_asset_01",
+      "caseId": "ECG042",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG042/ecg_principal.jpg",
+      "sha256": "8c1de861c790cbd6aa4824052567f544386436cc686ef3bb8bc4d0e4ef906628",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG042, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg043_asset_01",
+      "caseId": "ECG043",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG043/ecg_principal.jpg",
+      "sha256": "4363b78f319c1905f59ae86789eb8e37c18277def805fa3d589c344dd9ca6860",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG043, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg044_asset_01",
+      "caseId": "ECG044",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG044/ecg_principal.jpg",
+      "sha256": "f73c466710f2c14e1580b12a9086a6ad1ed425476bb664c7f28b549362d5b18c",
+      "width": 781,
+      "height": 377,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG044, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg045_asset_01",
+      "caseId": "ECG045",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG045/ecg_principal.jpg",
+      "sha256": "aded14c3d0355b2a6288eac270957c151e51ddf1023c9d937598022a082c631b",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG045, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg046_asset_01",
+      "caseId": "ECG046",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG046/ecg_principal.jpg",
+      "sha256": "892fc64f98c024fd99693123d8bbcc1a66773cb0d39a4926f257af09de8eac2a",
+      "width": 781,
+      "height": 439,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG046, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg047_asset_01",
+      "caseId": "ECG047",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG047/ecg_principal.jpg",
+      "sha256": "f6219260cc89e2b5a301c307274273769d39268add7949884d1ddb83c249b184",
+      "width": 781,
+      "height": 415,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG047, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg048_asset_01",
+      "caseId": "ECG048",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG048/ecg_principal.jpg",
+      "sha256": "c84cc43ff7e3ded02a1bafec4bf77f3ece2dd06edf347cbef83c0e46c7e27a0f",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG048, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg049_asset_01",
+      "caseId": "ECG049",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG049/ecg_principal.jpg",
+      "sha256": "8a8a831d47eb2afe66aa15185fc232d70cc748f7a176a304424327d3a8b237af",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG049, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg050_asset_01",
+      "caseId": "ECG050",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG050/ecg_principal.jpg",
+      "sha256": "d5215e792b6df427a800891b76568e4027a89f620987ae1f7ca593ffa9c88b99",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG050, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg051_asset_01",
+      "caseId": "ECG051",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG051/ecg_principal.jpg",
+      "sha256": "3f567276db1dd9bbbfe683b740da74c28268dd8fdcf24616adfbab3f12addd4f",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG051, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg052_asset_01",
+      "caseId": "ECG052",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG052/ecg_principal.jpg",
+      "sha256": "12da3aef65ccf2750f01df322d24c36c7ab16c51cb0e940d6f4464e35ff43c90",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG052, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg053_asset_01",
+      "caseId": "ECG053",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG053/ecg_principal.jpg",
+      "sha256": "1414e2e337d351ba68278a93eda2193a8864f2ee00bbe982de8068af6dffef84",
+      "width": 781,
+      "height": 377,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG053, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg054_asset_01",
+      "caseId": "ECG054",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG054/ecg_principal.jpg",
+      "sha256": "e56f49e476d1d9b99f32a9abd1d78ed87e589848e41487a55acb7ccdb96bd695",
+      "width": 781,
+      "height": 439,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG054, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg055_asset_01",
+      "caseId": "ECG055",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG055/ecg_principal.jpg",
+      "sha256": "f9c7fa84963baa501bc29d3efd573b89d17d3ac08aa7def4b6e24325d2104807",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG055, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg056_asset_01",
+      "caseId": "ECG056",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG056/ecg_principal.jpg",
+      "sha256": "a5ec6bdc63040673186536535d84c2b06c8164c02111efae06924dfe8fe2fa42",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG056, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg057_asset_01",
+      "caseId": "ECG057",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG057/ecg_principal.jpg",
+      "sha256": "6a608ddaf2e28e46d2ebd863e9d24cd6d61dd551ef07de17b33c480877b3af44",
+      "width": 781,
+      "height": 421,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG057, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg058_asset_01",
+      "caseId": "ECG058",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG058/ecg_principal.jpg",
+      "sha256": "35cbfd639bc70334545bf9a0df00758f2648cacedf729da07693dd4e2a3465d7",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG058, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg058_asset_02",
+      "caseId": "ECG058",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG058/ecg_questao_extra_02.jpg",
+      "sha256": "c1f6d188965db96c25470db9a0c05d1cc04781484aed658b5935dcbdc2be48bb",
+      "width": 781,
+      "height": 352,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG058, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg059_asset_01",
+      "caseId": "ECG059",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG059/ecg_principal.jpg",
+      "sha256": "db44e765944a672b753ed6eab064420f4d3cc5a472ea7a540d4793bb22f00ba6",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG059, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg060_asset_01",
+      "caseId": "ECG060",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG060/ecg_principal.jpg",
+      "sha256": "1068bc3fa8dd38ae8380741d8248e6fa6a68c47808d5d8937fbaea8dc2a97ad1",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG060, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg061_asset_01",
+      "caseId": "ECG061",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG061/ecg_principal.jpg",
+      "sha256": "2ad0f19c58a3a516fba27ee9a19a844a5768e8f801030aaa7d0ccbe5c4ac5804",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG061, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg062_asset_01",
+      "caseId": "ECG062",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG062/ecg_principal.jpg",
+      "sha256": "fd625de93004fc508bfb10d460d80958a60a755c8159a38ca12f62dc4119b9ed",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG062, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg063_asset_01",
+      "caseId": "ECG063",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG063/ecg_principal.jpg",
+      "sha256": "986dc6641fdf98c6c0291abc593af0c0193dc3d738774d6dcea32f10bd3dba4d",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG063, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg064_asset_01",
+      "caseId": "ECG064",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG064/ecg_principal.jpg",
+      "sha256": "dd34bbae8a55db9bce9bb5b168b8a7d80930569afc7a85773b71d679144daa70",
+      "width": 703,
+      "height": 392,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg064_asset_02",
+      "caseId": "ECG064",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG064/ecg_questao_extra_02.jpg",
+      "sha256": "072ccafe4fc08295683d6bcd76ee491dae375c7416951a714b3c2092b3cf7aea",
+      "width": 703,
+      "height": 325,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg065_asset_01",
+      "caseId": "ECG065",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG065/ecg_principal.jpg",
+      "sha256": "843c70cfab0728a8eacff600fab1d5e871d16b70e2cf84479ae873ca6d98d3ca",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG065, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg066_asset_01",
+      "caseId": "ECG066",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG066/ecg_principal.jpg",
+      "sha256": "2a4937800e9e97f3c12e6baec7576587c91d341c5d7b272ae056bc005ef69781",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG066, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg067_asset_01",
+      "caseId": "ECG067",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG067/ecg_principal.jpg",
+      "sha256": "045f13b539ec821c1e755e80c08a3944ffff719e5432242d431f1ad6e54c0cb8",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG067, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg068_asset_01",
+      "caseId": "ECG068",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG068/ecg_principal.jpg",
+      "sha256": "5f1f705f75f44b72af2a69212aa7bea5e15782b6c0c2c3c058eb9f0dd8395a47",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG068, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg069_asset_01",
+      "caseId": "ECG069",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG069/ecg_principal.jpg",
+      "sha256": "42dd425db3b64b43b1714d03ad902731e9e9ddd268f164754b5ec87a7de0612b",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG069, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg070_asset_01",
+      "caseId": "ECG070",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG070/ecg_principal.jpg",
+      "sha256": "35d6768a8f265c19d22665b57defa2700c2749cc5c170d960d9a11f74fed3610",
+      "width": 781,
+      "height": 314,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg070_asset_02",
+      "caseId": "ECG070",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG070/ecg_questao_extra_02.jpg",
+      "sha256": "9cfa4e5ed4f711dc4061d4be5948b92ba74b0a20fed99707792c6f9afcae2377",
+      "width": 781,
+      "height": 377,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg071_asset_01",
+      "caseId": "ECG071",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG071/ecg_principal.jpg",
+      "sha256": "efd9c4e4df4bea3e5be59a339ff8d6611b1b2f10cdf1930dcab7abf4fbead6ec",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG071, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg072_asset_01",
+      "caseId": "ECG072",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG072/ecg_principal.jpg",
+      "sha256": "3acb894e803d5b0e05ca3faf7839de7690b04d477d71bf5ab086bd2646601afd",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG072, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg073_asset_01",
+      "caseId": "ECG073",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG073/ecg_principal.jpg",
+      "sha256": "c86f9b871a60f49c165a58447ca16bcb2d5e4b099677e025f6435438fa9ad25c",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG073, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg074_asset_01",
+      "caseId": "ECG074",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG074/ecg_principal.jpg",
+      "sha256": "c60f2da53bd0a2a7ad79a8368605934cb65f439b9908a23a4746297c4ab2e0e7",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG074, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg075_asset_01",
+      "caseId": "ECG075",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG075/ecg_principal.jpg",
+      "sha256": "8ecedcebbd8fb106e275184c03869376605422971a57b6407f7569ab5aeb9ed5",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG075, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg076_asset_01",
+      "caseId": "ECG076",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG076/ecg_principal.jpg",
+      "sha256": "e150f55c2daadff5277b7fa01617bb0d14a6b31b2bc4ef605c1f95f4d0059059",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG076, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg077_asset_01",
+      "caseId": "ECG077",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG077/ecg_principal.jpg",
+      "sha256": "49338d38cb34a26c298dde768f51cf5324854d0e24bb8ca623b9ff128b34f0ae",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG077, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg078_asset_01",
+      "caseId": "ECG078",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG078/ecg_principal.jpg",
+      "sha256": "d86bcffcc5af940b807a93a45805736e3815265a69663b4105deaca82c57ac66",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG078, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg079_asset_01",
+      "caseId": "ECG079",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG079/ecg_principal.jpg",
+      "sha256": "6c0c8b0758d5b033a61222420ac3aeac4c37ba9b4fd6716a6408fad8400a3d42",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG079, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg080_asset_01",
+      "caseId": "ECG080",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG080/ecg_principal.jpg",
+      "sha256": "72ff73634cce13bd456dcfff067df3b801741db16c4d01a4cf4dcab8520346e4",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG080, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg081_asset_01",
+      "caseId": "ECG081",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG081/ecg_principal.jpg",
+      "sha256": "87fde85197d691848f5719b89830844126359bcc1999946e7e28e1c3b59d1bc9",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG081, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg082_asset_01",
+      "caseId": "ECG082",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG082/ecg_principal.jpg",
+      "sha256": "189656c9764fdf9014c1d104f298ebb499bfad1a11dcb229a1c135de3069b7b7",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG082, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg083_asset_01",
+      "caseId": "ECG083",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG083/ecg_principal.jpg",
+      "sha256": "f4ed4eaca0f59fab03621c1903a6825f6e0a5d0f85a19bd13bbd29c46e100d3e",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG083, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg084_asset_01",
+      "caseId": "ECG084",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG084/ecg_principal.jpg",
+      "sha256": "a4d98109413f6bf65b1f92b2afe74b77fe538baef8cf403507973cf228173dc7",
+      "width": 781,
+      "height": 415,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG084, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg085_asset_01",
+      "caseId": "ECG085",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG085/ecg_principal.jpg",
+      "sha256": "e2b08f7ac5fd947a0cb016f9273e1824e23279d7c8dfcd98ea29338df6c40e73",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG085, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg086_asset_01",
+      "caseId": "ECG086",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG086/ecg_principal.jpg",
+      "sha256": "8a66568839ba8109e52907d16b7665f676990cf94206a34bc6acb84beb57e747",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG086, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg087_asset_01",
+      "caseId": "ECG087",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG087/ecg_principal.jpg",
+      "sha256": "13d113b8e7ddd3e79431f41bca83eff4b207b8492b3cf2c9a490cc09369c7c5d",
+      "width": 781,
+      "height": 352,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG087, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg087_asset_02",
+      "caseId": "ECG087",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG087/ecg_questao_extra_02.jpg",
+      "sha256": "58bd9d063a831c48024addf37c96439505a1625a6890137215262d29938e0125",
+      "width": 781,
+      "height": 341,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG087, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg088_asset_01",
+      "caseId": "ECG088",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG088/ecg_principal.jpg",
+      "sha256": "6979d8340e9d5d0583ee3a102accbca826535aefece633532713b4b114cd6cf3",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG088, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg089_asset_01",
+      "caseId": "ECG089",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG089/ecg_principal.jpg",
+      "sha256": "d63f2229953e97d2f05d8bba59ca5f7a0a2e4f80e91095cd351657b142c6b3bb",
+      "width": 781,
+      "height": 428,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG089, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg090_asset_01",
+      "caseId": "ECG090",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG090/ecg_principal.jpg",
+      "sha256": "66fbd03c53b5cc1a66778a89521ce95cbab91686251a73ac546ef6e7cf274857",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG090, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg091_asset_01",
+      "caseId": "ECG091",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG091/ecg_principal.jpg",
+      "sha256": "49da34c8d7dc21942c4678a7cad538c912bb4af1880f541cf8eb15f1b92d4e53",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG091, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg092_asset_01",
+      "caseId": "ECG092",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG092/ecg_principal.jpg",
+      "sha256": "6eca8d92c550c1052e5619cea66d3703e46315a22d6da16c5729e2f534d69546",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG092, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg093_asset_01",
+      "caseId": "ECG093",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG093/ecg_principal.jpg",
+      "sha256": "920995a5add08ccc925e83c534705ab2b53707b1039fcaf75f2794a77558769b",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG093, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg094_asset_01",
+      "caseId": "ECG094",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG094/ecg_principal.jpg",
+      "sha256": "00143cde162f955f6f3b7f3328f5dc877affb97253f89e6b46f044dd18cf13e4",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG094, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg095_asset_01",
+      "caseId": "ECG095",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG095/ecg_principal.jpg",
+      "sha256": "7b228d648a53e1caea71cb4b6e42e6e6d987e09323f9f772d5d078159df126e3",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG095, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg096_asset_01",
+      "caseId": "ECG096",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG096/ecg_principal.jpg",
+      "sha256": "98cad15647dea4e593241d65014b6b8436905683e57d0fdd95c4bfcfe9181a81",
+      "width": 781,
+      "height": 426,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG096, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg097_asset_01",
+      "caseId": "ECG097",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG097/ecg_principal.jpg",
+      "sha256": "57bbd59f894863b8fcad09fffea87a428b66e957c82b22d73620f5d1fe4c86c4",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG097, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg098_asset_01",
+      "caseId": "ECG098",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG098/ecg_principal.jpg",
+      "sha256": "adf0ad872f712a010ff6f96912309239dc18a5f3c04def627daec83fa2d9ef49",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG098, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg099_asset_01",
+      "caseId": "ECG099",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG099/ecg_principal.jpg",
+      "sha256": "fbb9d6b93f38f82a39ae8845c88bd935100045d35d75b1de72325fe2d52c06c4",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG099, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg100_asset_01",
+      "caseId": "ECG100",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG100/ecg_principal.jpg",
+      "sha256": "64b186790ffab83e51121b0c1f38a0aee6e2155b7a8265ad0d3df649b13527da",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG100, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg101_asset_01",
+      "caseId": "ECG101",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG101/ecg_principal.jpg",
+      "sha256": "4ec3dd3854f9d1d647296369f13fd35a9e75a86e28ae6bb8aa877246a5c178e2",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG101, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg102_asset_01",
+      "caseId": "ECG102",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG102/ecg_principal.jpg",
+      "sha256": "5c606db969ddab887c92c603232cfe4ba84e24d9d7b028bd411b9af1acf97a73",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG102, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg103_asset_01",
+      "caseId": "ECG103",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG103/ecg_principal.jpg",
+      "sha256": "60add082d97ac04195d7a5c74350e282d3f2d587472fc52a14f24687f92c771d",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG103, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg104_asset_01",
+      "caseId": "ECG104",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG104/ecg_principal.jpg",
+      "sha256": "f796e2277daa40689577f31e7dd81db0d37b61b8cc8e2e9be42c14eaff370551",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG104, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg105_asset_01",
+      "caseId": "ECG105",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG105/ecg_principal.jpg",
+      "sha256": "71766eecea5217f7bc9b78704761040162fb72bf79349d43bcd8df0a1933ca2b",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG105, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg106_asset_01",
+      "caseId": "ECG106",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG106/ecg_principal.jpg",
+      "sha256": "f05a9cb6a2842e3c8fe7ad84bf7ee0d157aaf6468591843d6e3dae067a5104ee",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG106, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg107_asset_01",
+      "caseId": "ECG107",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG107/ecg_principal.jpg",
+      "sha256": "2d817ff15f74e57d6e0b9a0a3617f4c85128544163e2f219088ffd3ea8f55424",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG107, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg108_asset_01",
+      "caseId": "ECG108",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG108/ecg_principal.jpg",
+      "sha256": "6b108ddfeb0e079fe7bd274a45778b4cabaff48d183ee245c93eb9b3f352c0c1",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG108, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg109_asset_01",
+      "caseId": "ECG109",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG109/ecg_principal.jpg",
+      "sha256": "c2dc360ae80c837a1d6d751f0b8480d59aee8e7e321ebae1cbaad932611b03f2",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG109, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg110_asset_01",
+      "caseId": "ECG110",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG110/ecg_principal.jpg",
+      "sha256": "dd45efb430073916ad39ae03cbafc7c10d73a44cabbb3d67a8658eb3c0081a92",
+      "width": 781,
+      "height": 439,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG110, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg111_asset_01",
+      "caseId": "ECG111",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG111/ecg_principal.jpg",
+      "sha256": "08cc1db5d0e15ab03e100d2f68b11967e07f8b7b3bf569149fe84d5a9fdbac01",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG111, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg112_asset_01",
+      "caseId": "ECG112",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG112/ecg_principal.jpg",
+      "sha256": "19af097317bf1fd6b98c41605232cf53e5a3cd014deb7d3922363efdc84c001b",
+      "width": 781,
+      "height": 403,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG112, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg113_asset_01",
+      "caseId": "ECG113",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG113/ecg_principal.jpg",
+      "sha256": "14b70730271aa0aed426814659f3b6eda84eed8352ffc6b8fb1aaa1d405cefb1",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG113, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg114_asset_01",
+      "caseId": "ECG114",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG114/ecg_principal.jpg",
+      "sha256": "d6be36601d5c8c6e5b5ebb27eebf3414584ba2cc41a63eb1f6ddd6d6bfc3ff22",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG114, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg115_asset_01",
+      "caseId": "ECG115",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG115/ecg_principal.jpg",
+      "sha256": "eae3df4d10fcf99809ae23bc651d95d5b8935761acd9d62e75441d9bcbf74e55",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG115, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg116_asset_01",
+      "caseId": "ECG116",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG116/ecg_principal.jpg",
+      "sha256": "966bf2028013f305d9953493015a82c5f3af70d1f1a9e2b498893d8bfc42b330",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG116, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg117_asset_01",
+      "caseId": "ECG117",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG117/ecg_principal.jpg",
+      "sha256": "7a81196dbe200508201a3e0ede472ad62166dec2adf503d52145e1ada3110699",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG117, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg118_asset_01",
+      "caseId": "ECG118",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG118/ecg_principal.jpg",
+      "sha256": "61bfd1266a61502a3dbfcde1fc44db6afef0180ff2a5183621083402071715ff",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG118, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg119_asset_01",
+      "caseId": "ECG119",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG119/ecg_principal.jpg",
+      "sha256": "8327d91346e9f5181126b043cf8320223fdf2f64ccb0224e2065a1a37c9c1971",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG119, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg120_asset_01",
+      "caseId": "ECG120",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG120/ecg_principal.jpg",
+      "sha256": "c5fa29d1b7d7af20e4b98b13d21a4f5acde14947e9afffede5df378afb4e77d8",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG120, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg121_asset_01",
+      "caseId": "ECG121",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG121/ecg_principal.jpg",
+      "sha256": "01d1898af74c6ff3b49cf03d35d137bc856d03b33e2bf07b2e91c275578f4dc5",
+      "width": 781,
+      "height": 377,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG121, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg122_asset_01",
+      "caseId": "ECG122",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG122/ecg_principal.jpg",
+      "sha256": "0b84e3fbb4cc2095664a5d5baffe4c97690994fa30c7da154ad49bc43c563870",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG122, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg123_asset_01",
+      "caseId": "ECG123",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG123/ecg_principal.jpg",
+      "sha256": "6c11c37d38a81099028be77425716b6f8d059f373560517ca1f2719d45637048",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG123, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg124_asset_01",
+      "caseId": "ECG124",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG124/ecg_principal.jpg",
+      "sha256": "661a464f44e64a5b755ca1c1de34bcbbc4870bcd29a6e00a32937c24f635839f",
+      "width": 781,
+      "height": 401,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG124, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg125_asset_01",
+      "caseId": "ECG125",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG125/ecg_principal.jpg",
+      "sha256": "fb49a73f5f4e28f695af5e3a5cb278bec20bcb113469d9737caafa04a7af392d",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG125, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg126_asset_01",
+      "caseId": "ECG126",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG126/ecg_principal.jpg",
+      "sha256": "b71639a6998eb6074db24cbc477412b706993085014a2d73a4ef4215339c2b95",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG126, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg127_asset_01",
+      "caseId": "ECG127",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG127/ecg_principal.jpg",
+      "sha256": "10dda392dbc7b91fe73d4df32c1540cd3765dd56c09baa315cbf17123aa50a85",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG127, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg128_asset_01",
+      "caseId": "ECG128",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG128/ecg_principal.jpg",
+      "sha256": "5dc92b561bcda6e84ad3fb40978434a858f47a17174edc4b92064d3bd0e07735",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG128, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg129_asset_01",
+      "caseId": "ECG129",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG129/ecg_principal.jpg",
+      "sha256": "53333680f9145f9b760ccc66fcdf758479c736caf4f700533f8d9199d94c18dc",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG129, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg130_asset_01",
+      "caseId": "ECG130",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG130/ecg_principal.jpg",
+      "sha256": "a141499a733ad2b5ff44c9f6103aaaf2c1314e22036decfc8b413af932d3a193",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG130, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg131_asset_01",
+      "caseId": "ECG131",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG131/ecg_principal.jpg",
+      "sha256": "25e4d44a293e064663229849d6ac88b9422e7b8d3c29b9b0860b3106854e8921",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG131, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg132_asset_01",
+      "caseId": "ECG132",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG132/ecg_principal.jpg",
+      "sha256": "c1cf6a87fae9bc84a2f9ab9c663da185a1e2e8850d79fe4a7b5d2786a7457741",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG132, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg133_asset_01",
+      "caseId": "ECG133",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG133/ecg_principal.jpg",
+      "sha256": "91c450048f67ec424812bf0a782ffbba2d802b47430c29041b69e8653652f34b",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG133, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg134_asset_01",
+      "caseId": "ECG134",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG134/ecg_principal.jpg",
+      "sha256": "c34485c21001203d938c545a8c05bd56d064b5ffa30af0ca2b1f6c7be791bc4b",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG134, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg135_asset_01",
+      "caseId": "ECG135",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG135/ecg_principal.jpg",
+      "sha256": "5517b01856e656993cba52237640e1ea9812aea4c651659a935e164200f1289e",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG135, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg136_asset_01",
+      "caseId": "ECG136",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG136/ecg_principal.jpg",
+      "sha256": "d9bbde42a7026d103185e8383b45618384429e28124cbcce3dc86385002db444",
+      "width": 781,
+      "height": 365,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG136, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg136_asset_02",
+      "caseId": "ECG136",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG136/ecg_questao_extra_02.jpg",
+      "sha256": "028032f3f328f6b7a97ef085776841c49d5ec9779b77f55f2e2e004ee1862e09",
+      "width": 781,
+      "height": 352,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG136, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg137_asset_01",
+      "caseId": "ECG137",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG137/ecg_principal.jpg",
+      "sha256": "708ca32bb874b2c84b6254d6b1c41770e2890607cc1a73f98b72723a19b636ae",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG137, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg138_asset_01",
+      "caseId": "ECG138",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG138/ecg_principal.jpg",
+      "sha256": "b6deaff2930b5ea3044b4ddb8da7d795922c70fe95591f85e09951e3505d7019",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG138, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg139_asset_01",
+      "caseId": "ECG139",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG139/ecg_principal.jpg",
+      "sha256": "54821f8139c5a914237f4111b6ddf1e715766f48b6bc5ba6ba8f02121d340c26",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG139, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg140_asset_01",
+      "caseId": "ECG140",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG140/ecg_principal.jpg",
+      "sha256": "ec5c4fe174c09df9e38accf7bc76e7c84885bbed6592c0cbba2969aea7f62a8f",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG140, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg141_asset_01",
+      "caseId": "ECG141",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG141/ecg_principal.jpg",
+      "sha256": "11cc915eb2c6b192305d1ad1ec3ca0864f23728ad4cf957fc11e42c6347f2438",
+      "width": 781,
+      "height": 433,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG141, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg142_asset_01",
+      "caseId": "ECG142",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG142/ecg_principal.jpg",
+      "sha256": "f7c6e7d650f6236dbe863835eafc423c840e113575bcf4fb62801c3c769c12a8",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG142, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg143_asset_01",
+      "caseId": "ECG143",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG143/ecg_principal.jpg",
+      "sha256": "68c75cea2a4bd5c11bad3752181107d87690a055ba69ca156431e3d1042da2c3",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG143, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg144_asset_01",
+      "caseId": "ECG144",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG144/ecg_principal.jpg",
+      "sha256": "4cf260d1a522d2c76919830065fbbdda6b94dfcc087ae9c88bff6b7a7fdb2189",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG144, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg145_asset_01",
+      "caseId": "ECG145",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG145/ecg_principal.jpg",
+      "sha256": "3ca3a37059d545d7ffa78c7239fd92e6ef5cf7fb039ed03cca2b49caf06106b0",
+      "width": 781,
+      "height": 403,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG145, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg146_asset_01",
+      "caseId": "ECG146",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG146/ecg_principal.jpg",
+      "sha256": "be2957489012bd0d405f62c64fc332e634938c1bd74275d3f45ba07ed9180d94",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG146, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg146_asset_02",
+      "caseId": "ECG146",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG146/ecg_questao_extra_02.jpg",
+      "sha256": "3540c6a0c14abe7ac19f74105fffa75005ff035cf99b6c0cb8a2c8a2ad0f1e03",
+      "width": 622,
+      "height": 126,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG146, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg147_asset_01",
+      "caseId": "ECG147",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG147/ecg_principal.jpg",
+      "sha256": "b79cc29146b93903fb3e352df5a87ca80f4f29f2834fd3fa978ccf69f0110353",
+      "width": 781,
+      "height": 377,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG147, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg147_asset_02",
+      "caseId": "ECG147",
+      "role": "questao_extra",
+      "url": "/ecg/v3/assets/ECG147/ecg_questao_extra_02.jpg",
+      "sha256": "b7eeb56bc4e4f3b70e19538264b3340530f829a39a9d7f6080b5f21ecba5e98c",
+      "width": 781,
+      "height": 339,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG147, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg148_asset_01",
+      "caseId": "ECG148",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG148/ecg_principal.jpg",
+      "sha256": "cf8d805fa2455a93bd9aa43edb83ffc87197a26705e5c295383e14fe4c10418f",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG148, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg149_asset_01",
+      "caseId": "ECG149",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG149/ecg_principal.jpg",
+      "sha256": "ce3e50a8c5e9f927fb3215ac63684a6d3575ddd10c5a59db845d0b9a6d01f613",
+      "width": 781,
+      "height": 390,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG149, apresentado sem interpretação para exercício."
+    },
+    {
+      "assetId": "ecg150_asset_01",
+      "caseId": "ECG150",
+      "role": "principal",
+      "url": "/ecg/v3/assets/ECG150/ecg_principal.jpg",
+      "sha256": "03f43ae29a5c7aae4de13ad64ed6041f25f797e28b9c1999a1eeeecad82d2c67",
+      "width": 781,
+      "height": 440,
+      "preAnswerAlt": "Eletrocardiograma do caso ECG150, apresentado sem interpretação para exercício."
+    }
+  ]
+}

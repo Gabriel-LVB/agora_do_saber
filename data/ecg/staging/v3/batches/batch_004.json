@@ -1,0 +1,5327 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "agora_ecg_import_staging_v3",
+  "batchId": "batch_004",
+  "importMode": "staging",
+  "runtimeEnabled": false,
+  "caseCount": 15,
+  "caseIds": [
+    "ECG061",
+    "ECG062",
+    "ECG063",
+    "ECG064",
+    "ECG065",
+    "ECG066",
+    "ECG067",
+    "ECG068",
+    "ECG069",
+    "ECG070",
+    "ECG071",
+    "ECG072",
+    "ECG073",
+    "ECG074",
+    "ECG075"
+  ],
+  "records": [
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG061",
+        "stableAssetKey": "ecg_agora_061",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 61,
+          "internalQuestionPage": 121,
+          "internalAnswerPage": 122,
+          "diagnosisText": "Taquicardia sinusal.",
+          "family": "Miscelânea / integrar com clínica",
+          "subfamily": "Normal/variante",
+          "tags": [],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG061",
+            "assetId": "ecg061_asset_01",
+            "runtimePath": "assets/ECG061/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 121,
+            "width": 781,
+            "height": 433,
+            "sha256": "2ad0f19c58a3a516fba27ee9a19a844a5768e8f801030aaa7d0ccbe5c4ac5804",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG061, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg061_asset_01",
+        "clinicalContext": {
+          "age": 45,
+          "sex": "male",
+          "presentation": "Um homem de 45 anos queixou-se de palpitações, perda de peso e ansiedade.",
+          "vignetteRef": "original:cases.json#ECG061",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Taquicardia sinusal.",
+          "primaryConceptId": "ecg.rhythm.sinus_tachycardia",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo com QRS estreito em 110 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Uma onda P para cada complexo QRS – taquicardia sinusal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Intervalo PR normal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Eixo normal do QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS normal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [],
+        "conceptIds": [
+          "ecg.rhythm.sinus_tachycardia"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.rhythm.sinus_tachycardia",
+        "moduleId": "m09_integracao",
+        "difficulty": {
+          "overall": 2,
+          "reason": "variante/normal pode exigir reconhecer ausência de patologia"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo com QRS estreito em 110 bpm",
+            "Uma onda P para cada complexo QRS – taquicardia sinusal",
+            "Intervalo PR normal",
+            "Eixo normal do QRS"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.rhythm.sinus_tachycardia"
+          ],
+          "conceptIds": [
+            "ecg.rhythm.sinus_tachycardia"
+          ],
+          "visualTags": [],
+          "requiredFindings": [
+            "Ritmo com QRS estreito em 110 bpm",
+            "Uma onda P para cada complexo QRS – taquicardia sinusal",
+            "Intervalo PR normal"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.rhythm.sinus_tachycardia"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": []
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG061, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG061",
+        "sourceDiagnosis": "Taquicardia sinusal.",
+        "sourceConceptIds": [
+          "ecg.rhythm.sinus_tachycardia"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg061_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG061",
+          "assetId": "ecg061_asset_01",
+          "runtimePath": "assets/ECG061/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 121,
+          "width": 781,
+          "height": 433,
+          "sha256": "2ad0f19c58a3a516fba27ee9a19a844a5768e8f801030aaa7d0ccbe5c4ac5804",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG061, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG061",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG061",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Taquicardia sinusal.",
+            "primaryConceptId": "ecg.rhythm.sinus_tachycardia",
+            "keyEvidence": [
+              "Ritmo com QRS estreito em 110 bpm",
+              "Uma onda P para cada complexo QRS – taquicardia sinusal",
+              "Intervalo PR normal",
+              "Eixo normal do QRS"
+            ]
+          },
+          "recommendedNextCases": [
+            "ECG028",
+            "ECG052"
+          ],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG061",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG061",
+          "tasks": [
+            {
+              "id": "ECG061_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.rhythm.accelerated_idioventricular",
+                  "label": "Ritmo idioventricular acelerado",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.rhythm.sinus",
+                  "label": "Ritmo sinusal",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.rhythm.junctional",
+                  "label": "Ritmo/escape juncional",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.rhythm.sinus_tachycardia",
+                  "label": "Taquicardia sinusal",
+                  "isCorrect": true
+                }
+              ],
+              "answerConceptId": "ecg.rhythm.sinus_tachycardia",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG061_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo com QRS estreito em 110 bpm",
+                "Uma onda P para cada complexo QRS – taquicardia sinusal",
+                "Intervalo PR normal",
+                "Eixo normal do QRS"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG062",
+        "stableAssetKey": "ecg_agora_062",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 62,
+          "internalQuestionPage": 123,
+          "internalAnswerPage": 124,
+          "diagnosisText": "Bloqueio divisional anterossuperior e BRD – bloqueio bifascicular.",
+          "family": "Bloqueios e distúrbios de condução",
+          "subfamily": "Bloqueio de ramo/fascicular",
+          "tags": [
+            "BRD/BRE/fascicular"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG062",
+            "assetId": "ecg062_asset_01",
+            "runtimePath": "assets/ECG062/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 123,
+            "width": 781,
+            "height": 440,
+            "sha256": "fd625de93004fc508bfb10d460d80958a60a755c8159a38ca12f62dc4119b9ed",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG062, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg062_asset_01",
+        "clinicalContext": {
+          "age": 70,
+          "sex": "male",
+          "presentation": "Um homem de 70 anos é levado para a clínica devido a uma crise de tontura bastante vaga e que acontece aproximadamente uma vez por semana.",
+          "vignetteRef": "original:cases.json#ECG062",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Bloqueio divisional anterossuperior e BRD – bloqueio bifascicular.",
+          "primaryConceptId": "ecg.conduction.lafb",
+          "secondaryConceptIds": [
+            "ecg.conduction.bifascicular",
+            "ecg.conduction.rbbb",
+            "ecg.repolarization.t_inversion"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal de 94 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Intervalo PR no limite superior do normal (200 ms)",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Desvio do eixo para a esquerda",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Duração do complexo QRS prolongada (160 ms)",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Padrão RSR1 em V1–V2; onda S ampla em V6",
+            "importance": 3,
+            "leads": [
+              "V1",
+              "V2",
+              "V6"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas T invertidas em aVL, V1–V4",
+            "importance": 3,
+            "leads": [
+              "V1",
+              "V2",
+              "V3",
+              "V4",
+              "aVL"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "wide_qrs",
+          "right_bundle_pattern",
+          "left_axis_deviation",
+          "t_wave_inversion"
+        ],
+        "conceptIds": [
+          "ecg.conduction.bifascicular",
+          "ecg.conduction.lafb",
+          "ecg.conduction.rbbb",
+          "ecg.repolarization.t_inversion",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.conduction.lafb",
+        "moduleId": "m03_conducao",
+        "difficulty": {
+          "overall": 4,
+          "reason": "combina múltiplos achados/diagnósticos"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo sinusal de 94 bpm",
+            "Intervalo PR no limite superior do normal (200 ms)",
+            "Desvio do eixo para a esquerda",
+            "Duração do complexo QRS prolongada (160 ms)"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.conduction.lafb"
+          ],
+          "conceptIds": [
+            "ecg.conduction.bifascicular",
+            "ecg.conduction.lafb",
+            "ecg.conduction.rbbb",
+            "ecg.repolarization.t_inversion",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "wide_qrs",
+            "right_bundle_pattern",
+            "left_axis_deviation",
+            "t_wave_inversion"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal de 94 bpm",
+            "Intervalo PR no limite superior do normal (200 ms)",
+            "Desvio do eixo para a esquerda"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.conduction.lafb"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.conduction.bifascicular",
+              "ecg.conduction.rbbb",
+              "ecg.repolarization.t_inversion",
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG062, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG062",
+        "sourceDiagnosis": "Bloqueio divisional anterossuperior e BRD – bloqueio bifascicular.",
+        "sourceConceptIds": [
+          "ecg.conduction.bifascicular",
+          "ecg.conduction.lafb",
+          "ecg.conduction.rbbb",
+          "ecg.repolarization.t_inversion",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg062_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG062",
+          "assetId": "ecg062_asset_01",
+          "runtimePath": "assets/ECG062/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 123,
+          "width": 781,
+          "height": 440,
+          "sha256": "fd625de93004fc508bfb10d460d80958a60a755c8159a38ca12f62dc4119b9ed",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG062, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG062",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG062",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Bloqueio divisional anterossuperior e BRD – bloqueio bifascicular.",
+            "primaryConceptId": "ecg.conduction.lafb",
+            "keyEvidence": [
+              "Ritmo sinusal de 94 bpm",
+              "Intervalo PR no limite superior do normal (200 ms)",
+              "Desvio do eixo para a esquerda",
+              "Duração do complexo QRS prolongada (160 ms)"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG062",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG062",
+          "tasks": [
+            {
+              "id": "ECG062_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.conduction.avb1",
+                  "label": "Bloqueio AV de primeiro grau",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_wenckebach",
+                  "label": "Bloqueio AV de segundo grau Mobitz I/Wenckebach",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.lafb",
+                  "label": "Bloqueio divisional anterossuperior",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_2to1",
+                  "label": "Bloqueio AV 2:1",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.conduction.lafb",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG062_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal de 94 bpm",
+                "Intervalo PR no limite superior do normal (200 ms)",
+                "Desvio do eixo para a esquerda",
+                "Duração do complexo QRS prolongada (160 ms)"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG063",
+        "stableAssetKey": "ecg_agora_063",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 63,
+          "internalQuestionPage": 125,
+          "internalAnswerPage": 126,
+          "diagnosisText": "Inversão difusa das ondas T, provavelmente normal em um homem negro.",
+          "family": "Normais, variantes anatômicas e armadilhas",
+          "subfamily": "Normal/variante",
+          "tags": [],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "high",
+          "legacyContentReviewFlag": true,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": [
+            "resolve_legacy_content_review_flag"
+          ]
+        },
+        "assets": [
+          {
+            "caseId": "ECG063",
+            "assetId": "ecg063_asset_01",
+            "runtimePath": "assets/ECG063/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 125,
+            "width": 781,
+            "height": 440,
+            "sha256": "986dc6641fdf98c6c0291abc593af0c0193dc3d738774d6dcea32f10bd3dba4d",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG063, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg063_asset_01",
+        "clinicalContext": {
+          "age": 25,
+          "sex": null,
+          "presentation": "Este ECG foi obtido de um jogador de futebol profissional negro de 25 anos.",
+          "vignetteRef": "original:cases.json#ECG063",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Inversão difusa das ondas T, provavelmente normal em um homem negro.",
+          "primaryConceptId": "ecg.normal.t_wave_variant",
+          "secondaryConceptIds": [
+            "ecg.repolarization.t_inversion"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": true
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal de 61 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Eixo normal do QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS normal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Inversão difusa da onda T, particularmente de V2–V5",
+            "importance": 3,
+            "leads": [
+              "V2",
+              "V3",
+              "V4",
+              "V5"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "t_wave_inversion"
+        ],
+        "conceptIds": [
+          "ecg.normal.t_wave_variant",
+          "ecg.repolarization.t_inversion",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.normal.t_wave_variant",
+        "moduleId": "m01_fundamentos",
+        "difficulty": {
+          "overall": 4,
+          "reason": "variante/normal pode exigir reconhecer ausência de patologia; há ambiguidade ou armadilha diagnóstica no caso-fonte"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo sinusal de 61 bpm",
+            "Eixo normal do QRS",
+            "Complexo QRS normal",
+            "Inversão difusa da onda T, particularmente de V2–V5"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.normal.t_wave_variant"
+          ],
+          "conceptIds": [
+            "ecg.normal.t_wave_variant",
+            "ecg.repolarization.t_inversion",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "t_wave_inversion"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal de 61 bpm",
+            "Eixo normal do QRS",
+            "Complexo QRS normal"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.normal.t_wave_variant"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.repolarization.t_inversion",
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 3,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": true,
+          "legacyReviewReasons": [
+            "diagnóstico-fonte contém incerteza explícita"
+          ],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG063, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG063",
+        "sourceDiagnosis": "Inversão difusa das ondas T, provavelmente normal em um homem negro.",
+        "sourceConceptIds": [
+          "ecg.normal.t_wave_variant",
+          "ecg.repolarization.t_inversion",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "high",
+        "legacyContentReviewFlag": true,
+        "primaryAssetId": "ecg063_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG063",
+          "assetId": "ecg063_asset_01",
+          "runtimePath": "assets/ECG063/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 125,
+          "width": 781,
+          "height": 440,
+          "sha256": "986dc6641fdf98c6c0291abc593af0c0193dc3d738774d6dcea32f10bd3dba4d",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG063, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG063",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG063",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Inversão difusa das ondas T, provavelmente normal em um homem negro.",
+            "primaryConceptId": "ecg.normal.t_wave_variant",
+            "keyEvidence": [
+              "Ritmo sinusal de 61 bpm",
+              "Eixo normal do QRS",
+              "Complexo QRS normal",
+              "Inversão difusa da onda T, particularmente de V2–V5"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG063",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG063",
+          "tasks": [
+            {
+              "id": "ECG063_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.normal.artifact",
+                  "label": "Artefato eletrocardiográfico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.normal.t_wave_variant",
+                  "label": "Variação normal de onda T",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.metabolic.cns_t_wave",
+                  "label": "Alterações de onda T por evento neurológico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.repolarization.nonspecific",
+                  "label": "Alterações inespecíficas de ST-T",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.normal.t_wave_variant",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG063_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal de 61 bpm",
+                "Eixo normal do QRS",
+                "Complexo QRS normal",
+                "Inversão difusa da onda T, particularmente de V2–V5"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG064",
+        "stableAssetKey": "ecg_agora_064",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 64,
+          "internalQuestionPage": 127,
+          "internalAnswerPage": 128,
+          "diagnosisText": "Síndrome de WPW tipo B.",
+          "family": "Pré-excitação e canalopatias",
+          "subfamily": "Wolff-Parkinson-White",
+          "tags": [
+            "WPW/LGL"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG064",
+            "assetId": "ecg064_asset_01",
+            "runtimePath": "assets/ECG064/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 127,
+            "width": 703,
+            "height": 392,
+            "sha256": "dd34bbae8a55db9bce9bb5b168b8a7d80930569afc7a85773b71d679144daa70",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          },
+          {
+            "caseId": "ECG064",
+            "assetId": "ecg064_asset_02",
+            "runtimePath": "assets/ECG064/ecg_questao_extra_02.jpg",
+            "role": "questao_extra",
+            "type": "ecg",
+            "sourcePage": 127,
+            "width": 703,
+            "height": 325,
+            "sha256": "072ccafe4fc08295683d6bcd76ee491dae375c7416951a714b3c2092b3cf7aea",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg064_asset_01",
+        "clinicalContext": {
+          "age": 20,
+          "sex": "male",
+          "presentation": "Estes traçados foram documentados em um homem de 20 anos que teve crises de batimentos cardíacos rápidos e irregulares por muitos anos.",
+          "vignetteRef": "original:cases.json#ECG064",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Síndrome de WPW tipo B.",
+          "primaryConceptId": "ecg.preexcitation.wpw_b",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [],
+        "visualTags": [
+          "delta_wave_preexcitation"
+        ],
+        "conceptIds": [
+          "ecg.preexcitation.wpw_b"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.preexcitation.wpw_b",
+        "moduleId": "m04_preexcitacao_canalopatias",
+        "difficulty": {
+          "overall": 2,
+          "reason": "padrão relativamente direto segundo a anotação do caso-fonte"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.preexcitation.wpw_b"
+          ],
+          "conceptIds": [
+            "ecg.preexcitation.wpw_b"
+          ],
+          "visualTags": [
+            "delta_wave_preexcitation"
+          ],
+          "requiredFindings": [],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.preexcitation.wpw_b"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": []
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG064",
+        "sourceDiagnosis": "Síndrome de WPW tipo B.",
+        "sourceConceptIds": [
+          "ecg.preexcitation.wpw_b"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg064_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG064",
+          "assetId": "ecg064_asset_01",
+          "runtimePath": "assets/ECG064/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 127,
+          "width": 703,
+          "height": 392,
+          "sha256": "dd34bbae8a55db9bce9bb5b168b8a7d80930569afc7a85773b71d679144daa70",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        },
+        {
+          "caseId": "ECG064",
+          "assetId": "ecg064_asset_02",
+          "runtimePath": "assets/ECG064/ecg_questao_extra_02.jpg",
+          "role": "questao_extra",
+          "type": "ecg",
+          "sourcePage": 127,
+          "width": 703,
+          "height": 325,
+          "sha256": "072ccafe4fc08295683d6bcd76ee491dae375c7416951a714b3c2092b3cf7aea",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG064, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG064",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG064",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [],
+          "answer": {
+            "sourceDiagnosis": "Síndrome de WPW tipo B.",
+            "primaryConceptId": "ecg.preexcitation.wpw_b",
+            "keyEvidence": []
+          },
+          "recommendedNextCases": [
+            "ECG123",
+            "ECG145"
+          ],
+          "compareWithCases": [
+            "ECG015"
+          ]
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG064",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG064",
+          "tasks": [
+            {
+              "id": "ECG064_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.preexcitation.wpw_b",
+                  "label": "Wolff-Parkinson-White tipo B",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.metabolic.cns_t_wave",
+                  "label": "Alterações de onda T por evento neurológico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.repolarization.nonspecific",
+                  "label": "Alterações inespecíficas de ST-T",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.normal.artifact",
+                  "label": "Artefato eletrocardiográfico",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.preexcitation.wpw_b",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG064_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG065",
+        "stableAssetKey": "ecg_agora_065",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 65,
+          "internalQuestionPage": 129,
+          "internalAnswerPage": 130,
+          "diagnosisText": "Flutter atrial com bloqueio 4:1.",
+          "family": "Arritmias supraventriculares",
+          "subfamily": "Flutter atrial",
+          "tags": [
+            "flutter"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG065",
+            "assetId": "ecg065_asset_01",
+            "runtimePath": "assets/ECG065/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 129,
+            "width": 781,
+            "height": 440,
+            "sha256": "843c70cfab0728a8eacff600fab1d5e871d16b70e2cf84479ae873ca6d98d3ca",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG065, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg065_asset_01",
+        "clinicalContext": {
+          "age": 60,
+          "sex": "female",
+          "presentation": "Uma mulher de 60 anos foi vista no ambulatório queixando-se de falta de ar.",
+          "vignetteRef": "original:cases.json#ECG065",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Flutter atrial com bloqueio 4:1.",
+          "primaryConceptId": "ecg.arrhythmia.flutter",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Flutter atrial, mais bem visualizado em DIII",
+            "importance": 3,
+            "leads": [
+              "III"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Bloqueio 4:1",
+            "importance": 5,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Eixo normal do QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS normal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Depressão descendente do segmento ST, mais bem visualizada em V5–V6",
+            "importance": 3,
+            "leads": [
+              "V5",
+              "V6"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "atrial_flutter"
+        ],
+        "conceptIds": [
+          "ecg.arrhythmia.flutter"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.arrhythmia.flutter",
+        "moduleId": "m02_arritmias_supraventriculares",
+        "difficulty": {
+          "overall": 2,
+          "reason": "padrão relativamente direto segundo a anotação do caso-fonte"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Flutter atrial, mais bem visualizado em DIII",
+            "Bloqueio 4:1",
+            "Eixo normal do QRS",
+            "Complexo QRS normal"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.arrhythmia.flutter"
+          ],
+          "conceptIds": [
+            "ecg.arrhythmia.flutter"
+          ],
+          "visualTags": [
+            "atrial_flutter"
+          ],
+          "requiredFindings": [
+            "Flutter atrial, mais bem visualizado em DIII",
+            "Bloqueio 4:1",
+            "Eixo normal do QRS"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.arrhythmia.flutter"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": []
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG065, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG065",
+        "sourceDiagnosis": "Flutter atrial com bloqueio 4:1.",
+        "sourceConceptIds": [
+          "ecg.arrhythmia.flutter"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg065_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG065",
+          "assetId": "ecg065_asset_01",
+          "runtimePath": "assets/ECG065/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 129,
+          "width": 781,
+          "height": 440,
+          "sha256": "843c70cfab0728a8eacff600fab1d5e871d16b70e2cf84479ae873ca6d98d3ca",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG065, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG065",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG065",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte nas derivações III."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Flutter atrial com bloqueio 4:1.",
+            "primaryConceptId": "ecg.arrhythmia.flutter",
+            "keyEvidence": [
+              "Flutter atrial, mais bem visualizado em DIII",
+              "Bloqueio 4:1",
+              "Eixo normal do QRS",
+              "Complexo QRS normal"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG065",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG065",
+          "tasks": [
+            {
+              "id": "ECG065_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.arrhythmia.pvc",
+                  "label": "Extrassístole ventricular",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.af",
+                  "label": "Fibrilação atrial",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.vf",
+                  "label": "Fibrilação ventricular",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.flutter",
+                  "label": "Flutter atrial",
+                  "isCorrect": true
+                }
+              ],
+              "answerConceptId": "ecg.arrhythmia.flutter",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG065_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Flutter atrial, mais bem visualizado em DIII",
+                "Bloqueio 4:1",
+                "Eixo normal do QRS",
+                "Complexo QRS normal"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG066",
+        "stableAssetKey": "ecg_agora_066",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 66,
+          "internalQuestionPage": 131,
+          "internalAnswerPage": 132,
+          "diagnosisText": "ECG normal com ondas U proeminentes.",
+          "family": "Normais, variantes anatômicas e armadilhas",
+          "subfamily": "Normal/variante",
+          "tags": [
+            "normal/variante"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG066",
+            "assetId": "ecg066_asset_01",
+            "runtimePath": "assets/ECG066/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 131,
+            "width": 781,
+            "height": 440,
+            "sha256": "2a4937800e9e97f3c12e6baec7576587c91d341c5d7b272ae056bc005ef69781",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG066, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg066_asset_01",
+        "clinicalContext": {
+          "age": 30,
+          "sex": "male",
+          "presentation": "Este ECG foi obtido de um homem de 30 anos em um exame médico exigido por uma autoridade de Aviação Civil.",
+          "vignetteRef": "original:cases.json#ECG066",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "ECG normal com ondas U proeminentes.",
+          "primaryConceptId": "ecg.normal.normal",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal de 52 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas U proeminentes, em especial de V2–V4",
+            "importance": 3,
+            "leads": [
+              "V2",
+              "V3",
+              "V4"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "u_wave_prominent"
+        ],
+        "conceptIds": [
+          "ecg.normal.normal",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.normal.normal",
+        "moduleId": "m01_fundamentos",
+        "difficulty": {
+          "overall": 2,
+          "reason": "variante/normal pode exigir reconhecer ausência de patologia"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [],
+          "teachingPointRefs": [
+            "Ritmo sinusal de 52 bpm",
+            "Ondas U proeminentes, em especial de V2–V4"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.normal.normal"
+          ],
+          "conceptIds": [
+            "ecg.normal.normal",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "u_wave_prominent"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal de 52 bpm",
+            "Ondas U proeminentes, em especial de V2–V4"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.normal.normal"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 3,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG066, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG066",
+        "sourceDiagnosis": "ECG normal com ondas U proeminentes.",
+        "sourceConceptIds": [
+          "ecg.normal.normal",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg066_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG066",
+          "assetId": "ecg066_asset_01",
+          "runtimePath": "assets/ECG066/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 131,
+          "width": 781,
+          "height": 440,
+          "sha256": "2a4937800e9e97f3c12e6baec7576587c91d341c5d7b272ae056bc005ef69781",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG066, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG066",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG066",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "ECG normal com ondas U proeminentes.",
+            "primaryConceptId": "ecg.normal.normal",
+            "keyEvidence": [
+              "Ritmo sinusal de 52 bpm",
+              "Ondas U proeminentes, em especial de V2–V4"
+            ]
+          },
+          "recommendedNextCases": [
+            "ECG021",
+            "ECG046"
+          ],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG066",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG066",
+          "tasks": [
+            {
+              "id": "ECG066_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.repolarization.nonspecific",
+                  "label": "Alterações inespecíficas de ST-T",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.normal.artifact",
+                  "label": "Artefato eletrocardiográfico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.normal.normal",
+                  "label": "ECG normal",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.metabolic.cns_t_wave",
+                  "label": "Alterações de onda T por evento neurológico",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.normal.normal",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG066_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal de 52 bpm",
+                "Ondas U proeminentes, em especial de V2–V4"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG067",
+        "stableAssetKey": "ecg_agora_067",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 67,
+          "internalQuestionPage": 133,
+          "internalAnswerPage": 134,
+          "diagnosisText": "Ritmo idionodal acelerado.",
+          "family": "Miscelânea / integrar com clínica",
+          "subfamily": "Normal/variante",
+          "tags": [],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG067",
+            "assetId": "ecg067_asset_01",
+            "runtimePath": "assets/ECG067/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 133,
+            "width": 781,
+            "height": 440,
+            "sha256": "045f13b539ec821c1e755e80c08a3944ffff719e5432242d431f1ad6e54c0cb8",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG067, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg067_asset_01",
+        "clinicalContext": {
+          "age": null,
+          "sex": null,
+          "presentation": "Este ECG foi registrado como parte de um exame de “triagem” de um jovem jogador de futebol profissional.",
+          "vignetteRef": "original:cases.json#ECG067",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Ritmo idionodal acelerado.",
+          "primaryConceptId": "ecg.rhythm.junctional",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo regular com complexos QRS estreitos e frequência cardíaca de 35 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas P eventualmente visíveis imediatamente antes dos complexos QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Intervalo PR, quando mensurável, sempre curto, porém variável",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Amplitude da onda R em V4 mais a profundidade da onda S em V2 = 49 mm",
+            "importance": 3,
+            "leads": [
+              "V4",
+              "V2"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexos QRS e segmentos ST normais",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas T pontiagudas, especialmente em V4",
+            "importance": 3,
+            "leads": [
+              "V4"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [],
+        "conceptIds": [
+          "ecg.rhythm.junctional"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.rhythm.junctional",
+        "moduleId": "m09_integracao",
+        "difficulty": {
+          "overall": 2,
+          "reason": "variante/normal pode exigir reconhecer ausência de patologia"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo regular com complexos QRS estreitos e frequência cardíaca de 35 bpm",
+            "Ondas P eventualmente visíveis imediatamente antes dos complexos QRS",
+            "Intervalo PR, quando mensurável, sempre curto, porém variável",
+            "Amplitude da onda R em V4 mais a profundidade da onda S em V2 = 49 mm"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.rhythm.junctional"
+          ],
+          "conceptIds": [
+            "ecg.rhythm.junctional"
+          ],
+          "visualTags": [],
+          "requiredFindings": [
+            "Ritmo regular com complexos QRS estreitos e frequência cardíaca de 35 bpm",
+            "Ondas P eventualmente visíveis imediatamente antes dos complexos QRS",
+            "Intervalo PR, quando mensurável, sempre curto, porém variável"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.rhythm.junctional"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": []
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG067, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG067",
+        "sourceDiagnosis": "Ritmo idionodal acelerado.",
+        "sourceConceptIds": [
+          "ecg.rhythm.junctional"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg067_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG067",
+          "assetId": "ecg067_asset_01",
+          "runtimePath": "assets/ECG067/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 133,
+          "width": 781,
+          "height": 440,
+          "sha256": "045f13b539ec821c1e755e80c08a3944ffff719e5432242d431f1ad6e54c0cb8",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG067, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG067",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG067",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Ritmo idionodal acelerado.",
+            "primaryConceptId": "ecg.rhythm.junctional",
+            "keyEvidence": [
+              "Ritmo regular com complexos QRS estreitos e frequência cardíaca de 35 bpm",
+              "Ondas P eventualmente visíveis imediatamente antes dos complexos QRS",
+              "Intervalo PR, quando mensurável, sempre curto, porém variável",
+              "Amplitude da onda R em V4 mais a profundidade da onda S em V2 = 49 mm"
+            ]
+          },
+          "recommendedNextCases": [
+            "ECG103"
+          ],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG067",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG067",
+          "tasks": [
+            {
+              "id": "ECG067_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.rhythm.atrial_ectopic",
+                  "label": "Ritmo/taquicardia atrial ectópica",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.rhythm.junctional",
+                  "label": "Ritmo/escape juncional",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.rhythm.accelerated_idioventricular",
+                  "label": "Ritmo idioventricular acelerado",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.rhythm.sinus",
+                  "label": "Ritmo sinusal",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.rhythm.junctional",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG067_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo regular com complexos QRS estreitos e frequência cardíaca de 35 bpm",
+                "Ondas P eventualmente visíveis imediatamente antes dos complexos QRS",
+                "Intervalo PR, quando mensurável, sempre curto, porém variável",
+                "Amplitude da onda R em V4 mais a profundidade da onda S em V2 = 49 mm"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG068",
+        "stableAssetKey": "ecg_agora_068",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 68,
+          "internalQuestionPage": 135,
+          "internalAnswerPage": 136,
+          "diagnosisText": "IAMST anterolateral e bloqueio divisional anterossuperior.",
+          "family": "Síndromes coronarianas, isquemia e infarto",
+          "subfamily": "IAM com supra / elevação de ST",
+          "tags": [
+            "BRD/BRE/fascicular",
+            "IAMST/STEMI"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG068",
+            "assetId": "ecg068_asset_01",
+            "runtimePath": "assets/ECG068/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 135,
+            "width": 781,
+            "height": 433,
+            "sha256": "5f1f705f75f44b72af2a69212aa7bea5e15782b6c0c2c3c058eb9f0dd8395a47",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG068, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg068_asset_01",
+        "clinicalContext": {
+          "age": 45,
+          "sex": null,
+          "presentation": "Um paciente de 45 anos que estava sentindo dor retroesternal há 1 hora foi admitido no PS.",
+          "vignetteRef": "original:cases.json#ECG068",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "IAMST anterolateral e bloqueio divisional anterossuperior.",
+          "primaryConceptId": "ecg.ischemia.stemi_anterolateral",
+          "secondaryConceptIds": [
+            "ecg.conduction.lafb",
+            "ecg.ischemia.stemi",
+            "ecg.repolarization.st_elevation"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal de 100 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Desvio do eixo para a esquerda",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas Q em derivações V2–V4",
+            "importance": 3,
+            "leads": [
+              "V2",
+              "V3",
+              "V4"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Segmentos ST supradesnivelados em DI, aVL e V2–V5",
+            "importance": 5,
+            "leads": [
+              "V2",
+              "V3",
+              "V4",
+              "V5",
+              "aVL",
+              "I"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "left_axis_deviation",
+          "st_elevation"
+        ],
+        "conceptIds": [
+          "ecg.conduction.lafb",
+          "ecg.ischemia.stemi_anterolateral",
+          "ecg.ischemia.stemi",
+          "ecg.repolarization.st_elevation",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.ischemia.stemi_anterolateral",
+        "moduleId": "m06_isquemia_infarto",
+        "difficulty": {
+          "overall": 4,
+          "reason": "combina múltiplos achados/diagnósticos; padrão de alto impacto clínico"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo sinusal de 100 bpm",
+            "Desvio do eixo para a esquerda",
+            "Ondas Q em derivações V2–V4",
+            "Segmentos ST supradesnivelados em DI, aVL e V2–V5"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.ischemia.stemi_anterolateral"
+          ],
+          "conceptIds": [
+            "ecg.conduction.lafb",
+            "ecg.ischemia.stemi_anterolateral",
+            "ecg.ischemia.stemi",
+            "ecg.repolarization.st_elevation",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "left_axis_deviation",
+            "st_elevation"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal de 100 bpm",
+            "Desvio do eixo para a esquerda",
+            "Ondas Q em derivações V2–V4"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.ischemia.stemi_anterolateral"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.conduction.lafb",
+              "ecg.ischemia.stemi",
+              "ecg.repolarization.st_elevation",
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 5,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG068, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG068",
+        "sourceDiagnosis": "IAMST anterolateral e bloqueio divisional anterossuperior.",
+        "sourceConceptIds": [
+          "ecg.conduction.lafb",
+          "ecg.ischemia.stemi_anterolateral",
+          "ecg.ischemia.stemi",
+          "ecg.repolarization.st_elevation",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg068_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG068",
+          "assetId": "ecg068_asset_01",
+          "runtimePath": "assets/ECG068/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 135,
+          "width": 781,
+          "height": 433,
+          "sha256": "5f1f705f75f44b72af2a69212aa7bea5e15782b6c0c2c3c058eb9f0dd8395a47",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG068, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG068",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG068",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "IAMST anterolateral e bloqueio divisional anterossuperior.",
+            "primaryConceptId": "ecg.ischemia.stemi_anterolateral",
+            "keyEvidence": [
+              "Ritmo sinusal de 100 bpm",
+              "Desvio do eixo para a esquerda",
+              "Ondas Q em derivações V2–V4",
+              "Segmentos ST supradesnivelados em DI, aVL e V2–V5"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG068",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG068",
+          "tasks": [
+            {
+              "id": "ECG068_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.ischemia.stemi_anterolateral",
+                  "label": "IAM com supra anterolateral",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.ischemia.stemi_anterior",
+                  "label": "IAM com supra anterior",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.ischemia.stemi_inferior",
+                  "label": "IAM com supra inferior",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.ischemia.stemi",
+                  "label": "IAM com supradesnível de ST",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.ischemia.stemi_anterolateral",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG068_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal de 100 bpm",
+                "Desvio do eixo para a esquerda",
+                "Ondas Q em derivações V2–V4",
+                "Segmentos ST supradesnivelados em DI, aVL e V2–V5"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG069",
+        "stableAssetKey": "ecg_agora_069",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 69,
+          "internalQuestionPage": 137,
+          "internalAnswerPage": 138,
+          "diagnosisText": "Taquicardia atrial",
+          "family": "Arritmias supraventriculares",
+          "subfamily": "Taquicardia/ritmo atrial ectópico",
+          "tags": [],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG069",
+            "assetId": "ecg069_asset_01",
+            "runtimePath": "assets/ECG069/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 137,
+            "width": 781,
+            "height": 440,
+            "sha256": "42dd425db3b64b43b1714d03ad902731e9e9ddd268f164754b5ec87a7de0612b",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG069, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg069_asset_01",
+        "clinicalContext": {
+          "age": 30,
+          "sex": "male",
+          "presentation": "Um homem de 30 anos que se queixava de palpitações por muitos anos sem nada anormal ter sido encontrado foi até o PS durante um ataque e seu ECG foi feito.",
+          "vignetteRef": "original:cases.json#ECG069",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Taquicardia atrial",
+          "primaryConceptId": "ecg.arrhythmia.atrial_tachycardia",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Taquicardia de complexos estreitos e frequência cardíaca de 140 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas P negativas nas derivações inferiores DII, DIII e aVF",
+            "importance": 3,
+            "leads": [
+              "aVF",
+              "II",
+              "III"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Intervalo PR curto (aproximadamente 100 ms)",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Eixo normal do QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS, segmento ST e onda T normais",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [],
+        "conceptIds": [
+          "ecg.arrhythmia.atrial_tachycardia"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.arrhythmia.atrial_tachycardia",
+        "moduleId": "m02_arritmias_supraventriculares",
+        "difficulty": {
+          "overall": 2,
+          "reason": "padrão relativamente direto segundo a anotação do caso-fonte"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Taquicardia de complexos estreitos e frequência cardíaca de 140 bpm",
+            "Ondas P negativas nas derivações inferiores DII, DIII e aVF",
+            "Intervalo PR curto (aproximadamente 100 ms)",
+            "Eixo normal do QRS"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.arrhythmia.atrial_tachycardia"
+          ],
+          "conceptIds": [
+            "ecg.arrhythmia.atrial_tachycardia"
+          ],
+          "visualTags": [],
+          "requiredFindings": [
+            "Taquicardia de complexos estreitos e frequência cardíaca de 140 bpm",
+            "Ondas P negativas nas derivações inferiores DII, DIII e aVF",
+            "Intervalo PR curto (aproximadamente 100 ms)"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.arrhythmia.atrial_tachycardia"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": []
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG069, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG069",
+        "sourceDiagnosis": "Taquicardia atrial",
+        "sourceConceptIds": [
+          "ecg.arrhythmia.atrial_tachycardia"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg069_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG069",
+          "assetId": "ecg069_asset_01",
+          "runtimePath": "assets/ECG069/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 137,
+          "width": 781,
+          "height": 440,
+          "sha256": "42dd425db3b64b43b1714d03ad902731e9e9ddd268f164754b5ec87a7de0612b",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG069, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG069",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG069",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Taquicardia atrial",
+            "primaryConceptId": "ecg.arrhythmia.atrial_tachycardia",
+            "keyEvidence": [
+              "Taquicardia de complexos estreitos e frequência cardíaca de 140 bpm",
+              "Ondas P negativas nas derivações inferiores DII, DIII e aVF",
+              "Intervalo PR curto (aproximadamente 100 ms)",
+              "Eixo normal do QRS"
+            ]
+          },
+          "recommendedNextCases": [
+            "ECG011"
+          ],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG069",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG069",
+          "tasks": [
+            {
+              "id": "ECG069_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.arrhythmia.pvc",
+                  "label": "Extrassístole ventricular",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.af",
+                  "label": "Fibrilação atrial",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.vf",
+                  "label": "Fibrilação ventricular",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.atrial_tachycardia",
+                  "label": "Taquicardia atrial",
+                  "isCorrect": true
+                }
+              ],
+              "answerConceptId": "ecg.arrhythmia.atrial_tachycardia",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG069_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Taquicardia de complexos estreitos e frequência cardíaca de 140 bpm",
+                "Ondas P negativas nas derivações inferiores DII, DIII e aVF",
+                "Intervalo PR curto (aproximadamente 100 ms)",
+                "Eixo normal do QRS"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG070",
+        "stableAssetKey": "ecg_agora_070",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 70,
+          "internalQuestionPage": 139,
+          "internalAnswerPage": 140,
+          "diagnosisText": "Prolongamento do intervalo QT secundário à utilização de sotalol; taquicardia ventricular polimórfica do tipo torsade de pointes.",
+          "family": "Pré-excitação e canalopatias",
+          "subfamily": "QT longo / torsades",
+          "tags": [
+            "QT/Brugada",
+            "TV/FV",
+            "eletrólitos/drogas"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG070",
+            "assetId": "ecg070_asset_01",
+            "runtimePath": "assets/ECG070/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 139,
+            "width": 781,
+            "height": 314,
+            "sha256": "35d6768a8f265c19d22665b57defa2700c2749cc5c170d960d9a11f74fed3610",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          },
+          {
+            "caseId": "ECG070",
+            "assetId": "ecg070_asset_02",
+            "runtimePath": "assets/ECG070/ecg_questao_extra_02.jpg",
+            "role": "questao_extra",
+            "type": "ecg",
+            "sourcePage": 139,
+            "width": 781,
+            "height": 377,
+            "sha256": "9cfa4e5ed4f711dc4061d4be5948b92ba74b0a20fed99707792c6f9afcae2377",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg070_asset_01",
+        "clinicalContext": {
+          "age": 80,
+          "sex": "female",
+          "presentation": "Uma mulher de 80 anos, desorientada, foi enviada para o hospital por uma casa de repouso devido a um desmaio.",
+          "vignetteRef": "original:cases.json#ECG070",
+          "clinicalDependency": {
+            "level": "required",
+            "reason": "Etiologia/conduta depende do contexto clínico."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Prolongamento do intervalo QT secundário à utilização de sotalol; taquicardia ventricular polimórfica do tipo torsade de pointes.",
+          "primaryConceptId": "ecg.channelopathy.long_qt",
+          "secondaryConceptIds": [
+            "ecg.channelopathy.torsades",
+            "ecg.arrhythmia.vt",
+            "ecg.metabolic.sotalol"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [],
+        "visualTags": [
+          "long_qt"
+        ],
+        "conceptIds": [
+          "ecg.channelopathy.torsades",
+          "ecg.channelopathy.long_qt",
+          "ecg.arrhythmia.vt",
+          "ecg.metabolic.sotalol"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.channelopathy.long_qt",
+        "moduleId": "m04_preexcitacao_canalopatias",
+        "difficulty": {
+          "overall": 4,
+          "reason": "combina múltiplos achados/diagnósticos; padrão de alto impacto clínico"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.channelopathy.long_qt"
+          ],
+          "conceptIds": [
+            "ecg.channelopathy.torsades",
+            "ecg.channelopathy.long_qt",
+            "ecg.arrhythmia.vt",
+            "ecg.metabolic.sotalol"
+          ],
+          "visualTags": [
+            "long_qt"
+          ],
+          "requiredFindings": [],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.channelopathy.long_qt"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.channelopathy.torsades",
+              "ecg.arrhythmia.vt",
+              "ecg.metabolic.sotalol"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 5,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.8
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG070",
+        "sourceDiagnosis": "Prolongamento do intervalo QT secundário à utilização de sotalol; taquicardia ventricular polimórfica do tipo torsade de pointes.",
+        "sourceConceptIds": [
+          "ecg.channelopathy.torsades",
+          "ecg.channelopathy.long_qt",
+          "ecg.arrhythmia.vt",
+          "ecg.metabolic.sotalol"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg070_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG070",
+          "assetId": "ecg070_asset_01",
+          "runtimePath": "assets/ECG070/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 139,
+          "width": 781,
+          "height": 314,
+          "sha256": "35d6768a8f265c19d22665b57defa2700c2749cc5c170d960d9a11f74fed3610",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        },
+        {
+          "caseId": "ECG070",
+          "assetId": "ecg070_asset_02",
+          "runtimePath": "assets/ECG070/ecg_questao_extra_02.jpg",
+          "role": "questao_extra",
+          "type": "ecg",
+          "sourcePage": 139,
+          "width": 781,
+          "height": 377,
+          "sha256": "9cfa4e5ed4f711dc4061d4be5948b92ba74b0a20fed99707792c6f9afcae2377",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG070, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG070",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG070",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [],
+          "answer": {
+            "sourceDiagnosis": "Prolongamento do intervalo QT secundário à utilização de sotalol; taquicardia ventricular polimórfica do tipo torsade de pointes.",
+            "primaryConceptId": "ecg.channelopathy.long_qt",
+            "keyEvidence": []
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG070",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG070",
+          "tasks": [
+            {
+              "id": "ECG070_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.repolarization.nonspecific",
+                  "label": "Alterações inespecíficas de ST-T",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.normal.artifact",
+                  "label": "Artefato eletrocardiográfico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.channelopathy.long_qt",
+                  "label": "Síndrome/intervalo QT longo",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.metabolic.cns_t_wave",
+                  "label": "Alterações de onda T por evento neurológico",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.channelopathy.long_qt",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG070_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG071",
+        "stableAssetKey": "ecg_agora_071",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 71,
+          "internalQuestionPage": 141,
+          "internalAnswerPage": 142,
+          "diagnosisText": "Ondas T difusamente achatadas com ondas U proeminentes – classicamente causadas por hipopotassemia, mas, neste caso, foram relacionadas a um mixedema.",
+          "family": "Metabólico, fármacos e sistêmicas",
+          "subfamily": "Hipocalemia/hipopotassemia",
+          "tags": [
+            "eletrólitos/drogas"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG071",
+            "assetId": "ecg071_asset_01",
+            "runtimePath": "assets/ECG071/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 141,
+            "width": 781,
+            "height": 440,
+            "sha256": "efd9c4e4df4bea3e5be59a339ff8d6611b1b2f10cdf1930dcab7abf4fbead6ec",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG071, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg071_asset_01",
+        "clinicalContext": {
+          "age": 50,
+          "sex": "female",
+          "presentation": "Este ECG foi obtido, como parte de um exame de rotina, de uma mulher de 50 anos que disse estar assintomática.",
+          "vignetteRef": "original:cases.json#ECG071",
+          "clinicalDependency": {
+            "level": "required",
+            "reason": "Etiologia/conduta depende do contexto clínico."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Ondas T difusamente achatadas com ondas U proeminentes – classicamente causadas por hipopotassemia, mas, neste caso, foram relacionadas a um mixedema.",
+          "primaryConceptId": "ecg.metabolic.hypokalemia",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal de 45 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Eixo normal do QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS normal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas T difusamente achatadas e invertidas",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas U proeminentes, especialmente de V2–V5",
+            "importance": 3,
+            "leads": [
+              "V2",
+              "V3",
+              "V4",
+              "V5"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "u_wave_prominent"
+        ],
+        "conceptIds": [
+          "ecg.metabolic.hypokalemia",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.metabolic.hypokalemia",
+        "moduleId": "m08_metabolico_pericardio",
+        "difficulty": {
+          "overall": 2,
+          "reason": "padrão relativamente direto segundo a anotação do caso-fonte"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo sinusal de 45 bpm",
+            "Eixo normal do QRS",
+            "Complexo QRS normal",
+            "Ondas T difusamente achatadas e invertidas"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.metabolic.hypokalemia"
+          ],
+          "conceptIds": [
+            "ecg.metabolic.hypokalemia",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "u_wave_prominent"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal de 45 bpm",
+            "Eixo normal do QRS",
+            "Complexo QRS normal"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.metabolic.hypokalemia"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.8
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG071, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG071",
+        "sourceDiagnosis": "Ondas T difusamente achatadas com ondas U proeminentes – classicamente causadas por hipopotassemia, mas, neste caso, foram relacionadas a um mixedema.",
+        "sourceConceptIds": [
+          "ecg.metabolic.hypokalemia",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg071_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG071",
+          "assetId": "ecg071_asset_01",
+          "runtimePath": "assets/ECG071/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 141,
+          "width": 781,
+          "height": 440,
+          "sha256": "efd9c4e4df4bea3e5be59a339ff8d6611b1b2f10cdf1930dcab7abf4fbead6ec",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG071, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG071",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG071",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Ondas T difusamente achatadas com ondas U proeminentes – classicamente causadas por hipopotassemia, mas, neste caso, foram relacionadas a um mixedema.",
+            "primaryConceptId": "ecg.metabolic.hypokalemia",
+            "keyEvidence": [
+              "Ritmo sinusal de 45 bpm",
+              "Eixo normal do QRS",
+              "Complexo QRS normal",
+              "Ondas T difusamente achatadas e invertidas"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG071",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG071",
+          "tasks": [
+            {
+              "id": "ECG071_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.metabolic.hyperkalemia",
+                  "label": "Hipercalemia",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.metabolic.hypokalemia",
+                  "label": "Hipocalemia",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.metabolic.cns_t_wave",
+                  "label": "Alterações de onda T por evento neurológico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.metabolic.lithium",
+                  "label": "Efeito do lítio",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.metabolic.hypokalemia",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG071_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal de 45 bpm",
+                "Eixo normal do QRS",
+                "Complexo QRS normal",
+                "Ondas T difusamente achatadas e invertidas"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG072",
+        "stableAssetKey": "ecg_agora_072",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 72,
+          "internalQuestionPage": 143,
+          "internalAnswerPage": 144,
+          "diagnosisText": "Bloqueio AV de primeiro grau.",
+          "family": "Bloqueios e distúrbios de condução",
+          "subfamily": "Bloqueio AV de 1º grau",
+          "tags": [
+            "bloqueio AV"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG072",
+            "assetId": "ecg072_asset_01",
+            "runtimePath": "assets/ECG072/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 143,
+            "width": 781,
+            "height": 440,
+            "sha256": "3acb894e803d5b0e05ca3faf7839de7690b04d477d71bf5ab086bd2646601afd",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG072, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg072_asset_01",
+        "clinicalContext": {
+          "age": 45,
+          "sex": "male",
+          "presentation": "Este ECG, normal, foi obtido de um homem de 45 anos assintomático em um exame médico de rastreamento.",
+          "vignetteRef": "original:cases.json#ECG072",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Bloqueio AV de primeiro grau.",
+          "primaryConceptId": "ecg.conduction.avb1",
+          "secondaryConceptIds": [],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal de 64 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Intervalo PR prolongado (360 ms)",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS, segmento ST e onda T normais",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "prolonged_pr"
+        ],
+        "conceptIds": [
+          "ecg.conduction.avb1",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.conduction.avb1",
+        "moduleId": "m03_conducao",
+        "difficulty": {
+          "overall": 2,
+          "reason": "padrão relativamente direto segundo a anotação do caso-fonte"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo sinusal de 64 bpm",
+            "Intervalo PR prolongado (360 ms)",
+            "Complexo QRS, segmento ST e onda T normais"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": false
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": true,
+            "expectedSeconds": 10
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": false,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.conduction.avb1"
+          ],
+          "conceptIds": [
+            "ecg.conduction.avb1",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "prolonged_pr"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal de 64 bpm",
+            "Intervalo PR prolongado (360 ms)",
+            "Complexo QRS, segmento ST e onda T normais"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.conduction.avb1"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 1,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.4,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG072, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG072",
+        "sourceDiagnosis": "Bloqueio AV de primeiro grau.",
+        "sourceConceptIds": [
+          "ecg.conduction.avb1",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg072_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG072",
+          "assetId": "ecg072_asset_01",
+          "runtimePath": "assets/ECG072/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 143,
+          "width": 781,
+          "height": 440,
+          "sha256": "3acb894e803d5b0e05ca3faf7839de7690b04d477d71bf5ab086bd2646601afd",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG072, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG072",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG072",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Bloqueio AV de primeiro grau.",
+            "primaryConceptId": "ecg.conduction.avb1",
+            "keyEvidence": [
+              "Ritmo sinusal de 64 bpm",
+              "Intervalo PR prolongado (360 ms)",
+              "Complexo QRS, segmento ST e onda T normais"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG072",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG072",
+          "tasks": [
+            {
+              "id": "ECG072_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.conduction.avb1",
+                  "label": "Bloqueio AV de primeiro grau",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_2to1",
+                  "label": "Bloqueio AV 2:1",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_wenckebach",
+                  "label": "Bloqueio AV de segundo grau Mobitz I/Wenckebach",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_mobitz2",
+                  "label": "Bloqueio AV de segundo grau Mobitz II",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.conduction.avb1",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG072_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal de 64 bpm",
+                "Intervalo PR prolongado (360 ms)",
+                "Complexo QRS, segmento ST e onda T normais"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG073",
+        "stableAssetKey": "ecg_agora_073",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 73,
+          "internalQuestionPage": 145,
+          "internalAnswerPage": 146,
+          "diagnosisText": "Bloqueio AV (2:1) de segundo grau e bloqueio trifascicular.",
+          "family": "Bloqueios e distúrbios de condução",
+          "subfamily": "Bloqueio AV de 2º grau",
+          "tags": [
+            "BRD/BRE/fascicular",
+            "bloqueio AV"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG073",
+            "assetId": "ecg073_asset_01",
+            "runtimePath": "assets/ECG073/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 145,
+            "width": 781,
+            "height": 440,
+            "sha256": "c86f9b871a60f49c165a58447ca16bcb2d5e4b099677e025f6435438fa9ad25c",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG073, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg073_asset_01",
+        "clinicalContext": {
+          "age": 80,
+          "sex": "male",
+          "presentation": "Um homem de 80 anos é encontrado em seu exame de rotina tendo uma frequência cardíaca baixa e um sopro sistólico intenso.",
+          "vignetteRef": "original:cases.json#ECG073",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Bloqueio AV (2:1) de segundo grau e bloqueio trifascicular.",
+          "primaryConceptId": "ecg.conduction.avb2_2to1",
+          "secondaryConceptIds": [
+            "ecg.conduction.trifascicular"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Ritmo sinusal, frequência da onda P de 75 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Bloqueio AV (2:1) de segundo grau",
+            "importance": 5,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Desvio do eixo para a esquerda",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Duração do complexo QRS de 140 ms, com um padrão RSR1 em V1, indicando bloqueio do ramo direito (BRD)",
+            "importance": 5,
+            "leads": [
+              "V1"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "rhythm_sinus",
+          "right_bundle_pattern",
+          "left_axis_deviation"
+        ],
+        "conceptIds": [
+          "ecg.conduction.trifascicular",
+          "ecg.conduction.avb2_2to1",
+          "ecg.rhythm.sinus"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.conduction.avb2_2to1",
+        "moduleId": "m03_conducao",
+        "difficulty": {
+          "overall": 3,
+          "reason": "combina múltiplos achados/diagnósticos; padrão de alto impacto clínico"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Ritmo sinusal, frequência da onda P de 75 bpm",
+            "Bloqueio AV (2:1) de segundo grau",
+            "Desvio do eixo para a esquerda",
+            "Duração do complexo QRS de 140 ms, com um padrão RSR1 em V1, indicando bloqueio do ramo direito (BRD)"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.conduction.avb2_2to1"
+          ],
+          "conceptIds": [
+            "ecg.conduction.trifascicular",
+            "ecg.conduction.avb2_2to1",
+            "ecg.rhythm.sinus"
+          ],
+          "visualTags": [
+            "rhythm_sinus",
+            "right_bundle_pattern",
+            "left_axis_deviation"
+          ],
+          "requiredFindings": [
+            "Ritmo sinusal, frequência da onda P de 75 bpm",
+            "Bloqueio AV (2:1) de segundo grau",
+            "Desvio do eixo para a esquerda"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.conduction.avb2_2to1"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.conduction.trifascicular",
+              "ecg.rhythm.sinus"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 5,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG073, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG073",
+        "sourceDiagnosis": "Bloqueio AV (2:1) de segundo grau e bloqueio trifascicular.",
+        "sourceConceptIds": [
+          "ecg.conduction.trifascicular",
+          "ecg.conduction.avb2_2to1",
+          "ecg.rhythm.sinus"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg073_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG073",
+          "assetId": "ecg073_asset_01",
+          "runtimePath": "assets/ECG073/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 145,
+          "width": 781,
+          "height": 440,
+          "sha256": "c86f9b871a60f49c165a58447ca16bcb2d5e4b099677e025f6435438fa9ad25c",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG073, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG073",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG073",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Bloqueio AV (2:1) de segundo grau e bloqueio trifascicular.",
+            "primaryConceptId": "ecg.conduction.avb2_2to1",
+            "keyEvidence": [
+              "Ritmo sinusal, frequência da onda P de 75 bpm",
+              "Bloqueio AV (2:1) de segundo grau",
+              "Desvio do eixo para a esquerda",
+              "Duração do complexo QRS de 140 ms, com um padrão RSR1 em V1, indicando bloqueio do ramo direito (BRD)"
+            ]
+          },
+          "recommendedNextCases": [
+            "ECG034"
+          ],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG073",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG073",
+          "tasks": [
+            {
+              "id": "ECG073_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.conduction.avb1",
+                  "label": "Bloqueio AV de primeiro grau",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_wenckebach",
+                  "label": "Bloqueio AV de segundo grau Mobitz I/Wenckebach",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_mobitz2",
+                  "label": "Bloqueio AV de segundo grau Mobitz II",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.conduction.avb2_2to1",
+                  "label": "Bloqueio AV 2:1",
+                  "isCorrect": true
+                }
+              ],
+              "answerConceptId": "ecg.conduction.avb2_2to1",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG073_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Ritmo sinusal, frequência da onda P de 75 bpm",
+                "Bloqueio AV (2:1) de segundo grau",
+                "Desvio do eixo para a esquerda",
+                "Duração do complexo QRS de 140 ms, com um padrão RSR1 em V1, indicando bloqueio do ramo direito (BRD)"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG074",
+        "stableAssetKey": "ecg_agora_074",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 74,
+          "internalQuestionPage": 147,
+          "internalAnswerPage": 148,
+          "diagnosisText": "Fibrilação atrial e isquemia anterior.",
+          "family": "Síndromes coronarianas, isquemia e infarto",
+          "subfamily": "Infarto antigo, isquemia ou angina",
+          "tags": [
+            "FA",
+            "isquemia/angina"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG074",
+            "assetId": "ecg074_asset_01",
+            "runtimePath": "assets/ECG074/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 147,
+            "width": 781,
+            "height": 440,
+            "sha256": "c60f2da53bd0a2a7ad79a8368605934cb65f439b9908a23a4746297c4ab2e0e7",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG074, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg074_asset_01",
+        "clinicalContext": {
+          "age": 70,
+          "sex": "female",
+          "presentation": "Uma mulher de 70 anos que estava com falta de ar por vários meses foi admitida no hospital com dor no peito, e este é seu ECG.",
+          "vignetteRef": "original:cases.json#ECG074",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Fibrilação atrial e isquemia anterior.",
+          "primaryConceptId": "ecg.arrhythmia.af",
+          "secondaryConceptIds": [
+            "ecg.ischemia.old_infarct",
+            "ecg.ischemia.ischemia",
+            "ecg.repolarization.t_inversion"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Fibrilação atrial com uma extrassístole ventricular",
+            "importance": 5,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Resposta ventricular próxima de 110 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Eixo normal do QRS",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexo QRS normal",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Depressão horizontal do segmento ST de 7 mm em V2",
+            "importance": 3,
+            "leads": [
+              "V2"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Depressão descendente do segmento ST de V3–V6",
+            "importance": 3,
+            "leads": [
+              "V3",
+              "V4",
+              "V5",
+              "V6"
+            ],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Ondas T invertidas em DI, aVL e V6; ondas T inespecíficas nas outras derivações",
+            "importance": 3,
+            "leads": [
+              "V6",
+              "aVL",
+              "I"
+            ],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "atrial_fibrillation",
+          "premature_ventricular_complex",
+          "t_wave_inversion",
+          "q_waves_pathologic",
+          "irregular_rhythm"
+        ],
+        "conceptIds": [
+          "ecg.arrhythmia.af",
+          "ecg.ischemia.old_infarct",
+          "ecg.ischemia.ischemia",
+          "ecg.repolarization.t_inversion"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.arrhythmia.af",
+        "moduleId": "m02_arritmias_supraventriculares",
+        "difficulty": {
+          "overall": 4,
+          "reason": "combina múltiplos achados/diagnósticos"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Fibrilação atrial com uma extrassístole ventricular",
+            "Resposta ventricular próxima de 110 bpm",
+            "Eixo normal do QRS",
+            "Complexo QRS normal"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.arrhythmia.af"
+          ],
+          "conceptIds": [
+            "ecg.arrhythmia.af",
+            "ecg.ischemia.old_infarct",
+            "ecg.ischemia.ischemia",
+            "ecg.repolarization.t_inversion"
+          ],
+          "visualTags": [
+            "atrial_fibrillation",
+            "premature_ventricular_complex",
+            "t_wave_inversion",
+            "q_waves_pathologic",
+            "irregular_rhythm"
+          ],
+          "requiredFindings": [
+            "Fibrilação atrial com uma extrassístole ventricular",
+            "Resposta ventricular próxima de 110 bpm",
+            "Eixo normal do QRS"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.arrhythmia.af"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.ischemia.old_infarct",
+              "ecg.ischemia.ischemia",
+              "ecg.repolarization.t_inversion"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG074, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG074",
+        "sourceDiagnosis": "Fibrilação atrial e isquemia anterior.",
+        "sourceConceptIds": [
+          "ecg.arrhythmia.af",
+          "ecg.ischemia.old_infarct",
+          "ecg.ischemia.ischemia",
+          "ecg.repolarization.t_inversion"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg074_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG074",
+          "assetId": "ecg074_asset_01",
+          "runtimePath": "assets/ECG074/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 147,
+          "width": 781,
+          "height": 440,
+          "sha256": "c60f2da53bd0a2a7ad79a8368605934cb65f439b9908a23a4746297c4ab2e0e7",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG074, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG074",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG074",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Fibrilação atrial e isquemia anterior.",
+            "primaryConceptId": "ecg.arrhythmia.af",
+            "keyEvidence": [
+              "Fibrilação atrial com uma extrassístole ventricular",
+              "Resposta ventricular próxima de 110 bpm",
+              "Eixo normal do QRS",
+              "Complexo QRS normal"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG074",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG074",
+          "tasks": [
+            {
+              "id": "ECG074_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.arrhythmia.vf",
+                  "label": "Fibrilação ventricular",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.flutter",
+                  "label": "Flutter atrial",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.af",
+                  "label": "Fibrilação atrial",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.arrhythmia.pvc",
+                  "label": "Extrassístole ventricular",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.arrhythmia.af",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG074_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Fibrilação atrial com uma extrassístole ventricular",
+                "Resposta ventricular próxima de 110 bpm",
+                "Eixo normal do QRS",
+                "Complexo QRS normal"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "schemaVersion": 3,
+        "id": "ECG075",
+        "stableAssetKey": "ecg_agora_075",
+        "contentOrigin": {
+          "type": "proprietary_site_material",
+          "rightsHolder": "Ágora do Saber",
+          "collection": "Casos ECG do Ágora do Saber",
+          "externalBookSource": false,
+          "rightsRecord": "data/content_rights.json"
+        },
+        "sourceAnnotation": {
+          "caseNumber": 75,
+          "internalQuestionPage": 149,
+          "internalAnswerPage": 150,
+          "diagnosisText": "Marca-passo ventricular e ritmo de fibrilação atrial.",
+          "family": "Arritmias supraventriculares",
+          "subfamily": "Fibrilação atrial",
+          "tags": [
+            "FA"
+          ],
+          "status": "author_source_annotation",
+          "isIndependentImageValidation": false
+        },
+        "medicalValidation": {
+          "status": "pending_independent_review",
+          "independentImageReviewCompleted": false,
+          "validatedDiagnosis": null,
+          "validatedPrimaryConceptId": null,
+          "reviewPriority": "standard",
+          "legacyContentReviewFlag": false,
+          "reviewer": null,
+          "reviewedAt": null,
+          "notes": null
+        },
+        "runtimeActivation": {
+          "metadataImportEligible": true,
+          "diagnosisTrainingEnabled": false,
+          "microtasksEnabled": false,
+          "questionImageMatchingEnabled": false,
+          "spacedReviewEnabled": false,
+          "activationRequires": [
+            "independent_medical_validation"
+          ],
+          "additionalRequirements": []
+        },
+        "assets": [
+          {
+            "caseId": "ECG075",
+            "assetId": "ecg075_asset_01",
+            "runtimePath": "assets/ECG075/ecg_principal.jpg",
+            "role": "principal",
+            "type": "ecg",
+            "sourcePage": 149,
+            "width": 781,
+            "height": 440,
+            "sha256": "8ecedcebbd8fb106e275184c03869376605422971a57b6407f7569ab5aeb9ed5",
+            "preAnswerAlt": "Eletrocardiograma do caso ECG075, apresentado sem interpretação para exercício.",
+            "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+            "runtimeEligible": true,
+            "answerLeakRisk": "none_detected_by_source_role_and_filename"
+          }
+        ],
+        "primaryAssetId": "ecg075_asset_01",
+        "clinicalContext": {
+          "age": null,
+          "sex": null,
+          "presentation": "Uma mulher idosa foi admitida no hospital inconsciente e era evidente que havia sofrido um derrame.",
+          "vignetteRef": "original:cases.json#ECG075",
+          "clinicalDependency": {
+            "level": "helpful",
+            "reason": "Contexto auxilia integração clínica, mas o padrão principal pode ser estudado pelo traçado."
+          }
+        },
+        "sourceDerivedDiagnosis": {
+          "sourceLabel": "Marca-passo ventricular e ritmo de fibrilação atrial.",
+          "primaryConceptId": "ecg.pacing.ventricular",
+          "secondaryConceptIds": [
+            "ecg.arrhythmia.af",
+            "ecg.repolarization.t_inversion"
+          ],
+          "confidence": "source_annotated",
+          "independentlyReinterpretedFromImage": false,
+          "requiresHumanReview": false
+        },
+        "sourceDerivedKeyFindings": [
+          {
+            "finding": "Não se identificam ondas P; a linha de base irregular sugere fibrilação atrial",
+            "importance": 5,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexos QRS regulares; frequência de 73 bpm",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Desvio do eixo para a esquerda",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Complexos QRS largos com padrão indeterminado, com ondas T invertidas em algumas derivações",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          },
+          {
+            "finding": "Cada complexo QRS está precedido por uma espícula estreita e profunda",
+            "importance": 3,
+            "leads": [],
+            "confidence": "source_annotated"
+          }
+        ],
+        "visualTags": [
+          "atrial_fibrillation",
+          "wide_qrs",
+          "left_axis_deviation",
+          "t_wave_inversion",
+          "irregular_rhythm",
+          "paced_qrs"
+        ],
+        "conceptIds": [
+          "ecg.arrhythmia.af",
+          "ecg.pacing.ventricular",
+          "ecg.repolarization.t_inversion"
+        ],
+        "primaryConceptIdSourceDerived": "ecg.pacing.ventricular",
+        "moduleId": "m09_integracao",
+        "difficulty": {
+          "overall": 3,
+          "reason": "combina múltiplos achados/diagnósticos"
+        },
+        "pedagogy": {
+          "prerequisiteConceptIds": [
+            "ecg.rhythm.sinus"
+          ],
+          "teachingPointRefs": [
+            "Não se identificam ondas P; a linha de base irregular sugere fibrilação atrial",
+            "Complexos QRS regulares; frequência de 73 bpm",
+            "Desvio do eixo para a esquerda",
+            "Complexos QRS largos com padrão indeterminado, com ondas T invertidas em algumas derivações"
+          ],
+          "commonPitfalls": [],
+          "comparisonEligible": true
+        },
+        "trainingProfile": {
+          "rapidRecognition": {
+            "eligible": false,
+            "expectedSeconds": null
+          },
+          "systematicInterpretation": true,
+          "differentialTraining": true,
+          "clinicalIntegration": true,
+          "imageUse": "image_required"
+        },
+        "questionMatchingCandidate": {
+          "diagnosisConceptIds": [
+            "ecg.pacing.ventricular"
+          ],
+          "conceptIds": [
+            "ecg.arrhythmia.af",
+            "ecg.pacing.ventricular",
+            "ecg.repolarization.t_inversion"
+          ],
+          "visualTags": [
+            "atrial_fibrillation",
+            "wide_qrs",
+            "left_axis_deviation",
+            "t_wave_inversion",
+            "irregular_rhythm",
+            "paced_qrs"
+          ],
+          "requiredFindings": [
+            "Não se identificam ondas P; a linha de base irregular sugere fibrilação atrial",
+            "Complexos QRS regulares; frequência de 73 bpm",
+            "Desvio do eixo para a esquerda"
+          ],
+          "suitableQuestionRoles": [
+            "diagnosis",
+            "finding",
+            "differential",
+            "clinical_integration"
+          ],
+          "matchingConstraints": {
+            "mustHaveConceptIds": [
+              "ecg.pacing.ventricular"
+            ],
+            "mustNotHaveConceptIds": [],
+            "allowedSecondaryConceptIds": [
+              "ecg.arrhythmia.af",
+              "ecg.repolarization.t_inversion"
+            ]
+          },
+          "managementUse": {
+            "enabled": false,
+            "reason": "Condutas do material-base não foram revisadas contra diretrizes atuais.",
+            "requiresCurrentGuidelineReview": true
+          }
+        },
+        "reviewCandidate": {
+          "reviewEligible": true,
+          "importance": 4,
+          "recommendedVariationStrategy": "rotate_within_cluster"
+        },
+        "masteryDimensionsCandidate": {
+          "recognition": 0.8,
+          "systematicInterpretation": 0.9,
+          "differentialDiagnosis": 0.8,
+          "clinicalIntegration": 0.5
+        },
+        "quality": {
+          "metadataConfidence": "medium",
+          "legacyRequiresHumanReview": false,
+          "legacyReviewReasons": [],
+          "medicalGroundTruthConfirmed": false,
+          "provenance": "Estrutura derivada do material autoral e de seus textos; diagnóstico/achados aguardam validação independente do traçado."
+        },
+        "accessibility": {
+          "preAnswerAlt": "Eletrocardiograma do caso ECG075, apresentado sem interpretação para exercício.",
+          "answerSafeDescriptionAvailable": false
+        },
+        "stagingTransform": {
+          "excludedNonEcgFindingCount": 0,
+          "excludedNonEcgFindings": []
+        }
+      },
+      "adminCatalog": {
+        "id": "ECG075",
+        "sourceDiagnosis": "Marca-passo ventricular e ritmo de fibrilação atrial.",
+        "sourceConceptIds": [
+          "ecg.arrhythmia.af",
+          "ecg.pacing.ventricular",
+          "ecg.repolarization.t_inversion"
+        ],
+        "medicalValidationStatus": "pending_independent_review",
+        "reviewPriority": "standard",
+        "legacyContentReviewFlag": false,
+        "primaryAssetId": "ecg075_asset_01"
+      },
+      "assets": [
+        {
+          "caseId": "ECG075",
+          "assetId": "ecg075_asset_01",
+          "runtimePath": "assets/ECG075/ecg_principal.jpg",
+          "role": "principal",
+          "type": "ecg",
+          "sourcePage": 149,
+          "width": 781,
+          "height": 440,
+          "sha256": "8ecedcebbd8fb106e275184c03869376605422971a57b6407f7569ab5aeb9ed5",
+          "preAnswerAlt": "Eletrocardiograma do caso ECG075, apresentado sem interpretação para exercício.",
+          "accessibilityNote": "Texto alternativo neutro para não revelar o diagnóstico antes da resposta.",
+          "runtimeEligible": true,
+          "answerLeakRisk": "none_detected_by_source_role_and_filename"
+        }
+      ],
+      "trainingCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG075",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG075",
+          "primaryTask": {
+            "type": "diagnosis",
+            "prompt": "Qual é o principal diagnóstico eletrocardiográfico deste traçado?"
+          },
+          "systematicChecklist": {
+            "rate": "relevant",
+            "rhythm": "relevant",
+            "axis": "relevant",
+            "intervals": "relevant",
+            "pWave": "relevant",
+            "qrs": "relevant",
+            "stT": "relevant"
+          },
+          "hints": [
+            {
+              "level": 1,
+              "text": "Faça primeiro uma leitura sistemática: ritmo, frequência, eixo, intervalos, QRS e ST-T."
+            },
+            {
+              "level": 2,
+              "text": "Concentre-se no achado-chave descrito no material-fonte."
+            }
+          ],
+          "answer": {
+            "sourceDiagnosis": "Marca-passo ventricular e ritmo de fibrilação atrial.",
+            "primaryConceptId": "ecg.pacing.ventricular",
+            "keyEvidence": [
+              "Não se identificam ondas P; a linha de base irregular sugere fibrilação atrial",
+              "Complexos QRS regulares; frequência de 73 bpm",
+              "Desvio do eixo para a esquerda",
+              "Complexos QRS largos com padrão indeterminado, com ondas T invertidas em algumas derivações"
+            ]
+          },
+          "recommendedNextCases": [],
+          "compareWithCases": []
+        }
+      },
+      "microtaskCandidate": {
+        "schemaVersion": 3,
+        "caseId": "ECG075",
+        "enabled": false,
+        "status": "candidate_pending_independent_medical_validation",
+        "activationRequires": [
+          "independent_medical_validation"
+        ],
+        "candidate": {
+          "schemaVersion": 1,
+          "caseId": "ECG075",
+          "tasks": [
+            {
+              "id": "ECG075_diagnosis",
+              "type": "multiple_choice",
+              "prompt": "Qual é o principal diagnóstico eletrocardiográfico?",
+              "options": [
+                {
+                  "conceptId": "ecg.normal.artifact",
+                  "label": "Artefato eletrocardiográfico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.pacing.ventricular",
+                  "label": "Marca-passo ventricular",
+                  "isCorrect": true
+                },
+                {
+                  "conceptId": "ecg.metabolic.cns_t_wave",
+                  "label": "Alterações de onda T por evento neurológico",
+                  "isCorrect": false
+                },
+                {
+                  "conceptId": "ecg.repolarization.nonspecific",
+                  "label": "Alterações inespecíficas de ST-T",
+                  "isCorrect": false
+                }
+              ],
+              "answerConceptId": "ecg.pacing.ventricular",
+              "requiresImage": true
+            },
+            {
+              "id": "ECG075_evidence",
+              "type": "self_reveal",
+              "prompt": "Quais achados do traçado sustentam o diagnóstico?",
+              "answer": [
+                "Não se identificam ondas P; a linha de base irregular sugere fibrilação atrial",
+                "Complexos QRS regulares; frequência de 73 bpm",
+                "Desvio do eixo para a esquerda",
+                "Complexos QRS largos com padrão indeterminado, com ondas T invertidas em algumas derivações"
+              ],
+              "requiresImage": true
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

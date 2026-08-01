@@ -1,544 +1,446 @@
 import { useMemo } from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import {
+  buildDailyEffortSchedule,
+  buildEffortBalancedSchedule,
+  calculateScheduleEffort,
+  interleaveLongitudinalScheduleLessons,
+  interleaveScheduleSubjectBatches,
+  resolveScheduleWeeksCount,
+  resolveScheduleSubjectOrder,
+} from '../../services/courseSchedule.js';
 
-const stageMeta = (stage) => {
-  if (stage === 'direct-odd') return { type:'direct', parity:'odd' };
-  if (stage === 'direct-even') return { type:'direct', parity:'even' };
-  if (stage === 'clinical-odd') return { type:'clinical', parity:'odd' };
-  if (stage === 'clinical-even') return { type:'clinical', parity:'even' };
-  return null;
+const scheduleDateKey = date => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-');
+
+const lessonSearchText = (lesson, normalizeTextKey) => normalizeTextKey([
+  lesson.subject,
+  lesson.topic,
+  lesson.topicTitle,
+  lesson.title,
+  lesson.aula?.ai_catalog?.description,
+].filter(Boolean).join(' '));
+
+const patternRank = (text, rules, fallback = rules.length) => {
+  const hit = rules.findIndex(pattern => pattern.test(text));
+  return hit >= 0 ? hit : fallback;
 };
 
-const stageKey = (type, parity, suffix) => `${type}${parity === 'odd' ? 'Odd' : 'Even'}${suffix}`;
-
-const cycleReviewOffsetsForLessonCount = (totalLessons = 0) => {
-  if (totalLessons <= 10) return { directEven:1, clinicalOdd:3, clinicalEven:6 };
-  if (totalLessons <= 20) return { directEven:1, clinicalOdd:4, clinicalEven:9 };
-  if (totalLessons <= 40) return { directEven:2, clinicalOdd:7, clinicalEven:15 };
-  if (totalLessons <= 70) return { directEven:3, clinicalOdd:10, clinicalEven:24 };
-  return { directEven:4, clinicalOdd:14, clinicalEven:32 };
-};
-
+// O nome do hook foi preservado para compatibilidade com as telas lazy. Desde a
+// unificação de 2026, ele representa a jornada do cronograma, não um ciclo
+// paralelo de pares/ímpares.
 export const useCourseHeroJourney = ({ enabled = true } = {}) => {
   const {
     appliedVideoaulasData,
     aulaDocId,
-    aulaHasVqData,
     aulaVqKey,
-    capitalizeDisplayLabel,
-    cleanAulaTitle,
-    coursePrefsLoaded,
-    courseCycleSubjectBatchSize,
+    COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
+    COURSE_SCHEDULE_DEFAULT_WEEKS,
+    COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE,
+    COURSE_SCHEDULE_MIX_PRESETS,
     coursePlanSubjects,
-    coursePlanLocked,
+    coursePrefsLoaded,
+    courseScheduleCadence,
+    courseScheduleDayCursor,
+    courseScheduleEffortHours,
+    courseScheduleEndDate,
+    courseScheduleGoalMode,
+    courseScheduleMixPreset,
+    courseScheduleSubjectBatchSize,
+    courseScheduleStudyDays,
+    courseScheduleWeeks,
+    cronStartDate,
+    curWeek,
     effectiveCoursePlanLessonOrder,
     flattenCourseLessons,
     getAulaId,
-    getDueReviews,
-    looksLikeClinicalVignette,
     normalizeTextKey,
-    openSpacedReview,
-    saveCourseCycleReview,
-    saveCoursePlanPrefs,
     setActiveAulaAndReset,
     setActiveSubjectVid,
     setActiveSubtopicVid,
     setView,
-    setVqActiveBlock,
-    setVqActiveBlockView,
-    setVqAula,
-    setVqGenModal,
-    setVqQuestionParity,
-    setVqSubject,
-    setVqTopic,
     sortCourseSubjectsForDisplay,
-    vqBlocks,
-    vqBlocksLoaded,
     watchedAulas,
   } = useFeatureContext();
 
-  const model = useMemo(() => {
+  return useMemo(() => {
     const empty = {
-      activeSubjectSummaries:[],
       courseLessons:[],
-      dueCourseItems:[],
+      currentWeekData:null,
+      backlogLessons:[],
+      currentWeekRemaining:[],
+      dailyScheduleActive:false,
       heroJourneyStep:null,
       isReady:false,
-      normalizedSubjects:[],
-      progress:{ total:0, completed:0, primary:0, watched:0, pct:0 },
-      subjectSummaries:[],
-      unlockedSubjectLimit:0,
+      lessonsPerWeekLabel:'0',
+      lessonsPerDayLabel:'0',
+      mixedScheduleActive:false,
+      nearbyWeeks:[],
+      nextScheduleLesson:null,
+      orderedLessons:[],
+      orderedSubjects:[],
+      progress:{ completed:0, pct:0, total:0 },
+      nextLessonStatus:'none',
+      nextLessonWeek:null,
+      plannedWeeklySeconds:0,
+      plannedDailySeconds:0,
+      scheduleCurrentDay:null,
+      scheduleDays:[],
+      scheduleCurrentWeek:1,
+      scheduleEndDate:null,
+      scheduleHasStarted:false,
+      scheduleWeeks:[],
+      selectedWeek:1,
+      selectedWeekData:null,
+      selectedDayData:null,
+      subjectBatchSize:1,
+      totalEffortSeconds:0,
+      weeksCount:1,
     };
-    if (!enabled || !appliedVideoaulasData || !coursePrefsLoaded || !vqBlocksLoaded) return empty;
+    if (!enabled || !appliedVideoaulasData || !coursePrefsLoaded) return empty;
 
     const courseLessons = flattenCourseLessons(appliedVideoaulasData || {});
     if (!courseLessons.length) return { ...empty, isReady:true };
-
-    const subjects = sortCourseSubjectsForDisplay([...new Set(courseLessons.map(lesson => lesson.subject))]);
-    const subjectByKey = new Map(subjects.map(subject => [normalizeTextKey(subject), subject]));
-    const savedSubjects = coursePlanSubjects.map(subject => subjectByKey.get(normalizeTextKey(subject))).filter(Boolean);
-    const normalizedSubjects = [...savedSubjects, ...subjects.filter(subject => !savedSubjects.includes(subject))];
+    const courseSubjects = sortCourseSubjectsForDisplay([...new Set(courseLessons.map(lesson => lesson.subject))]);
+    const subjectByKey = new Map(courseSubjects.map(subject => [normalizeTextKey(subject), subject]));
+    const savedSubjects = (coursePlanSubjects || [])
+      .map(subject => subjectByKey.get(normalizeTextKey(subject)))
+      .filter(Boolean);
+    const orderedSubjects = resolveScheduleSubjectOrder({
+      availableSubjects:courseSubjects,
+      preferredSubjects:savedSubjects,
+    });
     const lessonOrderIndex = new Map((effectiveCoursePlanLessonOrder || []).map((id, index) => [String(id), index]));
-
-    const lessonWatched = (lesson) => [
+    const lessonRank = lesson => {
+      if (Number.isFinite(Number(lesson.aula?.display_plan_order))) {
+        return { bucket:0, order:Number(lesson.aula.display_plan_order), fallback:Number(lesson.courseIndex) || 0 };
+      }
+      const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
+      const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
+      if (Number.isFinite(hit)) return { bucket:0, order:hit, fallback:Number(lesson.courseIndex) || 0 };
+      return { bucket:1, order:Number(lesson.courseIndex) || 0, fallback:0 };
+    };
+    const compareLessonOrder = (left, right) => {
+      const leftRank = lessonRank(left);
+      const rightRank = lessonRank(right);
+      return leftRank.bucket - rightRank.bucket
+        || leftRank.order - rightRank.order
+        || leftRank.fallback - rightRank.fallback
+        || left.title.localeCompare(right.title, 'pt-BR');
+    };
+    const lessonWatched = lesson => [
       lesson.id,
       lesson.docId,
       getAulaId(lesson.aula),
       aulaDocId(lesson.aula),
       aulaVqKey(lesson.aula),
     ].filter(Boolean).some(id => !!watchedAulas[id]);
-
-    const blockEntriesForLesson = (lesson) => {
-      const data = vqBlocks[aulaDocId(lesson.aula)] || vqBlocks[aulaVqKey(lesson.aula)];
-      const rawBlocks = data?.blocks || {};
-      const entries = Array.isArray(rawBlocks)
-        ? rawBlocks.map((block, index) => [`block${index + 1}`, block])
-        : Object.entries(rawBlocks);
-      return entries.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-    };
-
-    const questionInfoForLesson = (lesson) => {
-      const blockEntries = blockEntriesForLesson(lesson);
-      const total = blockEntries.reduce((sum, [, block]) => sum + ((Array.isArray(block.questions) ? block.questions : []).length), 0);
-      const answered = blockEntries.reduce((sum, [, block]) => {
-        const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-        return sum + Object.keys(answers).length;
-      }, 0);
-      return { total, answered, blocks:blockEntries.length, blockEntries };
-    };
-
-    const isClinicalCourseQuestion = (question = {}) =>
-      question.libraryQuestionKind === 'clinical' || looksLikeClinicalVignette(question);
-
-    const journeyInfoForLesson = (lesson) => {
-      const stats = {
-        total:0,
-        answered:0,
-        directTotal:0,
-        clinicalTotal:0,
-        directOddTotal:0,
-        directOddAnswered:0,
-        directEvenTotal:0,
-        directEvenAnswered:0,
-        clinicalOddTotal:0,
-        clinicalOddAnswered:0,
-        clinicalEvenTotal:0,
-        clinicalEvenAnswered:0,
-      };
-      let directIndex = 0;
-      let clinicalIndex = 0;
-      blockEntriesForLesson(lesson).forEach(([, block]) => {
-        const questions = Array.isArray(block.questions) ? block.questions : [];
-        const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-        questions.forEach(question => {
-          const clinical = isClinicalCourseQuestion(question);
-          const type = clinical ? 'clinical' : 'direct';
-          const index = clinical ? ++clinicalIndex : ++directIndex;
-          const parity = index % 2 === 1 ? 'odd' : 'even';
-          const answered = Object.prototype.hasOwnProperty.call(answers, question.id);
-          stats.total += 1;
-          stats[`${type}Total`] += 1;
-          stats[stageKey(type, parity, 'Total')] += 1;
-          if (answered) {
-            stats.answered += 1;
-            stats[stageKey(type, parity, 'Answered')] += 1;
-          }
-        });
-      });
-      const done = (total, answered) => total > 0 && answered >= total;
-      const emptyOrDone = (total, answered) => total === 0 || answered >= total;
-      stats.directOddDone = done(stats.directOddTotal, stats.directOddAnswered);
-      stats.directEvenDone = emptyOrDone(stats.directEvenTotal, stats.directEvenAnswered);
-      stats.clinicalOddDone = emptyOrDone(stats.clinicalOddTotal, stats.clinicalOddAnswered);
-      stats.clinicalEvenDone = emptyOrDone(stats.clinicalEvenTotal, stats.clinicalEvenAnswered);
-      stats.primaryDone = lessonWatched(lesson) && stats.directOddDone;
-      stats.journeyDone = stats.primaryDone && stats.directEvenDone && stats.clinicalOddDone && stats.clinicalEvenDone;
-      return stats;
-    };
-
-    const firstQuestionBlockForLesson = (lesson, mode = 'pending') => {
-      const entries = questionInfoForLesson(lesson).blockEntries;
-      if (!entries.length) return null;
-      const stage = stageMeta(mode);
-      if (mode === 'clinical-review') {
-        let firstClinicalEntry = null;
-        for (const entry of entries) {
-          const [, block] = entry;
-          const questions = Array.isArray(block.questions) ? block.questions : [];
-          const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-          const hasClinical = questions.some(question => isClinicalCourseQuestion(question));
-          const hasPendingClinicalReview = questions.some(question =>
-            isClinicalCourseQuestion(question)
-            && !Object.prototype.hasOwnProperty.call(answers, `${question.id}__cycle_r10`)
-          );
-          if (hasClinical && !firstClinicalEntry) firstClinicalEntry = entry;
-          if (hasPendingClinicalReview) return entry;
-        }
-        return firstClinicalEntry;
-      }
-      if (mode === 'review') return entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
-      if (stage) {
-        let typeIndex = 0;
-        let firstStageEntry = null;
-        for (const entry of entries) {
-          const [, block] = entry;
-          const questions = Array.isArray(block.questions) ? block.questions : [];
-          const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-          let hasStageQuestion = false;
-          let hasPendingStageQuestion = false;
-          questions.forEach(question => {
-            const type = isClinicalCourseQuestion(question) ? 'clinical' : 'direct';
-            if (type !== stage.type) return;
-            const index = ++typeIndex;
-            const parity = index % 2 === 1 ? 'odd' : 'even';
-            if (parity === stage.parity) {
-              hasStageQuestion = true;
-              if (!Object.prototype.hasOwnProperty.call(answers, question.id)) hasPendingStageQuestion = true;
-            }
-          });
-          if (hasStageQuestion && !firstStageEntry) firstStageEntry = entry;
-          if (hasPendingStageQuestion) return entry;
-        }
-        return firstStageEntry;
-      }
-      return entries.find(([, block]) => {
-        const questions = Array.isArray(block.questions) ? block.questions : [];
-        const answers = block.answers && typeof block.answers === 'object' && !Array.isArray(block.answers) ? block.answers : {};
-        return questions.length > 0 && Object.keys(answers).length < questions.length;
-      }) || entries.find(([, block]) => (Array.isArray(block.questions) ? block.questions : []).length > 0) || null;
-    };
-
-    const planLessonRank = (lesson) => {
-      if (Number.isFinite(Number(lesson.aula?.display_plan_order))) return Number(lesson.aula.display_plan_order);
-      const ids = [lesson.docId, lesson.id, aulaDocId(lesson.aula), aulaVqKey(lesson.aula)].filter(Boolean).map(String);
-      const hit = ids.map(id => lessonOrderIndex.get(id)).find(index => Number.isFinite(index));
-      return Number.isFinite(hit) ? hit : Number.MAX_SAFE_INTEGER;
-    };
-
-    const lessonsBySubject = (subject) => courseLessons
-      .filter(lesson => lesson.subject === subject)
-      .sort((a, b) => {
-        const byPlan = planLessonRank(a) - planLessonRank(b);
-        if (byPlan) return byPlan;
-        return a.title.localeCompare(b.title, 'pt');
-      });
-
-    const topicsBySubject = (subject) => {
-      const map = {};
-      lessonsBySubject(subject).forEach(lesson => {
-        if (!map[lesson.topic]) map[lesson.topic] = [];
-        map[lesson.topic].push(lesson);
-      });
-      return map;
-    };
-
-    const subjectSummaries = normalizedSubjects.map(subject => {
-      const lessons = lessonsBySubject(subject);
-      const watched = lessons.filter(lessonWatched).length;
-      const completed = lessons.filter(lesson => journeyInfoForLesson(lesson).journeyDone).length;
-      const primaryCompleted = lessons.filter(lesson => journeyInfoForLesson(lesson).primaryDone).length;
-      const questionCount = lessons.reduce((acc, lesson) => acc + questionInfoForLesson(lesson).total, 0);
-      return {
-        subject,
-        lessons,
-        watched,
-        completed,
-        primaryCompleted,
-        total:lessons.length,
-        topics:Object.keys(topicsBySubject(subject)).length,
-        pct:lessons.length ? Math.round(completed / lessons.length * 100) : 0,
-        questions:questionCount,
-      };
-    });
-
-    const firstUnfinishedSubject = subjectSummaries.findIndex(item => item.total && item.completed < item.total);
-    const cycleSubjectBatchSize = Math.max(1, Math.min(subjectSummaries.length || 1, Number(courseCycleSubjectBatchSize) || 4));
-    const activeSubjectStartIndex = firstUnfinishedSubject >= 0 ? firstUnfinishedSubject : 0;
-    const unlockedSubjectLimit = firstUnfinishedSubject >= 0
-      ? Math.min(subjectSummaries.length, activeSubjectStartIndex + cycleSubjectBatchSize)
-      : Infinity;
-    const activeSubjectSummaries = firstUnfinishedSubject >= 0
-      ? subjectSummaries.slice(activeSubjectStartIndex, unlockedSubjectLimit)
-      : [];
-    const subjectSummaryBySubject = new Map(subjectSummaries.map(item => [item.subject, item]));
-    const interleavedCycleLessons = (() => {
-      const cycleSubjects = activeSubjectSummaries.length ? activeSubjectSummaries.map(item => item.subject) : normalizedSubjects;
-      const queues = cycleSubjects.map(subject => lessonsBySubject(subject)).filter(queue => queue.length);
-      const maxLessons = queues.reduce((highest, queue) => Math.max(highest, queue.length), 0);
-      const ordered = [];
-      for (let index = 0; index < maxLessons; index += 1) {
-        queues.forEach(queue => {
-          if (queue[index]) ordered.push(queue[index]);
-        });
-      }
-      return ordered;
-    })();
-    const courseCycleLessons = interleavedCycleLessons;
-    const lessonLocalIndex = new Map();
-    const primaryDonePrefixBySubject = new Map();
-    normalizedSubjects.forEach(subject => {
-      const lessons = lessonsBySubject(subject);
-      lessons.forEach((lesson, index) => lessonLocalIndex.set(lesson.id, index));
-      let donePrefix = 0;
-      for (const lesson of lessons) {
-        if (!journeyInfoForLesson(lesson).primaryDone) break;
-        donePrefix += 1;
-      }
-      primaryDonePrefixBySubject.set(subject, donePrefix);
-    });
-    const primaryCompleteThroughSubjectOffset = (lesson, offset) => {
-      const lessons = lessonsBySubject(lesson.subject);
-      if (!lessons.length) return false;
-      const localIndex = lessonLocalIndex.get(lesson.id) ?? lessons.findIndex(item => item.id === lesson.id);
-      if (localIndex < 0) return false;
-      const requiredIndex = Math.min(localIndex + offset, lessons.length - 1);
-      return (primaryDonePrefixBySubject.get(lesson.subject) || 0) > requiredIndex;
-    };
-    const subjectReviewOffsets = new Map(normalizedSubjects.map(subject => [
+    const lessonsBySubject = new Map(orderedSubjects.map(subject => [
       subject,
-      cycleReviewOffsetsForLessonCount(lessonsBySubject(subject).length),
+      courseLessons.filter(lesson => lesson.subject === subject).sort(compareLessonOrder),
     ]));
-    const subjectLessonTotals = new Map(normalizedSubjects.map(subject => [subject, lessonsBySubject(subject).length]));
-    const cycleEvents = courseCycleLessons.flatMap((lesson, index) => {
-      const offsets = subjectReviewOffsets.get(lesson.subject) || cycleReviewOffsetsForLessonCount(0);
-      const localIndex = lessonLocalIndex.get(lesson.id) || 0;
-      return [
-        { kind:'primary', lesson, sourceIndex:index, localIndex, position:index, priority:0, offset:0 },
-        { kind:'direct-even', lesson, sourceIndex:index, localIndex, position:index + offsets.directEven, priority:1, offset:offsets.directEven },
-        { kind:'clinical-odd', lesson, sourceIndex:index, localIndex, position:index + offsets.clinicalOdd, priority:2, offset:offsets.clinicalOdd },
-        { kind:'clinical-even', lesson, sourceIndex:index, localIndex, position:index + offsets.clinicalEven, priority:3, offset:offsets.clinicalEven },
-      ];
-    }).sort((a, b) => (
-      a.position - b.position
-      || a.priority - b.priority
-      || a.sourceIndex - b.sourceIndex
+    const allOrderedSubjectLessons = orderedSubjects.flatMap(subject => lessonsBySubject.get(subject) || []);
+    const activeMixPreset = (COURSE_SCHEDULE_MIX_PRESETS || []).find(preset => preset.id === courseScheduleMixPreset) || null;
+    const mixedScheduleActive = !!activeMixPreset;
+    const subjectRankFrom = subjects => {
+      const map = new Map(subjects.map((subject, index) => [normalizeTextKey(subject), index]));
+      return subject => map.has(normalizeTextKey(subject))
+        ? map.get(normalizeTextKey(subject))
+        : subjects.length + orderedSubjects.indexOf(subject);
+    };
+    const sortLessonsByStrategy = strategy => {
+      const ufcSubjectRank = subjectRankFrom(['Cardiologia','Pneumologia','Gastroenterologia','Endocrinologia','Nefrologia','Cirurgia','Obstetrícia','Pediatria','Ginecologia','Infectologia','Dermatologia','Hematologia','Reumatologia','Ortopedia','Psiquiatria','Oftalmologia']);
+      const defaultSubjectRank = subjectRankFrom(orderedSubjects);
+      const ruleSets = {
+        'importance-life':[
+          /\b(sepse|choque|parada|pcr|trauma|hemorragia|sangramento|ave|iam|infarto|hipercalemia|sdra|insuficiencia respiratoria)\b/,
+          /\b(hipertensao|diabetes|pneumonia|asma|dpoc|tuberculose|hiv|dengue|pre[- ]?natal|parto|puerperio|anemia|apendicite|colecistite|cirrose)\b/,
+          /\b(diagnostico|classificacao|rastreamento|prevencao|vacina|avaliacao)\b/,
+          /\b(tratamento|manejo|terapia|profilaxia|conduta)\b/,
+        ],
+        'basic-advanced':[
+          /\b(introducao|conceitos?|fundamentos?|anatomia|fisiologia|nocoes|classificacao|bases?)\b/,
+          /\b(semiologia|diagnostico|avaliacao|rastreamento|achados)\b/,
+          /\b(tratamento|manejo|terapia|profilaxia|conduta)\b/,
+          /\b(complicacoes?|emergencias?|aguda|choque|insuficiencia|crise)\b/,
+        ],
+        'high-yield':[
+          /\b(sus|epidemiologia|hipertensao|diabetes|pre[- ]?natal|parto|pneumonia|tuberculose|hiv|dengue|sepse|trauma|apendicite|cirrose|anemia|vacinas?)\b/,
+          /\b(diagnostico|tratamento|manejo|classificacao|rastreamento|prevencao|complicacoes?)\b/,
+        ],
+        'emergency-first':[
+          /\b(sepse|choque|parada|pcr|trauma|tce|ave|hemorragia|hipercalemia|hipoglicemia|cetoacidose|sdra|pneumotorax|queimaduras|intoxicacoes?)\b/,
+          /\b(aguda|crise|emergencia|urgencia|insuficiencia|obstrucao|isquemia)\b/,
+          /\b(tratamento|manejo|conduta|suporte|monitorizacao)\b/,
+        ],
+      };
+      const rules = ruleSets[strategy] || ruleSets['importance-life'];
+      if (strategy === 'course-order') return [...allOrderedSubjectLessons];
+      if (strategy === 'ufc-flow' || strategy === 'medico-bicho') {
+        const isPreventiveLesson = lesson => {
+          const subjectKey = normalizeTextKey(lesson.subject);
+          return subjectKey.includes('prevent') || subjectKey.includes('saude coletiva');
+        };
+        const preventiveLessons = allOrderedSubjectLessons.filter(isPreventiveLesson);
+        const clinicalLessons = allOrderedSubjectLessons
+          .filter(lesson => !isPreventiveLesson(lesson))
+          .sort((left, right) => ufcSubjectRank(left.subject) - ufcSubjectRank(right.subject) || compareLessonOrder(left, right));
+        return strategy === 'medico-bicho'
+          ? clinicalLessons
+          : interleaveLongitudinalScheduleLessons(clinicalLessons, preventiveLessons);
+      }
+      const source = allOrderedSubjectLessons;
+      return [...source].sort((left, right) => {
+        return patternRank(lessonSearchText(left, normalizeTextKey), rules) - patternRank(lessonSearchText(right, normalizeTextKey), rules)
+          || defaultSubjectRank(left.subject) - defaultSubjectRank(right.subject)
+          || compareLessonOrder(left, right);
+      });
+    };
+    const subjectBatchSize = Math.max(1, Math.min(
+      COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE,
+      Number(courseScheduleSubjectBatchSize) || COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
     ));
-
-    const openLesson = (lesson) => {
+    const orderedLessons = mixedScheduleActive
+      ? sortLessonsByStrategy(activeMixPreset.strategy)
+      : interleaveScheduleSubjectBatches({ orderedSubjects, lessonsBySubject, batchSize:subjectBatchSize });
+    const dailyScheduleActive = courseScheduleCadence === 'daily';
+    const startDate = cronStartDate ? new Date(`${cronStartDate}T12:00:00`) : null;
+    const validStartDate = !!(startDate && Number.isFinite(startDate.getTime()));
+    const today = new Date();
+    const todayAtNoon = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12);
+    const { totalEffortSeconds } = calculateScheduleEffort(orderedLessons);
+    const weeksCount = resolveScheduleWeeksCount({
+      cadence:courseScheduleCadence,
+      effortHours:courseScheduleEffortHours,
+      endDate:courseScheduleEndDate,
+      fallbackWeeks:Number(courseScheduleWeeks) || COURSE_SCHEDULE_DEFAULT_WEEKS,
+      goalMode:courseScheduleGoalMode,
+      startDate:validStartDate ? startDate : null,
+      studyDays:courseScheduleStudyDays,
+      today:todayAtNoon,
+      totalEffortSeconds,
+    });
+    const dailySchedule = dailyScheduleActive ? buildDailyEffortSchedule({
+      endDate:courseScheduleGoalMode === 'date' ? courseScheduleEndDate : null,
+      lessons:orderedLessons,
+      startDate:validStartDate ? startDate : null,
+      studyDays:courseScheduleStudyDays,
+      today:todayAtNoon,
+      weeksCount,
+    }) : null;
+    const balancedSchedule = dailyScheduleActive
+      ? null
+      : buildEffortBalancedSchedule({ lessons:orderedLessons, weeksCount });
+    const calendarStartDate = dailySchedule?.startDate || startDate;
+    const scheduleHasStarted = !!(calendarStartDate && Date.now() >= calendarStartDate.getTime());
+    const rawCurrentWeek = calendarStartDate
+      ? Math.floor((Date.now() - calendarStartDate.getTime()) / 604800000) + 1
+      : 1;
+    const scheduleCurrentWeek = Math.max(1, Math.min(weeksCount, rawCurrentWeek));
+    const scheduleDays = (dailySchedule?.days || []).map(baseDay => {
+      const watched = baseDay.lessons.filter(lessonWatched).length;
+      return {
+        ...baseDay,
+        remaining:baseDay.lessons.length - watched,
+        subjects:[...new Set(baseDay.lessons.map(lesson => lesson.subject))],
+        watched,
+        pct:baseDay.lessons.length ? Math.round(watched / baseDay.lessons.length * 100) : 0,
+      };
+    });
+    const baseWeeks = dailyScheduleActive
+      ? Array.from({ length:weeksCount }, (_, index) => {
+          const days = scheduleDays.filter(day => day.week === index + 1);
+          return {
+            effortSeconds:days.reduce((sum, day) => sum + day.effortSeconds, 0),
+            estimatedLessons:days.reduce((sum, day) => sum + day.estimatedLessons, 0),
+            knownDurationSeconds:days.reduce((sum, day) => sum + day.knownDurationSeconds, 0),
+            lessons:days.flatMap(day => day.lessons),
+            week:index + 1,
+          };
+        })
+      : balancedSchedule.weeks;
+    const scheduleWeeks = baseWeeks.map(baseWeek => {
+      const lessons = baseWeek.lessons;
+      const watched = lessons.filter(lessonWatched).length;
+      const weekStartDate = calendarStartDate ? new Date(calendarStartDate.getTime() + (baseWeek.week - 1) * 604800000) : null;
+      const weekEndDate = weekStartDate ? new Date(weekStartDate.getTime() + 6 * 86400000) : null;
+      return {
+        ...baseWeek,
+        endDate:weekEndDate,
+        remaining:lessons.length - watched,
+        startDate:weekStartDate,
+        subjects:[...new Set(lessons.map(lesson => lesson.subject))],
+        watched,
+        pct:lessons.length ? Math.round(watched / lessons.length * 100) : 0,
+      };
+    });
+    const nonEmptyWeekSizes = scheduleWeeks.filter(week => week.lessons.length).map(week => week.lessons.length);
+    const minLessonsPerWeek = nonEmptyWeekSizes.length ? Math.min(...nonEmptyWeekSizes) : 0;
+    const maxLessonsPerWeek = nonEmptyWeekSizes.length ? Math.max(...nonEmptyWeekSizes) : 0;
+    const lessonsPerWeekLabel = minLessonsPerWeek === maxLessonsPerWeek
+      ? String(maxLessonsPerWeek)
+      : `${minLessonsPerWeek}-${maxLessonsPerWeek}`;
+    const nonEmptyDaySizes = scheduleDays.filter(day => day.lessons.length).map(day => day.lessons.length);
+    const minLessonsPerDay = nonEmptyDaySizes.length ? Math.min(...nonEmptyDaySizes) : 0;
+    const maxLessonsPerDay = nonEmptyDaySizes.length ? Math.max(...nonEmptyDaySizes) : 0;
+    const lessonsPerDayLabel = minLessonsPerDay === maxLessonsPerDay
+      ? String(maxLessonsPerDay)
+      : `${minLessonsPerDay}-${maxLessonsPerDay}`;
+    const todayKey = scheduleDateKey(todayAtNoon);
+    const scheduleCurrentDay = scheduleDays.find(day => day.dateKey === todayKey)
+      || scheduleDays.find(day => day.date.getTime() >= todayAtNoon.getTime())
+      || scheduleDays[scheduleDays.length - 1]
+      || null;
+    const selectedDayData = scheduleDays.find(day => day.dateKey === courseScheduleDayCursor)
+      || scheduleCurrentDay;
+    const selectedWeek = dailyScheduleActive
+      ? selectedDayData?.week || scheduleCurrentWeek
+      : Math.max(1, Math.min(weeksCount, Number(curWeek) || scheduleCurrentWeek));
+    const selectedWeekData = scheduleWeeks.find(week => week.week === selectedWeek) || scheduleWeeks[0] || null;
+    const currentWeekData = scheduleWeeks.find(week => week.week === scheduleCurrentWeek) || selectedWeekData;
+    const backlogLessons = scheduleHasStarted
+      ? dailyScheduleActive
+        ? scheduleDays.filter(day => day.dateKey < todayKey).flatMap(day => day.lessons.filter(lesson => !lessonWatched(lesson)))
+        : scheduleWeeks.filter(week => week.week < scheduleCurrentWeek).flatMap(week => week.lessons.filter(lesson => !lessonWatched(lesson)))
+      : [];
+    const currentWeekRemaining = dailyScheduleActive
+      ? scheduleCurrentDay?.lessons.filter(lesson => !lessonWatched(lesson)) || []
+      : currentWeekData?.lessons.filter(lesson => !lessonWatched(lesson)) || [];
+    const nextScheduleLesson = backlogLessons[0]
+      || currentWeekRemaining[0]
+      || orderedLessons.find(lesson => !lessonWatched(lesson))
+      || null;
+    const completed = orderedLessons.filter(lessonWatched).length;
+    const progress = {
+      completed,
+      total:orderedLessons.length,
+      pct:orderedLessons.length ? Math.round(completed / orderedLessons.length * 100) : 0,
+    };
+    const openLesson = lesson => {
+      if (!lesson) return;
       setActiveSubjectVid(lesson.subject);
       setActiveSubtopicVid(`${lesson.topic}::${lesson.cat}`);
       setActiveAulaAndReset(lesson.aula);
       setView('videoaulas');
     };
-
-    const openQuestions = (lesson, mode = 'direct-odd') => {
-      setVqSubject(lesson.subject);
-      setVqTopic(lesson.topic);
-      setVqAula(lesson.aula);
-      setVqActiveBlock(null);
-      const journeyStage = stageMeta(mode) ? mode : null;
-      setVqQuestionParity(stageMeta(mode)?.parity || 'all');
-      const targetBlock = firstQuestionBlockForLesson(lesson, journeyStage || (mode === 'review-r10' ? 'clinical-review' : mode === 'review-r3' ? 'review' : 'pending'));
-      setVqActiveBlockView(targetBlock ? {
-        blockId:targetBlock[0],
-        showWrong:false,
-        fromPlan:true,
-        cycleStage:journeyStage || (mode === 'review-r3' ? 'r3' : mode === 'review-r10' ? 'r10' : null),
-      } : null);
-      if (aulaHasVqData(lesson.aula)) setView('videoquestions');
-      else setVqGenModal({ aula:lesson.aula, aulaId:aulaDocId(lesson.aula), suggestedQ:15, subject:lesson.subject, topic:lesson.topic, fromConfig:true });
-    };
-
-    const goToLessonStep = (lesson) => {
-      const ji = journeyInfoForLesson(lesson);
-      if (!lessonWatched(lesson)) {
-        openLesson(lesson);
-        return;
-      }
-      if (ji.directTotal === 0 || !ji.directOddDone) {
-        openQuestions(lesson, 'direct-odd');
-        return;
-      }
-      openLesson(lesson);
-    };
-
-    const lessonStep = (lesson) => {
-      const ji = journeyInfoForLesson(lesson);
-      if (!lessonWatched(lesson)) return { label:'Assistir aula', tone:'yellow', detail:'marque como assistida ao terminar', lesson };
-      if (ji.directTotal === 0) return { label:'Gerar questões', tone:'blue', detail:'fixação ímpar pendente', lesson };
-      if (!ji.directOddDone) return { label:'Fazer ímpares diretas', tone:'green', detail:`${ji.directOddAnswered}/${ji.directOddTotal} respondidas`, lesson };
-      return null;
-    };
-
-    const cycleEntryForEvent = (event) => {
-      const ji = journeyInfoForLesson(event.lesson);
-      const item = subjectSummaryBySubject.get(event.lesson.subject) || { subject:event.lesson.subject };
-      const reviewMilestone = () => {
-        const total = subjectLessonTotals.get(event.lesson.subject) || 0;
-        const targetLessonNumber = Math.min(event.localIndex + event.offset + 1, total || event.localIndex + event.offset + 1);
-        if (event.localIndex + event.offset + 1 > total && total > 0) return `após concluir a matéria (${total} aulas)`;
-        return `após a aula ${targetLessonNumber} da matéria`;
-      };
-      if (event.kind === 'primary') {
-        const step = lessonStep(event.lesson);
-        if (!step) return null;
-        return {
-          item,
-          index:event.sourceIndex,
-          step:{
-            ...step,
-            detail:event.lesson.title,
-            subdetail:`Ato ${event.sourceIndex + 1} do ciclo · ${step.detail}`,
-            action:()=>goToLessonStep(event.lesson),
-          },
-        };
-      }
-      if (!ji.primaryDone) return null;
-      if (event.kind === 'direct-even') {
-        if (!primaryCompleteThroughSubjectOffset(event.lesson, event.offset)) return null;
-        if (ji.directEvenTotal === 0 || ji.directEvenDone) return null;
-        return {
-          item,
-          index:event.sourceIndex,
-          step:{
-            label:ji.directEvenAnswered > 0 ? 'Concluir pares diretas' : 'Fazer pares diretas',
-            tone:'red',
-            detail:event.lesson.title,
-            subdetail:ji.directEvenAnswered > 0
-              ? `${ji.directEvenAnswered}/${ji.directEvenTotal} respondidas`
-              : reviewMilestone(),
-            lesson:event.lesson,
-            action:()=>openQuestions(event.lesson, 'direct-even'),
-          },
-        };
-      }
-      if (event.kind === 'clinical-odd') {
-        if (!primaryCompleteThroughSubjectOffset(event.lesson, event.offset)) return null;
-        if (!ji.directEvenDone || ji.clinicalOddTotal === 0 || ji.clinicalOddDone) return null;
-          return {
-            item,
-            index:event.sourceIndex,
-            step:{
-              label:ji.clinicalOddAnswered > 0 ? 'Concluir clínicas ímpares' : 'Fazer clínicas ímpares',
-              tone:'red',
-              detail:event.lesson.title,
-              subdetail:ji.clinicalOddAnswered > 0
-                ? `${ji.clinicalOddAnswered}/${ji.clinicalOddTotal} respondidas`
-                : reviewMilestone(),
-              lesson:event.lesson,
-              action:()=>openQuestions(event.lesson, 'clinical-odd'),
-            },
-          };
-      }
-      if (event.kind === 'clinical-even') {
-        if (!primaryCompleteThroughSubjectOffset(event.lesson, event.offset)) return null;
-        if (!ji.clinicalOddDone || ji.clinicalEvenTotal === 0 || ji.clinicalEvenDone) return null;
-          return {
-            item,
-            index:event.sourceIndex,
-            step:{
-              label:ji.clinicalEvenAnswered > 0 ? 'Concluir clínicas pares' : 'Fazer clínicas pares',
-              tone:'red',
-              detail:event.lesson.title,
-              subdetail:ji.clinicalEvenAnswered > 0
-                ? `${ji.clinicalEvenAnswered}/${ji.clinicalEvenTotal} respondidas`
-                : reviewMilestone(),
-              lesson:event.lesson,
-              action:()=>openQuestions(event.lesson, 'clinical-even'),
-            },
-          };
-      }
-      return null;
-    };
-
-    const cycleSteps = cycleEvents.map(cycleEntryForEvent).filter(Boolean);
-    const nextStepForSubject = (item) => {
-      const entry = cycleSteps.find(current => current.item.subject === item.subject);
-      if (entry?.step) return entry.step;
-      return {
-        label:'Matéria em dia',
-        tone:'gray',
-        detail:'sem pendência agora',
-        action:()=>{},
-        done:true,
-      };
-    };
-
-    const heroJourneyStep = cycleSteps[0] || null;
-
-    const progress = {
-      total:subjectSummaries.reduce((sum, item) => sum + item.total, 0),
-      completed:subjectSummaries.reduce((sum, item) => sum + item.completed, 0),
-      primary:subjectSummaries.reduce((sum, item) => sum + item.primaryCompleted, 0),
-      watched:subjectSummaries.reduce((sum, item) => sum + item.watched, 0),
-    };
-    progress.pct = progress.total ? Math.round(progress.completed / progress.total * 100) : 0;
-
-    const dueCourseItems = getDueReviews().filter(item => item.source === 'curso' || vqBlocks[item.aulaId]);
-    const lessonIds = (lesson) => [
-      lesson.id,
-      aulaVqKey(lesson.aula),
-      aulaDocId(lesson.aula),
-    ].filter(Boolean);
-    const reviewItemsForLesson = (lesson) => dueCourseItems.filter(item =>
-      lessonIds(lesson).includes(item.aulaId)
-      || cleanAulaTitle(item.aulaTitle || '') === lesson.title
-      || cleanAulaTitle(item.aulaTitle || '') === cleanAulaTitle(lesson.aula.title || '')
-    );
+    const nextWeek = nextScheduleLesson
+      ? scheduleWeeks.find(week => week.lessons.some(lesson => lesson.id === nextScheduleLesson.id))
+      : null;
+    const nextDay = nextScheduleLesson
+      ? scheduleDays.find(day => day.lessons.some(lesson => lesson.id === nextScheduleLesson.id))
+      : null;
+    const nextLessonStatus = !nextScheduleLesson
+      ? 'complete'
+      : dailyScheduleActive
+        ? nextDay?.dateKey < todayKey && scheduleHasStarted
+          ? 'backlog'
+          : nextDay?.dateKey === todayKey
+            ? 'current'
+            : 'future'
+        : nextWeek?.week < scheduleCurrentWeek && scheduleHasStarted
+          ? 'backlog'
+          : nextWeek?.week === scheduleCurrentWeek
+            ? 'current'
+            : 'future';
+    const heroJourneyStep = nextScheduleLesson ? {
+      item:{ subject:nextScheduleLesson.subject },
+      step:{
+        action:()=>openLesson(nextScheduleLesson),
+        detail:nextScheduleLesson.title,
+        label:'Próxima aula',
+        lesson:nextScheduleLesson,
+        subdetail:dailyScheduleActive && nextDay
+          ? nextLessonStatus === 'backlog'
+            ? `Pendente de ${nextDay.date.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' }).replace('.', '')}`
+            : nextDay.date.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' }).replace('.', '')
+          : nextWeek
+            ? nextLessonStatus === 'backlog' ? `Pendente da semana ${nextWeek.week}` : `Semana ${nextWeek.week}`
+            : '',
+      },
+    } : null;
+    const weekWindowStart = Math.max(1, Math.min(selectedWeek - 3, weeksCount - 6));
+    const nearbyWeeks = scheduleWeeks.filter(week => week.week >= weekWindowStart && week.week < weekWindowStart + 7);
+    const configuredEndDate = courseScheduleGoalMode === 'date' && courseScheduleEndDate
+      ? new Date(`${courseScheduleEndDate}T12:00:00`)
+      : null;
+    const validConfiguredEndDate = configuredEndDate && Number.isFinite(configuredEndDate.getTime())
+      ? configuredEndDate
+      : null;
+    const scheduleEndDate = dailySchedule?.endDate
+      || validConfiguredEndDate
+      || (validStartDate ? new Date(startDate.getTime() + weeksCount * 604800000 - 86400000) : null);
 
     return {
-      activeSubjectSummaries,
+      activeMixPreset,
+      backlogLessons,
       courseLessons,
-      cycleSubjectBatchSize,
-      dueCourseItems,
+      currentWeekData,
+      currentWeekRemaining,
+      dailyScheduleActive,
       heroJourneyStep,
       isReady:true,
-      journeyInfoForLesson,
-      nextStepForSubject,
-      normalizedSubjects,
-      openCycleReview:async (lesson, stage) => {
-        await saveCourseCycleReview(lesson.id, stage);
-        openQuestions(lesson, stage === 'r10' ? 'review-r10' : 'review-r3');
-      },
+      lessonWatched,
+      lessonsPerWeekLabel,
+      lessonsPerDayLabel,
+      mixedScheduleActive,
+      nearbyWeeks,
+      nextScheduleLesson,
+      openLesson,
+      orderedLessons,
+      orderedSubjects,
       progress,
-      questionInfoForLesson,
-      reviewItemsForLesson,
-      reviewSubject:items => openSpacedReview(items),
-      subjectSummaries,
-      unlockedSubjectLimit,
+      nextLessonStatus,
+      nextLessonDay:nextDay || null,
+      nextLessonWeek:nextWeek || null,
+      plannedDailySeconds:scheduleDays.length ? Math.round(totalEffortSeconds / scheduleDays.length) : 0,
+      plannedWeeklySeconds:weeksCount ? Math.round(totalEffortSeconds / weeksCount) : 0,
+      scheduleCurrentDay,
+      scheduleCurrentWeek,
+      scheduleDays,
+      scheduleEndDate,
+      scheduleHasStarted,
+      scheduleWeeks,
+      selectedWeek,
+      selectedWeekData,
+      selectedDayData,
+      subjectBatchSize,
+      totalEffortSeconds,
+      weeksCount,
     };
   }, [
+    COURSE_SCHEDULE_DEFAULT_SUBJECT_BATCH_SIZE,
+    COURSE_SCHEDULE_DEFAULT_WEEKS,
+    COURSE_SCHEDULE_MAX_SUBJECT_BATCH_SIZE,
+    COURSE_SCHEDULE_MIX_PRESETS,
     appliedVideoaulasData,
     aulaDocId,
-    aulaHasVqData,
     aulaVqKey,
-    cleanAulaTitle,
-    courseCycleSubjectBatchSize,
     coursePlanSubjects,
     coursePrefsLoaded,
+    courseScheduleCadence,
+    courseScheduleDayCursor,
+    courseScheduleEffortHours,
+    courseScheduleEndDate,
+    courseScheduleGoalMode,
+    courseScheduleMixPreset,
+    courseScheduleSubjectBatchSize,
+    courseScheduleStudyDays,
+    courseScheduleWeeks,
+    cronStartDate,
+    curWeek,
     effectiveCoursePlanLessonOrder,
     enabled,
     flattenCourseLessons,
     getAulaId,
-    getDueReviews,
-    looksLikeClinicalVignette,
     normalizeTextKey,
-    openSpacedReview,
-    saveCourseCycleReview,
     setActiveAulaAndReset,
     setActiveSubjectVid,
     setActiveSubtopicVid,
     setView,
-    setVqActiveBlock,
-    setVqActiveBlockView,
-    setVqAula,
-    setVqGenModal,
-    setVqQuestionParity,
-    setVqSubject,
-    setVqTopic,
     sortCourseSubjectsForDisplay,
-    vqBlocks,
-    vqBlocksLoaded,
     watchedAulas,
   ]);
-
-  const moveSubject = (idx, dir) => {
-    const next = [...(model.normalizedSubjects || [])];
-    const target = idx + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[idx], next[target]] = [next[target], next[idx]];
-    saveCoursePlanPrefs(next, coursePlanLocked);
-  };
-
-  return { ...model, moveSubject };
 };

@@ -11,7 +11,6 @@ export default function HomeView() {
     aulaHasVqData,
     aulaVqKey,
     Award,
-    BookOpen,
     capitalizeDisplayLabel,
     ChevronRight,
     courseLessonDisplayTitle,
@@ -22,6 +21,7 @@ export default function HomeView() {
     dueCount,
     effectiveCoursePlanLessonOrder,
     FamedIcon,
+    FactoryIcon,
     Flame,
     flattenCourseLessons,
     getAulaId,
@@ -36,6 +36,7 @@ export default function HomeView() {
     FolderIcon,
     looksLikeClinicalVignette,
     normalizeTextKey,
+    nextReviewAt,
     openSpacedReview,
     openViewWithReturn,
     RepeatIcon,
@@ -59,13 +60,14 @@ export default function HomeView() {
     setVqSubject,
     setVqTopic,
     sortCourseSubjectsForDisplay,
+    reviewScheduledCount,
     vqBlocks,
     vqBlocksLoaded,
     watchedAulas,
     Zap,
   } = useFeatureContext();
 
-			    const sharedLibraryCard = homeCanSeeSharedLibrary ? {key:'shared-library', icon:<BookOpen className="w-5 h-5"/>, title:'Biblioteca', desc:'Questões do curso organizadas por aula e prontas para praticar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
+			    const sharedLibraryCard = homeCanSeeSharedLibrary ? {key:'shared-library', icon:<FactoryIcon className="w-5 h-5"/>, title:'Fábrica de Questões', desc:isAdmin?'Produção, curadoria, seleção e auditoria do banco de questões.':'Questões do curso organizadas por aula e prontas para praticar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
 			    const famedCard = homeCanSeeFamed ? {key:'famed', icon:<FamedIcon className="w-5 h-5"/>, title:'FAMED', desc:'Aulas e questões da faculdade', action:()=>setView('famed')} : null;
 			    const creationCard = {key:'creation', icon:<FolderIcon className="w-5 h-5"/>, title:'Meus materiais', desc:'Acesse, crie ou importe suas aulas e bancos de questões.', action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}};
 			    const cursoCard = homeCanSeeVideoaulas ? {key:'curso', icon:<GraduationCap className="w-5 h-5"/>, title:'Portal do Curso', desc:'Videoaulas, questões, cronograma e organização do curso.', action:()=>setView('curso')} : null;
@@ -74,7 +76,10 @@ export default function HomeView() {
                 const minuteGoal = Math.max(1, parseInt(settings.dailyLectureMinutesGoal, 10) || 90);
                 const dailyQuestions = Object.keys(dailyStats.questionKeys || {}).length;
 	                const dailyMinutes = Math.floor(getDailyLessonSeconds(dailyStats) / 60);
-                  const { heroJourneyStep } = useCourseHeroJourney({ enabled:homeCanSeeVideoaulas });
+                  const nextReviewLabel = nextReviewAt
+                    ? new Intl.DateTimeFormat('pt-BR', { day:'2-digit', month:'short' }).format(new Date(nextReviewAt))
+                    : null;
+                  const { heroJourneyStep, progress:scheduleProgress, scheduleCurrentWeek } = useCourseHeroJourney({ enabled:homeCanSeeVideoaulas });
                   const homeJourney = heroJourneyStep ? {
                     ...heroJourneyStep.step,
                     helper:heroJourneyStep.step.subdetail
@@ -110,19 +115,33 @@ export default function HomeView() {
                           )}
                         </header>
 
+                        {homeCanSeeVideoaulas&&dueCount>0&&(
+                          <section className={`rounded-2xl border p-4 md:p-5 ${darkMode?'border-yellow-800/70 bg-yellow-950/20':'border-yellow-300 bg-yellow-50'}`}>
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                              <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${darkMode?'bg-yellow-900/50 text-yellow-300':'bg-yellow-200 text-yellow-800'}`}><RepeatIcon className="h-5 w-5"/></span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-bold uppercase tracking-[.16em] text-yellow-600">Prioridade de hoje</p>
+                                <h2 className={`mt-0.5 font-serif text-xl font-bold ${darkMode?'text-gray-100':'text-gray-900'}`}>{dueCount} {dueCount===1?'questão pronta':'questões prontas'} para revisão</h2>
+                                <p className={`mt-1 text-xs ${darkMode?'text-gray-400':'text-gray-600'}`}>Revise primeiro o que venceu; depois o fluxo aponta a próxima aula.</p>
+                              </div>
+                              <button onClick={()=>openSpacedReview()} className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl bg-yellow-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-yellow-700">Revisar agora<ChevronRight className="h-4 w-4"/></button>
+                            </div>
+                          </section>
+                        )}
+
                         {homeJourney&&(
                           <section className="home-journey-row rounded-xl px-3.5 py-3 flex items-center gap-3">
                             <span className="home-icon mt-0.5">
                               <Award className="w-5 h-5"/>
                             </span>
                             <div className="min-w-0 flex-1">
-                              <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-gray-500':'text-gray-400'}`}>Ciclo de Estudos</p>
+                              <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-gray-500':'text-gray-400'}`}>Seu cronograma · semana {scheduleCurrentWeek}</p>
                               <h3 className={`mt-0.5 text-sm md:text-[15px] font-bold truncate ${darkMode?'text-gray-100':'text-gray-900'}`}>{courseLessonDisplayTitle(homeJourney.lesson?.aula || { title:homeJourney.lesson?.title || homeJourney.label })}</h3>
                               <p className={`mt-0.5 text-xs truncate ${darkMode?'text-gray-400':'text-gray-600'}`}>{homeJourney.helper || 'Próximo passo'} · {homeJourney.label}</p>
                             </div>
                             <div className="flex flex-shrink-0 items-center gap-2">
-                              <button onClick={()=>{setCursoTab('plano');setView('curso');}} className={`hidden sm:inline-flex min-h-[38px] items-center justify-center rounded-lg border px-3 py-2 text-xs font-bold ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                                Ajustar
+                              <button onClick={()=>{setCursoTab('cronograma');setView('curso');}} className={`hidden sm:inline-flex min-h-[38px] items-center justify-center rounded-lg border px-3 py-2 text-xs font-bold ${darkMode?'border-gray-700 text-gray-300 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                Ver plano · {scheduleProgress.pct}%
                               </button>
                               <button onClick={homeJourney.action} className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-lg bg-yellow-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-yellow-700">
                                 Continuar<ChevronRight className="w-3.5 h-3.5"/>
@@ -133,17 +152,17 @@ export default function HomeView() {
 
                         <section className="space-y-3">
                           <h3 className="home-section-heading px-1"><span>Ações rápidas</span></h3>
-                          <div className={`grid grid-cols-1 ${homeCanUseAdvancedFeatures?'md:grid-cols-3':'md:grid-cols-1'} gap-3`}>
+                          <div className={`grid grid-cols-1 ${homeCanSeeVideoaulas?'md:grid-cols-3':homeCanUseAdvancedFeatures?'md:grid-cols-2':'md:grid-cols-1'} gap-3`}>
                             {homeCanUseAdvancedFeatures&&(
                               <button onClick={()=>openViewWithReturn('quick')} className="home-action-card rounded-xl p-4 text-left flex items-start gap-3 transition-colors">
                                 <Flame className="home-icon mt-0.5"/>
                                 <span><strong className="block text-base">Dúvida Rápida</strong><span className="block text-xs opacity-50 mt-1 leading-relaxed">Tire uma dúvida pontual e escolha como quer estudá-la.</span></span>
                               </button>
                             )}
-                            {homeCanUseAdvancedFeatures&&(
+                            {homeCanSeeVideoaulas&&(
                               <button onClick={()=>openSpacedReview()} className="home-action-card rounded-xl p-4 text-left flex items-start gap-3 transition-colors">
                                 <RepeatIcon className="home-icon mt-0.5"/>
-                                <span><strong className="block text-base">Revisão espaçada {dueCount>0&&`· ${dueCount}`}</strong><span className="block text-xs opacity-50 mt-1 leading-relaxed">Revise conteúdos no momento certo para não esquecer.</span></span>
+                                <span><strong className="block text-base">Revisões {dueCount>0&&`· ${dueCount}`}</strong><span className="block text-xs opacity-50 mt-1 leading-relaxed">{dueCount>0?'Há conteúdo esperando por você.':reviewScheduledCount>0?`${reviewScheduledCount} questões agendadas${nextReviewLabel?` · próxima em ${nextReviewLabel}`:''}.`:'Adicione uma aula concluída e o sistema monta sua agenda.'}</span></span>
                               </button>
                             )}
                             <button onClick={()=>setExamSetup({})} className="home-action-card rounded-xl p-4 text-left flex items-start gap-3 transition-colors">
