@@ -1,9 +1,101 @@
 export const DISABLED_COURSE_QUESTIONS_CONFIG_DOC = 'disabled_course_questions';
 export const DISABLED_COURSE_QUESTIONS_VERSION = 'agora-disabled-course-questions-v1';
+export const NON_CONTENT_COURSE_QUESTION_POLICY = 'agora-non-content-course-question-v1';
 
 const cleanId = value => String(value ?? '').trim();
 
 const uniqueIds = values => [...new Set((values || []).map(cleanId).filter(Boolean))];
+
+const normalizeSearchText = value => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const NON_CONTENT_PATTERNS = [
+  {
+    code:'study-importance',
+    reason:'Pergunta sobre a importância de estudar o tema',
+    pattern:/\b(?:importancia|relevancia|necessidade|beneficio|valor)\b.{0,100}\b(?:estudar|aprender|aprendizado|aprendizagem)\b|\b(?:estudar|aprender|aprendizado|aprendizagem)\b.{0,100}\b(?:importante|fundamental|essencial|relevante)\b/,
+  },
+  {
+    code:'study-why',
+    reason:'Pergunta sobre por que estudar ou conhecer o tema',
+    pattern:/\bpor que\b.{0,70}\b(?:estudar|compreender|conhecer|aprender)\b|\bjustifica\b.{0,70}\b(?:o estudo|estudar|a inclusao (?:deste|desse|do) tema)\b/,
+  },
+  {
+    code:'lesson-purpose',
+    reason:'Pergunta sobre objetivo ou finalidade da aula',
+    pattern:/\b(?:objetivo|finalidade|proposito)\b.{0,70}\b(?:aula|videoaula|modulo do curso|curso (?:medico|de medicina|da graduacao|da faculdade))\b|\b(?:aula|videoaula|modulo do curso|curso (?:medico|de medicina|da graduacao|da faculdade))\b.{0,70}\b(?:objetivo|finalidade|proposito)\b|\b(?:objetivo|finalidade|proposito)\b.{0,50}\b(?:de estudar|do estudo (?:deste|desse|do) tema|da aprendizagem)\b/,
+  },
+  {
+    code:'course-relevance',
+    reason:'Pergunta sobre a relevância do tema no curso ou na formação',
+    pattern:/\b(?:importancia|relevancia|contribuicao|papel)\b.{0,120}\b(?:aula|videoaula|aprendizado|aprendizagem|formacao (?:medica|profissional|do aluno|do estudante)|curso (?:medico|de medicina|da graduacao|da faculdade))\b|\b(?:razao|motivo)\b.{0,80}\b(?:incluir|abordar|apresentar)\b.{0,80}\b(?:aula|videoaula|modulo do curso|curso (?:medico|de medicina|da graduacao|da faculdade))\b/,
+  },
+  {
+    code:'lesson-outcome',
+    reason:'Pergunta sobre o aprendizado ou a mensagem da aula',
+    pattern:/\b(?:ao final|apos|depois) (?:desta|da) (?:aula|videoaula)\b.{0,100}\b(?:aluno|estudante|aprender|compreender|capaz)\b|\b(?:mensagem|aprendizado) (?:principal|central)\b.{0,80}\b(?:aula|videoaula)\b/,
+  },
+];
+
+export const detectNonContentCourseQuestion = question => {
+  const text = normalizeSearchText([
+    question?.statement,
+    question?.question,
+    question?.front,
+    question?.caseContext,
+  ].filter(Boolean).join(' '));
+  if (!text) return null;
+  const match = NON_CONTENT_PATTERNS.find(rule => rule.pattern.test(text));
+  return match ? { code:match.code, reason:match.reason } : null;
+};
+
+export const findNonContentCourseQuestions = (items = []) => {
+  const matches = [];
+  const seen = new Set();
+  (items || []).forEach(item => {
+    [...(item?.directQuestions || []), ...(item?.clinicalQuestions || [])].forEach(question => {
+      const detection = detectNonContentCourseQuestion(question);
+      const key = `${cleanId(item?.id || item?.lessonId)}::${cleanId(question?.id)}`;
+      if (!detection || !question?.id || seen.has(key)) return;
+      seen.add(key);
+      matches.push({
+        aulaId:item?.lessonId || item?.id,
+        lessonId:item?.lessonId,
+        sharedLibraryItemId:item?.id,
+        lessonTitle:cleanId(item?.title),
+        question,
+        detection,
+      });
+    });
+  });
+  return matches;
+};
+
+export const createNonContentCourseQuestionPolicyEntry = ({
+  enabledAt = Date.now(),
+  enabledBy = null,
+  matchedCount = 0,
+} = {}) => ({
+  id:`policy::${NON_CONTENT_COURSE_QUESTION_POLICY}`,
+  entryType:'policy',
+  policy:NON_CONTENT_COURSE_QUESTION_POLICY,
+  enabled:true,
+  enabledAt,
+  enabledBy:enabledBy || null,
+  matchedCount:Math.max(0, Number(matchedCount) || 0),
+});
+
+export const isNonContentCourseQuestionPolicyEnabled = entries =>
+  normalizeDisabledCourseQuestions(entries).some(entry =>
+    entry?.entryType === 'policy'
+    && entry?.policy === NON_CONTENT_COURSE_QUESTION_POLICY
+    && entry?.enabled !== false
+  );
 
 const questionAliases = ({
   aulaId,
@@ -26,6 +118,13 @@ export const normalizeDisabledCourseQuestions = value => {
   const source = Array.isArray(value) ? value : value?.entries;
   if (!Array.isArray(source)) return [];
   return source.map(entry => {
+    if (entry?.entryType === 'policy' && entry?.policy === NON_CONTENT_COURSE_QUESTION_POLICY) {
+      return {
+        ...entry,
+        id:cleanId(entry.id) || `policy::${NON_CONTENT_COURSE_QUESTION_POLICY}`,
+        enabled:entry.enabled !== false,
+      };
+    }
     const questionId = cleanId(entry?.questionId || entry?.qId);
     const lessonAliases = uniqueIds(entry?.lessonAliases || [
       entry?.aulaId,
@@ -73,22 +172,40 @@ const aliasesOverlap = (left = [], right = []) => {
 };
 
 export const isCourseQuestionDisabled = (entries, context = {}) => {
+  const normalizedEntries = Array.isArray(entries)
+    && entries.every(entry => entry?.entryType === 'policy'
+      || (entry?.questionId && Array.isArray(entry?.lessonAliases)))
+    ? entries
+    : normalizeDisabledCourseQuestions(entries);
+  const policyEnabled = normalizedEntries.some(entry =>
+    entry?.entryType === 'policy'
+    && entry?.policy === NON_CONTENT_COURSE_QUESTION_POLICY
+    && entry?.enabled !== false
+  );
+  if (policyEnabled && detectNonContentCourseQuestion(context.question)) return true;
   const questionId = cleanId(context.questionId || context.qId || context.question?.id);
   if (!questionId) return false;
   const aliases = questionAliases(context);
   if (!aliases.length) return false;
-  const normalizedEntries = Array.isArray(entries)
-    && entries.every(entry => entry?.questionId && Array.isArray(entry?.lessonAliases))
-    ? entries
-    : normalizeDisabledCourseQuestions(entries);
   return normalizedEntries.some(entry =>
-    entry.questionId === questionId && aliasesOverlap(entry.lessonAliases, aliases)
+    entry?.entryType !== 'policy'
+    && entry.questionId === questionId
+    && aliasesOverlap(entry.lessonAliases, aliases)
   );
 };
 
 export const upsertDisabledCourseQuestion = (entries, nextEntry) => {
   const normalized = normalizeDisabledCourseQuestions(entries);
   if (!nextEntry) return normalized;
+  if (nextEntry?.entryType === 'policy') {
+    const policyIndex = normalized.findIndex(entry =>
+      entry?.entryType === 'policy' && entry?.policy === nextEntry.policy
+    );
+    if (policyIndex < 0) return [...normalized, nextEntry];
+    const next = [...normalized];
+    next[policyIndex] = { ...next[policyIndex], ...nextEntry, id:next[policyIndex].id };
+    return next;
+  }
   const matchIndex = normalized.findIndex(entry =>
     entry.questionId === nextEntry.questionId
     && aliasesOverlap(entry.lessonAliases, nextEntry.lessonAliases)

@@ -55,11 +55,16 @@ import {
   REVIEW_FIRST_EXPOSURE_WAVES,
 } from '../src/services/reviewMigration.js';
 import {
+  createNonContentCourseQuestionPolicyEntry,
   createDisabledCourseQuestionEntry,
+  detectNonContentCourseQuestion,
   disableCourseReviewQueueItems,
   filterDisabledCourseQuestionsFromVqBlocks,
+  findNonContentCourseQuestions,
   isCourseQuestionDisabled,
+  isNonContentCourseQuestionPolicyEnabled,
   pruneDisabledCourseQuestionsFromSession,
+  upsertDisabledCourseQuestion,
 } from '../src/services/disabledCourseQuestions.js';
 import {
   advanceFsrsCard,
@@ -1047,6 +1052,97 @@ const disabledEntry = createDisabledCourseQuestionEntry({
   disabledAt:reviewNow,
   disabledBy:'admin@example.com',
 });
+assert.ok(detectNonContentCourseQuestion({ statement:'Por que é importante estudar a anatomia do reto?' }));
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a finalidade desta aula sobre valvopatias?' })?.code,
+  'lesson-purpose',
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Ao final desta aula, o aluno deverá compreender a circulação coronariana.' })?.code,
+  'lesson-outcome',
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a relevância deste tema para a formação médica?' })?.code,
+  'course-relevance',
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é o principal motivo para abordar as valvopatias nesta aula?' })?.code,
+  'course-relevance',
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a importância clínica da ausência das tênias colônicas para delimitar o reto?' }),
+  null,
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a finalidade da colonoscopia no rastreamento do câncer colorretal?' }),
+  null,
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a finalidade da abordagem cirúrgica na obstrução intestinal?' }),
+  null,
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a importância do estudo histopatológico na doença inflamatória intestinal?' }),
+  null,
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a importância do conhecimento do tipo sanguíneo antes da transfusão?' }),
+  null,
+);
+assert.equal(
+  detectNonContentCourseQuestion({ statement:'Qual é a importância do ácido fólico na formação do tubo neural?' }),
+  null,
+);
+const nonContentMatches = findNonContentCourseQuestions([{
+  id:'shared-lesson-meta',
+  lessonId:'lesson-meta',
+  title:'Aula de teste',
+  directQuestions:[
+    { id:'meta-1', statement:'Qual é a importância de compreender este tema para a formação médica?' },
+    { id:'content-1', statement:'Qual artéria irriga predominantemente o nó atrioventricular?' },
+  ],
+  clinicalQuestions:[
+    { id:'meta-2', statement:'Qual é o objetivo desta videoaula sobre insuficiência cardíaca?' },
+  ],
+}]);
+assert.deepEqual(nonContentMatches.map(row => row.question.id), ['meta-1', 'meta-2']);
+const nonContentPolicy = createNonContentCourseQuestionPolicyEntry({
+  enabledAt:reviewNow,
+  enabledBy:'admin@example.com',
+  matchedCount:nonContentMatches.length,
+});
+const entriesWithPolicy = upsertDisabledCourseQuestion([disabledEntry], nonContentPolicy);
+assert.equal(isNonContentCourseQuestionPolicyEnabled(entriesWithPolicy), true);
+assert.equal(isCourseQuestionDisabled(entriesWithPolicy, {
+  aulaId:'lesson-meta',
+  question:nonContentMatches[0].question,
+}), true);
+assert.equal(isCourseQuestionDisabled(entriesWithPolicy, {
+  aulaId:'lesson-meta',
+  question:{ id:'content-1', statement:'Qual artéria irriga predominantemente o nó atrioventricular?' },
+}), false);
+const policyFilteredBlocks = filterDisabledCourseQuestionsFromVqBlocks({
+  'lesson-meta':{
+    meta:{ totalQuestions:2 },
+    blocks:{ main:{ questions:[
+      nonContentMatches[0].question,
+      { id:'content-1', statement:'Qual artéria irriga predominantemente o nó atrioventricular?' },
+    ] } },
+  },
+}, entriesWithPolicy);
+assert.deepEqual(policyFilteredBlocks['lesson-meta'].blocks.main.questions.map(question => question.id), ['content-1']);
+const policyFilteredQueue = disableCourseReviewQueueItems({
+  'lesson-meta':{ main:{
+    'meta-1':{
+      source:'curso',
+      dueDate:reviewNow,
+      adaptiveState:'introduction',
+      question:nonContentMatches[0].question,
+    },
+  } },
+}, entriesWithPolicy);
+assert.equal(policyFilteredQueue['lesson-meta'].main['meta-1'].globallyDisabled, true);
+assert.equal(policyFilteredQueue['lesson-meta'].main['meta-1'].dueDate, null);
 assert.equal(isCourseQuestionDisabled([disabledEntry], {
   aulaId:'another-runtime-id',
   sharedLibraryItemId:'shared-lesson-1',
@@ -1353,6 +1449,10 @@ assert.doesNotMatch(sharedLibraryViewSource, /sharedLibraryAudienceMode|Prévia 
 assert.doesNotMatch(sharedLibraryViewSource, /id:'exams'|id:'pharmacology'|id:'famed'/);
 assert.match(sharedLibraryViewSource, /questionMatchesSearch/);
 assert.match(sharedLibraryViewSource, /Buscar questão/);
+assert.match(sharedLibraryViewSource, /Inativar perguntas sobre a própria aula/);
+assert.match(sharedLibraryViewSource, /Filtro de perguntas metadidáticas ativo/);
+assert.match(appSource, /findNonContentCourseQuestions\(sharedLibraryItems\)/);
+assert.match(appSource, /createNonContentCourseQuestionPolicyEntry/);
 
 const ecgCaseBankViewSource = await readFile(new URL('../src/features/question-factory/EcgCaseBankView.jsx', import.meta.url), 'utf8');
 assert.match(ecgCaseBankViewSource, /export default function EcgCaseBankView/);
@@ -1490,6 +1590,8 @@ assert.match(promptsSource, /Toda alternativa deve conter algum núcleo plausív
 assert.match(promptsSource, /PRINCÍPIO DE EFICIÊNCIA E ALTO RENDIMENTO/);
 assert.match(promptsSource, /maximizar domínio relevante por tempo de estudo/);
 assert.match(promptsSource, /sem meta padrão, piso artificial ou incentivo para preencher volume/);
+assert.match(promptsSource, /qual é o objetivo\/finalidade da aula/);
+assert.match(promptsSource, /Ignore falas metadidáticas da transcrição/);
 assert.match(appSource, /timeoutMs:120000/);
 assert.match(appSource, /REQUEST_TIMEOUT/);
 

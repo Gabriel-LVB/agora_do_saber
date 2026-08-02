@@ -219,6 +219,15 @@ inclusive em cópias já persistidas nos usuários. Favoritos do curso são lido
 `vq_blocks` e aparecem junto dos favoritos pessoais para que uma questão marcada possa
 ser reencontrada depois do recarregamento antes de ser inativada.
 
+O mesmo documento pode conter a política compacta `agora-non-content-course-question-v1`.
+Ela é ativada uma única vez pelo admin, após o site contar e pedir confirmação, e bloqueia
+por padrões textuais conservadores perguntas sobre a importância de estudar o tema,
+objetivo/finalidade da aula e aprendizado esperado. Isso evita uma entrada por questão,
+não consome requests do Gemini e também protege contra novas questões com esses padrões.
+Finalidades médicas reais — de um exame, procedimento, fármaco ou estrutura — não devem
+ser confundidas com metacomentários sobre a aula. Os prompts de sumário e geração também
+ignoram apresentação, agenda, motivação, comentários do professor e encerramento.
+
 ### Identidade
 
 Cada cartão adaptativo precisa de uma chave global estável:

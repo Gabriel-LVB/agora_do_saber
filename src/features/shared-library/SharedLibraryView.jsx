@@ -79,7 +79,10 @@ export default function SharedLibraryView() {
     ArrowLeft,
     QuestionView,
     inactivateCourseQuestion,
+    inactivateNonContentCourseQuestions,
     isCourseQuestionGloballyDisabled,
+    nonContentQuestionCleanupRunning,
+    nonContentQuestionPolicyEnabled,
     LoadingState,
     EmptyState,
     UserIcon,
@@ -417,6 +420,10 @@ export default function SharedLibraryView() {
                         <button onClick={()=>repairSharedLibraryIncompleteQuestions(repairScopeItems)} disabled={sharedLibraryRepairing||sharedLibraryRun.running||sharedLibraryPurging||!incompleteQuestionCount} className={`w-full rounded-xl border px-4 py-3 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-45 ${darkMode?'border-yellow-800/70 text-yellow-300 hover:bg-yellow-950/25':'border-yellow-200 text-yellow-800 hover:bg-yellow-50'}`}>
                           {sharedLibraryRepairing?<Spinner className="w-4 h-4"/>:<ShieldAlert className="w-4 h-4"/>}
                           Revisar questões incompletas{incompleteQuestionCount?` (${incompleteQuestionCount})`:''}
+                        </button>
+                        <button onClick={inactivateNonContentCourseQuestions} disabled={nonContentQuestionPolicyEnabled||nonContentQuestionCleanupRunning||sharedLibraryLoading||sharedLibraryRun.running||sharedLibraryPurging} className={`w-full rounded-xl border px-4 py-3 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-45 ${darkMode?'border-red-900/70 text-red-300 hover:bg-red-950/25':'border-red-200 text-red-700 hover:bg-red-50'}`}>
+                          {nonContentQuestionCleanupRunning?<Spinner className="w-4 h-4"/>:<Trash2 className="w-4 h-4"/>}
+                          {nonContentQuestionPolicyEnabled?'Filtro de perguntas metadidáticas ativo':nonContentQuestionCleanupRunning?'Inativando...':'Inativar perguntas sobre a própria aula'}
                         </button>
                         <div className="flex items-center justify-between text-xs"><span>{SHARED_LIBRARY_STAGE_LABELS[sharedLibraryRun.stage] || 'Parada'}</span><span>{sharedLibraryRun.current}/{sharedLibraryRun.total}</span></div>
                         <div className={`h-2 rounded-full overflow-hidden ${darkMode?'bg-gray-700':'bg-gray-200'}`}><div className="h-full bg-yellow-600" style={{width:`${sharedLibraryRun.total?Math.round(sharedLibraryRun.current/sharedLibraryRun.total*100):0}%`}}/></div>

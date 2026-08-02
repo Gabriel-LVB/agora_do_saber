@@ -234,6 +234,7 @@ Antes de finalizar, revise a bateria: a quantidade de casos é adequada? cada ca
 const REGRAS_ENUNCIADO = `
 REGRAS DO ENUNCIADO:
 - Jamais mencione a aula, o professor, o assunto ou qualquer referência ao contexto didático
+- PROIBIDO perguntar por que estudar, aprender, conhecer ou compreender o tema; qual é a importância de estudá-lo; qual é o objetivo/finalidade da aula; ou o que o aluno deverá aprender. A questão deve cobrar diretamente um conhecimento médico.
 - O enunciado NUNCA deve conter palavras que sejam sinônimos diretos da resposta correta. Se a resposta é "inibição da bomba de prótons", o enunciado não pode dizer "supressão ácida" ou "bomba de prótons"
 - Nos casos clínicos: inclua idade, sexo, contexto relevante, tempo de evolução, sintomas e achados de exame — nunca entregue o diagnóstico ou tratamento que é a resposta
 - Vinheta clínica boa precisa ter um "dado discriminativo": algo que diferencie a correta dos distratores. Sem esse dado, a questão vira decoreba ou chute.
@@ -1001,6 +1002,7 @@ ${structureBlock}
 
 REGRAS DOS SUBTÓPICOS:
 - Cada subtópico = 1 conceito médico específico, relevante e com conteúdo próprio.
+- Ignore falas metadidáticas da transcrição: apresentação da aula, agenda, objetivos declarados, motivação, importância de estudar o tema, comentários sobre o curso/professor e encerramento. Elas não são conteúdo médico e nunca devem virar subtópico.
 - Todo subtópico deve sustentar uma pergunta direta própria ou ter relevância didática real para compreender a aula; na prática, preserve todos os conhecimentos técnicos apresentados e elimine apenas repetições sem conteúdo novo.
 - O título precisa declarar uma única fronteira de cobrança. Se ele mistura dois conhecimentos que poderiam gerar respostas diferentes, divida-o.
 - Se dois subtópicos produziriam essencialmente a mesma pergunta, funda-os ou reescreva-os para separar claramente as cobranças.
@@ -1073,6 +1075,8 @@ export const buildSharedLibraryDirectPrompt = ({ lessonTitle='', batchTitle='', 
 
 TIPO ÚNICO: QUESTÕES DIRETAS.
 - Crie exatamente uma questão para cada subtópico, na ordem recebida.
+- Cada questão deve cobrar diretamente conteúdo médico. É proibido perguntar por que estudar/conhecer o tema, qual é a importância do estudo, qual é o objetivo/finalidade da aula ou o que o aluno aprenderá.
+- Se um subtópico recebido for apenas apresentação, motivação ou comentário sobre a aula, não reproduza esse enfoque: cobre o primeiro conhecimento médico concreto correspondente na referência.
 - Pergunte o conceito de forma objetiva, com alvo estreito e resposta previsível.
 - Teste mecanismo, critério, classificação, comparação, exceção, contraindicação ou consequência prática.
 - PROIBIDO criar paciente, caso, história clínica, vinheta, cenário narrativo, idade, sexo, sintomas, evolução ou achados de exame.
@@ -1111,6 +1115,7 @@ ${fullMap}
 
 OBJETIVO:
 - Avaliar compreensão, integração e raciocínio clínico; não repetir as perguntas diretas com um enunciado maior.
+- Cobrar somente conhecimento médico. Nunca pergunte sobre a importância de estudar o tema, a finalidade/objetivo da aula, o professor, o curso ou o aprendizado esperado do aluno.
 - Crie o MENOR conjunto de questões fortes que realmente teste este tópico-eixo. A quantidade é decidida por você e deve ser claramente menor que uma questão por subtópico.
 - Selecione apenas conteúdos que mudem hipótese, interpretação, diagnóstico diferencial, exame, conduta, contraindicação, prognóstico ou resposta diante de uma evolução clínica.
 - Ignore subtópicos inúteis para aplicação clínica, trivia, definições isoladas e detalhes que só permitem decoreba. Se este tópico-eixo não sustentar nenhuma cobrança clínica honesta, responda somente SEM_QUESTOES_CLINICAS.

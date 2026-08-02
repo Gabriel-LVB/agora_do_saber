@@ -3850,6 +3850,7 @@ export default function QuestionBankApp() {
   const disabledCourseQuestionsRef = useRef([]);
   const disabledCourseQuestionRuntimeRef = useRef(null);
   const disableCourseQuestionInFlightRef = useRef(false);
+  const [nonContentQuestionCleanupRunning, setNonContentQuestionCleanupRunning] = useState(false);
   const [viewReturnTarget, setViewReturnTarget] = useState(null);
   const [cronograma, setCronograma]       = useState(null);   // array de 46 semanas
   const [cronLoading, setCronLoading]     = useState(false);
@@ -3996,6 +3997,11 @@ export default function QuestionBankApp() {
   const isCourseQuestionGloballyDisabled = useCallback((context = {}) => (
     disabledCourseQuestionRuntimeRef.current?.isCourseQuestionDisabled(disabledCourseQuestions, context) || false
   ), [disabledCourseQuestions]);
+  const nonContentQuestionPolicyEnabled = disabledCourseQuestions.some(entry =>
+    entry?.entryType === 'policy'
+    && entry?.policy === 'agora-non-content-course-question-v1'
+    && entry?.enabled !== false
+  );
 
   const inactivateCourseQuestion = async (context = {}) => {
     if (!isAdmin || disableCourseQuestionInFlightRef.current) return false;
@@ -4047,6 +4053,64 @@ export default function QuestionBankApp() {
       return false;
     } finally {
       disableCourseQuestionInFlightRef.current = false;
+    }
+  };
+
+  const inactivateNonContentCourseQuestions = async () => {
+    if (!isAdmin || disableCourseQuestionInFlightRef.current || nonContentQuestionCleanupRunning) return false;
+    if (sharedLibraryLoading) {
+      addToast('Aguarde a Fábrica terminar de carregar.', 'info', 3500);
+      return false;
+    }
+    const runtime = disabledCourseQuestionRuntimeRef.current
+      || await import('./services/disabledCourseQuestions.js');
+    disabledCourseQuestionRuntimeRef.current = runtime;
+    if (runtime.isNonContentCourseQuestionPolicyEnabled(disabledCourseQuestionsRef.current)) {
+      addToast('O filtro de perguntas sobre a própria aula já está ativo.', 'info', 3500);
+      return true;
+    }
+    const candidates = runtime.findNonContentCourseQuestions(sharedLibraryItems).filter(candidate =>
+      !runtime.isCourseQuestionDisabled(disabledCourseQuestionsRef.current, candidate)
+    );
+    if (!candidates.length) {
+      addToast('Nenhuma pergunta metadidática foi encontrada no banco carregado.', 'success', 4000);
+      return true;
+    }
+    const lessonCount = new Set(candidates.map(candidate =>
+      String(candidate.sharedLibraryItemId || candidate.lessonId || candidate.aulaId)
+    )).size;
+    const confirmed = window.confirm(
+      `Encontrei ${candidates.length} pergunta(s) sobre a própria aula em ${lessonCount} aula(s). `
+      + 'Ativar o filtro global? Elas sumirão do curso, favoritos e revisões, mas o conteúdo original será preservado.'
+    );
+    if (!confirmed) return false;
+    disableCourseQuestionInFlightRef.current = true;
+    setNonContentQuestionCleanupRunning(true);
+    try {
+      const configRef = doc(db, 'config', DISABLED_COURSE_QUESTIONS_CONFIG_DOC);
+      const snapshot = await getDoc(configRef);
+      const currentEntries = runtime.normalizeDisabledCourseQuestions(snapshot.exists() ? snapshot.data() : []);
+      const policyEntry = runtime.createNonContentCourseQuestionPolicyEntry({
+        enabledAt:Date.now(),
+        enabledBy:user?.email || user?.uid || null,
+        matchedCount:candidates.length,
+      });
+      const entries = runtime.upsertDisabledCourseQuestion(currentEntries, policyEntry);
+      await setDoc(configRef, cleanFirestoreData({
+        version:DISABLED_COURSE_QUESTIONS_VERSION,
+        entries,
+        updatedAt:Date.now(),
+        updatedBy:user?.email || user?.uid || null,
+      }), { merge:true });
+      await applyDisabledCourseQuestionEntries(entries);
+      addToast(`${candidates.length} pergunta(s) metadidática(s) inativada(s).`, 'success', 5000);
+      return true;
+    } catch {
+      addToast('Não consegui ativar o filtro global agora.', 'warning', 4500);
+      return false;
+    } finally {
+      disableCourseQuestionInFlightRef.current = false;
+      setNonContentQuestionCleanupRunning(false);
     }
   };
 
@@ -13313,6 +13377,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     homeCanUseAdvancedFeatures,
     HomeMottoEditor,
     inactivateCourseQuestion,
+    inactivateNonContentCourseQuestions,
     isAcademiaMirrorRootFolder,
     isAdmin,
     isAnswerCorrect,
@@ -13348,6 +13413,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     memoryCardTypeName,
     MessageCircle,
     mobileNavOpen,
+    nonContentQuestionCleanupRunning,
+    nonContentQuestionPolicyEnabled,
     MoreIcon,
     moveCourseToSiteOnly,
     moveSiteOnlyToCourse,

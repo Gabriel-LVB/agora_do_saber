@@ -54,8 +54,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A ponte entre selecao publicada, vq_blocks, gestao manual e ativacao adaptativa
 // acrescenta cerca de 1 KiB ao nucleo; paineis e algoritmos continuam em chunks lazy.
 // A busca administrativa por enunciado/alternativa acrescenta menos de 1 KiB ao
-// chunk lazy da Fabrica, sem aumentar o bundle de entrada.
-const CORE_TOTAL_GZIP_LIMIT = 446 * 1024;
+// chunk lazy da Fabrica. A confirmação da política global de limpeza acrescenta
+// menos de 1 KiB ao núcleo, sem alterar o primeiro carregamento de dados.
+const CORE_TOTAL_GZIP_LIMIT = 447 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 // Curadoria, seleção automática, publicação e exportação de auditoria ficam
 // juntas em um único módulo administrativo carregado somente sob demanda.
@@ -73,9 +74,9 @@ const ECG_QUESTION_MATCHER_GZIP_LIMIT = 5 * 1024;
 const REVIEW_DASHBOARD_GZIP_LIMIT = 6 * 1024;
 // O painel le progresso de varios alunos somente quando o admin abre a aba.
 const COURSE_STUDENTS_GZIP_LIMIT = 5 * 1024;
-// O registro global de questões inativas só é carregado após autenticação de
-// usuário do curso e permanece isolado do primeiro render da Home.
-const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 2 * 1024;
+// O registro global de questões inativas e o detector textual conservador só são
+// carregados após autenticação de usuário do curso e permanecem fora da Home inicial.
+const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 3 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + QUESTION_CURATION_GZIP_LIMIT
