@@ -635,27 +635,41 @@ preservando resultado e histórico sem criar dívida futura. `legacyFallback` pr
 resultado anterior para rollback e comparação das essenciais. Se o cálculo FSRS falhar,
 a resposta e a persistência legadas devem continuar.
 
-Quando existe uma seleção publicada, todas as questões elegíveis entram uma vez no plano
-de primeira exposição da respectiva aula: 35% no dia da ativação, 30% no dia seguinte,
+Quando existe uma seleção publicada, questões de aulas adicionadas já no fluxo progressivo
+entram uma vez no plano de primeira exposição: 35% no dia da ativação, 30% no dia seguinte,
 20% no quarto dia, 10% no oitavo e 5% no décimo quinto. A divisão usa o método dos maiores
 restos para somar exatamente o total da aula. Dentro das ondas, erros anteriores vêm
 primeiro; depois, metadados priorizam `essential`, importância, qualidade, papel cognitivo,
 baixa redundância e diversidade de conceitos, deixando complementares e reservas mais
-fracas para depois. Não reintroduza cotas globais ocultas de erradas/inéditas/acertadas
+fracas para depois. A alocação `v9` também espalha questões irmãs entre dias diferentes
+sempre que houver capacidade: primeiro por `redundancyClusterId`/`canonicalQuestionId`,
+depois por `primaryConceptId` e sobreposição de `conceptIds`. As quantidades 35/30/20/10/5
+continuam exatas; a primeira representante de cada família preserva sua prioridade e as
+variações são adiadas em favor de cobertura conceitual. Essa distribuição vale para cartões
+novos. A migração v9 corrige a matrícula retroativa defeituosa da v5/v6 e a reconstrução
+superatrasada da v7: cartões do núcleo legado retomam o calendário gradual que já possuíam,
+enquanto todo o backlog complementar/reserva legado inédito recebe datas entre amanhã e o
+29º dia futuro. A alocação `legacy-backlog-balanced-v1` equilibra a carga já prevista nos
+outros cartões, preserva a prioridade pedagógica e separa irmãs; assim, o horizonte de 30
+dias contabiliza o backlog completo sem despejá-lo hoje. Cartões que já têm revisão real,
+FSRS ou agendamento manual nunca têm a data
+recalculada. Não reintroduza cotas globais ocultas de erradas/inéditas/acertadas
 nem anexe questões de reforço ao fim de uma sessão por causa de um erro. Depois da
 primeira resposta real, somente questões `essential` recebem nova data pelo FSRS. Questões
 desativadas, `deprecated`, `review_required`, `reviewEligible: false` ou que exigem visual
 ainda não resolvido não entram. Sem curadoria **e seleção publicada**, a aula não cria
 cartões novos; cartões legados ficam em `awaiting-curation`, sem vencimento e fora da
-contagem. A migração v5 reativa antigos `dormant` ainda inéditos, aposenta vencimentos
-FSRS antigos de complementares/reservas já respondidas sem apagar o histórico e remove
-ativações legadas de reforço, preservando respostas, pausas e datas válidas das essenciais.
+contagem. A migração v9 aposenta vencimentos antigos de complementares/reservas já
+respondidas sem apagar o histórico, remove ativações legadas de reforço e preserva
+respostas, pausas e datas válidas das essenciais. O rollout progressivo é identificado pelo
+marco de criação/primeiro planejamento; não confunda backlog anterior com aula recém-adicionada.
 
 O banco completo da aula e a revisão longitudinal continuam com experiências diferentes.
-Questões do Curso permite percorrer o banco diretamente; Revisões garante que toda questão
-curada e elegível seja vista pelo menos uma vez, mas reparte essa primeira passagem nas
-cinco ondas. Depois dela, somente o núcleo essencial se transforma em revisão longitudinal;
-complementares e reservas ampliam a cobertura inicial sem inflar a dívida futura.
+Questões do Curso permite percorrer o banco diretamente; nas aulas adicionadas já no fluxo
+progressivo, Revisões garante que toda questão curada e elegível seja vista pelo menos uma
+vez nas cinco ondas. O backlog legado também aparece uma vez, distribuído pela janela de
+30 dias da migração balanceada. Depois da primeira exposição, somente o núcleo essencial se transforma em
+revisão longitudinal; complementares e reservas ampliam a cobertura inicial sem inflar a dívida futura.
 
 Na tela de Revisões, 7/14/30 dias são somente horizontes do gráfico de próximos
 vencimentos; nunca trate esses números como intervalos do agendador. Em 14 e 30 dias,

@@ -67,7 +67,9 @@ const ECG_CASE_BANK_GZIP_LIMIT = 6 * 1024;
 // O FSRS só é carregado na primeira resposta de revisão.
 // O teto inclui a ponte local e a biblioteca oficial, mantidas fora do carregamento inicial.
 const FSRS_SCHEDULER_GZIP_LIMIT = 8 * 1024;
-const REVIEW_MIGRATION_GZIP_LIMIT = 4 * 1024;
+// Inclui a ponte de reparo v8 que distingue backlog legado de novas aulas sem
+// puxar centenas de cartões antigos para o mesmo dia. Continua em chunk lazy.
+const REVIEW_MIGRATION_GZIP_LIMIT = 5.5 * 1024;
 // A ontologia nao entra no JavaScript: o matcher e seu detector visual sao
 // baixados apenas quando vq_blocks precisa da projecao automatica de ECG.
 const ECG_QUESTION_MATCHER_GZIP_LIMIT = 5 * 1024;

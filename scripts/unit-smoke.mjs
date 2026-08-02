@@ -50,7 +50,9 @@ import {
 import {
   allocateReviewFirstExposureWaves,
   buildWatchedLessonsIndividualPlan,
+  distributeReviewFirstExposureRows,
   FSRS_PENDING_SCHEDULER_VERSION,
+  INDIVIDUAL_REVIEW_PLAN_VERSION,
   orderReviewFirstExposureRows,
   REVIEW_FIRST_EXPOSURE_WAVES,
 } from '../src/services/reviewMigration.js';
@@ -599,6 +601,25 @@ const learningSelectionSnapshot = buildLearningSelectionSnapshot({
 assert.equal(learningSelectionSnapshot.publishedAt, 12345);
 assert.equal(Object.keys(learningSelectionSnapshot.questionPolicies).length, 4);
 assert.equal(learningSelectionSnapshot.questionPolicies['metadata-q-4'].tier, 'disabled');
+const siblingSelectionSnapshot = buildLearningSelectionSnapshot({
+  selection:{
+    essential:[{
+      question:metadataQuestions[0],
+      metadata:{
+        ...normalizedMetadata,
+        redundancyClusterId:'cluster-sibling',
+        canonicalQuestionId:'metadata-q-1',
+      },
+    }],
+    complementary:[],
+    reserve:[],
+    disabled:[],
+    totals:{ available:1, essential:1 },
+  },
+  questionSignature:'siblings',
+});
+assert.equal(siblingSelectionSnapshot.questionPolicies['metadata-q-1'].redundancyClusterId, 'cluster-sibling');
+assert.equal(siblingSelectionSnapshot.questionPolicies['metadata-q-1'].canonicalQuestionId, 'metadata-q-1');
 
 const rotatedKeyCalls = [];
 let rotateCount = 0;
@@ -745,6 +766,7 @@ assert.deepEqual(REVIEW_FIRST_EXPOSURE_WAVES, [
   { percentage:10, dayOffset:8 },
   { percentage:5, dayOffset:15 },
 ]);
+assert.equal(INDIVIDUAL_REVIEW_PLAN_VERSION, 'curated-progressive-essential-fsrs-v9');
 assert.deepEqual(allocateReviewFirstExposureWaves(70).map(wave => wave.count), [25,21,14,7,3]);
 assert.equal(allocateReviewFirstExposureWaves(70).reduce((sum, wave) => sum + wave.count, 0), 70);
 assert.deepEqual(orderReviewFirstExposureRows([
@@ -752,6 +774,32 @@ assert.deepEqual(orderReviewFirstExposureRows([
   { qId:'concept-a-2', outcome:'unseen', sourceIndex:1, policy:{ tier:'complementary', primaryConceptId:'a', importance:4, qualityScore:80 } },
   { qId:'concept-b', outcome:'unseen', sourceIndex:2, policy:{ tier:'complementary', primaryConceptId:'b', importance:4, qualityScore:80 } },
 ]).map(row => row.qId), ['concept-a-1','concept-b','concept-a-2']);
+const siblingDistribution = distributeReviewFirstExposureRows([
+  { qId:'sister-1', policy:{ redundancyClusterId:'cluster-a', primaryConceptId:'a', conceptIds:['a'] } },
+  { qId:'sister-2', policy:{ redundancyClusterId:'cluster-a', primaryConceptId:'a', conceptIds:['a'] } },
+  { qId:'sister-3', policy:{ redundancyClusterId:'cluster-a', primaryConceptId:'a', conceptIds:['a'] } },
+  { qId:'other-1', policy:{ primaryConceptId:'b', conceptIds:['b'] } },
+  { qId:'other-2', policy:{ primaryConceptId:'c', conceptIds:['c'] } },
+  { qId:'other-3', policy:{ primaryConceptId:'d', conceptIds:['d'] } },
+  { qId:'other-4', policy:{ primaryConceptId:'e', conceptIds:['e'] } },
+  { qId:'other-5', policy:{ primaryConceptId:'f', conceptIds:['f'] } },
+], allocateReviewFirstExposureWaves(8));
+assert.deepEqual(siblingDistribution.map(bucket => bucket.rows.length), [3,2,2,1,0]);
+assert.deepEqual(siblingDistribution
+  .map((bucket, bucketIndex) => bucket.rows.some(row => row.qId === 'sister-1') ? bucketIndex : null)
+  .filter(index => index != null), [0]);
+assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
+  siblingDistribution.findIndex(bucket => bucket.rows.some(row => row.qId === qId))
+), [0,1,2]);
+const sharedConceptDistribution = distributeReviewFirstExposureRows([
+  { qId:'shared-1', policy:{ primaryConceptId:'a', conceptIds:['shared', 'a'] } },
+  { qId:'shared-2', policy:{ primaryConceptId:'b', conceptIds:['shared', 'b'] } },
+  { qId:'different', policy:{ primaryConceptId:'c', conceptIds:['c'] } },
+], allocateReviewFirstExposureWaves(3));
+assert.notEqual(
+  sharedConceptDistribution.findIndex(bucket => bucket.rows.some(row => row.qId === 'shared-1')),
+  sharedConceptDistribution.findIndex(bucket => bucket.rows.some(row => row.qId === 'shared-2')),
+);
 const individualPlan = buildWatchedLessonsIndividualPlan({
   now:reviewNow,
   lessons:[
@@ -866,6 +914,297 @@ assert.equal(progressiveItems.filter(item => item.adaptiveState === 'dormant').l
 assert.ok(progressiveItems
   .filter(item => item.learningPolicy.tier === 'essential')
   .every(item => item.migration.firstExposure.bucketIndex === 0));
+const siblingAwareLesson = {
+  aulaId:'sibling-aware',
+  aulaTitle:'Aula com questões irmãs',
+  subject:'Cardiologia',
+  topic:'Valvopatias',
+  aulaData:{ blocks:{ main:{
+    questions:[
+      ...['sister-1', 'sister-2', 'sister-3'].map((id, index) => ({
+        ...migrationQuestion(id),
+        learningPolicy:{
+          tier:'essential',
+          conceptIds:['estenose-aortica'],
+          primaryConceptId:'estenose-aortica',
+          redundancyClusterId:'criterio-gravidade-ea',
+          canonicalQuestionId:index ? 'sister-1' : null,
+          importance:5,
+          qualityScore:95 - index,
+          learningRole:'core',
+          reviewEligible:true,
+          status:'active',
+        },
+      })),
+      ...Array.from({ length:5 }, (_, index) => ({
+        ...migrationQuestion(`different-${index}`),
+        learningPolicy:{
+          tier:'complementary',
+          conceptIds:[`different-concept-${index}`],
+          primaryConceptId:`different-concept-${index}`,
+          importance:3,
+          qualityScore:75 - index,
+          learningRole:'reinforcement',
+          reviewEligible:true,
+          status:'active',
+        },
+      })),
+    ],
+  } } },
+};
+const siblingAwarePlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[siblingAwareLesson],
+});
+const siblingAwareItems = siblingAwarePlan.queue['sibling-aware'].main;
+assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
+  siblingAwareItems[qId].migration.firstExposure.bucketIndex
+), [0,1,2]);
+assert.ok(['sister-1', 'sister-2', 'sister-3'].every(qId =>
+  siblingAwareItems[qId].migration.firstExposure.siblingStrategy === 'metadata-v1'
+));
+const legacyV5Queue = JSON.parse(JSON.stringify(siblingAwarePlan.queue));
+const legacyV5DueDates = {};
+Object.entries(legacyV5Queue['sibling-aware'].main).forEach(([qId, item], index) => {
+  item.dueDate = reviewNow + 1000 + index;
+  item.migration.version = 'curated-progressive-essential-fsrs-v5';
+  item.migration.firstExposure = {
+    ...item.migration.firstExposure,
+    version:'curated-progressive-essential-fsrs-v5',
+    siblingStrategy:undefined,
+  };
+  legacyV5DueDates[qId] = item.dueDate;
+});
+const preservedLegacyV5Plan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow + 2000,
+  existingQueue:legacyV5Queue,
+  lessons:[siblingAwareLesson],
+});
+assert.deepEqual(
+  Object.fromEntries(Object.entries(preservedLegacyV5Plan.queue['sibling-aware'].main)
+    .map(([qId, item]) => [qId, item.dueDate])),
+  legacyV5DueDates,
+);
+assert.ok(Object.values(preservedLegacyV5Plan.queue['sibling-aware'].main).every(item =>
+  item.migration.firstExposure.version === INDIVIDUAL_REVIEW_PLAN_VERSION
+  && item.migration.firstExposure.siblingStrategy === 'legacy-preserved'
+));
+
+// A v6 chegou a matricular novamente todo o estoque legado e a v7 ainda o
+// ancorou em uma data antiga, transformando centenas de cartões em atrasados.
+// A v9 devolve o núcleo antigo à agenda gradual e distribui o complemento
+// legado pelos próximos 29 dias, visíveis na previsão de 30 dias.
+const brokenReplanAt = reviewNow + 10 * REVIEW_DAY_MS;
+const brokenV6Queue = JSON.parse(JSON.stringify(legacyV5Queue));
+Object.entries(brokenV6Queue['sibling-aware'].main).forEach(([qId, item], index) => {
+  const siblingExposure = siblingAwareItems[qId].migration.firstExposure;
+  item.dueDate = brokenReplanAt + siblingExposure.dayOffset * REVIEW_DAY_MS + index;
+  item.migration.version = 'curated-progressive-essential-fsrs-v6';
+  item.migration.firstExposure = {
+    ...siblingExposure,
+    version:'curated-progressive-essential-fsrs-v6',
+    plannedAt:brokenReplanAt,
+  };
+});
+const recoveredV6Plan = buildWatchedLessonsIndividualPlan({
+  now:brokenReplanAt + 2000,
+  existingQueue:brokenV6Queue,
+  lessons:[siblingAwareLesson],
+});
+const recoveredV6Items = recoveredV6Plan.queue['sibling-aware'].main;
+assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
+  recoveredV6Items[qId].migration.firstExposure.bucketIndex
+), [null,null,null]);
+assert.ok(['sister-1', 'sister-2', 'sister-3'].every(qId =>
+  recoveredV6Items[qId].migration.firstExposure.siblingStrategy === 'legacy-schedule-restored'
+  && recoveredV6Items[qId].migration.firstExposure.plannedAt === reviewNow
+  && recoveredV6Items[qId].dueDate < reviewNow
+));
+assert.ok(['different-0', 'different-1', 'different-2', 'different-3', 'different-4'].every(qId =>
+  recoveredV6Items[qId].adaptiveState === 'introduction'
+  && recoveredV6Items[qId].dueDate > brokenReplanAt
+  && recoveredV6Items[qId].migration.firstExposure.siblingStrategy === 'legacy-backlog-balanced-v1'
+));
+
+const brokenV7Queue = JSON.parse(JSON.stringify(brokenV6Queue));
+Object.values(brokenV7Queue['sibling-aware'].main).forEach(item => {
+  item.migration.version = 'curated-progressive-essential-fsrs-v7';
+  item.migration.firstExposure = {
+    ...item.migration.firstExposure,
+    version:'curated-progressive-essential-fsrs-v7',
+    siblingStrategy:'v6-calendar-recovery',
+    plannedAt:reviewNow,
+    recoveredAt:brokenReplanAt,
+  };
+  item.dueDate = reviewNow - REVIEW_DAY_MS;
+});
+const repairedV7Plan = buildWatchedLessonsIndividualPlan({
+  now:brokenReplanAt + 3000,
+  existingQueue:brokenV7Queue,
+  lessons:[siblingAwareLesson],
+});
+assert.equal(Object.values(repairedV7Plan.queue['sibling-aware'].main)
+  .filter(item => item.dueDate != null).length, 8);
+assert.equal(Object.values(repairedV7Plan.queue['sibling-aware'].main)
+  .filter(item => item.adaptiveState === 'dormant').length, 0);
+
+// Regressão do caso real: centenas de complementares retroativas não podem
+// substituir a carga gradual de 30 cartões do núcleo que já estava em curso,
+// mas todas precisam ganhar uma data dentro da previsão de 30 dias.
+const avalancheNow = reviewNow + 2 * REVIEW_DAY_MS;
+const avalancheQuestions = [
+  ...Array.from({ length:100 }, (_, index) => ({
+    ...migrationQuestion(`legacy-core-${index}`),
+    learningPolicy:{
+      tier:'essential',
+      conceptIds:[`core-${index}`],
+      importance:5,
+      qualityScore:90,
+      reviewEligible:true,
+      status:'active',
+    },
+  })),
+  ...Array.from({ length:700 }, (_, index) => ({
+    ...migrationQuestion(`legacy-extra-${index}`),
+    learningPolicy:{
+      tier:'complementary',
+      conceptIds:[index < 3 ? 'legacy-sister-concept' : `extra-${index}`],
+      primaryConceptId:index < 3 ? 'legacy-sister-concept' : `extra-${index}`,
+      redundancyClusterId:index < 3 ? 'legacy-sister-cluster' : null,
+      canonicalQuestionId:index > 0 && index < 3 ? 'legacy-extra-0' : null,
+      importance:3,
+      qualityScore:70,
+      reviewEligible:true,
+      status:'active',
+    },
+  })),
+];
+const avalancheQueue = { avalanche:{ main:Object.fromEntries(avalancheQuestions.map(question => [
+  question.id,
+  {
+    source:'curso',
+    cardKey:`course/avalanche/${question.id}`,
+    question,
+    learningPolicy:question.learningPolicy,
+    adaptiveState:question.learningPolicy.tier === 'essential' ? 'core' : 'introduction',
+    dueDate:reviewNow - REVIEW_DAY_MS,
+    reps:0,
+    lastReview:null,
+    addedAt:reviewNow,
+    migration:{
+      version:'curated-progressive-essential-fsrs-v7',
+      createdAt:reviewNow,
+      firstExposure:{
+        version:'curated-progressive-essential-fsrs-v7',
+        siblingStrategy:'v6-calendar-recovery',
+        plannedAt:reviewNow,
+        recoveredAt:avalancheNow,
+      },
+    },
+  },
+])) } };
+const repairedAvalanchePlan = buildWatchedLessonsIndividualPlan({
+  now:avalancheNow,
+  existingQueue:avalancheQueue,
+  lessons:[{
+    aulaId:'avalanche',
+    aulaData:{ blocks:{ main:{ questions:avalancheQuestions } } },
+  }],
+});
+const repairedAvalancheSummary = summarizeReviewQueue(repairedAvalanchePlan.queue, avalancheNow);
+assert.equal(repairedAvalancheSummary.total, 800);
+assert.equal(repairedAvalancheSummary.due, 30);
+assert.equal(Object.values(repairedAvalanchePlan.queue.avalanche.main)
+  .filter(item => item.adaptiveState === 'introduction').length, 700);
+const repairedAvalancheForecast = buildReviewForecast(repairedAvalanchePlan.queue, { now:avalancheNow, days:30 });
+assert.equal(repairedAvalancheForecast.beyondRange, 0);
+assert.equal(
+  repairedAvalancheForecast.days.reduce((sum, day) => sum + day.total, 0) + repairedAvalancheForecast.overdue,
+  800,
+);
+assert.ok(Object.values(repairedAvalanchePlan.queue.avalanche.main)
+  .filter(item => item.migration.firstExposure.siblingStrategy === 'legacy-backlog-balanced-v1')
+  .every(item => item.dueDate > avalancheNow && item.dueDate < avalancheNow + 30 * REVIEW_DAY_MS));
+assert.equal(new Set(['legacy-extra-0', 'legacy-extra-1', 'legacy-extra-2'].map(qId =>
+  new Date(repairedAvalanchePlan.queue.avalanche.main[qId].dueDate).toISOString().slice(0, 10)
+)).size, 3);
+const repeatedAvalanchePlan = buildWatchedLessonsIndividualPlan({
+  now:avalancheNow + 1000,
+  existingQueue:repairedAvalanchePlan.queue,
+  lessons:[{
+    aulaId:'avalanche',
+    aulaData:{ blocks:{ main:{ questions:avalancheQuestions } } },
+  }],
+});
+assert.equal(repeatedAvalanchePlan.changed, 0);
+
+// O reparo precisa considerar também os cartões já concluídos ao reconstruir
+// as ondas antigas. Senão ele aplicaria novamente 35% apenas sobre o restante,
+// que foi precisamente o motivo do salto na carga diária.
+const partialBrokenAt = reviewNow + 2 * REVIEW_DAY_MS;
+const partialBrokenV6Queue = JSON.parse(JSON.stringify(legacyV5Queue));
+['sister-1', 'sister-2', 'sister-3', 'different-0', 'different-1'].forEach(qId => {
+  const item = partialBrokenV6Queue['sibling-aware'].main[qId];
+  item.reps = 1;
+  item.lastReview = reviewNow + REVIEW_DAY_MS;
+  if (qId.startsWith('different-')) {
+    item.adaptiveState = 'completed-once';
+    item.dueDate = null;
+  }
+});
+['different-2', 'different-3', 'different-4'].forEach((qId, index) => {
+  const item = partialBrokenV6Queue['sibling-aware'].main[qId];
+  item.dueDate = partialBrokenAt + index;
+  item.migration.version = 'curated-progressive-essential-fsrs-v6';
+  item.migration.firstExposure = {
+    ...item.migration.firstExposure,
+    version:'curated-progressive-essential-fsrs-v6',
+    bucketIndex:index,
+    dayOffset:REVIEW_FIRST_EXPOSURE_WAVES[index].dayOffset,
+    plannedAt:partialBrokenAt,
+  };
+});
+const recoveredPartialV6Plan = buildWatchedLessonsIndividualPlan({
+  now:partialBrokenAt + 2000,
+  existingQueue:partialBrokenV6Queue,
+  lessons:[siblingAwareLesson],
+});
+assert.deepEqual(['different-2', 'different-3', 'different-4'].map(qId =>
+  recoveredPartialV6Plan.queue['sibling-aware'].main[qId].migration.firstExposure.bucketIndex
+), [2,2,3]);
+assert.ok(['different-2', 'different-3', 'different-4'].every(qId =>
+  recoveredPartialV6Plan.queue['sibling-aware'].main[qId].dueDate > partialBrokenAt
+));
+
+// Cartões que nasceram corretamente na v6 têm criação e planejamento no mesmo
+// instante e não devem perder a distribuição de irmãs ao receber o marcador v9.
+const nativeV6Queue = JSON.parse(JSON.stringify(siblingAwarePlan.queue));
+Object.values(nativeV6Queue['sibling-aware'].main).forEach(item => {
+  item.migration.version = 'curated-progressive-essential-fsrs-v6';
+  item.migration.firstExposure.version = 'curated-progressive-essential-fsrs-v6';
+});
+const preservedNativeV6Plan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow + 2000,
+  existingQueue:nativeV6Queue,
+  lessons:[siblingAwareLesson],
+});
+assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
+  preservedNativeV6Plan.queue['sibling-aware'].main[qId].migration.firstExposure.bucketIndex
+), [0,1,2]);
+
+const reviewedSiblingQueue = JSON.parse(JSON.stringify(brokenV6Queue));
+reviewedSiblingQueue['sibling-aware'].main['sister-2'].reps = 1;
+reviewedSiblingQueue['sibling-aware'].main['sister-2'].lastReview = reviewNow - 1000;
+reviewedSiblingQueue['sibling-aware'].main['sister-2'].dueDate = reviewNow + 123456;
+const preservedReviewedSiblingPlan = buildWatchedLessonsIndividualPlan({
+  now:brokenReplanAt + 2000,
+  existingQueue:reviewedSiblingQueue,
+  lessons:[siblingAwareLesson],
+});
+assert.equal(
+  preservedReviewedSiblingPlan.queue['sibling-aware'].main['sister-2'].dueDate,
+  reviewNow + 123456,
+);
 const repeatedProgressivePlan = buildWatchedLessonsIndividualPlan({
   now:reviewNow + 1000,
   existingQueue:progressiveLessonPlan.queue,

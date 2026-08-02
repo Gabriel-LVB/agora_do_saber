@@ -106,6 +106,7 @@ A primeira auditoria real mostrou inflação de notas máximas, uso excessivo de
 ### Uso adaptativo da seleção, implementado
 
 - essenciais e questões de maior importância/qualidade ocupam as primeiras ondas das aulas ativadas;
+- questões irmãs são distribuídas entre ondas diferentes sempre que houver vaga: clusters redundantes e relações canônicas têm precedência, seguidos por conceito principal e conceitos compartilhados;
 - questões já erradas entram como remediação prioritária mesmo quando são complementares ou reserva;
 - toda complementar e reserva elegível recebe uma primeira data nas ondas 35/30/20/10/5;
 - erros não anexam nem antecipam novas questões no fim da sessão; as ondas permanecem estáveis;
@@ -115,10 +116,11 @@ A primeira auditoria real mostrou inflação de notas máximas, uso excessivo de
 - sem seleção publicada, a aula não cria cartões novos e cartões legados aguardam curadoria sem vencimento nem obrigação;
 - FSRS continua responsável pela próxima data das essenciais somente depois da primeira resposta real.
 
-O aluno pode usar o banco completo da aula como fixação direta. Se preferir Revisões,
-todas as questões curadas e elegíveis aparecem ao menos uma vez, em ordem pedagógica e
-divididas nas cinco ondas. Essa primeira exposição não é uma repetição FSRS: somente
-essenciais passam a ter retornos longitudinais governados por `nextDue`.
+O aluno pode usar o banco completo da aula como fixação direta. Nas aulas adicionadas já
+no fluxo progressivo, todas as questões curadas e elegíveis aparecem ao menos uma vez em
+Revisões, em ordem pedagógica e divididas nas cinco ondas. O backlog legado é reintroduzido
+integralmente entre amanhã e o 29º dia futuro. Essa primeira exposição não é uma repetição FSRS: somente essenciais
+passam a ter retornos longitudinais governados por `nextDue`.
 
 ## FSRS: escopo e implantação
 
@@ -129,7 +131,7 @@ O motor será um serviço comum e não ficará acoplado a `SpacedReviewView`.
 - a interface pública chama a antiga Revisão espaçada de **Revisões**, mantendo `view === 'spaced-review'` por compatibilidade;
 - a tela da videoaula separa **Marcar assistida** de **Adicionar à Revisão**; sem curadoria, o segundo controle permanece desabilitado;
 - uma aula ativa pode ser pausada sem perder histórico/FSRS e retomada depois, ou zerada para apagar somente sua fila de revisão até uma nova adição explícita;
-- toda questão de aula ativada passa a ser elegível individualmente; o plano distribui a entrada ao longo dos dias em vez de exigir refazer uma aula inteira;
+- toda questão de aula adicionada no fluxo progressivo passa a ser elegível individualmente; o plano distribui a entrada ao longo dos dias em vez de exigir refazer uma aula inteira;
 - a migração lê as respostas atuais e o caderno de erros: erros anteriores têm prioridade; entre as demais, os metadados ordenam importância, qualidade, papel cognitivo, redundância e diversidade conceitual;
 - a fila diária mistura aulas e matérias. A separação por aula existe apenas nos documentos do Firestore, para evitar documentos gigantes;
 - novas entradas recebem `cardKey`, `schedulerVersion`, `state`, `reps`, `lapses`, `addedAt` e `lastReview` por `services/reviewScheduler.js`;
@@ -183,10 +185,17 @@ no dia da ativação, 30% no dia seguinte, 20% no quarto dia, 10% no oitavo e 5%
 quinto. Arredondamentos usam maiores restos e sempre somam exatamente o total elegível.
 Não há cota global oculta por errada/inédita/acertada. Aulas ainda não selecionadas não
 criam cartões novos; registros legados ficam em `awaiting-curation`, com `dueDate: null`.
-A versão `curated-progressive-essential-fsrs-v5` migra complementares e reservas antigas
-em `dormant` para a nova primeira exposição quando ainda estão inéditas. Se já foram
-respondidas ou têm FSRS legado, passam a `completed-once`: o histórico é preservado, mas
-o vencimento é retirado. Ativações antigas de reforço voltam à onda original. Novas aulas
+A versão `curated-progressive-essential-fsrs-v9` distribui todas as complementares e reservas
+inéditas do backlog legado pelos 29 dias futuros usando `legacy-backlog-balanced-v1`; nenhuma
+entra hoje, e todas aparecem no horizonte de 30 dias. A capacidade diária é calculada para
+equilibrar a carga já agendada, sem um limite que descarte cartões. Se já foram respondidas ou têm FSRS legado, passam a
+`completed-once`: o histórico é preservado, mas o vencimento é retirado. Novos cartões de
+aulas adicionadas no fluxo progressivo são distribuídos entre as ondas usando
+`redundancyClusterId`, `canonicalQuestionId`, `primaryConceptId` e sobreposição de
+`conceptIds`. A v9 corrige tanto o replanejamento coletivo da v6 quanto a reconstrução
+superatrasada da v7: o núcleo legado inédito volta à distribuição diária anterior, enquanto
+o complemento recebe datas futuras balanceadas. Cartões com revisão real, FSRS ou agendamento manual mantêm suas datas.
+Ativações antigas de reforço voltam à onda original. Novas aulas
 e questões publicadas são incorporadas de forma
 incremental; `cardKey` impede duplicatas. A classificação histórica prioriza a ordem,
 mas não inventa avaliações antigas. Questões bloqueadas pela curadoria ou pelo requisito
@@ -340,7 +349,7 @@ A Fábrica pode marcar `needsVisual: true` e `visualType: 'ecg'`. Um `ecgAssetId
 ### Fase C — FSRS individual ativo, implementada
 
 - serviço oficial versionado, IDs estáveis e adaptador da fila atual;
-- reconciliação automática das aulas já ativadas com seleção publicada, incluindo toda questão elegível sem concentrá-la no mesmo dia;
+- reconciliação automática das aulas já ativadas com seleção publicada, sem matricular coletivamente o backlog legado;
 - fila global por questão, com primeira exposição nas ondas 35/30/20/10/5 e prioridade orientada pelos metadados;
 - FSRS controlando a próxima data das essenciais depois da resposta real;
 - fallback e comparação acumulada com o motor anterior;
