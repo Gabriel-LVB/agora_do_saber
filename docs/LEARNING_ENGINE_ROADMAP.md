@@ -13,7 +13,9 @@ Transformar o banco de questões em um sistema de aprendizagem que:
 - incorpora 150 ECGs por importação em massa, com metadados fornecidos pelo administrador;
 - mantém conteúdo global separado de respostas, histórico e estado cognitivo de cada aluno.
 
-O sistema não deve obrigar o aluno a responder toda questão gerada. Produção e seleção são etapas diferentes.
+Ao ativar uma aula curada em Revisões, o sistema garante uma primeira passagem por toda
+questão elegível, sem despejar o banco inteiro no mesmo dia. Produção e curadoria continuam
+separadas: questões desativadas, inseguras ou sem visual obrigatório resolvido não entram.
 
 ## Decisões que não devem ser reinterpretadas
 
@@ -103,19 +105,20 @@ A primeira auditoria real mostrou inflação de notas máximas, uso excessivo de
 
 ### Uso adaptativo da seleção, implementado
 
-- essenciais formam o núcleo automático das aulas ativadas;
-- questões já erradas entram como remediação mesmo quando são complementares ou reserva;
-- complementares e reserva ainda não necessárias ficam persistidas como adormecidas, sem vencimento e sem contar como carga;
-- um erro libera no máximo um reforço da mesma aula que compartilhe conceito, favorecendo complementar antes de reserva;
-- o reforço liberado entra uma única vez no fim da sessão já aberta da mesma modalidade, sem exigir sair e entrar novamente;
+- essenciais e questões de maior importância/qualidade ocupam as primeiras ondas das aulas ativadas;
+- questões já erradas entram como remediação prioritária mesmo quando são complementares ou reserva;
+- toda complementar e reserva elegível recebe uma primeira data nas ondas 35/30/20/10/5;
+- erros não anexam nem antecipam novas questões no fim da sessão; as ondas permanecem estáveis;
+- depois da primeira resposta, somente essenciais continuam longitudinalmente pelo FSRS;
+- complementares e reservas passam a `completed-once`, preservam o resultado e deixam de contar como vencimento futuro;
 - `disabled`, `deprecated`, `review_required` e `reviewEligible: false` não entram;
 - sem seleção publicada, a aula não cria cartões novos e cartões legados aguardam curadoria sem vencimento nem obrigação;
-- FSRS continua responsável pela próxima data somente depois da primeira resposta real do cartão ativo.
+- FSRS continua responsável pela próxima data das essenciais somente depois da primeira resposta real.
 
-O aluno pode usar o banco completo da aula como fixação inicial. A rotina longitudinal
-não exige que ele revise tudo: essenciais e erros entram, enquanto complementares e
-reservas acertadas ficam fora até surgir evidência de dificuldade no mesmo conceito.
-Se o banco inicial não for concluído, essenciais inéditas ainda podem entrar gradualmente.
+O aluno pode usar o banco completo da aula como fixação direta. Se preferir Revisões,
+todas as questões curadas e elegíveis aparecem ao menos uma vez, em ordem pedagógica e
+divididas nas cinco ondas. Essa primeira exposição não é uma repetição FSRS: somente
+essenciais passam a ter retornos longitudinais governados por `nextDue`.
 
 ## FSRS: escopo e implantação
 
@@ -127,7 +130,7 @@ O motor será um serviço comum e não ficará acoplado a `SpacedReviewView`.
 - a tela da videoaula separa **Marcar assistida** de **Adicionar à Revisão**; sem curadoria, o segundo controle permanece desabilitado;
 - uma aula ativa pode ser pausada sem perder histórico/FSRS e retomada depois, ou zerada para apagar somente sua fila de revisão até uma nova adição explícita;
 - toda questão de aula ativada passa a ser elegível individualmente; o plano distribui a entrada ao longo dos dias em vez de exigir refazer uma aula inteira;
-- a migração lê as respostas atuais e o caderno de erros: erros anteriores têm prioridade, inéditas começam aos poucos e acertadas entram em menor volume a partir do dia seguinte;
+- a migração lê as respostas atuais e o caderno de erros: erros anteriores têm prioridade; entre as demais, os metadados ordenam importância, qualidade, papel cognitivo, redundância e diversidade conceitual;
 - a fila diária mistura aulas e matérias. A separação por aula existe apenas nos documentos do Firestore, para evitar documentos gigantes;
 - novas entradas recebem `cardKey`, `schedulerVersion`, `state`, `reps`, `lapses`, `addedAt` e `lastReview` por `services/reviewScheduler.js`;
 - a Home prioriza revisões vencidas antes do próximo passo do curso;
@@ -175,15 +178,19 @@ classifica cada questão disponível:
 - `unseen`: questão ainda não respondida;
 - `correct`: resposta atual correta e sem erro anterior registrado.
 
-A introdução ativa distribui por dia até 8 erradas, 10 inéditas e 6 acertadas. Somente
-com seleção publicada esses limites se aplicam ao núcleo essencial e às remediações;
-complementares e reservas sem evidência de necessidade permanecem adormecidas e não
-contam como carga. Aulas ainda não selecionadas não criam cartões novos; registros
-legados ficam em `awaiting-curation`, com `dueDate: null`. A publicação posterior restaura apenas cartões elegíveis e preserva
-datas estacionadas em `parkedDueDate`. Novas aulas ativadas e novas questões publicadas
-são incorporadas de forma incremental; `cardKey` impede duplicatas. A classificação histórica é usada
-para priorizar a primeira aparição, mas não inventa datas ou avaliações antigas que o
-site nunca registrou.
+A introdução ativa é calculada separadamente para cada aula: 35% das questões elegíveis
+no dia da ativação, 30% no dia seguinte, 20% no quarto dia, 10% no oitavo e 5% no décimo
+quinto. Arredondamentos usam maiores restos e sempre somam exatamente o total elegível.
+Não há cota global oculta por errada/inédita/acertada. Aulas ainda não selecionadas não
+criam cartões novos; registros legados ficam em `awaiting-curation`, com `dueDate: null`.
+A versão `curated-progressive-essential-fsrs-v5` migra complementares e reservas antigas
+em `dormant` para a nova primeira exposição quando ainda estão inéditas. Se já foram
+respondidas ou têm FSRS legado, passam a `completed-once`: o histórico é preservado, mas
+o vencimento é retirado. Ativações antigas de reforço voltam à onda original. Novas aulas
+e questões publicadas são incorporadas de forma
+incremental; `cardKey` impede duplicatas. A classificação histórica prioriza a ordem,
+mas não inventa avaliações antigas. Questões bloqueadas pela curadoria ou pelo requisito
+visual permanecem fora da carga.
 
 ### Estatísticas úteis da fila
 
@@ -201,6 +208,16 @@ jamais representam intervalos fixos de agendamento. A previsão contém apenas o
 próximo vencimento conhecido de cada cartão e muda em tempo real conforme o FSRS
 processa novas respostas. Resultados diários de revisão passam a ser registrados em
 `daily_stats/{date}.reviewEvents` para sustentar estatísticas históricas futuras.
+
+### Inativação administrativa global
+
+Questões problemáticas do curso podem ser inativadas pelo administrador diretamente no
+cartão. `config/disabled_course_questions` guarda a combinação de `questionId` com aliases
+da aula e do item compartilhado; o conteúdo original não é apagado. O bloqueio filtra a
+Fábrica, Questões do Curso, Favoritos, sessões abertas e cartões antigos em `vq_review`,
+inclusive em cópias já persistidas nos usuários. Favoritos do curso são lidos de
+`vq_blocks` e aparecem junto dos favoritos pessoais para que uma questão marcada possa
+ser reencontrada depois do recarregamento antes de ser inativada.
 
 ### Identidade
 
@@ -314,9 +331,9 @@ A Fábrica pode marcar `needsVisual: true` e `visualType: 'ecg'`. Um `ecgAssetId
 ### Fase C — FSRS individual ativo, implementada
 
 - serviço oficial versionado, IDs estáveis e adaptador da fila atual;
-- reconciliação automática das aulas já ativadas com seleção publicada, sem importar o banco inteiro;
-- fila global por questão, com entrada gradual baseada em erro/inédita/acerto;
-- FSRS controlando a próxima data depois da resposta real;
+- reconciliação automática das aulas já ativadas com seleção publicada, incluindo toda questão elegível sem concentrá-la no mesmo dia;
+- fila global por questão, com primeira exposição nas ondas 35/30/20/10/5 e prioridade orientada pelos metadados;
+- FSRS controlando a próxima data das essenciais depois da resposta real;
 - fallback e comparação acumulada com o motor anterior;
 - ampliar a telemetria para carga diária, retenção e exportação de eventos;
 - conectar progressivamente todas as origens elegíveis sem perder identidade;

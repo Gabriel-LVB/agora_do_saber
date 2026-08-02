@@ -78,6 +78,8 @@ export default function SharedLibraryView() {
     ChevronRight,
     ArrowLeft,
     QuestionView,
+    inactivateCourseQuestion,
+    isCourseQuestionGloballyDisabled,
     LoadingState,
     EmptyState,
     UserIcon,
@@ -103,8 +105,21 @@ export default function SharedLibraryView() {
               return [
                 ...(item.directQuestions || []).map(question => ({ ...question, libraryQuestionKind:'direct' })),
                 ...(clinicalReady ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : []),
-              ];
+              ].filter(question => !isCourseQuestionGloballyDisabled({
+                aulaId:item.lessonId || item.id,
+                lessonId:item.lessonId,
+                sharedLibraryItemId:item.id,
+                question,
+              }));
             };
+            const searchNeedle = normalizeTextKey(sharedLibrarySearch);
+            const questionMatchesSearch = question => !searchNeedle || normalizeTextKey(
+              `${question?.statement || ''} ${(question?.options || []).map(option => option?.text || '').join(' ')}`
+            ).includes(searchNeedle);
+            const itemMetadataMatchesSearch = item => !searchNeedle
+              || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(searchNeedle);
+            const itemMatchesSearch = item => itemMetadataMatchesSearch(item)
+              || itemQuestions(item).some(questionMatchesSearch);
             // Mesma fonte do Portal: matéria, total e sequência não podem divergir.
             const sharedCourseLessons = flattenCourseLessons(appliedVideoaulasData || videoaulasData || {});
             const courseSubjects = sortSubjects([...new Set(sharedCourseLessons.map(lesson=>lesson.subject).filter(Boolean))]);
@@ -175,16 +190,14 @@ export default function SharedLibraryView() {
                   ? itemQuestions(item).length > 0
                   : false;
               const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
-              const needle = normalizeTextKey(sharedLibrarySearch);
-              const matchesSearch = !needle || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(needle);
+              const matchesSearch = itemMatchesSearch(item);
               return hasContent && matchesSubject && matchesSearch;
             }).sort((a,b) => (subjectOrder.indexOf(a.subject) - subjectOrder.indexOf(b.subject))
               || (sharedLessonOrder.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
               || String(a.title).localeCompare(String(b.title),'pt'));
             const repairScopeItems = displayedSharedLibraryItems.filter(item => {
               const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
-              const needle = normalizeTextKey(sharedLibrarySearch);
-              const matchesSearch = !needle || normalizeTextKey(`${item.title} ${item.subject} ${item.topic}`).includes(needle);
+              const matchesSearch = itemMatchesSearch(item);
               return matchesSubject && matchesSearch;
             });
             const incompleteQuestionCount = showSharedLibraryAdminTools ? countSharedLibraryIncompleteQuestions(repairScopeItems) : 0;
@@ -221,7 +234,10 @@ export default function SharedLibraryView() {
                   </article>
                 </div>
               );
-              const questions = itemQuestions(activeItem);
+              const allQuestions = itemQuestions(activeItem);
+              const questions = searchNeedle && !itemMetadataMatchesSearch(activeItem)
+                ? allQuestions.filter(questionMatchesSearch)
+                : allQuestions;
               return <QuestionView
                 title={activeItem.title}
                 onBack={()=>setSharedLibraryActiveItemId(null)}
@@ -241,6 +257,12 @@ export default function SharedLibraryView() {
                 displayMode={settings.questionDisplayMode || 'list'}
                 onDisplayModeChange={mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})}
                 adminQuestionExplanations={showSharedLibraryAdminTools}
+                onAdminDisableQuestion={question=>inactivateCourseQuestion({
+                  aulaId:activeItem.lessonId || activeItem.id,
+                  lessonId:activeItem.lessonId,
+                  sharedLibraryItemId:activeItem.id,
+                  question,
+                })}
               />;
             }
             const factoryNavigation = showSharedLibraryAdminTools ? (
@@ -425,7 +447,7 @@ export default function SharedLibraryView() {
 
                 <div className="grid md:grid-cols-[220px_1fr] gap-4">
                   <div className="space-y-2">
-                    <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar conteúdo..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
+                    <input value={sharedLibrarySearch} onChange={e=>setSharedLibrarySearch(e.target.value)} placeholder="Buscar questão..." className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}/>
                     <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=>{const coverage=subjectCoverage.get(subject)||{complete:0,total:0};return <option key={subject} value={subject}>{subject} · {coverage.complete}/{coverage.total}</option>;})}</select>
                     {showSharedLibraryAdminTools&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>

@@ -2,6 +2,7 @@ export const REVIEW_SCHEDULER_VERSION = 'agora-legacy-v2';
 export const REVIEW_INTERVAL_DAYS = [3, 7, 14, 30, 90];
 export const REVIEW_DAY_MS = 86400000;
 export const DEFAULT_LESSON_REVIEW_SIZE = 12;
+export const FIRST_EXPOSURE_COMPLETED_SCHEDULER_VERSION = 'first-exposure-complete-v1';
 
 export const isReviewQueueItemScheduled = item => {
   const isCourseItem = item?.source === 'curso' || String(item?.cardKey || '').startsWith('course/');
@@ -9,7 +10,8 @@ export const isReviewQueueItemScheduled = item => {
   if (isCourseItem && (!policy || policy.tier === 'unclassified')) return false;
   return item?.dueDate != null
     && Number.isFinite(Number(item.dueDate))
-    && !['dormant', 'disabled', 'awaiting-curation', 'awaiting-visual', 'paused'].includes(item?.adaptiveState)
+    && !['completed-once', 'dormant', 'disabled', 'disabled-global', 'awaiting-curation', 'awaiting-visual', 'paused'].includes(item?.adaptiveState)
+    && !item?.globallyDisabled
     && policy?.tier !== 'disabled';
 };
 
@@ -117,12 +119,14 @@ export const resumeReviewLesson = ({ queue = {}, aulaId, now = Date.now() }) =>
   mapLessonReviewItems(queue, aulaId, item => {
     if (item.adaptiveState !== 'paused') return item;
     const pause = item.reviewPause || {};
-    const fallbackState = item.learningPolicy?.tier === 'essential' ? 'core' : 'dormant';
+    const fallbackState = item.learningPolicy?.tier === 'essential'
+      ? 'core'
+      : ['complementary', 'reserve'].includes(item.learningPolicy?.tier) ? 'introduction' : 'dormant';
     const previousState = pause.adaptiveState || fallbackState;
     const adaptiveState = policyBlocksScheduling(item.learningPolicy)
       ? 'disabled'
       : item.question?.visualRequirement?.status === 'unresolved' ? 'awaiting-visual' : previousState;
-    const scheduled = !['dormant', 'disabled', 'awaiting-curation', 'awaiting-visual', 'paused'].includes(adaptiveState);
+    const scheduled = !['completed-once', 'dormant', 'disabled', 'disabled-global', 'awaiting-curation', 'awaiting-visual', 'paused'].includes(adaptiveState);
     const restoredDueDate = finiteDateOrNull(pause.dueDate)
       ?? finiteDateOrNull(item.parkedDueDate)
       ?? (scheduled ? now : null);
@@ -153,30 +157,23 @@ export const scheduleReviewOutcome = ({ item = {}, correct, now = Date.now() }) 
   };
 };
 
-const reviewSessionEntryKey = entry => entry?.item?.cardKey
-  || `${entry?.aulaId || ''}/${entry?.blockId || ''}/${entry?.qId || ''}`;
-
-// Um reforço liberado durante a sessão entra uma única vez no fim da fila já
-// aberta. Se o aluno já concluiu enquanto o salvamento terminava, a sessão é
-// reaberta diretamente no reforço, sem exigir sair e entrar novamente.
-export const appendAdaptiveSupportToReviewSession = (session, supportItem) => {
-  if (!session || !supportItem?.question) return session;
-  const items = Array.isArray(session.items) ? session.items : [];
-  const supportKey = reviewSessionEntryKey(supportItem);
-  if (items.some(item => reviewSessionEntryKey(item) === supportKey)) return session;
-  const allFlashcards = items.length > 0 && items.every(item => !!item?.question?.isFlashcard);
-  const allQuestions = items.length > 0 && items.every(item => !item?.question?.isFlashcard);
-  if ((allFlashcards && !supportItem.question.isFlashcard)
-    || (allQuestions && supportItem.question.isFlashcard)) return session;
-  const wasCompleted = !!session.completed;
-  return {
-    ...session,
-    items:[...items, supportItem],
-    index:wasCompleted ? items.length : Math.max(0, Math.min(Number(session.index) || 0, items.length)),
-    completed:false,
-    adaptiveSupportAdded:(Number(session.adaptiveSupportAdded) || 0) + 1,
-  };
-};
+// Complementares e reservas cumprem uma única exposição. O resultado continua
+// registrado para estatísticas e curadoria, mas não cria dívida longitudinal.
+export const completeCourseReviewFirstExposure = ({ item = {}, correct, now = Date.now() }) => ({
+  ...item,
+  adaptiveState:'completed-once',
+  dueDate:null,
+  parkedDueDate:null,
+  schedulerVersion:FIRST_EXPOSURE_COMPLETED_SCHEDULER_VERSION,
+  state:'completed',
+  reps:(Number(item.reps) || 0) + 1,
+  lapses:(Number(item.lapses) || 0) + (correct ? 0 : 1),
+  lastReview:now,
+  firstExposureResult:{
+    correct:!!correct,
+    answeredAt:now,
+  },
+});
 
 const answerIsCorrect = (question, answer) => {
   if (!answer) return false;
@@ -306,6 +303,8 @@ export const buildReviewForecast = (queue = {}, { now = Date.now(), days = 30 } 
     adaptive:{
       essentialActive:items.filter(item => item.learningPolicy?.tier === 'essential').length,
       remediationActive:items.filter(item => item.adaptiveState === 'remediation').length,
+      complementaryScheduled:items.filter(item => item.learningPolicy?.tier === 'complementary').length,
+      reserveScheduled:items.filter(item => item.learningPolicy?.tier === 'reserve').length,
       complementaryWaiting:allItems.filter(item =>
         item.adaptiveState === 'dormant' && item.learningPolicy?.tier === 'complementary'
       ).length,

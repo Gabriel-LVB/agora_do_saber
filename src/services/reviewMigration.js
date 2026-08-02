@@ -1,17 +1,18 @@
 import {
   buildReviewCardKey,
   createReviewQueueItem,
-  REVIEW_DAY_MS,
 } from './reviewScheduler.js';
 import { questionHasUnresolvedRequiredVisual } from './questionVisual.js';
 
-export const INDIVIDUAL_REVIEW_PLAN_VERSION = 'curated-adaptive-individual-v3';
+export const INDIVIDUAL_REVIEW_PLAN_VERSION = 'curated-progressive-essential-fsrs-v5';
 export const FSRS_PENDING_SCHEDULER_VERSION = 'fsrs-pending-first-review-v1';
-export const INDIVIDUAL_REVIEW_DAILY_QUOTAS = Object.freeze({
-  wrong:8,
-  unseen:10,
-  correct:6,
-});
+export const REVIEW_FIRST_EXPOSURE_WAVES = Object.freeze([
+  Object.freeze({ percentage:35, dayOffset:0 }),
+  Object.freeze({ percentage:30, dayOffset:1 }),
+  Object.freeze({ percentage:20, dayOffset:4 }),
+  Object.freeze({ percentage:10, dayOffset:8 }),
+  Object.freeze({ percentage:5, dayOffset:15 }),
+]);
 
 const answerIsCorrect = (question, answer) => {
   if (!answer) return false;
@@ -26,33 +27,105 @@ const blockEntries = blocks => Array.isArray(blocks)
   ? blocks.map((block, index) => [String(block?.id || `block_${index}`), block])
   : Object.entries(blocks || {});
 
-const roundRobinLessons = rows => {
+export const allocateReviewFirstExposureWaves = total => {
+  const cleanTotal = Math.max(0, Math.floor(Number(total) || 0));
+  const rows = REVIEW_FIRST_EXPOSURE_WAVES.map((wave, index) => {
+    const exact = cleanTotal * wave.percentage / 100;
+    const count = Math.floor(exact);
+    return { ...wave, count, fraction:exact - count, index };
+  });
+  let remaining = cleanTotal - rows.reduce((sum, row) => sum + row.count, 0);
+  [...rows]
+    .sort((left, right) => right.fraction - left.fraction || left.index - right.index)
+    .forEach(row => {
+      if (remaining <= 0) return;
+      rows[row.index].count += 1;
+      remaining -= 1;
+    });
+  return rows.map(({ fraction:_fraction, index:_index, ...row }) => row);
+};
+
+const outcomeScore = outcome => outcome === 'wrong' ? 3000000 : outcome === 'unseen' ? 2000000 : 1000000;
+const tierScore = tier => tier === 'essential' ? 300000 : tier === 'complementary' ? 150000 : 0;
+const learningRoleScore = role => role === 'core' ? 16000 : role === 'reinforcement' ? 9000 : role === 'variation' ? 2000 : 0;
+const cognitiveScore = level => level === 'reasoning' ? 5000 : level === 'application' ? 3000 : level === 'understanding' ? 1500 : 0;
+const conceptKey = row => String(row.policy?.primaryConceptId || row.policy?.conceptIds?.[0] || '').trim();
+
+// Importancia e qualidade dominam a ordem; dentro de questoes pedagogicamente
+// proximas, conceitos ainda nao apresentados recebem preferencia para ampliar
+// a cobertura da aula desde a primeira onda.
+export const orderReviewFirstExposureRows = (rows = []) => {
+  const remaining = [...rows];
+  const ordered = [];
+  const conceptCounts = new Map();
+  while (remaining.length) {
+    remaining.sort((left, right) => {
+      const score = row => {
+        const policy = row.policy || {};
+        const concept = conceptKey(row);
+        const diversityBonus = concept && !conceptCounts.has(concept) ? 10000 : 0;
+        const repetitionPenalty = concept ? Math.min(5, conceptCounts.get(concept) || 0) * 1000 : 0;
+        return outcomeScore(row.outcome)
+          + tierScore(policy.tier)
+          + (Number(policy.importance) || 0) * 20000
+          + (Number(policy.qualityScore) || 0) * 150
+          + learningRoleScore(policy.learningRole)
+          + cognitiveScore(policy.cognitiveLevel)
+          + diversityBonus
+          - repetitionPenalty
+          - (Number(policy.redundancyScore) || 0) * 12000;
+      };
+      return score(right) - score(left)
+        || Number(left.sourceIndex || 0) - Number(right.sourceIndex || 0)
+        || String(left.qId).localeCompare(String(right.qId));
+    });
+    const selected = remaining.shift();
+    ordered.push(selected);
+    const concept = conceptKey(selected);
+    if (concept) conceptCounts.set(concept, (conceptCounts.get(concept) || 0) + 1);
+  }
+  return ordered;
+};
+
+const firstExposureDueDate = ({ dayOffset, now, slot }) => {
+  if (dayOffset === 0) return now - 60000 + slot;
+  const due = new Date(now);
+  due.setHours(0, 0, 0, 0);
+  due.setDate(due.getDate() + dayOffset);
+  return due.getTime() + slot;
+};
+
+const buildFirstExposurePlan = ({ rows = [], now = Date.now() }) => {
   const byLesson = new Map();
   rows.forEach(row => {
     const key = String(row.aulaId);
     byLesson.set(key, [...(byLesson.get(key) || []), row]);
   });
-  const queues = [...byLesson.values()];
-  const ordered = [];
-  while (queues.some(queue => queue.length)) {
-    queues.forEach(queue => {
-      if (queue.length) ordered.push(queue.shift());
+  const plannedByCardKey = new Map();
+  const buckets = REVIEW_FIRST_EXPOSURE_WAVES.map(wave => ({ ...wave, count:0 }));
+  byLesson.forEach(lessonRows => {
+    const ordered = orderReviewFirstExposureRows(lessonRows);
+    const lessonWaves = allocateReviewFirstExposureWaves(ordered.length);
+    let cursor = 0;
+    lessonWaves.forEach((wave, bucketIndex) => {
+      buckets[bucketIndex].count += wave.count;
+      for (let slot = 0; slot < wave.count; slot += 1) {
+        const row = ordered[cursor];
+        cursor += 1;
+        plannedByCardKey.set(row.cardKey, {
+          bucketIndex,
+          dayOffset:wave.dayOffset,
+          dueDate:firstExposureDueDate({ dayOffset:wave.dayOffset, now, slot }),
+          percentage:wave.percentage,
+          sequenceIndex:cursor - 1,
+        });
+      }
     });
-  }
-  return ordered;
-};
-
-const plannedDueDate = ({ outcome, index, now }) => {
-  const quota = INDIVIDUAL_REVIEW_DAILY_QUOTAS[outcome];
-  const baseDay = outcome === 'correct' ? 1 : 0;
-  const dayOffset = baseDay + Math.floor(index / quota);
-  const slot = index % quota;
-  // Cartoes do dia zero ja estao vencidos. A diferenca de segundos mantem
-  // erros, ineditas e aulas diferentes misturados de forma deterministica.
-  const categoryOffset = outcome === 'wrong' ? -120000 : outcome === 'unseen' ? -60000 : 0;
+  });
   return {
-    dayOffset,
-    dueDate:now + dayOffset * REVIEW_DAY_MS + categoryOffset + slot * 1000,
+    buckets,
+    plannedByCardKey,
+    total:rows.length,
   };
 };
 
@@ -96,9 +169,9 @@ const setQueueItem = (queue, aulaId, blockId, qId, item) => {
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 // Constroi uma unica agenda por questao para as aulas ativadas pelo aluno.
-// Essenciais entram no nucleo. Complementares e reserva ficam estacionadas e
-// so sao ativadas por evidencia de dificuldade. Aulas sem selecao publicada
-// ficam integralmente fora da carga ate a curadoria ser concluida e publicada.
+// Toda questao curada e elegivel recebe uma primeira exposicao nas ondas
+// 35/30/20/10/5. Depois dela, somente as essenciais seguem para o FSRS.
+// Aulas sem selecao publicada continuam fora da carga ate a curadoria.
 export const buildWatchedLessonsIndividualPlan = ({
   lessons = [],
   existingQueue = {},
@@ -155,51 +228,64 @@ export const buildWatchedLessonsIndividualPlan = ({
           outcome,
           lesson,
           policy:normalizedLearningPolicy(question),
+          sourceIndex:candidates.length,
         });
       });
     });
   });
 
+  const intendedAdaptiveState = row => {
+    const existingItem = existingByCardKey.get(row.cardKey)?.item;
+    const existingAdaptiveState = existingItem?.adaptiveState;
+    const isOneTimeQuestion = ['complementary', 'reserve'].includes(row.policy?.tier);
+    const wasAlreadyReviewed = existingAdaptiveState === 'completed-once'
+      || !!existingItem?.fsrs
+      || !!existingItem?.lastReview
+      || Number(existingItem?.reps) > 0;
+    if (isOneTimeQuestion && wasAlreadyReviewed) return 'completed-once';
+    if (row.outcome === 'wrong') return 'remediation';
+    if (isOneTimeQuestion && existingItem?.adaptiveActivation?.reason === 'related-error') return 'introduction';
+    if (['remediation', 'manual'].includes(existingAdaptiveState)) return existingAdaptiveState;
+    if (row.policy?.tier === 'essential') return 'core';
+    return 'introduction';
+  };
   const classify = row => {
     const existingAdaptiveState = existingByCardKey.get(row.cardKey)?.item?.adaptiveState;
     if (existingAdaptiveState === 'paused' || pausedLessonIds.has(String(row.aulaId))) {
-      return { active:false, adaptiveState:'paused' };
+      return { active:false, adaptiveState:'paused', intendedAdaptiveState:intendedAdaptiveState(row) };
     }
     if (!row.policy) return { active:false, adaptiveState:'awaiting-curation' };
     if (policyBlocksReview(row.policy)) return { active:false, adaptiveState:'disabled' };
     if (questionHasUnresolvedRequiredVisual(row.question)) {
       return { active:false, adaptiveState:'awaiting-visual' };
     }
-    if (row.outcome === 'wrong') return { active:true, adaptiveState:'remediation' };
-    if (['remediation', 'manual'].includes(existingAdaptiveState)) {
-      return { active:true, adaptiveState:existingAdaptiveState };
-    }
-    if (row.policy?.tier === 'essential') return { active:true, adaptiveState:'core' };
-    return { active:false, adaptiveState:'dormant' };
+    const adaptiveState = intendedAdaptiveState(row);
+    return { active:adaptiveState !== 'completed-once', adaptiveState };
   };
   candidates.forEach(row => Object.assign(row, classify(row)));
 
-  const orderedByOutcome = Object.fromEntries(['wrong', 'unseen', 'correct'].map(outcome => [
-    outcome,
-    roundRobinLessons(candidates.filter(row => row.active && row.outcome === outcome)),
-  ]));
-  const plannedByCardKey = new Map();
-  Object.entries(orderedByOutcome).forEach(([outcome, rows]) => {
-    rows.forEach((row, index) => {
-      plannedByCardKey.set(row.cardKey, plannedDueDate({ outcome, index, now }));
-    });
+  const firstExposure = buildFirstExposurePlan({
+    rows:candidates.filter(row => row.policy
+      && !policyBlocksReview(row.policy)
+      && !questionHasUnresolvedRequiredVisual(row.question)
+      && row.adaptiveState !== 'completed-once'),
+    now,
   });
+  const { plannedByCardKey } = firstExposure;
 
   const counts = { wrong:0, unseen:0, correct:0 };
   const adaptive = {
     essential:0,
     remediation:0,
+    complementaryScheduled:0,
+    reserveScheduled:0,
     complementaryWaiting:0,
     reserveWaiting:0,
     awaitingCuration:0,
     awaitingVisual:0,
     disabled:0,
     paused:0,
+    completedOnce:0,
   };
   let added = 0;
   let changed = 0;
@@ -211,8 +297,25 @@ export const buildWatchedLessonsIndividualPlan = ({
       adaptive.awaitingCuration += 1;
       return;
     }
-    const plan = plannedByCardKey.get(row.cardKey) || { dayOffset:null, dueDate:null };
+    const plan = plannedByCardKey.get(row.cardKey) || {
+      bucketIndex:null,
+      dayOffset:null,
+      dueDate:null,
+      percentage:null,
+      sequenceIndex:null,
+    };
     const learningPolicy = row.policy || fallbackPolicy;
+    const savedFirstExposure = existing?.migration?.firstExposure;
+    const firstExposurePlan = savedFirstExposure?.version === INDIVIDUAL_REVIEW_PLAN_VERSION
+      ? savedFirstExposure
+      : plan.dayOffset != null ? {
+          version:INDIVIDUAL_REVIEW_PLAN_VERSION,
+          bucketIndex:plan.bucketIndex,
+          dayOffset:plan.dayOffset,
+          percentage:plan.percentage,
+          sequenceIndex:plan.sequenceIndex,
+          plannedAt:now,
+        } : null;
     let nextItem = existing || {
       ...createReviewQueueItem({
         source:'curso',
@@ -233,6 +336,7 @@ export const buildWatchedLessonsIndividualPlan = ({
         source:'watched-lessons',
         priorOutcome:row.outcome,
         plannedDayOffset:plan.dayOffset,
+        ...(firstExposurePlan ? { firstExposure:firstExposurePlan } : {}),
         createdAt:now,
       },
     };
@@ -245,30 +349,62 @@ export const buildWatchedLessonsIndividualPlan = ({
         ...(nextItem.migration || {}),
         version:INDIVIDUAL_REVIEW_PLAN_VERSION,
         priorOutcome:row.outcome,
-        plannedDayOffset:row.active ? plan.dayOffset : null,
+        plannedDayOffset:row.active || row.adaptiveState === 'paused' ? (firstExposurePlan?.dayOffset ?? null) : null,
+        ...(firstExposurePlan ? { firstExposure:firstExposurePlan } : {}),
       },
     };
+    if (existing?.adaptiveActivation?.reason === 'related-error') {
+      const { adaptiveActivation:_retiredAdaptiveActivation, ...withoutAdaptiveActivation } = nextItem;
+      nextItem = withoutAdaptiveActivation;
+    }
     if (row.active) {
-      const existingDue = existing?.dueDate;
-      const parkedDue = existing?.parkedDueDate;
+      const retiredAdaptiveSupport = existing?.adaptiveActivation?.reason === 'related-error';
+      const existingDue = retiredAdaptiveSupport ? null : existing?.dueDate;
+      const parkedDue = retiredAdaptiveSupport ? null : existing?.parkedDueDate;
+      const fsrsDue = retiredAdaptiveSupport ? null : existing?.fsrs?.nextDue;
       const resumableDue = existingDue != null && Number.isFinite(Number(existingDue))
         ? Number(existingDue)
         : parkedDue != null && Number.isFinite(Number(parkedDue))
           ? Number(parkedDue)
+          : fsrsDue != null && Number.isFinite(Number(fsrsDue))
+            ? Number(fsrsDue)
           : null;
-      nextItem.dueDate = resumableDue ?? plan.dueDate;
+      nextItem.dueDate = resumableDue ?? plan.dueDate ?? now;
       nextItem.parkedDueDate = null;
       if (!existing) added += 1;
       counts[row.outcome] += 1;
       if (row.adaptiveState === 'remediation') adaptive.remediation += 1;
       else if (row.policy?.tier === 'essential') adaptive.essential += 1;
+      else if (row.policy?.tier === 'complementary') adaptive.complementaryScheduled += 1;
+      else if (row.policy?.tier === 'reserve') adaptive.reserveScheduled += 1;
     } else {
       const currentDue = existing?.dueDate;
-      nextItem.parkedDueDate = currentDue != null && Number.isFinite(Number(currentDue))
-        ? Number(currentDue)
-        : existing?.parkedDueDate || null;
+      const completedWhilePaused = row.adaptiveState === 'paused'
+        && row.intendedAdaptiveState === 'completed-once';
+      nextItem.parkedDueDate = row.adaptiveState === 'completed-once' || completedWhilePaused
+        ? null
+        : currentDue != null && Number.isFinite(Number(currentDue))
+          ? Number(currentDue)
+          : existing?.parkedDueDate || (row.adaptiveState === 'paused' ? plan.dueDate : null);
       nextItem.dueDate = null;
-      if (row.adaptiveState === 'paused') adaptive.paused += 1;
+      if (row.adaptiveState === 'paused') {
+        adaptive.paused += 1;
+        nextItem.reviewPause = completedWhilePaused
+          ? {
+              ...(existing?.reviewPause || {}),
+              adaptiveState:'completed-once',
+              dueDate:null,
+              parkedDueDate:null,
+              pausedAt:existing?.reviewPause?.pausedAt || now,
+            }
+          : existing?.reviewPause || {
+              adaptiveState:row.intendedAdaptiveState || 'introduction',
+              dueDate:null,
+              parkedDueDate:nextItem.parkedDueDate,
+              pausedAt:now,
+            };
+      }
+      else if (row.adaptiveState === 'completed-once') adaptive.completedOnce += 1;
       else if (row.adaptiveState === 'disabled') adaptive.disabled += 1;
       else if (row.adaptiveState === 'awaiting-visual') adaptive.awaitingVisual += 1;
       else if (row.policy?.tier === 'complementary') adaptive.complementaryWaiting += 1;
@@ -288,59 +424,9 @@ export const buildWatchedLessonsIndividualPlan = ({
     evaluated:candidates.length,
     counts,
     adaptive,
-  };
-};
-
-const policiesOverlap = (left = {}, right = {}) => {
-  const rightConcepts = new Set(right.conceptIds || []);
-  return (left.conceptIds || []).some(conceptId => rightConcepts.has(conceptId));
-};
-
-// Um erro em uma questao ativa libera no maximo um reforco relacionado. A
-// questao liberada entra na fila; as demais continuam fora da carga prevista.
-export const activateAdaptiveSupportQuestion = ({
-  queue = {},
-  aulaId,
-  answeredItem,
-  now = Date.now(),
-}) => {
-  const answeredPolicy = answeredItem?.learningPolicy;
-  if (!answeredPolicy || !['essential', 'complementary'].includes(answeredPolicy.tier)) {
-    return { queue, activated:null };
-  }
-  const candidates = Object.entries(queue?.[aulaId] || {}).flatMap(([blockId, qMap]) =>
-    Object.entries(qMap || {}).map(([qId, item]) => ({ blockId, qId, item }))
-  ).filter(row =>
-    row.item?.adaptiveState === 'dormant'
-    && ['complementary', 'reserve'].includes(row.item?.learningPolicy?.tier)
-    && policiesOverlap(answeredPolicy, row.item.learningPolicy)
-  ).sort((left, right) => {
-    const tierRank = tier => tier === 'complementary' ? 0 : 1;
-    return tierRank(left.item.learningPolicy.tier) - tierRank(right.item.learningPolicy.tier)
-      || Number(right.item.learningPolicy.importance || 0) - Number(left.item.learningPolicy.importance || 0)
-      || Number(right.item.learningPolicy.qualityScore || 0) - Number(left.item.learningPolicy.qualityScore || 0);
-  });
-  const selected = candidates[0];
-  if (!selected) return { queue, activated:null };
-  const activatedItem = {
-    ...selected.item,
-    adaptiveState:'remediation',
-    dueDate:now + 1000,
-    adaptiveActivation:{
-      reason:'related-error',
-      sourceCardKey:answeredItem.cardKey || null,
-      activatedAt:now,
-    },
-  };
-  const nextQueue = { ...queue };
-  setQueueItem(nextQueue, String(aulaId), selected.blockId, selected.qId, activatedItem);
-  return {
-    queue:nextQueue,
-    activated:{
-      aulaId:String(aulaId),
-      blockId:selected.blockId,
-      qId:selected.qId,
-      item:activatedItem,
+    introduction:{
+      buckets:firstExposure.buckets,
+      total:firstExposure.total,
     },
   };
 };

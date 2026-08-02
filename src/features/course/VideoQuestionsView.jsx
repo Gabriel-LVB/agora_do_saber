@@ -34,6 +34,7 @@ export default function VideoQuestionsView() {
     getCourseVqQuestionPlan,
     getKey,
     GraduationCap,
+    inactivateCourseQuestion,
     isAdmin,
     isAnswerCorrect,
     isFinalObjectiveAnswer,
@@ -245,7 +246,12 @@ export default function VideoQuestionsView() {
 	                    onOpenAnswer={q=>setOpenAnswerModal({question:q, isEssay:q.isEssay})}
 		                    displayMode={canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list'}
 		                    onDisplayModeChange={canUseAdvancedFeatures ? (mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})) : null}
-		                    adminQuestionExplanations={isAdmin}
+	                    adminQuestionExplanations={isAdmin}
+	                    onAdminDisableQuestion={isAdmin ? (question=>inactivateCourseQuestion({
+	                      aulaId:aulaIdNew,
+	                      blockId,
+	                      question,
+	                    })) : null}
 		                    onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 		                      questions:qs,
 		                      title:visibleTitle,

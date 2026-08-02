@@ -1,6 +1,5 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
-import { appendAdaptiveSupportToReviewSession } from '../../services/reviewScheduler.js';
 import { resolveScheduleSubjectOrder } from '../../services/courseSchedule.js';
 import { useCourseHeroJourney } from './useCourseHeroJourney.js';
 
@@ -55,6 +54,7 @@ export default function CoursePortalView() {
     getDueReviews,
     getKey,
     getTodayKey,
+    inactivateCourseQuestion,
     isAdmin,
     isAnswerCorrect,
     isReviewItemFavorite,
@@ -343,14 +343,14 @@ export default function CoursePortalView() {
                     const correct = Object.values(sessionResults).filter(Boolean).length;
                     const pct = Math.round(correct / total * 100);
                     const wrong = total - correct;
-                    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
+                    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns erros para revisar.' : 'Sessão útil para revelar lacunas importantes.';
                     return (
                       <div className={`rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
                         <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
                         <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Sessão encerrada</p>
                         <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Revisão concluída</h3>
                         <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
-                        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correct}/{total} corretas · {wrong} para reforçar</p>
+                        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correct}/{total} corretas · {wrong} erros</p>
                         <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} As questões acertadas foram empurradas para o próximo intervalo; as erradas voltam para revisão mais cedo.</p>
                         <div className="grid grid-cols-2 gap-3 mb-8 text-left">
                           <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
@@ -359,7 +359,7 @@ export default function CoursePortalView() {
                           </div>
                           <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
                             <p className="text-2xl font-serif font-bold text-red-500">{wrong}</p>
-                            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>reforço</p>
+                            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>erros</p>
                           </div>
                         </div>
 	                        <button onClick={()=>setReviewSession(null)} className="px-8 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">
@@ -389,10 +389,7 @@ export default function CoursePortalView() {
                               const itemKey = reviewSessionKey(item);
                               setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [itemKey]: letter}, sessionResults:{...(p?.sessionResults||{}), [itemKey]:correct}}));
                               if (canUseAdvancedFeatures && !correct) setReviewNotebook(item, 'add');
-                              const supportItem = await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
-                              if (supportItem) setReviewSession(previous =>
-                                appendAdaptiveSupportToReviewSession(previous, supportItem)
-                              );
+                              await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
                             }}
                             darkMode={dm}
                             isFavorite={isReviewItemFavorite(item)}
@@ -400,6 +397,12 @@ export default function CoursePortalView() {
                             showErrorNotebook={false}
                             apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
                             adminQuestionExplanations={isAdmin}
+                            onAdminDisableQuestion={isAdmin ? (()=>inactivateCourseQuestion({
+                              aulaId:item.aulaId,
+                              blockId:item.blockId,
+                              questionId:item.qId,
+                              question:item.question,
+                            })) : null}
                           />
                         ))}
                         {finished&&(
@@ -449,10 +452,7 @@ export default function CoursePortalView() {
 			                          trackQuestionAnswered(`review:${item.aulaId}:${item.blockId}:${item.qId}:${item.item?.dueDate||getTodayKey()}`);
 		                          setReviewSession(p=>({...p, sessionAnswers:{...(p?.sessionAnswers||{}), [itemKey]: letter}, sessionResults:{...(p?.sessionResults||{}), [itemKey]:correct}}));
 			                          if (canUseAdvancedFeatures && !correct) setReviewNotebook(item, 'add');
-			                          const supportItem = await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
-			                          if (supportItem) setReviewSession(previous =>
-			                            appendAdaptiveSupportToReviewSession(previous, supportItem)
-			                          );
+			                          await updateReviewItem(item.aulaId, item.blockId, item.qId, correct);
 			                        }}
 	                        darkMode={dm}
 	                        isFavorite={isReviewItemFavorite(item)}
@@ -460,6 +460,12 @@ export default function CoursePortalView() {
 		                        showErrorNotebook={false}
 	                        apiKey={getKey()} oracleLength={settings.oracleLength} onCall={callWithRotation}
 	                        adminQuestionExplanations={isAdmin}
+	                        onAdminDisableQuestion={isAdmin ? (()=>inactivateCourseQuestion({
+	                          aulaId:item.aulaId,
+	                          blockId:item.blockId,
+	                          questionId:item.qId,
+	                          question:item.question,
+	                        })) : null}
 	                      />
 	                      <div className="flex items-center justify-between gap-3 mt-4">
 	                        <button onClick={()=>setReviewSession(p=>({...p,index:Math.max(0,index-1)}))} disabled={index===0}

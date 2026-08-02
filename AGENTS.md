@@ -476,7 +476,9 @@ A calibração vigente é `agora-question-metadata-v2`/`agora-learning-selection
 
 O executor da Curadoria segue o padrão resiliente da criação: exibe logs com horário por aula, lote, tentativa, chave, validação, salvamento e publicação; permite pausar/continuar e parar após a requisição ativa; usa o mesmo pool administrativo deduplicado da criação — chaves atuais e backups encontrados nos perfis, sem registrar seus valores — e mantém um cursor rotativo entre chamadas; tenta outra chave em cota, chave inválida, timeout, sobrecarga, conexão, JSON truncado ou lote incompleto; valida exatamente os IDs esperados antes de salvar; e, se uma aula esgotar as tentativas, marca seu manifesto como pausado e continua a matéria. As chamadas mecânicas de curadoria desativam o thinking, pedem `application/json` nativo e admitem até 180 segundos nos lotes de 30. Lotes concluídos nunca são descartados. O resumo final separa publicadas, pendentes e não iniciadas.
 
-FSRS é o motor ativo por cartão para questões do curso e materiais pessoais, nunca um experimento exclusivo desta coleção. A integração usa `ts-fsrs@5.4.1`: `services/reviewMigration.js` considera somente questões de aulas explicitamente ativadas **com seleção pedagógica publicada** e distribui erradas, inéditas e acertadas; depois da primeira resposta real, `services/fsrsScheduler.js` grava `fsrs` e seu `nextDue` controla a fila. Aula sem curadoria e publicação não cria cartões novos. Se houver cartão legado, ele fica em `adaptiveState: 'awaiting-curation'`, `dueDate: null` e não conta nem aparece como pendência. Preserve o import dinâmico, `cardKey`, `parkedDueDate` e `legacyFallback`. A UI é uma fila única; a partição por aula em `vq_review` é apenas armazenamento. Leia `docs/LEARNING_ENGINE_ROADMAP.md` antes de mexer nessas áreas.
+FSRS é o motor ativo por cartão para questões essenciais do curso e para materiais pessoais, nunca um experimento exclusivo desta coleção. A integração usa `ts-fsrs@5.4.1`: `services/reviewMigration.js` considera somente questões de aulas explicitamente ativadas **com seleção pedagógica publicada** e distribui a primeira exposição de todas as elegíveis nas ondas 35/30/20/10/5. Depois da resposta real, essenciais seguem longitudinalmente e `services/fsrsScheduler.js` grava `fsrs`; complementares e reservas passam a `adaptiveState: 'completed-once'`, sem novo vencimento. Aula sem curadoria e publicação não cria cartões novos. Se houver cartão legado, ele fica em `adaptiveState: 'awaiting-curation'`, `dueDate: null` e não conta nem aparece como pendência. Preserve o import dinâmico, `cardKey`, `parkedDueDate` e `legacyFallback`. A UI é uma fila única; a partição por aula em `vq_review` é apenas armazenamento. Leia `docs/LEARNING_ENGINE_ROADMAP.md` antes de mexer nessas áreas.
+
+O administrador pode inativar globalmente uma questão do curso diretamente no cartão, inclusive pela Fábrica, Questões do Curso, Revisões e Favoritos. A lista autoritativa fica em `config/disabled_course_questions`; ela usa o ID da questão combinado com aliases estáveis da aula/item compartilhado. Esse bloqueio prevalece sobre cópias antigas em `vq_blocks`, cartões já existentes em `vq_review`, sessões abertas e favoritos. Não apague o conteúdo original: preserve o registro para auditoria. A tela Favoritos agrega tanto a biblioteca pessoal quanto os favoritos persistidos nos blocos do curso. A busca da Fábrica indexa enunciados e alternativas; quando o texto encontra uma questão dentro de uma aula, abrir o resultado mostra somente as correspondências, permitindo recuperar e inativar um cartão mesmo sem favorito.
 
 O responsável confirmou que o material ECG é próprio, autorizado e pode ser servido por URLs públicas; “Hampton”/“Hamptom” foi uma inferência incorreta de IA. O pacote original contém 150 casos clínicos e respostas completas. A entrada principal da aba administrativa Banco de ECG é um curso prático por famílias: traçado e caso antes do gabarito, autorreflexão, marcação de acerto/revisão e progresso local. O catálogo é um modo secundário de consulta. Não trate a flag `pending_independent_review` como bloqueio. Assets ficam em `public/ecg/v3/`, casos em `public/ecg/v3/cases.json` e metadados técnicos em lotes de 15. A associação automática às questões usa `services/ecgQuestionMatcher.js` e o índice gerado `public/ecg/v3/question-match-index.json`: a resposta correta/esperada identifica um conceito da ontologia, distratores são ignorados, somente o ECG principal de `phase: 'question'` é anexado e ambiguidades ficam em `awaiting-visual`, sem vencimento nem contagem. Não crie curadoria manual paralela nem use matching textual vago. O progresso do curso prático de ECG ainda não alimenta o FSRS. Leia `docs/ECG_QUESTION_MATCHING.md`.
 
@@ -622,33 +624,38 @@ Conceitualmente:
 
 Use `persistReviewQueueChanges`; não persista `vq_review` diretamente no `App.jsx`.
 
-As respostas da revisão atualizam a UI primeiro. Acerto avança o intervalo; erro reduz/reagenda conforme os handlers existentes. A fila pode apontar para questões do curso e da biblioteca pessoal, portanto qualquer remoção/regeneração deve executar a poda das referências órfãs.
+As respostas da revisão atualizam a UI primeiro. Em cartões longitudinais, acerto avança o intervalo e erro reduz/reagenda; em complementares/reservas do curso, qualquer resultado conclui a exposição única. A fila pode apontar para questões do curso e da biblioteca pessoal, portanto qualquer remoção/regeneração deve executar a poda das referências órfãs.
 
 Questões de aulas ativadas pelo aluno entram individualmente pela migração incremental, em
 uma fila global. Marcar a aula como assistida e adicioná-la a Revisões são ações separadas.
-O primeiro vencimento é o plano de introdução; após a resposta,
+O primeiro vencimento é o plano de introdução. Após a resposta de uma essencial,
 `services/fsrsScheduler.js` atualiza o cartão FSRS-6 e `nextDue` decide o próximo
-vencimento. `legacyFallback` preserva o resultado anterior para rollback e comparação.
-Se o cálculo FSRS falhar, a resposta e a persistência legadas devem continuar.
+vencimento. Complementares e reservas encerram a primeira exposição em `completed-once`,
+preservando resultado e histórico sem criar dívida futura. `legacyFallback` preserva o
+resultado anterior para rollback e comparação das essenciais. Se o cálculo FSRS falhar,
+a resposta e a persistência legadas devem continuar.
 
-Quando existe uma seleção publicada, somente essenciais e questões já erradas entram
-automaticamente na carga. Complementares e reservas ficam com `adaptiveState: 'dormant'`
-e `dueDate: null`, portanto não contam como pendência. Um erro em uma questão ativa pode
-liberar no máximo um reforço da mesma aula com conceito em comum. Esse reforço entra uma
-única vez no fim da sessão ativa da mesma modalidade; se a tela de conclusão já tiver
-aberto enquanto o processamento terminava, a sessão volta diretamente ao reforço.
-Questões desativadas,
-`deprecated` ou `review_required` não entram. Sem curadoria **e seleção publicada**, a
-aula não cria cartões novos; cartões legados ficam em `awaiting-curation`, sem vencimento
-e fora da contagem. A publicação posterior reativa somente o recorte elegível e preserva
-datas já estacionadas.
+Quando existe uma seleção publicada, todas as questões elegíveis entram uma vez no plano
+de primeira exposição da respectiva aula: 35% no dia da ativação, 30% no dia seguinte,
+20% no quarto dia, 10% no oitavo e 5% no décimo quinto. A divisão usa o método dos maiores
+restos para somar exatamente o total da aula. Dentro das ondas, erros anteriores vêm
+primeiro; depois, metadados priorizam `essential`, importância, qualidade, papel cognitivo,
+baixa redundância e diversidade de conceitos, deixando complementares e reservas mais
+fracas para depois. Não reintroduza cotas globais ocultas de erradas/inéditas/acertadas
+nem anexe questões de reforço ao fim de uma sessão por causa de um erro. Depois da
+primeira resposta real, somente questões `essential` recebem nova data pelo FSRS. Questões
+desativadas, `deprecated`, `review_required`, `reviewEligible: false` ou que exigem visual
+ainda não resolvido não entram. Sem curadoria **e seleção publicada**, a aula não cria
+cartões novos; cartões legados ficam em `awaiting-curation`, sem vencimento e fora da
+contagem. A migração v5 reativa antigos `dormant` ainda inéditos, aposenta vencimentos
+FSRS antigos de complementares/reservas já respondidas sem apagar o histórico e remove
+ativações legadas de reforço, preservando respostas, pausas e datas válidas das essenciais.
 
-O banco completo da aula e a revisão longitudinal têm papéis diferentes. A tela de
-Questões do Curso deixa o aluno fazer todas as questões como fixação inicial, mas isso
-não transforma o banco inteiro em dívida futura. Em Revisões entram essenciais e erros;
-complementares/reservas acertadas ficam fora da rotina, e uma dificuldade conceitual
-pode liberar um reforço. Se o aluno não zerar o banco inicial, as essenciais ainda podem
-ser apresentadas individualmente pela revisão após a aula assistida e curada.
+O banco completo da aula e a revisão longitudinal continuam com experiências diferentes.
+Questões do Curso permite percorrer o banco diretamente; Revisões garante que toda questão
+curada e elegível seja vista pelo menos uma vez, mas reparte essa primeira passagem nas
+cinco ondas. Depois dela, somente o núcleo essencial se transforma em revisão longitudinal;
+complementares e reservas ampliam a cobertura inicial sem inflar a dívida futura.
 
 Na tela de Revisões, 7/14/30 dias são somente horizontes do gráfico de próximos
 vencimentos; nunca trate esses números como intervalos do agendador. Em 14 e 30 dias,

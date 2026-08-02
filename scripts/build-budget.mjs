@@ -24,6 +24,7 @@ let ecgQuestionMatcher = null;
 let questionVisual = null;
 let spacedReview = null;
 let courseStudents = null;
+let disabledCourseQuestions = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -41,6 +42,7 @@ for (const file of jsFiles) {
   if (file.startsWith('questionVisual-')) questionVisual = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('SpacedReviewView-')) spacedReview = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('CourseStudentsView-')) courseStudents = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('disabledCourseQuestions-')) disabledCourseQuestions = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -51,7 +53,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // completo; o teto cresceu somente pelo custo medido desta primeira fatia.
 // A ponte entre selecao publicada, vq_blocks, gestao manual e ativacao adaptativa
 // acrescenta cerca de 1 KiB ao nucleo; paineis e algoritmos continuam em chunks lazy.
-const CORE_TOTAL_GZIP_LIMIT = 445 * 1024;
+// A busca administrativa por enunciado/alternativa acrescenta menos de 1 KiB ao
+// chunk lazy da Fabrica, sem aumentar o bundle de entrada.
+const CORE_TOTAL_GZIP_LIMIT = 446 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 // Curadoria, seleção automática, publicação e exportação de auditoria ficam
 // juntas em um único módulo administrativo carregado somente sob demanda.
@@ -69,6 +73,9 @@ const ECG_QUESTION_MATCHER_GZIP_LIMIT = 5 * 1024;
 const REVIEW_DASHBOARD_GZIP_LIMIT = 6 * 1024;
 // O painel le progresso de varios alunos somente quando o admin abre a aba.
 const COURSE_STUDENTS_GZIP_LIMIT = 5 * 1024;
+// O registro global de questões inativas só é carregado após autenticação de
+// usuário do curso e permanece isolado do primeiro render da Home.
+const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 2 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + QUESTION_CURATION_GZIP_LIMIT
@@ -77,7 +84,8 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + REVIEW_MIGRATION_GZIP_LIMIT
   + ECG_QUESTION_MATCHER_GZIP_LIMIT
   + REVIEW_DASHBOARD_GZIP_LIMIT
-  + COURSE_STUDENTS_GZIP_LIMIT;
+  + COURSE_STUDENTS_GZIP_LIMIT
+  + DISABLED_COURSE_QUESTIONS_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
 const coreGzip = totalGzip
@@ -88,7 +96,8 @@ const coreGzip = totalGzip
   - (reviewMigration?.gzip || 0)
   - ecgQuestionMatcherGzip
   - (spacedReview?.gzip || 0)
-  - (courseStudents?.gzip || 0);
+  - (courseStudents?.gzip || 0)
+  - (disabledCourseQuestions?.gzip || 0);
 
 assert.ok(
   entry.raw <= ENTRY_RAW_LIMIT,
@@ -127,6 +136,11 @@ assert.ok(reviewMigration, 'A migracao da fila individual deve permanecer em mod
 assert.ok(
   reviewMigration.gzip <= REVIEW_MIGRATION_GZIP_LIMIT,
   `Migracao da fila individual passou do budget: ${fmt(reviewMigration.gzip)} > ${fmt(REVIEW_MIGRATION_GZIP_LIMIT)}`
+);
+assert.ok(disabledCourseQuestions, 'O registro de questoes inativas deve permanecer em modulo lazy proprio.');
+assert.ok(
+  disabledCourseQuestions.gzip <= DISABLED_COURSE_QUESTIONS_GZIP_LIMIT,
+  `Registro de questoes inativas passou do budget: ${fmt(disabledCourseQuestions.gzip)} > ${fmt(DISABLED_COURSE_QUESTIONS_GZIP_LIMIT)}`
 );
 assert.ok(ecgQuestionMatcher, 'O matcher de ECG deve permanecer em modulo lazy proprio.');
 assert.ok(questionVisual, 'A deteccao visual de ECG deve permanecer fora do bundle inicial.');

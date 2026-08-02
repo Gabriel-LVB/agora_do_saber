@@ -325,7 +325,7 @@ export default function CourseStudentsView() {
                     <div><strong className="block text-lg text-yellow-600">{row.recent.activeDays}/14</strong><span className="text-[10px] uppercase opacity-50">dias ativos · {row.recent.lessonMinutes} min</span></div>
                   </div>
                   <p className={`mt-3 text-[11px] ${darkMode?'text-gray-500':'text-gray-400'}`}>
-                    Últimos 14 dias: {row.recent.questions} questões e {row.recent.reviews} revisões · {row.adaptiveWaiting} reforços fora da carga.
+                    Últimos 14 dias: {row.recent.questions} questões e {row.recent.reviews} revisões · {row.adaptiveWaiting} itens fora da carga.
                   </p>
                   {!!row.errors?.length&&<div className="mt-2 text-xs text-red-500">
                     <p>Leitura parcial em {row.errors.map(error=>error.source).join(', ')}.</p>

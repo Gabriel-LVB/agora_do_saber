@@ -35,9 +35,9 @@ import {
   selectLearningQuestions,
 } from '../src/services/questionMetadata.js';
 import {
-  appendAdaptiveSupportToReviewSession,
   buildReviewForecast,
   buildReviewCardKey,
+  completeCourseReviewFirstExposure,
   createReviewQueueItem,
   pauseReviewLesson,
   REVIEW_DAY_MS,
@@ -48,10 +48,19 @@ import {
   summarizeReviewQueue,
 } from '../src/services/reviewScheduler.js';
 import {
+  allocateReviewFirstExposureWaves,
   buildWatchedLessonsIndividualPlan,
-  activateAdaptiveSupportQuestion,
   FSRS_PENDING_SCHEDULER_VERSION,
+  orderReviewFirstExposureRows,
+  REVIEW_FIRST_EXPOSURE_WAVES,
 } from '../src/services/reviewMigration.js';
+import {
+  createDisabledCourseQuestionEntry,
+  disableCourseReviewQueueItems,
+  filterDisabledCourseQuestionsFromVqBlocks,
+  isCourseQuestionDisabled,
+  pruneDisabledCourseQuestionsFromSession,
+} from '../src/services/disabledCourseQuestions.js';
 import {
   advanceFsrsCard,
   compareFsrsWithLegacy,
@@ -689,6 +698,20 @@ assert.equal(firstFsrsState.version, FSRS_SCHEDULER_VERSION);
 assert.equal(firstFsrsState.mode, 'active');
 assert.equal(firstFsrsState.intervalDays, 3);
 assert.equal(firstFsrsState.nextDue, reviewNow + 3 * REVIEW_DAY_MS);
+const completedOneTimeCard = completeCourseReviewFirstExposure({
+  item:{
+    ...reviewCard,
+    source:'curso',
+    learningPolicy:{ tier:'complementary' },
+    fsrs:firstFsrsState,
+  },
+  correct:false,
+  now:reviewNow + 10,
+});
+assert.equal(completedOneTimeCard.adaptiveState, 'completed-once');
+assert.equal(completedOneTimeCard.dueDate, null);
+assert.equal(completedOneTimeCard.lapses, 1);
+assert.equal(completedOneTimeCard.fsrs, firstFsrsState);
 const secondFsrsState = advanceFsrsCard({
   previous:firstFsrsState,
   correct:true,
@@ -710,6 +733,20 @@ const migrationQuestion = id => ({
     { letter:'B', text:'Errada', isCorrect:false },
   ],
 });
+assert.deepEqual(REVIEW_FIRST_EXPOSURE_WAVES, [
+  { percentage:35, dayOffset:0 },
+  { percentage:30, dayOffset:1 },
+  { percentage:20, dayOffset:4 },
+  { percentage:10, dayOffset:8 },
+  { percentage:5, dayOffset:15 },
+]);
+assert.deepEqual(allocateReviewFirstExposureWaves(70).map(wave => wave.count), [25,21,14,7,3]);
+assert.equal(allocateReviewFirstExposureWaves(70).reduce((sum, wave) => sum + wave.count, 0), 70);
+assert.deepEqual(orderReviewFirstExposureRows([
+  { qId:'concept-a-1', outcome:'unseen', sourceIndex:0, policy:{ tier:'complementary', primaryConceptId:'a', importance:4, qualityScore:80 } },
+  { qId:'concept-a-2', outcome:'unseen', sourceIndex:1, policy:{ tier:'complementary', primaryConceptId:'a', importance:4, qualityScore:80 } },
+  { qId:'concept-b', outcome:'unseen', sourceIndex:2, policy:{ tier:'complementary', primaryConceptId:'b', importance:4, qualityScore:80 } },
+]).map(row => row.qId), ['concept-a-1','concept-b','concept-a-2']);
 const individualPlan = buildWatchedLessonsIndividualPlan({
   now:reviewNow,
   lessons:[
@@ -776,13 +813,120 @@ const curatedPlan = buildWatchedLessonsIndividualPlan({
     } } },
   }],
 });
-assert.equal(curatedPlan.added, 2);
+assert.equal(curatedPlan.added, 4);
 assert.equal(curatedPlan.adaptive.essential, 1);
 assert.equal(curatedPlan.adaptive.remediation, 1);
-assert.equal(curatedPlan.adaptive.complementaryWaiting, 1);
-assert.equal(curatedPlan.adaptive.reserveWaiting, 1);
+assert.equal(curatedPlan.adaptive.complementaryScheduled, 1);
+assert.equal(curatedPlan.adaptive.reserveScheduled, 1);
+assert.equal(curatedPlan.adaptive.complementaryWaiting, 0);
+assert.equal(curatedPlan.adaptive.reserveWaiting, 0);
 assert.equal(curatedPlan.adaptive.disabled, 1);
-assert.equal(curatedPlan.queue['curated-1'].main.support.dueDate, null);
+assert.ok(Number.isFinite(curatedPlan.queue['curated-1'].main.support.dueDate));
+assert.equal(curatedPlan.queue['curated-1'].main.support.adaptiveState, 'introduction');
+const progressiveLessonPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{
+    aulaId:'progressive-70',
+    aulaTitle:'Aula com 70 questões',
+    subject:'Cardiologia',
+    topic:'Teste progressivo',
+    aulaData:{ blocks:{ main:{
+      questions:Array.from({ length:70 }, (_, index) => ({
+        ...migrationQuestion(`progressive-${String(index).padStart(2, '0')}`),
+        learningPolicy:{
+          tier:index < 10 ? 'essential' : index < 55 ? 'complementary' : 'reserve',
+          conceptIds:[`concept-${index % 12}`],
+          primaryConceptId:`concept-${index % 12}`,
+          importance:index < 10 ? 5 : index < 55 ? 4 : 2,
+          qualityScore:100 - index,
+          learningRole:index < 10 ? 'core' : index < 55 ? 'reinforcement' : 'variation',
+          reviewEligible:true,
+          status:'active',
+        },
+      })),
+    } } },
+  }],
+});
+assert.equal(progressiveLessonPlan.added, 70);
+assert.deepEqual(progressiveLessonPlan.introduction.buckets.map(bucket => bucket.count), [25,21,14,7,3]);
+assert.equal(summarizeReviewQueue(progressiveLessonPlan.queue, reviewNow).total, 70);
+const progressiveForecast = buildReviewForecast(progressiveLessonPlan.queue, { now:reviewNow, days:16 });
+assert.equal(progressiveForecast.days[0].total, 25);
+assert.equal(progressiveForecast.days[1].total, 21);
+assert.equal(progressiveForecast.days[4].total, 14);
+assert.equal(progressiveForecast.days[8].total, 7);
+assert.equal(progressiveForecast.days[15].total, 3);
+const progressiveItems = Object.values(progressiveLessonPlan.queue['progressive-70'].main);
+assert.equal(progressiveItems.filter(item => item.adaptiveState === 'dormant').length, 0);
+assert.ok(progressiveItems
+  .filter(item => item.learningPolicy.tier === 'essential')
+  .every(item => item.migration.firstExposure.bucketIndex === 0));
+const repeatedProgressivePlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow + 1000,
+  existingQueue:progressiveLessonPlan.queue,
+  lessons:[{
+    aulaId:'progressive-70',
+    aulaData:{ blocks:{ main:{ questions:progressiveItems.map(item => item.question) } } },
+  }],
+});
+assert.equal(repeatedProgressivePlan.changed, 0);
+const upgradedDormantPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{
+    aulaId:'legacy-eligible',
+    aulaData:{ blocks:{ main:{ questions:[
+      { ...migrationQuestion('support'), learningPolicy:{ tier:'complementary', conceptIds:['ritmo'], importance:4, qualityScore:80 } },
+      { ...migrationQuestion('support-fsrs'), learningPolicy:{ tier:'complementary', conceptIds:['ritmo'], importance:3, qualityScore:70 } },
+    ] } } },
+  }],
+  existingQueue:{ 'legacy-eligible':{ main:{
+    support:{
+      source:'curso',
+      cardKey:'course/legacy-eligible/support',
+      dueDate:null,
+      adaptiveState:'dormant',
+      learningPolicy:{ tier:'complementary', reviewEligible:true, status:'active' },
+      migration:{ version:'curated-adaptive-individual-v3' },
+    },
+    'support-fsrs':{
+      source:'curso',
+      cardKey:'course/legacy-eligible/support-fsrs',
+      dueDate:null,
+      adaptiveState:'dormant',
+      learningPolicy:{ tier:'complementary', reviewEligible:true, status:'active' },
+      fsrs:firstFsrsState,
+      migration:{ version:'curated-adaptive-individual-v3' },
+    },
+  } } },
+});
+assert.equal(upgradedDormantPlan.queue['legacy-eligible'].main.support.adaptiveState, 'introduction');
+assert.ok(Number.isFinite(upgradedDormantPlan.queue['legacy-eligible'].main.support.dueDate));
+assert.equal(upgradedDormantPlan.queue['legacy-eligible'].main['support-fsrs'].adaptiveState, 'completed-once');
+assert.equal(upgradedDormantPlan.queue['legacy-eligible'].main['support-fsrs'].dueDate, null);
+assert.equal(upgradedDormantPlan.queue['legacy-eligible'].main['support-fsrs'].fsrs, firstFsrsState);
+const pausedLegacyOneTimePlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{
+    aulaId:'paused-one-time',
+    aulaData:{ blocks:{ main:{ questions:[{
+      ...migrationQuestion('support-fsrs'),
+      learningPolicy:{ tier:'complementary', conceptIds:['ritmo'] },
+    }] } } },
+  }],
+  existingQueue:{ 'paused-one-time':{ main:{ 'support-fsrs':{
+    source:'curso',
+    cardKey:'course/paused-one-time/support-fsrs',
+    dueDate:null,
+    parkedDueDate:firstFsrsState.nextDue,
+    adaptiveState:'paused',
+    fsrs:firstFsrsState,
+    reviewPause:{ adaptiveState:'longitudinal', dueDate:firstFsrsState.nextDue },
+  } } } },
+});
+assert.equal(pausedLegacyOneTimePlan.queue['paused-one-time'].main['support-fsrs'].reviewPause.adaptiveState, 'completed-once');
+const resumedLegacyOneTime = resumeReviewLesson({ queue:pausedLegacyOneTimePlan.queue, aulaId:'paused-one-time', now:reviewNow });
+assert.equal(resumedLegacyOneTime.queue['paused-one-time'].main['support-fsrs'].adaptiveState, 'completed-once');
+assert.equal(resumedLegacyOneTime.queue['paused-one-time'].main['support-fsrs'].dueDate, null);
 const visualWaitingPlan = buildWatchedLessonsIndividualPlan({
   now:reviewNow,
   lessons:[{
@@ -841,8 +985,8 @@ const resumedLesson = resumeReviewLesson({ queue:pausedReconciledPlan.queue, aul
 assert.equal(resumedLesson.changed, true);
 assert.equal(resumedLesson.queue['curated-1'].main.essential.adaptiveState, 'core');
 assert.equal(resumedLesson.queue['curated-1'].main.essential.dueDate, essentialDueBeforePause);
-assert.equal(resumedLesson.queue['curated-1'].main.support.adaptiveState, 'dormant');
-assert.equal(resumedLesson.queue['curated-1'].main.support.dueDate, null);
+assert.equal(resumedLesson.queue['curated-1'].main.support.adaptiveState, 'introduction');
+assert.ok(Number.isFinite(resumedLesson.queue['curated-1'].main.support.dueDate));
 const restoredCuratedPlan = buildWatchedLessonsIndividualPlan({
   now:reviewNow,
   lessons:[{
@@ -865,52 +1009,7 @@ const restoredCuratedPlan = buildWatchedLessonsIndividualPlan({
 assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.dueDate, reviewNow - 5000);
 assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.parkedDueDate, null);
 assert.equal(curatedPlan.queue['curated-1'].main.disabled.adaptiveState, 'disabled');
-const supportActivation = activateAdaptiveSupportQuestion({
-  queue:curatedPlan.queue,
-  aulaId:'curated-1',
-  answeredItem:curatedPlan.queue['curated-1'].main.essential,
-  now:reviewNow,
-});
-assert.equal(supportActivation.activated?.qId, 'support');
-assert.equal(supportActivation.activated?.item.adaptiveState, 'remediation');
-assert.equal(supportActivation.activated?.item.dueDate, reviewNow + 1000);
-const activeReviewSession = {
-  items:[{
-    aulaId:'curated-1',
-    blockId:'main',
-    qId:'essential',
-    item:curatedPlan.queue['curated-1'].main.essential,
-    question:migrationQuestion('essential'),
-  }],
-  index:0,
-  sessionAnswers:{ 'course/curated-1/essential':'B' },
-  sessionResults:{ 'course/curated-1/essential':false },
-  completed:true,
-};
-const supportSessionItem = {
-  ...supportActivation.activated,
-  question:migrationQuestion('support'),
-};
-const sessionWithSupport = appendAdaptiveSupportToReviewSession(activeReviewSession, supportSessionItem);
-assert.equal(sessionWithSupport.items.length, 2);
-assert.equal(sessionWithSupport.items[1].qId, 'support');
-assert.equal(sessionWithSupport.index, 1);
-assert.equal(sessionWithSupport.completed, false);
-assert.equal(sessionWithSupport.adaptiveSupportAdded, 1);
-assert.equal(
-  appendAdaptiveSupportToReviewSession(sessionWithSupport, supportSessionItem),
-  sessionWithSupport,
-);
-assert.equal(
-  appendAdaptiveSupportToReviewSession(activeReviewSession, {
-    ...supportSessionItem,
-    qId:'support-flashcard',
-    item:{ ...supportSessionItem.item, cardKey:'course/curated-1/support-flashcard' },
-    question:{ ...supportSessionItem.question, id:'support-flashcard', isFlashcard:true },
-  }),
-  activeReviewSession,
-);
-const reconciledActivation = buildWatchedLessonsIndividualPlan({
+const retiredAdaptiveSupport = buildWatchedLessonsIndividualPlan({
   now:reviewNow + 500,
   lessons:[{
     aulaId:'curated-1',
@@ -921,10 +1020,79 @@ const reconciledActivation = buildWatchedLessonsIndividualPlan({
       ],
     } } },
   }],
-  existingQueue:supportActivation.queue,
+  existingQueue:{
+    ...curatedPlan.queue,
+    'curated-1':{
+      ...curatedPlan.queue['curated-1'],
+      main:{
+        ...curatedPlan.queue['curated-1'].main,
+        support:{
+          ...curatedPlan.queue['curated-1'].main.support,
+          adaptiveState:'remediation',
+          dueDate:reviewNow + 1000,
+          adaptiveActivation:{ reason:'related-error', activatedAt:reviewNow },
+        },
+      },
+    },
+  },
 });
-assert.equal(reconciledActivation.queue['curated-1'].main.support.adaptiveState, 'remediation');
-assert.equal(reconciledActivation.queue['curated-1'].main.support.dueDate, reviewNow + 1000);
+assert.equal(retiredAdaptiveSupport.queue['curated-1'].main.support.adaptiveState, 'introduction');
+assert.notEqual(retiredAdaptiveSupport.queue['curated-1'].main.support.dueDate, reviewNow + 1000);
+assert.equal(retiredAdaptiveSupport.queue['curated-1'].main.support.adaptiveActivation, undefined);
+
+const disabledEntry = createDisabledCourseQuestionEntry({
+  aulaId:'aula-visible',
+  sharedLibraryItemId:'shared-lesson-1',
+  question:migrationQuestion('bad-question'),
+  disabledAt:reviewNow,
+  disabledBy:'admin@example.com',
+});
+assert.equal(isCourseQuestionDisabled([disabledEntry], {
+  aulaId:'another-runtime-id',
+  sharedLibraryItemId:'shared-lesson-1',
+  questionId:'bad-question',
+}), true);
+const disabledVqBlocks = filterDisabledCourseQuestionsFromVqBlocks({
+  'aula-visible':{
+    meta:{ sharedLibraryItemId:'shared-lesson-1', totalQuestions:2 },
+    blocks:{ main:{
+      questions:[migrationQuestion('bad-question'), migrationQuestion('good-question')],
+      favorites:['bad-question'],
+    } },
+  },
+}, [disabledEntry]);
+assert.deepEqual(disabledVqBlocks['aula-visible'].blocks.main.questions.map(question => question.id), ['good-question']);
+assert.equal(disabledVqBlocks['aula-visible'].meta.totalQuestions, 1);
+const disabledQueue = disableCourseReviewQueueItems({
+  'aula-visible':{ main:{
+    'bad-question':{
+      source:'curso',
+      cardKey:'course/aula-visible/bad-question',
+      dueDate:reviewNow,
+      adaptiveState:'core',
+      question:migrationQuestion('bad-question'),
+    },
+  } },
+  lib_personal:{ main:{
+    'bad-question':{ source:'oraculo', dueDate:reviewNow, adaptiveState:'core' },
+  } },
+}, [disabledEntry], {
+  'aula-visible':{ meta:{ sharedLibraryItemId:'shared-lesson-1' } },
+});
+assert.equal(disabledQueue['aula-visible'].main['bad-question'].globallyDisabled, true);
+assert.equal(disabledQueue['aula-visible'].main['bad-question'].dueDate, null);
+assert.equal(disabledQueue.lib_personal.main['bad-question'].dueDate, reviewNow);
+const disabledSession = pruneDisabledCourseQuestionsFromSession({
+  items:[
+    { aulaId:'aula-visible', blockId:'main', qId:'bad-question', question:migrationQuestion('bad-question') },
+    { aulaId:'aula-visible', blockId:'main', qId:'good-question', question:migrationQuestion('good-question') },
+  ],
+  index:0,
+  sessionAnswers:{},
+}, [disabledEntry], {
+  'aula-visible':{ meta:{ sharedLibraryItemId:'shared-lesson-1' } },
+});
+assert.deepEqual(disabledSession.items.map(item => item.qId), ['good-question']);
 const individualForecast = buildReviewForecast(individualPlan.queue, { now:reviewNow, days:7 });
 assert.equal(individualForecast.total, 0);
 assert.equal(individualForecast.dueNow, 0);
@@ -1183,6 +1351,8 @@ assert.match(sharedLibraryViewSource, /QuestionCurationView = React\.lazy/);
 assert.doesNotMatch(sharedLibraryViewSource, /QuestionSelectionView|id:'selection'|label:'Seleção'/);
 assert.doesNotMatch(sharedLibraryViewSource, /sharedLibraryAudienceMode|Prévia aluno|setSharedLibraryAudienceMode/);
 assert.doesNotMatch(sharedLibraryViewSource, /id:'exams'|id:'pharmacology'|id:'famed'/);
+assert.match(sharedLibraryViewSource, /questionMatchesSearch/);
+assert.match(sharedLibraryViewSource, /Buscar questão/);
 
 const ecgCaseBankViewSource = await readFile(new URL('../src/features/question-factory/EcgCaseBankView.jsx', import.meta.url), 'utf8');
 assert.match(ecgCaseBankViewSource, /export default function EcgCaseBankView/);
@@ -1376,7 +1546,8 @@ assert.match(coursePortalViewSource, /h-14 rounded-xl border px-3 py-4/);
 assert.doesNotMatch(coursePortalViewSource, /\[12,16,24,36\]/);
 assert.doesNotMatch(coursePortalViewSource, /Cirurgia \+ GO primeiro/);
 assert.doesNotMatch(coursePortalViewSource, />Recomendado</);
-assert.match(coursePortalViewSource, /appendAdaptiveSupportToReviewSession/);
+assert.doesNotMatch(coursePortalViewSource, /appendAdaptiveSupportToReviewSession|adaptiveSupportAdded/);
+assert.match(coursePortalViewSource, /onAdminDisableQuestion/);
 assert.match(coursePortalViewSource, /progress:scheduleProgress/);
 assert.doesNotMatch(coursePortalViewSource, /const lessonOrderIndex = new Map/);
 assertNoFreeIdentifiers(coursePortalViewSource, 'CoursePortalView');
@@ -1475,6 +1646,9 @@ assert.match(settingsViewSource, /useFeatureContext/);
 const favoritesViewSource = await readFile(new URL('../src/features/favorites/FavoritesView.jsx', import.meta.url), 'utf8');
 assert.match(favoritesViewSource, /export default function FavoritesView/);
 assert.match(favoritesViewSource, /useFeatureContext/);
+assert.match(favoritesViewSource, /Object\.entries\(vqBlocks/);
+assert.match(favoritesViewSource, />Curso</);
+assert.match(favoritesViewSource, /onAdminDisableQuestion/);
 
 const spacedReviewViewSource = await readFile(new URL('../src/features/review/SpacedReviewView.jsx', import.meta.url), 'utf8');
 assert.match(spacedReviewViewSource, /export default function SpacedReviewView/);
@@ -1482,8 +1656,8 @@ assert.match(spacedReviewViewSource, /useFeatureContext/);
 assert.match(spacedReviewViewSource, />Revisões</);
 assert.match(spacedReviewViewSource, /reviewScheduledCount/);
 assert.match(spacedReviewViewSource, /Responder questões/);
-assert.match(spacedReviewViewSource, /appendAdaptiveSupportToReviewSession/);
-assert.match(spacedReviewViewSource, /reforço\{adaptiveSupportAdded===1/);
+assert.doesNotMatch(spacedReviewViewSource, /appendAdaptiveSupportToReviewSession|adaptiveSupportAdded/);
+assert.match(spacedReviewViewSource, /onAdminDisableQuestion/);
 assert.match(spacedReviewViewSource, /Revisar flashcards/);
 assert.match(spacedReviewViewSource, /Carga prevista/);
 assert.match(spacedReviewViewSource, /max-w-5xl/);

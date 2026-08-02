@@ -408,6 +408,7 @@ const QuestionView = ({
   onReviewErrorNotebook=null,
   onOpenErrorReviewResult=null,
   errorReviewResultCount=0,
+  onAdminDisableQuestion=null,
   onGoToAula=null,
   goToAulaLabel='Assistir aula',
 	  onGenerateExtra=null,
@@ -759,6 +760,7 @@ const QuestionView = ({
 	        apiKey={apiKey} oracleLength={oracleLength} onCall={onCall}
 	        onOpenAnswer={onOpenAnswer}
 	        adminQuestionExplanations={adminQuestionExplanations}
+	        onAdminDisableQuestion={onAdminDisableQuestion ? ()=>onAdminDisableQuestion(q) : null}
 	        hideCaseContext={!!caseMeta.key}
 	        flashcardStudyMode={!!entry}
 	        flashcardLarge={allFlashcards}/>
@@ -766,7 +768,7 @@ const QuestionView = ({
 	  );};
   const renderCompletion = () => {
     const wrongCount = questions.length - correctCount;
-    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns pontos para reforçar.' : 'Sessão útil para revelar lacunas importantes.';
+    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns erros para revisar.' : 'Sessão útil para revelar lacunas importantes.';
     const nextUnitAction = onNextUnit ? {
       label:nextUnitLabel,
       helper:nextUnitHelper,
@@ -838,7 +840,7 @@ const QuestionView = ({
         <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Bloco encerrado</p>
         <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Bloco concluído</h3>
         <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
-        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correctCount}/{questions.length} corretas · {wrongCount} para reforçar</p>
+        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correctCount}/{questions.length} corretas · {wrongCount} erros</p>
         <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} Adicione as questões à revisão para transformar esse resultado em ciclo de retenção.</p>
         <div className="grid grid-cols-2 gap-3 mb-8 text-left">
           <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
@@ -847,7 +849,7 @@ const QuestionView = ({
           </div>
           <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
             <p className="text-2xl font-serif font-bold text-red-500">{wrongCount}</p>
-            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>reforço</p>
+            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>erros</p>
           </div>
         </div>
         <div className="space-y-5 text-left">
@@ -1656,14 +1658,16 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false, onAdminDisableQuestion=null }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
   const [pressedAnswer, setPressedAnswer] = useState(null);
   const [lessonExplanationOpen, setLessonExplanationOpen] = useState(false);
   const [alternativeExplanationsOpen, setAlternativeExplanationsOpen] = useState(false);
+  const [adminDisableBusy, setAdminDisableBusy] = useState(false);
   const answerLockRef = useRef(null);
   const answerPointerRef = useRef(null);
+  const cardMountedRef = useRef(true);
   const suppressNextAnswerClickRef = useRef({ letter:null, until:0 });
   useEffect(() => {
     setOptimisticNotebook(isInErrorNotebook);
@@ -1674,6 +1678,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     setPressedAnswer(null);
     setLessonExplanationOpen(false);
     setAlternativeExplanationsOpen(false);
+    setAdminDisableBusy(false);
   }, [question?.id]);
   useEffect(() => {
     if (selectedLetter != null) {
@@ -1683,6 +1688,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       answerLockRef.current = null;
     }
   }, [selectedLetter]);
+  useEffect(() => () => { cardMountedRef.current = false; }, []);
   const persistedAnswer = selectedLetter === '' ? null : selectedLetter;
   const displayedAnswer = persistedAnswer ?? optimisticAnswer;
   const isSkipped = displayedAnswer === 'SKIPPED';
@@ -1718,6 +1724,15 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
     setOptimisticNotebook(!previous);
     const result = onToggleErrorNotebook();
     if (result && typeof result.catch === 'function') result.catch(() => setOptimisticNotebook(previous));
+  };
+  const handleAdminDisable = async () => {
+    if (!onAdminDisableQuestion || adminDisableBusy) return;
+    if (cardMountedRef.current) setAdminDisableBusy(true);
+    try {
+      await onAdminDisableQuestion();
+    } finally {
+      if (cardMountedRef.current) setAdminDisableBusy(false);
+    }
   };
   const handleAnswerClick = (letter) => {
     const canChangeAnswer = revealMode === 'selected';
@@ -1793,8 +1808,20 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	        <div className="flex items-center gap-2">
 	          <span className={`question-type-label text-xs font-bold px-2.5 py-1 rounded-lg ${darkMode?'text-yellow-300':'text-yellow-800'}`}>{questionTypeLabel} {index + 1}</span>
 	          {isSkipped && <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Em branco</span>}
-	        </div>
+        </div>
         <div className="flex items-center gap-2">
+          {onAdminDisableQuestion && (
+            <button
+              type="button"
+              onClick={handleAdminDisable}
+              disabled={adminDisableBusy}
+              title="Inativar esta questão para todos"
+              aria-label="Inativar esta questão para todos"
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40 disabled:opacity-45 ${darkMode?'border-red-800 text-red-300 hover:bg-red-950/40':'border-red-200 text-red-600 hover:bg-red-50'}`}
+            >
+              <Trash2 className="h-4 w-4"/><span className="hidden sm:inline">Inativar</span>
+            </button>
+          )}
           {showErrorNotebook && (
             <button
               onClick={handleNotebookClick}

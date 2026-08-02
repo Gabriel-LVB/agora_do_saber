@@ -20,6 +20,7 @@ import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTo
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
 import {
   buildReviewForecast,
+  completeCourseReviewFirstExposure,
   createReviewQueueItem,
   isReviewQueueItemScheduled,
   pauseReviewLesson,
@@ -36,6 +37,8 @@ import { resetSharedLibraryAnswersPatch, saveSharedLibraryAnswerPatch } from './
 import { saveUserVqBlockPatch } from './services/vqBlocks.js';
 
 const CHUNK_RELOAD_KEY = 'agora_lazy_chunk_reload_v1';
+const DISABLED_COURSE_QUESTIONS_CONFIG_DOC = 'disabled_course_questions';
+const DISABLED_COURSE_QUESTIONS_VERSION = 'agora-disabled-course-questions-v1';
 const isChunkLoadError = (error) =>
   /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(String(error?.message || error || ''));
 const lazyWithRetry = (factory) => factory().catch(error => {
@@ -3843,6 +3846,10 @@ export default function QuestionBankApp() {
   const RESET_CONFIRM_WORD = 'APAGAR';
   const [srModal, setSrModal]             = useState(null);  // modal de adicionar à revisão
   const [reviewSession, setReviewSession] = useState(null);  // sessão ativa de revisão
+  const [disabledCourseQuestions, setDisabledCourseQuestions] = useState([]);
+  const disabledCourseQuestionsRef = useRef([]);
+  const disabledCourseQuestionRuntimeRef = useRef(null);
+  const disableCourseQuestionInFlightRef = useRef(false);
   const [viewReturnTarget, setViewReturnTarget] = useState(null);
   const [cronograma, setCronograma]       = useState(null);   // array de 46 semanas
   const [cronLoading, setCronLoading]     = useState(false);
@@ -3946,6 +3953,102 @@ export default function QuestionBankApp() {
   useEffect(() => {
     reviewQueueRef.current = reviewQueue;
   }, [reviewQueue]);
+
+  const applyDisabledCourseQuestionEntries = useCallback(async (rawEntries) => {
+    const runtime = disabledCourseQuestionRuntimeRef.current
+      || await import('./services/disabledCourseQuestions.js');
+    disabledCourseQuestionRuntimeRef.current = runtime;
+    const entries = runtime.normalizeDisabledCourseQuestions(rawEntries);
+    disabledCourseQuestionsRef.current = entries;
+    setDisabledCourseQuestions(entries);
+
+    const currentVqBlocks = vqBlocksRef.current || {};
+    const nextVqBlocks = runtime.filterDisabledCourseQuestionsFromVqBlocks(currentVqBlocks, entries);
+    if (nextVqBlocks !== currentVqBlocks) {
+      vqBlocksRef.current = nextVqBlocks;
+      setVqBlocks(nextVqBlocks);
+      if (user && !user.isAnonymous) writeTimedCache(userVqBlocksCacheKey(user.uid), nextVqBlocks);
+    }
+
+    const currentQueue = reviewQueueRef.current || {};
+    const nextQueue = runtime.disableCourseReviewQueueItems(currentQueue, entries, currentVqBlocks);
+    if (nextQueue !== currentQueue) {
+      reviewQueueRef.current = nextQueue;
+      setReviewQueue(nextQueue);
+      if (user && !user.isAnonymous) writeTimedCache(userReviewQueueCacheKey(user.uid), nextQueue);
+    }
+
+    setReviewSession(session => runtime.pruneDisabledCourseQuestionsFromSession(session, entries, currentVqBlocks));
+    return entries;
+  }, [user?.uid, user?.isAnonymous]);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous || (!isAdmin && !canSeeVideoaulas)) {
+      disabledCourseQuestionsRef.current = [];
+      setDisabledCourseQuestions([]);
+      return undefined;
+    }
+    return onSnapshot(doc(db, 'config', DISABLED_COURSE_QUESTIONS_CONFIG_DOC), snapshot => {
+      applyDisabledCourseQuestionEntries(snapshot.exists() ? snapshot.data() : []).catch(console.warn);
+    }, console.warn);
+  }, [user?.uid, user?.isAnonymous, isAdmin, canSeeVideoaulas, applyDisabledCourseQuestionEntries]);
+
+  const isCourseQuestionGloballyDisabled = useCallback((context = {}) => (
+    disabledCourseQuestionRuntimeRef.current?.isCourseQuestionDisabled(disabledCourseQuestions, context) || false
+  ), [disabledCourseQuestions]);
+
+  const inactivateCourseQuestion = async (context = {}) => {
+    if (!isAdmin || disableCourseQuestionInFlightRef.current) return false;
+    const runtime = disabledCourseQuestionRuntimeRef.current
+      || await import('./services/disabledCourseQuestions.js');
+    disabledCourseQuestionRuntimeRef.current = runtime;
+    const aulaData = vqBlocksRef.current?.[context.aulaId];
+    const entry = runtime.createDisabledCourseQuestionEntry({
+      ...context,
+      questionId:context.questionId || context.qId || context.question?.id,
+      sharedLibraryItemId:context.sharedLibraryItemId || aulaData?.meta?.sharedLibraryItemId,
+      lessonId:context.lessonId || aulaData?.meta?.lessonId,
+      disabledAt:Date.now(),
+      disabledBy:user?.email || user?.uid || null,
+    });
+    if (!entry) {
+      addToast('Origem da questão não identificada.', 'warning', 4200);
+      return false;
+    }
+    if (runtime.isCourseQuestionDisabled(disabledCourseQuestionsRef.current, {
+      ...context,
+      lessonAliases:entry.lessonAliases,
+      questionId:entry.questionId,
+    })) {
+      addToast('Questão já inativa para todos.', 'info', 3200);
+      return true;
+    }
+    const confirmed = window.confirm(
+      'Inativar para todos? Ela sumirá do curso, favoritos e revisões. O original será preservado.'
+    );
+    if (!confirmed) return false;
+    disableCourseQuestionInFlightRef.current = true;
+    try {
+      const configRef = doc(db, 'config', DISABLED_COURSE_QUESTIONS_CONFIG_DOC);
+      const snapshot = await getDoc(configRef);
+      const currentEntries = runtime.normalizeDisabledCourseQuestions(snapshot.exists() ? snapshot.data() : []);
+      const entries = runtime.upsertDisabledCourseQuestion(currentEntries, entry);
+      await setDoc(configRef, cleanFirestoreData({
+        version:DISABLED_COURSE_QUESTIONS_VERSION,
+        entries,
+        updatedAt:Date.now(),
+        updatedBy:user?.email || user?.uid || null,
+      }), { merge:true });
+      await applyDisabledCourseQuestionEntries(entries);
+      addToast('Questão inativada para todos.', 'success', 4200);
+      return true;
+    } catch {
+      addToast('Não consegui inativar a questão agora.', 'warning', 4500);
+      return false;
+    } finally {
+      disableCourseQuestionInFlightRef.current = false;
+    }
+  };
 
   const persistReviewQueueCache = (queue) => {
     if (user && !user.isAnonymous) writeTimedCache(userReviewQueueCacheKey(user.uid), queue || {});
@@ -4051,7 +4154,7 @@ export default function QuestionBankApp() {
     || backgroundPrefetchStage >= 2
   );
   const foregroundVqBlocksData = canSeeVideoaulas && (
-    ['curso', 'videoquestions'].includes(view)
+    ['curso', 'videoquestions', 'favorites'].includes(view)
     || (isAdmin && view === 'shared-library')
     || !!vqAula
     || !!vqActiveBlockView
@@ -4530,8 +4633,13 @@ export default function QuestionBankApp() {
     const cacheKey = userReviewQueueCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.reviewQueue, null);
     if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
-      reviewQueueRef.current = cached.value;
-      setReviewQueue(cached.value);
+      const filteredCache = disabledCourseQuestionRuntimeRef.current?.disableCourseReviewQueueItems(
+        cached.value,
+        disabledCourseQuestionsRef.current,
+        vqBlocksRef.current,
+      ) || cached.value;
+      reviewQueueRef.current = filteredCache;
+      setReviewQueue(filteredCache);
       if (cached.fresh) {
         setReviewLoaded(true);
         return;
@@ -4542,9 +4650,19 @@ export default function QuestionBankApp() {
         const snap = await getDocs(collection(db, 'users', user.uid, 'vq_review'));
         const loaded = {};
         snap.forEach(d => { loaded[d.id] = d.data(); });
-        reviewQueueRef.current = loaded;
-        setReviewQueue(loaded);
-        writeTimedCache(cacheKey, loaded);
+        const runtime = disabledCourseQuestionRuntimeRef.current
+          || (disabledCourseQuestionsRef.current.length
+            ? await import('./services/disabledCourseQuestions.js')
+            : null);
+        if (runtime) disabledCourseQuestionRuntimeRef.current = runtime;
+        const filtered = runtime?.disableCourseReviewQueueItems(
+          loaded,
+          disabledCourseQuestionsRef.current,
+          vqBlocksRef.current,
+        ) || loaded;
+        reviewQueueRef.current = filtered;
+        setReviewQueue(filtered);
+        writeTimedCache(cacheKey, filtered);
       } catch(e) {
         console.warn('review queue load failed:', e?.code || e?.message || e);
       } finally {
@@ -5065,38 +5183,47 @@ export default function QuestionBankApp() {
     await saveReviewQueue({ ...queue, [aulaId]: { ...cur, [blockId]: nextBlock } });
   };
 
-  // Atualiza após responder e devolve um eventual reforço para a sessão ativa.
+  // Essenciais e materiais pessoais seguem no FSRS. Complementares e reservas
+  // encerram sua participação depois da primeira exposição real.
   const updateReviewItem = async (aulaId, blockId, qId, correct) => {
     const queue = reviewQueueRef.current || {};
     const cur = queue[aulaId] || {};
     const item = cur[blockId]?.[qId];
     if (!item) return;
     const reviewAt = Date.now();
-    const legacyItem = scheduleReviewOutcome({ item, correct, now:reviewAt });
-    let nextItem = legacyItem;
-    try {
-      const { advanceFsrsCard } = await import('./services/fsrsScheduler.js');
-      const fsrsState = advanceFsrsCard({
-        previous:item.fsrs || item.fsrsShadow,
-        correct,
-        legacyDue:legacyItem.dueDate,
-        now:reviewAt,
-      });
-      nextItem = {
-        ...legacyItem,
-        dueDate:fsrsState.nextDue,
-        intervalDays:fsrsState.intervalDays,
-        schedulerVersion:fsrsState.version,
-        fsrs:fsrsState,
-        legacyFallback:{
-          dueDate:legacyItem.dueDate,
-          interval:legacyItem.interval,
-          schedulerVersion:legacyItem.schedulerVersion,
-          calculatedAt:reviewAt,
-        },
-      };
-    } catch(error) {
-      console.warn('FSRS scheduling failed; legacy fallback used:', error?.message || error);
+    const isCourseItem = item.source === 'curso' || String(item.cardKey || '').startsWith('course/');
+    const isOneTimeCourseQuestion = isCourseItem
+      && ['complementary', 'reserve'].includes(item.learningPolicy?.tier);
+    let nextItem;
+    if (isOneTimeCourseQuestion) {
+      nextItem = completeCourseReviewFirstExposure({ item, correct, now:reviewAt });
+    } else {
+      const legacyItem = scheduleReviewOutcome({ item, correct, now:reviewAt });
+      nextItem = legacyItem;
+      try {
+        const { advanceFsrsCard } = await import('./services/fsrsScheduler.js');
+        const fsrsState = advanceFsrsCard({
+          previous:item.fsrs || item.fsrsShadow,
+          correct,
+          legacyDue:legacyItem.dueDate,
+          now:reviewAt,
+        });
+        nextItem = {
+          ...legacyItem,
+          dueDate:fsrsState.nextDue,
+          intervalDays:fsrsState.intervalDays,
+          schedulerVersion:fsrsState.version,
+          fsrs:fsrsState,
+          legacyFallback:{
+            dueDate:legacyItem.dueDate,
+            interval:legacyItem.interval,
+            schedulerVersion:legacyItem.schedulerVersion,
+            calculatedAt:reviewAt,
+          },
+        };
+      } catch(error) {
+        console.warn('FSRS scheduling failed; legacy fallback used:', error?.message || error);
+      }
     }
     trackReviewOutcome({
       eventKey:`${item.cardKey || `${aulaId}/${blockId}/${qId}`}@${Number(item.dueDate) || reviewAt}`,
@@ -5109,46 +5236,8 @@ export default function QuestionBankApp() {
       ...cur,
       [blockId]: { ...cur[blockId], [qId]:nextItem }
     };
-    let nextQueue = { ...queue, [aulaId]:updated };
-    let activatedReviewItem = null;
-    if (!correct) {
-      try {
-        const { activateAdaptiveSupportQuestion } = await import('./services/reviewMigration.js');
-        const activation = activateAdaptiveSupportQuestion({
-          queue:nextQueue,
-          aulaId,
-          answeredItem:nextItem,
-          now:reviewAt,
-        });
-        nextQueue = activation.queue;
-        if (activation.activated) {
-          const activated = activation.activated;
-          const aulaData = vqBlocksRef.current?.[activated.aulaId];
-          const block = aulaData?.blocks?.[activated.blockId];
-          const question = (block?.questions || []).find(candidate =>
-            String(candidate?.id) === String(activated.qId)
-          ) || activated.item?.question;
-          if (question) {
-            activatedReviewItem = {
-              ...activated,
-              question,
-              aulaTitle:activated.item?.aulaTitle || aulaData?.meta?.aulaTitle || null,
-              blockTitle:activated.item?.blockTitle || block?.title || null,
-              source:activated.item?.source || 'curso',
-              subjectId:activated.item?.subjectId || null,
-              topicId:activated.item?.topicId || null,
-            };
-          }
-        }
-      } catch(error) {
-        console.warn('Adaptive reinforcement activation skipped:', error?.message || error);
-      }
-    }
-    // A fila local é atualizada de forma otimista dentro de saveReviewQueue.
-    // Não segure a sessão aberta esperando a escrita remota: o reforço precisa
-    // aparecer no fim da lista assim que for identificado.
-    saveReviewQueue(nextQueue);
-    return activatedReviewItem;
+    saveReviewQueue({ ...queue, [aulaId]:updated });
+    return null;
   };
 
   const resolveCourseLessonReviewId = (aula) => {
@@ -5208,9 +5297,10 @@ export default function QuestionBankApp() {
       addToast('Aula concluída. As questões serão liberadas após a curadoria ser publicada.', 'info', 4200);
       return 0;
     }
-    const waiting = plan.adaptive.complementaryWaiting + plan.adaptive.reserveWaiting;
+    const todayCount = Number(plan.introduction?.buckets?.find(bucket => bucket.dayOffset === 0)?.count) || 0;
+    const laterCount = Math.max(0, Number(plan.introduction?.total) - todayCount);
     addToast(
-      `${plan.added} questões entraram no plano${waiting ? ` · ${waiting} reforços ficaram em espera adaptativa` : ''}.`,
+      `${plan.introduction?.total || plan.added} questões distribuídas · ${todayCount} para hoje${laterCount ? ` e ${laterCount} ao longo das próximas ondas` : ''}.`,
       'success',
       5200,
     );
@@ -5319,6 +5409,13 @@ export default function QuestionBankApp() {
                 visualRequirement:storedQuestion.visualRequirement || currentQuestion.visualRequirement,
               }
               : currentQuestion || storedQuestion;
+            if (itemSource === 'curso' && isCourseQuestionGloballyDisabled({
+              aulaId,
+              sharedLibraryItemId:aulaData?.meta?.sharedLibraryItemId,
+              lessonId:aulaData?.meta?.lessonId,
+              questionId:qId,
+              question:q,
+            })) return;
             if (q) due.push({
               aulaId,
               blockId,
@@ -5421,8 +5518,21 @@ export default function QuestionBankApp() {
     const cacheKey = userVqBlocksCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.vqBlocks, null);
     if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
-      vqBlocksRef.current = cached.value;
-      setVqBlocks(cached.value);
+      const filteredCache = disabledCourseQuestionRuntimeRef.current?.filterDisabledCourseQuestionsFromVqBlocks(
+        cached.value,
+        disabledCourseQuestionsRef.current,
+      ) || cached.value;
+      vqBlocksRef.current = filteredCache;
+      setVqBlocks(filteredCache);
+      const filteredQueue = disabledCourseQuestionRuntimeRef.current?.disableCourseReviewQueueItems(
+        reviewQueueRef.current || {},
+        disabledCourseQuestionsRef.current,
+        cached.value,
+      );
+      if (filteredQueue && filteredQueue !== reviewQueueRef.current) {
+        reviewQueueRef.current = filteredQueue;
+        setReviewQueue(filteredQueue);
+      }
     }
     // O cache serve apenas para abrir a tela sem atraso. Sempre confirme o
     // progresso no Firestore: outro dispositivo pode ter respondido questões
@@ -5433,9 +5543,27 @@ export default function QuestionBankApp() {
         const snap = await getDocs(collection(db, 'users', user.uid, 'vq_blocks'));
         const loaded = {};
         snap.forEach(d => { loaded[d.id] = d.data(); });
-        vqBlocksRef.current = loaded;
-        setVqBlocks(loaded);
-        writeTimedCache(cacheKey, loaded);
+        const runtime = disabledCourseQuestionRuntimeRef.current
+          || (disabledCourseQuestionsRef.current.length
+            ? await import('./services/disabledCourseQuestions.js')
+            : null);
+        if (runtime) disabledCourseQuestionRuntimeRef.current = runtime;
+        const filtered = runtime?.filterDisabledCourseQuestionsFromVqBlocks(
+          loaded,
+          disabledCourseQuestionsRef.current,
+        ) || loaded;
+        vqBlocksRef.current = filtered;
+        setVqBlocks(filtered);
+        const filteredQueue = runtime?.disableCourseReviewQueueItems(
+          reviewQueueRef.current || {},
+          disabledCourseQuestionsRef.current,
+          loaded,
+        );
+        if (filteredQueue && filteredQueue !== reviewQueueRef.current) {
+          reviewQueueRef.current = filteredQueue;
+          setReviewQueue(filteredQueue);
+        }
+        writeTimedCache(cacheKey, filtered);
       } catch(e) { console.error('vqBlocks load error:', e); }
       finally { setVqLoading(false); setVqBlocksLoaded(true); }
     })();
@@ -5717,7 +5845,15 @@ export default function QuestionBankApp() {
         const previousAnswers = Object.values(current?.blocks || {}).reduce((answers, block) => ({ ...answers, ...(block?.answers || {}) }), {});
         const previousFavorites = Object.values(current?.blocks || {}).flatMap(block => Array.isArray(block?.favorites) ? block.favorites : []);
         const previousErrorNotebook = Object.values(current?.blocks || {}).flatMap(block => Array.isArray(block?.errorNotebook) ? block.errorNotebook : []);
-        const questions = [...directQuestions, ...clinicalQuestions];
+        const questions = [...directQuestions, ...clinicalQuestions].filter(question =>
+          !disabledCourseQuestionRuntimeRef.current?.isCourseQuestionDisabled(disabledCourseQuestionsRef.current, {
+            aulaId:key,
+            lessonId:item.lessonId,
+            sharedLibraryItemId:item.id,
+            question,
+          })
+        );
+        if (!questions.length) return;
         next[key] = {
           meta:{
             totalQuestions:questions.length,
@@ -5727,6 +5863,7 @@ export default function QuestionBankApp() {
             topic:item.topic,
             source:'shared-library',
             readOnly:true,
+            lessonId:item.lessonId || lesson.id || null,
             sharedLibraryItemId:item.id,
             sharedLibraryUpdatedAt:item.updatedAt,
             sharedLibraryPublishKey:publishKey,
@@ -13175,6 +13312,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     homeCanUseAcademia,
     homeCanUseAdvancedFeatures,
     HomeMottoEditor,
+    inactivateCourseQuestion,
     isAcademiaMirrorRootFolder,
     isAdmin,
     isAnswerCorrect,
@@ -13182,6 +13320,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     isFinalObjectiveAnswer,
     isFolderDescendant,
     isFolderItem,
+    isCourseQuestionGloballyDisabled,
     isMemoryCardType,
     isProtectedMirrorRootFolder,
     isReviewItemFavorite,

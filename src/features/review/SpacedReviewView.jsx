@@ -1,6 +1,5 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
-import { appendAdaptiveSupportToReviewSession } from '../../services/reviewScheduler.js';
 
 export default function SpacedReviewView() {
   const {
@@ -15,6 +14,7 @@ export default function SpacedReviewView() {
     getDueReviews,
     getKey,
     getTodayKey,
+    inactivateCourseQuestion,
     isAdmin,
     isAnswerCorrect,
     isReviewItemFavorite,
@@ -69,7 +69,6 @@ export default function SpacedReviewView() {
       sessionAnswers,
       sessionResults = {},
       completed = false,
-      adaptiveSupportAdded = 0,
     } = reviewSession;
     const current = sessionItems[index];
     const sessionItemKey = current?.item?.cardKey || `${current?.aulaId}/${current?.blockId}/${current?.qId}`;
@@ -84,7 +83,7 @@ export default function SpacedReviewView() {
         <div className={`mx-auto max-w-2xl rounded-2xl border p-8 text-center shadow-sm md:p-10 ${dm?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}>
           <CheckIcon className="mx-auto mb-4 h-12 w-12 text-green-500"/>
           <h2 className="font-serif text-3xl font-bold text-yellow-600">Revisão concluída</h2>
-          <p className={`mt-3 text-sm ${dm?'text-gray-400':'text-gray-600'}`}>{correct} acertos · {wrong} para reforçar</p>
+          <p className={`mt-3 text-sm ${dm?'text-gray-400':'text-gray-600'}`}>{correct} acertos · {wrong} erros</p>
           <p className={`mt-1 text-3xl font-serif font-bold ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
           <button onClick={()=>setReviewSession(null)} className="mt-7 rounded-xl bg-yellow-600 px-8 py-3 font-bold text-white hover:bg-yellow-700">Voltar</button>
         </div>
@@ -118,7 +117,6 @@ export default function SpacedReviewView() {
           <button onClick={()=>setReviewSession(null)} className={`flex items-center gap-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="h-4 w-4"/>Sair</button>
           <div className="text-right">
             <span className={`block text-xs font-bold ${dm?'text-gray-400':'text-gray-500'}`}>{index + 1}/{total}</span>
-            {!!adaptiveSupportAdded&&<span className="mt-0.5 block text-[10px] font-bold text-orange-500">+{adaptiveSupportAdded} reforço{adaptiveSupportAdded===1?'':'s'} no fim</span>}
           </div>
         </div>
         <div className={`mb-5 h-2 overflow-hidden rounded-full ${dm?'bg-gray-800':'bg-gray-100'}`}>
@@ -137,16 +135,19 @@ export default function SpacedReviewView() {
               sessionResults:{ ...(previous?.sessionResults || {}), [sessionItemKey]:correct },
             }));
             if (!correct) setReviewNotebook(current, 'add');
-            const supportItem = await updateReviewItem(current.aulaId, current.blockId, current.qId, correct);
-            if (supportItem) setReviewSession(previous =>
-              appendAdaptiveSupportToReviewSession(previous, supportItem)
-            );
+            await updateReviewItem(current.aulaId, current.blockId, current.qId, correct);
           }}
           darkMode={dm}
           isFavorite={isReviewItemFavorite(current)}
           onToggleFavorite={()=>toggleReviewFavorite(current)}
           showErrorNotebook={false}
           adminQuestionExplanations={isAdmin}
+          onAdminDisableQuestion={isAdmin ? (()=>inactivateCourseQuestion({
+            aulaId:current.aulaId,
+            blockId:current.blockId,
+            questionId:current.qId,
+            question:current.question,
+          })) : null}
           apiKey={getKey()}
           oracleLength={settings.oracleLength}
           onCall={callWithRotation}
