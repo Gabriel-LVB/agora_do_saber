@@ -85,6 +85,7 @@ export default function FamedPortalView() {
     startFamedAcademiaCreation,
     subjectProgress,
     trackQuestionAnswered,
+    watchedAulas,
     Zap,
   } = useFeatureContext();
   const [contentItems, setContentItems] = React.useState([]);
@@ -421,7 +422,7 @@ export default function FamedPortalView() {
     {contentError&&isAdmin&&<p className={`rounded-xl border px-4 py-3 text-sm ${darkMode?'border-red-900 bg-red-900 bg-opacity-20 text-red-200':'border-red-200 bg-red-50 text-red-800'}`}>{contentError}</p>}
     {isAdmin&&legacyContentItems.length>0&&<section className={`rounded-2xl border p-4 md:p-5 ${darkMode?'border-red-900 bg-red-950/20':'border-red-200 bg-red-50'}`}><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Limpeza do fluxo antigo</p><p className={`mt-1 text-sm ${darkMode?'text-gray-300':'text-gray-700'}`}>{legacyContentItems.length} conteúdo(s) antigo(s) estão ocultos e prontos para exclusão.</p></div><button type="button" disabled={cleaningLegacy} onClick={cleanLegacyContent} className="min-h-[44px] rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-40">{cleaningLegacy?'Apagando…':'Apagar conteúdo antigo'}</button></div></section>}
     <FamedScheduleView darkMode={darkMode} isAdmin={isAdmin} contentByScheduleId={contentByScheduleId} contentLoading={contentLoading}
-      courseCatalogReady={!!appliedVideoaulasData} courseLessonsByScheduleId={courseLessonsByScheduleId} onOpenCourseLesson={openCourseLesson}
+      courseCatalogReady={!!appliedVideoaulasData} courseLessonsByScheduleId={courseLessonsByScheduleId} watchedAulas={watchedAulas} onOpenCourseLesson={openCourseLesson}
       onExportCourseCatalog={exportCourseCatalog}
       removingContentId={removingContentId} onRemoveContent={removeScheduleContent}
       onOpenLesson={openSubject} onOpenQuestions={openAllQuestions} onCreate={startFamedAcademiaCreation}/>

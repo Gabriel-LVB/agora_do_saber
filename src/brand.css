@@ -853,6 +853,10 @@ html.agora-theme-fallback .agora-shell *::after {
   }
 }
 
+.agora-shell .app-card.famed-discipline:hover {
+  background: var(--surface-strong);
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
   ::view-transition-new(root) {

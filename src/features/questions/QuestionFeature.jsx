@@ -1658,7 +1658,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false, onAdminDisableQuestion=null }) => {
+const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false, onAdminDisableQuestion=null, allowGiveUp=false }) => {
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
   const [pressedAnswer, setPressedAnswer] = useState(null);
@@ -1692,13 +1692,14 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
   const persistedAnswer = selectedLetter === '' ? null : selectedLetter;
   const displayedAnswer = persistedAnswer ?? optimisticAnswer;
   const isSkipped = displayedAnswer === 'SKIPPED';
-  const effectiveLetter = isSkipped ? null : displayedAnswer;
+  const gaveUp = displayedAnswer === 'DONT_KNOW';
+  const effectiveLetter = isSkipped || gaveUp ? null : displayedAnswer;
   // Para questões abertas: só é "respondida" se tiver JSON salvo com campo answer
   const isOpenAnswered = (() => {
     if (!question.isOpen || !displayedAnswer || displayedAnswer === 'SKIPPED') return false;
     try { const p = JSON.parse(displayedAnswer); return !!(p?.answer); } catch(e) { return false; }
   })();
-  const isAnswered = question.isOpen ? isOpenAnswered : question.isFlashcard ? !!effectiveLetter : (effectiveLetter != null);
+  const isAnswered = question.isOpen ? isOpenAnswered : question.isFlashcard ? !!effectiveLetter : (gaveUp || effectiveLetter != null);
   const showResults = (question.isOpen || question.isFlashcard) ? false : ((revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped)));
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
@@ -1796,7 +1797,8 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 
   useEffect(() => {
     if (showResults && isAnswered && !isCorrect && !isSkipped) setLessonExplanationOpen(true);
-  }, [showResults, isAnswered, isCorrect, isSkipped, question?.id]);
+    if (showResults && gaveUp) setAlternativeExplanationsOpen(true);
+  }, [showResults, isAnswered, isCorrect, isSkipped, gaveUp, question?.id]);
 
 	  const cardClass = question.isFlashcard && flashcardLarge
 	    ? `mb-0 flex-1 min-h-0 flex flex-col ${darkMode?'bg-transparent':'bg-transparent'}`
@@ -1955,7 +1957,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	          else if (showResults && isSkipped && opt.isCorrect) letterBadge = darkMode?'bg-green-800 text-green-300':'bg-green-100 text-green-700';
 	          else if (isSelected && revealMode==='selected') letterBadge = 'bg-blue-500 text-white';
 	          else if (isPressed) letterBadge = 'bg-yellow-500 text-white';
-	          const showOptionExplanation = !!(hasStructuredExplanations && showResults && !isSkipped && (opt.isCorrect || isSelected) && opt.explanation);
+          const showOptionExplanation = !!(hasStructuredExplanations && showResults && !isSkipped && (opt.isCorrect || isSelected) && opt.explanation);
 	          const optionExplanationLabel = opt.isCorrect ? 'Certa:' : 'Erro:';
 	          const optionExplanationClass = opt.isCorrect
 	            ? (darkMode ? 'border-green-400/20 text-green-100' : 'border-green-300/70 text-green-900')
@@ -2000,6 +2002,15 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             </div>
           );
         })}
+        {allowGiveUp && !isAnswered && !isSkipped && (
+          <button
+            type="button"
+            onClick={()=>handleAnswerClick('DONT_KNOW')}
+            className={`mt-1 min-h-[44px] w-full rounded-xl border border-dashed px-4 py-2.5 text-sm font-bold transition-colors ${darkMode?'border-gray-600 text-gray-400 hover:border-orange-500 hover:bg-orange-950/20 hover:text-orange-300':'border-gray-300 text-gray-500 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700'}`}
+          >
+            Não sei
+          </button>
+        )}
       </div>
       )}
       {showResults && (

@@ -1,5 +1,6 @@
 import React from 'react';
 import { FAMED_S5_SCHEDULE, FAMED_S5_SCHEDULE_STATS } from './famedSchedule.js';
+import { courseLessonStableIds } from './famedCourseLessonMap.js';
 
 const BookOpen = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>;
 const FileText = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>;
@@ -50,7 +51,10 @@ const linkedLessonsDuration = lessons => formatCourseDuration(
   (lessons || []).reduce((total,lesson) => total + Number(lesson.durationSeconds || lesson.aula?.duration_seconds || 0), 0)
 );
 
-export default function FamedScheduleView({ darkMode, isAdmin=false, contentByScheduleId={}, contentLoading=false, courseCatalogReady=false, courseLessonsByScheduleId={}, removingContentId=null, onOpenCourseLesson, onExportCourseCatalog, onOpenLesson, onOpenQuestions, onCreate, onRemoveContent }) {
+const isCourseLessonWatched = (lesson, watchedAulas) => courseLessonStableIds(lesson)
+  .some(id => !!watchedAulas?.[id]);
+
+export default function FamedScheduleView({ darkMode, isAdmin=false, contentByScheduleId={}, contentLoading=false, courseCatalogReady=false, courseLessonsByScheduleId={}, watchedAulas={}, removingContentId=null, onOpenCourseLesson, onExportCourseCatalog, onOpenLesson, onOpenQuestions, onCreate, onRemoveContent }) {
   return (
     <div className="famed-schedule space-y-4">
       <section className="famed-schedule-summary px-1 py-1">
@@ -110,12 +114,19 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
                       <span className={`text-[11px] font-bold ${darkMode?'text-gray-400':'text-gray-500'}`}>{linkedCourseLessons.length} aula{linkedCourseLessons.length===1?'':'s'}{courseDuration?` · ${courseDuration}`:''}</span>
                     </div>
                     <div className="mt-1">
-                      {linkedCourseLessons.map(lesson => <button key={lesson.docId||lesson.id} type="button" onClick={()=>onOpenCourseLesson?.(lesson)}
-                        className={`group flex min-h-[42px] w-full items-center gap-3 border-b py-2 text-left text-xs transition-colors last:border-b-0 ${darkMode?'border-gray-800 text-gray-300 hover:text-yellow-300':'border-gray-200 text-gray-700 hover:text-yellow-700'}`}>
-                        <span className="min-w-0 flex-1 font-bold leading-snug">{lesson.title}</span>
-                        {!!lesson.duration&&<span className={`flex-shrink-0 text-[10px] font-medium ${darkMode?'text-gray-600':'text-gray-400'}`}>{lesson.duration}</span>}
-                        <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors ${darkMode?'bg-gray-800 text-gray-500 group-hover:bg-yellow-900/40 group-hover:text-yellow-300':'bg-white text-gray-400 group-hover:bg-yellow-50 group-hover:text-yellow-700'}`}><PlayIcon className="h-3 w-3"/></span>
-                      </button>)}
+                      {linkedCourseLessons.map(lesson => {
+                        const watched = isCourseLessonWatched(lesson, watchedAulas);
+                        return <button key={lesson.docId||lesson.id} type="button" onClick={()=>onOpenCourseLesson?.(lesson)}
+                          className={`group flex min-h-[42px] w-full items-center gap-3 border-b py-2 text-left text-xs transition-colors last:border-b-0 ${watched
+                            ? darkMode?'border-gray-800 text-green-300 hover:text-green-200':'border-gray-200 text-green-700 hover:text-green-800'
+                            : darkMode?'border-gray-800 text-gray-300 hover:text-yellow-300':'border-gray-200 text-gray-700 hover:text-yellow-700'}`}>
+                          <span className="min-w-0 flex-1 font-bold leading-snug">{lesson.title}</span>
+                          {!!lesson.duration&&<span className={`flex-shrink-0 text-[10px] font-medium ${watched?(darkMode?'text-green-500/70':'text-green-600/70'):(darkMode?'text-gray-600':'text-gray-400')}`}>{lesson.duration}</span>}
+                          <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors ${watched
+                            ? darkMode?'bg-green-950/70 text-green-400 group-hover:bg-green-900/70':'bg-green-100 text-green-700 group-hover:bg-green-200'
+                            : darkMode?'bg-gray-800 text-gray-500 group-hover:bg-yellow-900/40 group-hover:text-yellow-300':'bg-white text-gray-400 group-hover:bg-yellow-50 group-hover:text-yellow-700'}`}><PlayIcon className="h-3 w-3"/></span>
+                        </button>;
+                      })}
                     </div>
                   </div>}
                   {(content||isAdmin)&&<div className="famed-actions mt-3 grid grid-cols-2 gap-2">

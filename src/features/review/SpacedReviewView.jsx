@@ -111,6 +111,17 @@ export default function SpacedReviewView() {
         isCorrect:option.text === correctText,
       })),
     };
+    const answerCurrentReview = async letter => {
+      const correct = isAnswerCorrect(reviewQuestion, letter);
+      trackQuestionAnswered(`review:${current.aulaId}:${current.blockId}:${current.qId}:${current.item?.dueDate||getTodayKey()}`);
+      setReviewSession(previous => ({
+        ...previous,
+        sessionAnswers:{ ...(previous?.sessionAnswers || {}), [sessionItemKey]:letter },
+        sessionResults:{ ...(previous?.sessionResults || {}), [sessionItemKey]:correct },
+      }));
+      if (!correct) setReviewNotebook(current, 'add');
+      await updateReviewItem(current.aulaId, current.blockId, current.qId, correct);
+    };
     return (
       <div className="mx-auto w-full max-w-5xl">
         <div className="mb-4 flex items-center justify-between gap-4">
@@ -126,17 +137,8 @@ export default function SpacedReviewView() {
           question={reviewQuestion}
           index={index}
           selectedLetter={sessionAnswers[sessionItemKey]}
-          onAnswer={async letter => {
-            const correct = isAnswerCorrect(reviewQuestion, letter);
-            trackQuestionAnswered(`review:${current.aulaId}:${current.blockId}:${current.qId}:${current.item?.dueDate||getTodayKey()}`);
-            setReviewSession(previous => ({
-              ...previous,
-              sessionAnswers:{ ...(previous?.sessionAnswers || {}), [sessionItemKey]:letter },
-              sessionResults:{ ...(previous?.sessionResults || {}), [sessionItemKey]:correct },
-            }));
-            if (!correct) setReviewNotebook(current, 'add');
-            await updateReviewItem(current.aulaId, current.blockId, current.qId, correct);
-          }}
+          onAnswer={answerCurrentReview}
+          allowGiveUp={!question.isOpen&&!question.isFlashcard}
           darkMode={dm}
           isFavorite={isReviewItemFavorite(current)}
           onToggleFavorite={()=>toggleReviewFavorite(current)}

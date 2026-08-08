@@ -94,7 +94,8 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
     subjectOrder.indexOf(left.subject) - subjectOrder.indexOf(right.subject)
     || String(left.title).localeCompare(String(right.title), 'pt-BR')), [items, subjectOrder]);
   const subjects = React.useMemo(() => [...new Set(orderedItems.map(item => item.subject).filter(Boolean))], [orderedItems]);
-  const [selectedSubject, setSelectedSubject] = React.useState(subjects[0] || '');
+  const subjectsKey = subjects.join('\u0001');
+  const [selectedSubjects, setSelectedSubjects] = React.useState(() => subjects[0] ? [subjects[0]] : []);
   const [selectedItemId, setSelectedItemId] = React.useState('all');
   const [analysesByItem, setAnalysesByItem] = React.useState({});
   const [analysesLoading, setAnalysesLoading] = React.useState(false);
@@ -232,20 +233,30 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
   }, [orderedItems, user?.uid]);
 
   React.useEffect(() => {
-    if (subjects.includes(selectedSubject)) return;
-    setSelectedSubject(subjects[0] || '');
-    setSelectedItemId('all');
-  }, [selectedSubject, subjects]);
+    setSelectedSubjects(current => {
+      const valid = subjects.filter(subject => current.includes(subject));
+      if (valid.length) {
+        const unchanged = valid.length === current.length
+          && valid.every((subject, index) => subject === current[index]);
+        return unchanged ? current : valid;
+      }
+      return subjects[0] ? [subjects[0]] : [];
+    });
+  }, [subjectsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const subjectItems = React.useMemo(
-    () => orderedItems.filter(item => item.subject === selectedSubject),
-    [orderedItems, selectedSubject],
+    () => orderedItems.filter(item => selectedSubjects.includes(item.subject)),
+    [orderedItems, selectedSubjects],
   );
   React.useEffect(() => {
+    if (selectedSubjects.length !== 1) {
+      if (selectedItemId !== 'all') setSelectedItemId('all');
+      return;
+    }
     if (selectedItemId === 'all') return;
     if (subjectItems.some(item => String(item.id) === String(selectedItemId))) return;
     setSelectedItemId('all');
-  }, [selectedItemId, subjectItems]);
+  }, [selectedItemId, selectedSubjects.length, subjectItems]);
 
   const targetItems = React.useMemo(
     () => selectedItemId === 'all'
@@ -253,8 +264,12 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
       : subjectItems.filter(item => String(item.id) === String(selectedItemId)),
     [selectedItemId, subjectItems],
   );
-  const selectedScopeLabel = selectedItemId === 'all' ? 'matéria' : 'aula';
-  const analysisScopeKey = `${selectedSubject}::${selectedItemId}`;
+  const selectedScopeLabel = selectedItemId !== 'all'
+    ? 'aula'
+    : selectedSubjects.length === 1
+      ? 'matéria'
+      : 'matérias';
+  const analysisScopeKey = `${selectedSubjects.join('|')}::${selectedItemId}`;
   const analysesLoaded = analysisRead.scopeKey === analysisScopeKey;
   const displayedAnalysesByItem = analysesLoaded ? analysesByItem : EMPTY_ANALYSES_BY_ITEM;
 
@@ -282,11 +297,11 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
         error:error?.message || error?.code || 'Falha ao carregar',
         errorScopeKey:requestedScopeKey,
       }));
-      addToast(`Não consegui carregar os metadados desta ${selectedScopeLabel}.`, 'error', 4500);
+      addToast('Não consegui carregar os metadados deste recorte.', 'error', 4500);
     } finally {
       setAnalysesLoading(false);
     }
-  }, [addToast, analysisScopeKey, selectedScopeLabel, targetItems]);
+  }, [addToast, analysisScopeKey, targetItems]);
 
   const buildSelectionForAnalysis = React.useCallback((item, analysis) => {
     const questions = flattenSharedLibraryQuestions(item);
@@ -803,7 +818,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
             <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Curadoria sem regeneração</p>
             <h3 className="mt-1 font-serif text-2xl font-bold">Metadados por matéria, em lotes otimizados</h3>
             <p className={`mt-1 max-w-3xl text-sm ${darkMode?'text-gray-400':'text-gray-600'}`}>
-              Selecione a matéria inteira. Cada aula é analisada em lotes retomáveis de até 30 questões e a seleção pedagógica é publicada automaticamente ao terminar.
+              Selecione uma ou mais matérias. Cada aula é analisada em lotes retomáveis de até 30 questões e a seleção pedagógica é publicada automaticamente ao terminar.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -818,17 +833,37 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
-          <label className="text-xs font-bold">Matéria
-            <select value={selectedSubject} onChange={event=>{setSelectedSubject(event.target.value);setSelectedItemId('all');}} disabled={running||analysesLoading} className={`mt-1 ${fieldClass(darkMode)}`}>
-              {subjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}
-            </select>
-          </label>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]">
+          <div className={`rounded-xl border p-3 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold">Matérias <span className="font-medium opacity-50">({selectedSubjects.length} selecionada{selectedSubjects.length===1?'':'s'})</span></p>
+              <div className="flex items-center gap-2 text-[10px] font-bold">
+                <button type="button" disabled={running||analysesLoading||selectedSubjects.length===subjects.length} onClick={()=>{setSelectedSubjects(subjects);setSelectedItemId('all');}} className="text-yellow-600 disabled:opacity-35">Todas</button>
+                <button type="button" disabled={running||analysesLoading||!selectedSubjects.length} onClick={()=>{setSelectedSubjects([]);setSelectedItemId('all');}} className="opacity-55 disabled:opacity-25">Limpar</button>
+              </div>
+            </div>
+            <div className="mt-2 grid max-h-48 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+              {subjects.map(subject => {
+                const checked = selectedSubjects.includes(subject);
+                const count = orderedItems.filter(item => item.subject === subject).length;
+                return <label key={subject} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors ${running||analysesLoading?'cursor-not-allowed opacity-50':''} ${checked?(darkMode?'border-yellow-700 bg-yellow-950/25 text-yellow-200':'border-yellow-400 bg-yellow-50 text-yellow-900'):(darkMode?'border-gray-700 bg-gray-800 text-gray-300':'border-gray-200 bg-white text-gray-700')}`}>
+                  <input type="checkbox" checked={checked} disabled={running||analysesLoading} onChange={event=>{
+                    const enabled = event.target.checked;
+                    setSelectedSubjects(current => subjects.filter(value => enabled ? current.includes(value)||value===subject : current.includes(value)&&value!==subject));
+                    setSelectedItemId('all');
+                  }}/>
+                  <span className="min-w-0 flex-1 truncate font-bold">{subject}</span>
+                  <span className="flex-shrink-0 opacity-45">{count}</span>
+                </label>;
+              })}
+            </div>
+          </div>
           <label className="text-xs font-bold">Aula específica
-            <select value={selectedItemId} onChange={event=>setSelectedItemId(event.target.value)} disabled={running||analysesLoading} className={`mt-1 ${fieldClass(darkMode)}`}>
-              <option value="all">Todas as aulas da matéria ({subjectItems.length})</option>
+            <select value={selectedItemId} onChange={event=>setSelectedItemId(event.target.value)} disabled={running||analysesLoading||selectedSubjects.length!==1} className={`mt-1 ${fieldClass(darkMode)}`}>
+              <option value="all">{selectedSubjects.length===1?`Todas as aulas da matéria (${subjectItems.length})`:'Disponível ao selecionar uma matéria'}</option>
               {subjectItems.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
             </select>
+            {selectedSubjects.length>1&&<span className="mt-2 block text-[10px] font-medium opacity-50">Com várias matérias, a fila inclui todas as aulas selecionadas.</span>}
           </label>
           <div className={`min-w-44 rounded-xl border px-4 py-3 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
             <p className="text-2xl font-serif font-bold text-yellow-600">{analysesLoading ? '…' : analysesLoaded ? `${completion}%` : '—'}</p>
