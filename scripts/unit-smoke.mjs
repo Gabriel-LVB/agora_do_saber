@@ -90,6 +90,11 @@ import {
   resolveScheduleSubjectOrder,
 } from '../src/services/courseSchedule.js';
 import {
+  buildClinicalPrioritySchedule,
+  COURSE_CLINICAL_PRIORITY_CATALOG_SIZE,
+  COURSE_CLINICAL_PRIORITY_VERSION,
+} from '../src/services/courseClinicalPriority.js';
+import {
   enrichQuestionWithEcgImage,
   enrichVqBlocksWithEcgImages,
   ECG_QUESTION_MATCH_VERSION,
@@ -285,14 +290,19 @@ const dailySlots = buildScheduleDaySlots({
 });
 assert.equal(dailySlots.slots.length, 6);
 assert.deepEqual([...new Set(dailySlots.slots.map(slot => slot.weekday))], [1,3,5]);
+assert.equal(dailySlots.days.length, 14);
+assert.equal(dailySlots.days.filter(day => !day.planDay).length, 8);
 const dailyEffortSchedule = buildDailyEffortSchedule({
   lessons:Array.from({ length:6 }, (_, index) => ({ id:`daily-${index}`, durationSeconds:1800 })),
   startDate:'2026-08-03',
   studyDays:[1,3,5],
   weeksCount:2,
 });
-assert.equal(dailyEffortSchedule.days.length, 6);
+assert.equal(dailyEffortSchedule.slots.length, 6);
+assert.equal(dailyEffortSchedule.days.length, 14);
 assert.equal(dailyEffortSchedule.days.flatMap(day => day.lessons).length, 6);
+assert.equal(dailyEffortSchedule.days.filter(day => !day.planDay).length, 8);
+assert.equal(dailyEffortSchedule.days.filter(day => !day.planDay).flatMap(day => day.lessons).length, 0);
 const scheduleEffortFixture = Array.from({ length:4 }, (_, index) => ({ id:`effort-${index}`, durationSeconds:5 * 3600 }));
 const scheduleEffort = calculateScheduleEffort(scheduleEffortFixture);
 assert.equal(scheduleEffort.totalEffortSeconds, 20 * 3600);
@@ -354,9 +364,61 @@ const famedCourseCatalogSnapshot = JSON.parse(await readFile(
   new URL('../data/famed/course-catalog.snapshot.json', import.meta.url),
   'utf8',
 ));
+const clinicalPriorityCuration = JSON.parse(await readFile(
+  new URL('../data/famed/course-clinical-priority.v3.json', import.meta.url),
+  'utf8',
+));
 assert.equal(famedCourseCatalogSnapshot.schema, 'agora-famed-course-catalog-v1');
 assert.equal(famedCourseCatalogSnapshot.courseLessons.length, FAMED_COURSE_LESSON_MAP.catalogSnapshot.lessons);
 assert.equal(famedCourseCatalogSnapshot.exportedAt, FAMED_COURSE_LESSON_MAP.catalogSnapshot.exportedAt);
+const clinicalPrioritySchedule = buildClinicalPrioritySchedule(famedCourseCatalogSnapshot.courseLessons);
+const curatedClinicalPriorityIndexes = clinicalPriorityCuration.units.flatMap(unit => unit.lessons);
+assert.equal(clinicalPriorityCuration.schema, 'agora-course-clinical-priority-v1');
+assert.equal(COURSE_CLINICAL_PRIORITY_VERSION, 'generalist-clinical-priority-v3');
+assert.equal(clinicalPriorityCuration.version, COURSE_CLINICAL_PRIORITY_VERSION);
+assert.equal(clinicalPriorityCuration.units.length, 128);
+assert.equal(new Set(clinicalPriorityCuration.units.map(unit => unit.id)).size, clinicalPriorityCuration.units.length);
+assert.equal(COURSE_CLINICAL_PRIORITY_CATALOG_SIZE, famedCourseCatalogSnapshot.courseLessons.length);
+assert.equal(clinicalPrioritySchedule.length, famedCourseCatalogSnapshot.courseLessons.length);
+assert.equal(new Set(clinicalPrioritySchedule.map(lesson => lesson.courseOrder)).size, clinicalPrioritySchedule.length);
+assert.equal(curatedClinicalPriorityIndexes.length, famedCourseCatalogSnapshot.courseLessons.length);
+assert.equal(new Set(curatedClinicalPriorityIndexes).size, curatedClinicalPriorityIndexes.length);
+assert.deepEqual(clinicalPrioritySchedule.map(lesson => lesson.courseIndex), curatedClinicalPriorityIndexes);
+assert.equal(clinicalPrioritySchedule[0].title, 'Parada Cardiorrespiratória e Cadeia de Sobrevivência');
+const clinicalPriorityFirstFortyTitles = clinicalPrioritySchedule.slice(0, 40).map(lesson => lesson.title);
+[
+  'Diabetes: Introdução, Fisiologia e Classificação',
+  'Noções de Espirometria e Asma',
+  'Sepse e Choque Séptico',
+  'Eletrocardiograma Normal: Fundamentos para Taquiarritmias',
+  'Diagnóstico e Classificação da Hipertensão Arterial',
+  'Trauma: Preparação, Triagem e Mortalidade',
+  'Pneumonia Adquirida na Comunidade e Hospitalar',
+  'Assistência Pré-Natal',
+  'Tromboembolismo Pulmonar (TEP) e Trombose Venosa Profunda (TVP)',
+].forEach(title => assert.equal(clinicalPriorityFirstFortyTitles.includes(title), true, `Tema clínico prioritário ausente do início: ${title}`));
+const clinicalPriorityPosition = new Map(curatedClinicalPriorityIndexes.map((courseIndex, position) => [courseIndex, position]));
+clinicalPriorityCuration.multipartGroups.forEach(group => group.forEach((courseIndex, index) => {
+  if (!index) return;
+  assert.equal(
+    clinicalPriorityPosition.get(courseIndex),
+    clinicalPriorityPosition.get(group[index - 1]) + 1,
+    `Partes separadas no curso: ${group.join(', ')}`,
+  );
+}));
+clinicalPriorityCuration.prerequisites.forEach(([prerequisite, dependent]) => assert.ok(
+  clinicalPriorityPosition.get(prerequisite) < clinicalPriorityPosition.get(dependent),
+  `Pré-requisito ${prerequisite} deve anteceder ${dependent}`,
+));
+const initialTraumaUnit = clinicalPriorityCuration.units.find(unit => unit.id === 'initial-trauma');
+assert.ok(initialTraumaUnit.lessons.length >= 4);
+assert.equal(new Set(initialTraumaUnit.lessons.map(courseIndex =>
+  famedCourseCatalogSnapshot.courseLessons.find(lesson => lesson.courseIndex === courseIndex)?.subject
+)).size, 1);
+const changedClinicalCatalog = [...famedCourseCatalogSnapshot.courseLessons].reverse().map((lesson, index) =>
+  index === 0 ? { ...lesson, title:`${lesson.title} (alterada)` } : lesson
+);
+assert.deepEqual(buildClinicalPrioritySchedule(changedClinicalCatalog), changedClinicalCatalog);
 const famedSnapshotIds = new Set(famedCourseCatalogSnapshot.courseLessons.flatMap(lesson => lesson.stableIds || []).map(String));
 Object.values(FAMED_COURSE_LESSON_MAP.links).flat().forEach(lessonId => {
   assert.equal(famedSnapshotIds.has(String(lessonId)), true, `Vínculo FAMED ausente do snapshot: ${lessonId}`);
@@ -1978,6 +2040,8 @@ assert.match(appSource, /\bClock,/);
 
 const coursePortalViewSource = await readFile(new URL('../src/features/course/CoursePortalView.jsx', import.meta.url), 'utf8');
 assert.match(coursePortalViewSource, /export default function CoursePortalView/);
+assert.match(coursePortalViewSource, /dayIndex\+1/);
+assert.match(coursePortalViewSource, /Descanso/);
 assert.match(coursePortalViewSource, /useFeatureContext/);
 assert.match(coursePortalViewSource, /useCourseHeroJourney/);
 assert.match(coursePortalViewSource, /useCourseHeroJourney\(\{ enabled:true \}\)/);
@@ -2079,6 +2143,8 @@ assert.match(courseHeroJourneySource, /label:'Próxima aula'/);
 assert.match(courseHeroJourneySource, /buildEffortBalancedSchedule/);
 assert.match(courseHeroJourneySource, /buildDailyEffortSchedule/);
 assert.match(courseHeroJourneySource, /courseIndex/);
+assert.match(courseHeroJourneySource, /buildClinicalPrioritySchedule\(allOrderedSubjectLessons\)/);
+assert.match(appSource, /label:'Ordem de importância'/);
 assert.match(courseHeroJourneySource, /interleaveLongitudinalScheduleLessons\(clinicalLessons, preventiveLessons\)/);
 assert.match(courseHeroJourneySource, /strategy === 'medico-bicho'/);
 assert.doesNotMatch(courseHeroJourneySource, /vqBlocksLoaded|interleavedCycleLessons|direct-even|clinical-odd|clinical-even/);

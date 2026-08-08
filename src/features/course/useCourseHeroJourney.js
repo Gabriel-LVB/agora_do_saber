@@ -9,6 +9,7 @@ import {
   resolveScheduleWeeksCount,
   resolveScheduleSubjectOrder,
 } from '../../services/courseSchedule.js';
+import { buildClinicalPrioritySchedule } from '../../services/courseClinicalPriority.js';
 
 const scheduleDateKey = date => [
   date.getFullYear(),
@@ -152,15 +153,10 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
         : subjects.length + orderedSubjects.indexOf(subject);
     };
     const sortLessonsByStrategy = strategy => {
+      if (strategy === 'importance-life') return buildClinicalPrioritySchedule(allOrderedSubjectLessons);
       const ufcSubjectRank = subjectRankFrom(['Cardiologia','Pneumologia','Gastroenterologia','Endocrinologia','Nefrologia','Cirurgia','Obstetrícia','Pediatria','Ginecologia','Infectologia','Dermatologia','Hematologia','Reumatologia','Ortopedia','Psiquiatria','Oftalmologia']);
       const defaultSubjectRank = subjectRankFrom(orderedSubjects);
       const ruleSets = {
-        'importance-life':[
-          /\b(sepse|choque|parada|pcr|trauma|hemorragia|sangramento|ave|iam|infarto|hipercalemia|sdra|insuficiencia respiratoria)\b/,
-          /\b(hipertensao|diabetes|pneumonia|asma|dpoc|tuberculose|hiv|dengue|pre[- ]?natal|parto|puerperio|anemia|apendicite|colecistite|cirrose)\b/,
-          /\b(diagnostico|classificacao|rastreamento|prevencao|vacina|avaliacao)\b/,
-          /\b(tratamento|manejo|terapia|profilaxia|conduta)\b/,
-        ],
         'basic-advanced':[
           /\b(introducao|conceitos?|fundamentos?|anatomia|fisiologia|nocoes|classificacao|bases?)\b/,
           /\b(semiologia|diagnostico|avaliacao|rastreamento|achados)\b/,
@@ -177,7 +173,7 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
           /\b(tratamento|manejo|conduta|suporte|monitorizacao)\b/,
         ],
       };
-      const rules = ruleSets[strategy] || ruleSets['importance-life'];
+      const rules = ruleSets[strategy] || ruleSets['basic-advanced'];
       if (strategy === 'course-order') return [...allOrderedSubjectLessons];
       if (strategy === 'ufc-flow' || strategy === 'medico-bicho') {
         const isPreventiveLesson = lesson => {
@@ -254,9 +250,9 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
       ? Array.from({ length:weeksCount }, (_, index) => {
           const days = scheduleDays.filter(day => day.week === index + 1);
           return {
-            effortSeconds:days.reduce((sum, day) => sum + day.effortSeconds, 0),
-            estimatedLessons:days.reduce((sum, day) => sum + day.estimatedLessons, 0),
-            knownDurationSeconds:days.reduce((sum, day) => sum + day.knownDurationSeconds, 0),
+            effortSeconds:days.reduce((sum, day) => sum + (day.effortSeconds || 0), 0),
+            estimatedLessons:days.reduce((sum, day) => sum + (day.estimatedLessons || 0), 0),
+            knownDurationSeconds:days.reduce((sum, day) => sum + (day.knownDurationSeconds || 0), 0),
             lessons:days.flatMap(day => day.lessons),
             week:index + 1,
           };
@@ -395,7 +391,7 @@ export const useCourseHeroJourney = ({ enabled = true } = {}) => {
       nextLessonStatus,
       nextLessonDay:nextDay || null,
       nextLessonWeek:nextWeek || null,
-      plannedDailySeconds:scheduleDays.length ? Math.round(totalEffortSeconds / scheduleDays.length) : 0,
+      plannedDailySeconds:dailySchedule?.slots?.length ? Math.round(totalEffortSeconds / dailySchedule.slots.length) : 0,
       plannedWeeklySeconds:weeksCount ? Math.round(totalEffortSeconds / weeksCount) : 0,
       scheduleCurrentDay,
       scheduleCurrentWeek,

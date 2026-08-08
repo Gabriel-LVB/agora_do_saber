@@ -2603,8 +2603,8 @@ const COURSE_SCHEDULE_PRESETS = [
 const COURSE_SCHEDULE_MIX_PRESETS = [
   {
     id:'importance-life',
-    label:'Importância prática',
-    desc:'Prioriza o que mais ajuda no dia a dia do médico generalista.',
+    label:'Ordem de importância',
+    desc:'Prioriza utilidade clínica, respeitando pré-requisitos e sequências que precisam ficar juntas.',
     strategy:'importance-life',
   },
   {

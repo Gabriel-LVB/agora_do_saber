@@ -208,20 +208,24 @@ export const buildScheduleDaySlots = ({
     : maximumEndDate;
   const totalCalendarDays = calendarDayNumber(boundedEndDate) - calendarDayNumber(baseDate) + 1;
   const allowedDays = new Set(normalizeScheduleStudyDays(studyDays));
+  const days = [];
   const slots = [];
   for (let offset = 0; offset < totalCalendarDays; offset += 1) {
     const date = addCalendarDays(baseDate, offset);
     const weekday = isoWeekday(date);
-    if (!allowedDays.has(weekday)) continue;
-    slots.push({
+    const calendarDay = {
       date,
       dateKey:localDateKey(date),
-      planDay:slots.length + 1,
       week:Math.floor(offset / 7) + 1,
       weekday,
-    });
+    };
+    days.push(calendarDay);
+    if (!allowedDays.has(weekday)) continue;
+    calendarDay.planDay = slots.length + 1;
+    slots.push(calendarDay);
   }
   return {
+    days,
     endDate:boundedEndDate,
     slots,
     startDate:baseDate,
@@ -238,14 +242,18 @@ export const buildDailyEffortSchedule = ({
 } = {}) => {
   const calendar = buildScheduleDaySlots({ endDate, startDate, studyDays, today, weeksCount });
   const balanced = buildEffortBalancedSchedule({ lessons, weeksCount:calendar.slots.length || 1 });
+  const days = calendar.days.map(day => !day.planDay ? {
+    ...day,
+    lessons:[],
+  } : {
+    ...balanced.weeks[day.planDay - 1],
+    ...day,
+  });
   return {
     ...calendar,
     fallbackSeconds:balanced.fallbackSeconds,
     totalEffortSeconds:balanced.totalEffortSeconds,
-    days:calendar.slots.map((slot, index) => ({
-      ...balanced.weeks[index],
-      ...slot,
-    })),
+    days,
   };
 };
 

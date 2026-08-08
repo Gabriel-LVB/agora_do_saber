@@ -1030,7 +1030,7 @@ export default function CoursePortalView() {
                                       ? currentAgendaData.date.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' })
                                       : `Semana ${currentAgendaData.week}`}</h3>
                                     <p className={`text-xs mt-1 ${dm?'text-gray-500':'text-gray-500'}`}>
-                                      {[dailyScheduleActive?`Semana ${currentAgendaData.week}`:weekDateLabel(currentAgendaData), currentAgendaData.subjects.join(' · ')].filter(Boolean).join(' · ') || `Sem aulas ${dailyScheduleActive?'neste dia':'nesta semana'}`}
+                                      {[dailyScheduleActive?`Semana ${currentAgendaData.week}`:weekDateLabel(currentAgendaData), dailyScheduleActive&&!currentAgendaData.planDay?'Descanso':currentAgendaData.subjects.join(' · ')].filter(Boolean).join(' · ') || `Sem aulas ${dailyScheduleActive?'neste dia':'nesta semana'}`}
                                     </p>
                                   </div>
                                   <div className="flex items-center justify-between gap-3 sm:justify-end">
@@ -1068,7 +1068,7 @@ export default function CoursePortalView() {
                                   );
                                 })}
                                 {!currentAgendaData.lessons.length&&(
-                                  <div className={`sm:col-span-2 rounded-xl border border-dashed p-5 text-center text-sm ${dm?'border-gray-700 text-gray-500':'border-gray-300 text-gray-500'}`}>Nenhuma aula foi distribuída {dailyScheduleActive?'neste dia':'nesta semana'}. Reduza a duração total do plano para evitar períodos vazios.</div>
+                                  <div className={`sm:col-span-2 rounded-xl border border-dashed p-5 text-center text-sm ${dm?'border-gray-700 text-gray-500':'border-gray-300 text-gray-500'}`}>Nenhuma aula planejada {dailyScheduleActive?'neste dia.':'nesta semana.'}</div>
                                 )}
                               </div>
                             </div>
@@ -1080,7 +1080,7 @@ export default function CoursePortalView() {
                               <p className={`text-[11px] ${dm?'text-gray-500':'text-gray-500'}`}>Arraste para navegar</p>
                             </div>
                             <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-                            {timelineEntries.map(entry => {
+                            {timelineEntries.map((entry,dayIndex) => {
                               const isSelected = dailyScheduleActive
                                 ? entry.dateKey === selectedDayData?.dateKey
                                 : entry.week === selectedWeek;
@@ -1092,14 +1092,14 @@ export default function CoursePortalView() {
                                   className={`min-w-[138px] max-w-[138px] snap-start rounded-xl border p-3 text-left transition-all ${isSelected?(dm?'border-yellow-600 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(dm?'border-gray-800 bg-gray-900 hover:border-gray-700':'border-gray-200 bg-white hover:border-yellow-300')}`}>
                                   <div className="flex items-start justify-between gap-2 mb-2">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${entry.pct===100?'bg-green-500 text-white':isCurrent?(dm?'bg-yellow-900/60 text-yellow-400 ring-1 ring-yellow-500':'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400'):(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
-                                      {entry.pct===100?<CheckIcon className="w-3.5 h-3.5"/>:dailyScheduleActive?entry.date.getDate():entry.week}
+                                      {dailyScheduleActive?dayIndex+1:entry.pct===100?<CheckIcon className="w-3.5 h-3.5"/>:entry.week}
                                     </div>
-                                    <span className={`text-[10px] font-bold ${entry.pct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{entry.pct}%</span>
+                                    <span className={`text-[10px] font-bold ${entry.pct===100?'text-green-500':dm?'text-gray-500':'text-gray-400'}`}>{dailyScheduleActive&&!entry.planDay?'Descanso':`${entry.pct}%`}</span>
                                   </div>
                                   <p className={`text-xs font-bold truncate ${dm?'text-gray-300':'text-gray-700'}`}>{dailyScheduleActive
                                     ? entry.date.toLocaleDateString('pt-BR', { weekday:'short' }).replace('.', '')
                                     : entry.subjects.join(' + ') || 'Semana vazia'}</p>
-                                  <p className={`mt-1 text-[10px] ${dm?'text-gray-600':'text-gray-400'}`}>{entry.lessons.length} aula{entry.lessons.length!==1?'s':''} · {formatCourseDuration(entry.effortSeconds) || '—'}</p>
+                                  <p className={`mt-1 text-[10px] ${dm?'text-gray-600':'text-gray-400'}`}>{dailyScheduleActive&&!entry.planDay?'Sem aulas':`${entry.lessons.length} aula${entry.lessons.length!==1?'s':''} · ${formatCourseDuration(entry.effortSeconds) || '—'}`}</p>
                                   <p className={`mt-0.5 truncate text-[10px] ${dm?'text-gray-600':'text-gray-400'}`}>{dailyScheduleActive
                                     ? `${formatPlanDate(entry.date)} · sem. ${entry.week}`
                                     : weekDateLabel(entry)}</p>
