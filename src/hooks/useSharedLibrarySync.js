@@ -77,7 +77,7 @@ export const useSharedLibrarySync = ({
   const refreshSharedLibrary = useCallback(async () => {
     if (!user || user.isAnonymous || !canReadSharedLibrary) {
       clearSharedLibrary();
-      return;
+      return [];
     }
     setSharedLibraryLoading(true);
     setSharedLibraryError('');
@@ -92,7 +92,8 @@ export const useSharedLibrarySync = ({
         const data = entry.data() || {};
         if (isAdmin || data.published !== false) items.push({ ...data, id:entry.id });
       });
-      setSharedLibraryItems(await hydrateSharedLibraryItems(items));
+      const hydratedItems = await hydrateSharedLibraryItems(items);
+      setSharedLibraryItems(hydratedItems);
       const progress = {};
       progressSnap?.forEach(entry => { progress[entry.id] = entry.data() || {}; });
       setSharedLibraryProgress(progress);
@@ -100,10 +101,12 @@ export const useSharedLibrarySync = ({
         const saved = configSnap.data() || {};
         setSharedLibraryConfig(previous => ({ ...previous, ...saved }));
       }
+      return hydratedItems;
     } catch(error) {
       console.error('Shared library load failed:', error);
       setSharedLibraryError(error?.code || error?.message || 'Falha ao carregar biblioteca compartilhada');
       if (showLoadErrors) addToastRef.current?.('Não consegui carregar a Biblioteca compartilhada.', 'error', 4500);
+      return null;
     } finally {
       setSharedLibraryLoading(false);
     }

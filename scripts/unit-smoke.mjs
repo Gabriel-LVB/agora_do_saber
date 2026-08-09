@@ -10,6 +10,10 @@ import {
   sharedLibraryChunkDocId,
 } from '../src/services/sharedLibraryContent.js';
 import {
+  mapSharedLibraryRepairCandidates,
+  repairSharedLibraryIncompleteItems,
+} from '../src/services/sharedLibraryRepair.js';
+import {
   buildQuickPracticePrompt,
   extractQuickSection,
 } from '../src/features/quick/quickContent.js';
@@ -171,6 +175,46 @@ assert.deepEqual(
   mergeSharedLibraryQuestionChunks(chunkPrepared.main, chunkPrepared.chunks.directQuestions.map(chunk => ({ id:chunk.id, ...chunk.data }))).directQuestions.map(question => question.id),
   ['q1', 'q2'],
 );
+
+const mappedPartialRepair = mapSharedLibraryRepairCandidates([{ id:'repair_batch_2' }], 'repair_batch', 2);
+assert.equal(mappedPartialRepair.has(0), false);
+assert.equal(mappedPartialRepair.get(1)?.id, 'repair_batch_2');
+const repairFixtureItem = {
+  id:'repair-lesson',
+  title:'Aula de reparo',
+  directQuestions:[
+    { id:'q1', statement:'Questão original 1' },
+    { id:'q2', statement:'Questão original 2' },
+  ],
+};
+const repairFixtureIssues = repairFixtureItem.directQuestions.map((question, index) => ({
+  field:'directQuestions',
+  index,
+  issue:'explicação incompleta',
+  label:'fixação',
+  question,
+}));
+const repairCallSizes = [];
+const repairLogs = [];
+let savedRepairItem = null;
+const repairFixtureResult = await repairSharedLibraryIncompleteItems({
+  targets:[{ item:repairFixtureItem, issues:repairFixtureIssues }],
+  reviewQuestions:async ({ questions, namespace }) => {
+    repairCallSizes.push(questions.length);
+    return { questions:[{ id:`${namespace}_1`, repaired:true }] };
+  },
+  getQuestionIssue:question => question.repaired ? '' : 'explicação incompleta',
+  saveItem:async (id, patch) => { savedRepairItem = { ...repairFixtureItem, ...patch, id }; },
+  refreshItems:async () => [savedRepairItem],
+  countIncompleteQuestions:items => items.reduce((total, item) => total + item.directQuestions.filter(question => !question.repaired).length, 0),
+  addLog:(type, message) => repairLogs.push({ type, message }),
+});
+assert.deepEqual(repairCallSizes, [2, 1]);
+assert.equal(savedRepairItem.directQuestions.every(question => question.repaired), true);
+assert.equal(savedRepairItem.questionRepairMeta.repairedCount, 2);
+assert.equal(repairFixtureResult.confirmedFixed, 2);
+assert.equal(repairFixtureResult.remaining, 0);
+assert.match(repairLogs.find(entry => entry.type === 'warning')?.message || '', /1\/2/);
 
 const fullQuickPrompt = buildQuickPracticePrompt({
   title:'Estenose mitral',
@@ -1804,6 +1848,7 @@ assert.match(sharedLibrarySyncSource, /where\('published', '==', true\)/);
 assert.match(sharedLibrarySyncSource, /!user \|\| user\.isAnonymous \|\| !canReadSharedLibrary/);
 assert.match(sharedLibrarySyncSource, /loadProgress \? withFirestoreTimeout\(getDocs\(collection\(db, 'users', user\.uid, progressCollection\)\)\) : Promise\.resolve\(null\)/);
 assert.match(sharedLibrarySyncSource, /if \(showLoadErrors\) addToastRef\.current\?\.\('Não consegui carregar a Biblioteca compartilhada\.', 'error', 4500\);/);
+assert.match(sharedLibrarySyncSource, /return hydratedItems;/);
 
 const bizuarioSource = await readFile(new URL('../src/features/bizuario/BizuarioModal.jsx', import.meta.url), 'utf8');
 assert.match(bizuarioSource, /export default function BizuarioModal/);
@@ -2000,6 +2045,9 @@ assert.match(promptsSource, /maximizar domínio relevante por tempo de estudo/);
 assert.match(promptsSource, /sem meta padrão, piso artificial ou incentivo para preencher volume/);
 assert.match(promptsSource, /qual é o objetivo\/finalidade da aula/);
 assert.match(promptsSource, /Ignore falas metadidáticas da transcrição/);
+assert.match(promptsSource, /Devolva EXATAMENTE .*item\(ns\), na mesma ordem da bateria recebida/);
+assert.match(appSource, /import\('\.\/services\/sharedLibraryRepair\.js'\)/);
+assert.match(appSource, /Revisão conferida:/);
 assert.match(appSource, /timeoutMs:120000/);
 assert.match(appSource, /REQUEST_TIMEOUT/);
 
@@ -2167,13 +2215,20 @@ assert.match(favoritesViewSource, /onAdminDisableQuestion/);
 
 const spacedReviewViewSource = await readFile(new URL('../src/features/review/SpacedReviewView.jsx', import.meta.url), 'utf8');
 assert.match(spacedReviewViewSource, /export default function SpacedReviewView/);
+assert.match(spacedReviewViewSource, /return deferInteractionWork\(\(\) => \{/);
+assert.match(spacedReviewViewSource, /setReviewNotebook\(current, 'add'\)\.catch/);
+assert.match(spacedReviewViewSource, /reviewSessionTopRef\.current\?\.scrollIntoView\(\{behavior:'smooth',block:'start'\}\)/);
+assert.match(spacedReviewViewSource, /moveReviewSession\(Math\.min\(total-1,index\+1\)\)/);
+assert.match(appSource, /saveVqBlockPatch\([\s\S]*?errorNotebook:nextList\(previousBlock\.errorNotebook\)/);
 assert.match(spacedReviewViewSource, /useFeatureContext/);
 assert.match(spacedReviewViewSource, />Revisões</);
 assert.match(spacedReviewViewSource, /reviewScheduledCount/);
 assert.match(spacedReviewViewSource, /Responder questões/);
 assert.match(spacedReviewViewSource, /allowGiveUp/);
 assert.match(questionFeatureSource, /DONT_KNOW/);
+assert.match(questionFeatureSource, /const isSelected = gaveUp \|\| effectiveLetter===opt\.letter/);
 assert.match(questionFeatureSource, />\s*Não sei\s*<\/button>/);
+assert.match(questionFeatureSource, /hover:-translate-y-0\.5 hover:shadow-md/);
 assert.doesNotMatch(spacedReviewViewSource, /appendAdaptiveSupportToReviewSession|adaptiveSupportAdded/);
 assert.match(spacedReviewViewSource, /onAdminDisableQuestion/);
 assert.match(spacedReviewViewSource, /Revisar flashcards/);

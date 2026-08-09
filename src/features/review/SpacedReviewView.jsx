@@ -10,6 +10,7 @@ export default function SpacedReviewView() {
     ChevronRight,
     darkMode,
     dailyStats,
+    deferInteractionWork,
     EmptyState,
     getDueReviews,
     getKey,
@@ -35,6 +36,7 @@ export default function SpacedReviewView() {
     updateReviewItem,
   } = useFeatureContext();
   const [forecastRange, setForecastRange] = React.useState(7);
+  const reviewSessionTopRef = React.useRef(null);
   const dm = darkMode;
   const dueItems = getDueReviews();
   const dueFlashcardItems = dueItems.filter(item => item.question?.isFlashcard);
@@ -111,19 +113,25 @@ export default function SpacedReviewView() {
         isCorrect:option.text === correctText,
       })),
     };
-    const answerCurrentReview = async letter => {
+    const answerCurrentReview = letter => {
       const correct = isAnswerCorrect(reviewQuestion, letter);
-      trackQuestionAnswered(`review:${current.aulaId}:${current.blockId}:${current.qId}:${current.item?.dueDate||getTodayKey()}`);
       setReviewSession(previous => ({
         ...previous,
         sessionAnswers:{ ...(previous?.sessionAnswers || {}), [sessionItemKey]:letter },
         sessionResults:{ ...(previous?.sessionResults || {}), [sessionItemKey]:correct },
       }));
-      if (!correct) setReviewNotebook(current, 'add');
-      await updateReviewItem(current.aulaId, current.blockId, current.qId, correct);
+      return deferInteractionWork(() => {
+        trackQuestionAnswered(`review:${current.aulaId}:${current.blockId}:${current.qId}:${current.item?.dueDate||getTodayKey()}`);
+        if (!correct) setReviewNotebook(current, 'add').catch(()=>{});
+        return updateReviewItem(current.aulaId, current.blockId, current.qId, correct);
+      });
+    };
+    const moveReviewSession = nextIndex => {
+      setReviewSession(previous => ({...previous, index:nextIndex}));
+      setTimeout(()=>reviewSessionTopRef.current?.scrollIntoView({behavior:'smooth',block:'start'}), 0);
     };
     return (
-      <div className="mx-auto w-full max-w-5xl">
+      <div ref={reviewSessionTopRef} className="mx-auto w-full max-w-5xl">
         <div className="mb-4 flex items-center justify-between gap-4">
           <button onClick={()=>setReviewSession(null)} className={`flex items-center gap-2 font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}><ArrowLeft className="h-4 w-4"/>Sair</button>
           <div className="text-right">
@@ -155,9 +163,11 @@ export default function SpacedReviewView() {
           onCall={callWithRotation}
         />
         <div className="mt-4 flex items-center justify-between gap-3">
-          <button onClick={()=>setReviewSession(previous=>({...previous,index:Math.max(0,index-1)}))} disabled={index===0} className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold disabled:opacity-30 ${dm?'border-gray-700 text-gray-300':'border-gray-200 text-gray-600'}`}><ArrowLeft className="h-4 w-4"/>Anterior</button>
+          <button onClick={()=>moveReviewSession(Math.max(0,index-1))} disabled={index===0} className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold disabled:opacity-30 ${dm?'border-gray-700 text-gray-300':'border-gray-200 text-gray-600'}`}><ArrowLeft className="h-4 w-4"/>Anterior</button>
           <button
-            onClick={()=>setReviewSession(previous=>(index===total-1?{...previous,completed:true}:{...previous,index:Math.min(total-1,index+1)}))}
+            onClick={()=>index===total-1
+              ? setReviewSession(previous=>({...previous,completed:true}))
+              : moveReviewSession(Math.min(total-1,index+1))}
             disabled={index===total-1&&!finished}
             className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-yellow-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-30"
           >

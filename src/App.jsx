@@ -5554,7 +5554,12 @@ export default function QuestionBankApp() {
     const nextList = (list) => mode === 'add' ? addToList(list || [], reviewItem.qId) : toggleInList(list || [], reviewItem.qId);
     if (origin.type === 'curso') {
       if (!origin.aulaData || !origin.block) return;
-      await saveVqBlock(reviewItem.aulaId, {...origin.aulaData, blocks:{...origin.aulaData.blocks,[reviewItem.blockId]:{...origin.block,errorNotebook:nextList(origin.block.errorNotebook)}}});
+      await saveVqBlockPatch(
+        reviewItem.aulaId,
+        reviewItem.blockId,
+        previousBlock => ({...previousBlock, errorNotebook:nextList(previousBlock.errorNotebook)}),
+        nextBlock => ({ errorNotebook:nextBlock.errorNotebook }),
+      );
       return;
     }
     if (!origin.subj || !origin.topic) return;
@@ -8353,6 +8358,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       subtopics,
       sourceMaterials,
       generatedText,
+      expectedQuestionCount:questions.length,
       settings:effectiveReviewSettings,
     });
     onProgress?.('Revisando qualidade...');
@@ -8437,66 +8443,39 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!ok) return;
     setSharedLibraryRepairing(true);
     const toastId = addToast('Revisando questões incompletas da Biblioteca...', 'loading', 0);
-    let fixed = 0;
-    let skipped = 0;
     try {
-      for (const { item, issues } of targets) {
-        const subtopics = (item.summaryBlocks || []).flatMap(block => block?.subtopics || []);
-        const sourceMaterials = [
-          item.summaryText ? `SUMÁRIO DA AULA:\n${item.summaryText}` : '',
-          `QUESTÕES COM PROBLEMA:\n${issues.map((row, index) => `${index + 1}. ${row.label} #${row.index + 1}: ${row.issue}`).join('\n')}`,
-        ].filter(Boolean).join('\n\n');
-        updateToast(toastId, `Revisando ${item.title || 'aula'} (${issues.length})...`, 'loading');
-        const reviewSettings = withAdminQuestionPromptSettings({
-          ...settingsRef.current,
-          questionTypes:['direct'],
-          questionStyle:'direct',
-          adminQuestionExplanations:true,
-        });
-        const result = await reviewGeneratedQuestions({
-          questions:issues.map(row => row.question),
-          namespace:`shared_repair_${item.id}_${Date.now()}`,
+      const { repairSharedLibraryIncompleteItems } = await import('./services/sharedLibraryRepair.js');
+      const reviewSettings = withAdminQuestionPromptSettings({
+        ...settingsRef.current,
+        questionTypes:['direct'],
+        questionStyle:'direct',
+        adminQuestionExplanations:true,
+      });
+      const result = await repairSharedLibraryIncompleteItems({
+        targets,
+        getQuestionIssue:getSharedLibraryQuestionIssue,
+        countIncompleteQuestions:countSharedLibraryIncompleteQuestions,
+        saveItem:saveSharedLibraryItem,
+        refreshItems:refreshSharedLibrary,
+        updateStatus:message => updateToast(toastId, message, 'loading'),
+        addLog:addSharedLibraryLog,
+        reviewQuestions:({ questions, namespace, item, subtopics, sourceMaterials }) => reviewGeneratedQuestions({
+          questions,
+          namespace,
           settings:reviewSettings,
           subjectTitle:item.subject || '',
           topicTitle:item.title || item.topic || '',
           subtopics,
           sourceMaterials,
-          toastId,
-        });
-        const repaired = result.questions || [];
-        if (repaired.length < issues.length) {
-          skipped += issues.length;
-          addSharedLibraryLog('warning', `${item.title}: revisão devolveu ${repaired.length}/${issues.length}; mantive como estava.`);
-          continue;
-        }
-        const patch = {};
-        const byField = new Map();
-        issues.forEach((row, index) => {
-          const original = row.question || {};
-          const nextQuestion = {
-            ...original,
-            ...(repaired[index] || {}),
-            id:original.id || repaired[index]?.id || `${row.field}_${row.index + 1}`,
-            libraryQuestionKind:original.libraryQuestionKind || (row.field === 'clinicalQuestions' ? 'clinical' : 'direct'),
-          };
-          if (!nextQuestion.caseContext && original.caseContext) nextQuestion.caseContext = original.caseContext;
-          if (!nextQuestion.statement && original.statement) nextQuestion.statement = original.statement;
-          if (!byField.has(row.field)) byField.set(row.field, [...(item[row.field] || [])]);
-          byField.get(row.field)[row.index] = nextQuestion;
-        });
-        byField.forEach((questions, field) => {
-          patch[field] = questions;
-        });
-        patch.questionRepairMeta = {
-          repairedAt:Date.now(),
-          repairedCount:issues.length,
-          reasons:[...new Set(issues.map(row => row.issue))],
-        };
-        await saveSharedLibraryItem(item.id, patch);
-        fixed += issues.length;
-        addSharedLibraryLog('success', `${item.title}: ${issues.length} questão(ões) reparada(s).`);
-      }
-      updateToast(toastId, skipped ? `Revisão terminou: ${fixed} reparadas, ${skipped} mantidas.` : `Revisão terminou: ${fixed} questão(ões) reparada(s).`, skipped ? 'info' : 'success');
+        }),
+      });
+      updateToast(
+        toastId,
+        result.remaining
+          ? `Revisão conferida: ${result.confirmedFixed} corrigida(s); ${result.remaining} ainda incompleta(s).`
+          : `Revisão conferida: ${result.confirmedFixed} questão(ões) corrigida(s); nenhuma incompleta restante.`,
+        result.remaining ? 'info' : 'success'
+      );
       setTimeout(() => removeToast(toastId), 5000);
     } catch(e) {
       updateToast(toastId, `Falha ao revisar questões: ${getBulkErrorText(e)}`, 'error');

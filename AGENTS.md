@@ -237,6 +237,7 @@ Serviços:
 - `libraryProgress.js`: patches pequenos de progresso dos tópicos pessoais;
 - `sharedLibraryProgress.js`: respostas/progresso da Biblioteca;
 - `sharedLibraryContent.js`: separação e recomposição de documentos grandes;
+- `sharedLibraryRepair.js`: validação, retentativa individual e confirmação remota do reparo de questões incompletas;
 - `courseProgress.js`: aulas assistidas e estatísticas diárias;
 - `reviewQueue.js`: documentos da revisão espaçada;
 - `vqBlocks.js`: patch granular de blocos de questões de videoaula;

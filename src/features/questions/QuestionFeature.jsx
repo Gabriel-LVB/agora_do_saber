@@ -1797,8 +1797,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 
   useEffect(() => {
     if (showResults && isAnswered && !isCorrect && !isSkipped) setLessonExplanationOpen(true);
-    if (showResults && gaveUp) setAlternativeExplanationsOpen(true);
-  }, [showResults, isAnswered, isCorrect, isSkipped, gaveUp, question?.id]);
+  }, [showResults, isAnswered, isCorrect, isSkipped, question?.id]);
 
 	  const cardClass = question.isFlashcard && flashcardLarge
 	    ? `mb-0 flex-1 min-h-0 flex flex-col ${darkMode?'bg-transparent':'bg-transparent'}`
@@ -1910,7 +1909,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
       ) : (
         <div className="space-y-3 mb-4">
         {question.options.map(opt=>{
-          const isSelected = effectiveLetter===opt.letter;
+          const isSelected = gaveUp || effectiveLetter===opt.letter;
           let optionState = 'neutral';
           let cls = `question-option w-full text-left flex flex-col items-stretch px-4 py-3.5 md:px-5 md:py-4 rounded-xl border border-transparent transition-colors focus:outline-none `;
           if (!isAnswered && !isSkipped || revealMode==='selected') {
@@ -2006,7 +2005,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           <button
             type="button"
             onClick={()=>handleAnswerClick('DONT_KNOW')}
-            className={`mt-1 min-h-[44px] w-full rounded-xl border border-dashed px-4 py-2.5 text-sm font-bold transition-colors ${darkMode?'border-gray-600 text-gray-400 hover:border-orange-500 hover:bg-orange-950/20 hover:text-orange-300':'border-gray-300 text-gray-500 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700'}`}
+            className={`mt-1 min-h-[44px] w-full transform rounded-xl border border-dashed px-4 py-2.5 text-sm font-bold transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-400/40 active:translate-y-0 active:shadow-sm ${darkMode?'border-gray-600 text-gray-400 hover:border-orange-400 hover:bg-orange-950/40 hover:text-orange-200':'border-gray-300 text-gray-500 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-800'}`}
           >
             Não sei
           </button>

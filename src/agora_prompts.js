@@ -484,6 +484,7 @@ export const buildQuestionRepairPrompt = ({
   subtopics = [],
   sourceMaterials = '',
   generatedText = '',
+  expectedQuestionCount = 0,
   settings = {},
 }) => {
   const types = settings.questionTypes || ['direct'];
@@ -548,6 +549,7 @@ ${QUESTION_REPAIR_CHECKLIST.map(item => `- ${item}`).join('\n')}
 
 REGRAS DE CORREÇÃO:
 - Não comente a revisão. Não entregue relatório. Entregue somente as questões/flashcards finais.
+- Devolva EXATAMENTE ${Math.max(1, Number(expectedQuestionCount) || 1)} item(ns), na mesma ordem da bateria recebida; nunca omita uma questão problemática.
 - Corrija erros factuais, ambiguidade, pistas, lacunas e explicações fracas.
 - Exclua ou substitua itens inúteis, óbvios, genéricos, redundantes ou desalinhados com o material base.
 - Para questões fechadas, coloque SEMPRE a correta como A porque o site embaralha depois.
