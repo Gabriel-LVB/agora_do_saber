@@ -2052,6 +2052,13 @@ assert.match(academiaTopicViewSource, /export default AcademiaTopicView/);
 assert.match(academiaTopicViewSource, /Sumário da aula/);
 assert.match(academiaTopicViewSource, /chapterQuestions\.map/);
 assert.match(academiaTopicViewSource, /Fixação do capítulo/);
+assert.match(academiaTopicViewSource, /academiaQuestionPlacement/);
+assert.match(academiaTopicViewSource, /Durante a aula/);
+assert.match(academiaTopicViewSource, /Ao final/);
+assert.match(academiaTopicViewSource, /questionPlacement === 'inline'/);
+assert.match(academiaTopicViewSource, /questionPlacement === 'end'/);
+assert.doesNotMatch(academiaTopicViewSource, /Depois da aula/);
+assert.doesNotMatch(academiaTopicViewSource, /idx>0\?\(darkMode\?'border-t/);
 
 const bulkGenerateModalSource = await readFile(new URL('../src/features/bulk/BulkGenerateModal.jsx', import.meta.url), 'utf8');
 assert.match(bulkGenerateModalSource, /export default function BulkGenerateModal/);
@@ -2167,7 +2174,12 @@ assert.match(famedPortalViewSource, /famed-flashcards-auditoria-/);
 assert.doesNotMatch(famedPortalViewSource, /rejectedFlashcards|getFamedEssentialClozeIssue/);
 assert.match(famedPortalViewSource, /saveFamedQuestionAssets/);
 assert.match(famedPortalViewSource, /loadFamedQuestionAssets/);
-assert.match(famedPortalViewSource, /id:'__all__'/);
+assert.match(famedPortalViewSource, /activePanel === 'student-topics'/);
+assert.match(famedPortalViewSource, /Tópicos da aula/);
+assert.match(famedPortalViewSource, /Escolha um tópico\. Dentro dele, leia a aula e responda às questões logo abaixo\./);
+assert.match(famedPortalViewSource, /'student-topics'\)/);
+assert.match(famedPortalViewSource, /activeTopic\?'topic':isAdmin\?'subject':'student-topics'/);
+assert.doesNotMatch(famedPortalViewSource, /id:'__all__'/);
 assert.doesNotMatch(famedPortalViewSource, /maxCards|maxTokens|slice\(0,\s*20\)/);
 assert.doesNotMatch(famedPortalViewSource, /matchFamedScheduleCourseLessons/);
 assert.doesNotMatch(famedPortalViewSource, /FamedManualEditor|FamedPackageImporter/);
@@ -2214,6 +2226,8 @@ const famedPastQuestionsViewSource = await readFile(new URL('../src/features/fam
 assert.match(famedPastQuestionsViewSource, /Adicionar pacote de questões antigas/);
 assert.match(famedPastQuestionsViewSource, /buildFamedQuestionPackagePrompt/);
 assert.match(famedPastQuestionsViewSource, /accept="\.zip,application\/zip/);
+assert.match(famedPastQuestionsViewSource, /\{isAdmin&&<p className=.*Guarde aqui as provas anteriores/);
+assert.match(famedPastQuestionsViewSource, /\{isAdmin&&<div className="mb-4 flex items-center justify-between gap-3">/);
 assert.doesNotMatch(famedPastQuestionsViewSource, /<textarea|buildExternalPrompt/);
 
 const famedQuestionPackageSource = await readFile(new URL('../src/features/famed/famedQuestionPackage.js', import.meta.url), 'utf8');

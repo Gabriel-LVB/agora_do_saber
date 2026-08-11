@@ -742,7 +742,7 @@ famedStudy: {
 }
 ```
 
-Cada card de aula publicado expõe exatamente três ações de estudo: **Academia**, **Questões antigas** e **Flashcards**. Para o aluno, Academia abre a aula inteira em leitura contínua, com sumário no início e as questões de fixação logo abaixo do capítulo correspondente; a lista administrativa de tópicos não aparece como etapa intermediária.
+Cada card de aula publicado expõe exatamente três ações de estudo: **Academia**, **Questões antigas** e **Flashcards**. Para o aluno, Academia abre um menu simplificado de tópicos com numeração, título e progresso, sem controles administrativos nem objetivos expansíveis. Cada tópico leva à sua aula, com sumário quando necessário; a preferência persistida `settings.academiaQuestionPlacement` decide se as questões de fixação aparecem logo após cada capítulo (`inline`, padrão) ou reunidas depois do conteúdo (`end`).
 
 Questões antigas são importadas por um ZIP versionado (`agora-famed-question-package-v1`) com `questions.json` na raiz e figuras em `images/`. A interface fornece um prompt completo para gerar esse pacote no GPT. Os dados estruturais ficam no conjunto de `famedStudy`; cada descritor de imagem guarda um `assetId`, enquanto o `dataUrl` correspondente fica em `famed_assets/{assetId}` para não inflar o documento principal. O site valida caminhos, formatos, tamanho, gabaritos e vínculos antes de salvar, hidrata as imagens ao abrir o bloco e continua usando o `QuestionView`.
 

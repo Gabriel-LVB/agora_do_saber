@@ -72,7 +72,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // menos de 0,1 KiB medido ao núcleo; a margem continua restrita e auditável.
 // O filtro pedagógico v9 da FAMED acrescenta contexto ao chunk compartilhado de prompts:
 // cardinalidade, listas parciais, teste contrafactual e proibição de inventários.
-const CORE_TOTAL_GZIP_LIMIT = 445.5 * 1024;
+// A escolha persistida da posição das questões na Academia acrescentou 0,17 KiB
+// medido ao módulo lazy compartilhado, sem alterar o bundle de entrada.
+const CORE_TOTAL_GZIP_LIMIT = 446 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 // Curadoria, seleção automática, publicação e exportação de auditoria ficam
 // juntas em um único módulo administrativo carregado somente sob demanda.
@@ -102,9 +104,10 @@ const SHARED_LIBRARY_REPAIR_GZIP_LIMIT = 3 * 1024;
 // o respectivo painel, e prompt/seleção de flashcards só entram após a ação admin.
 // O importador ZIP e o descompactador ficam em chunks próprios, baixados somente
 // quando o admin seleciona um pacote. O aumento medido também cobre a apresentação
-// cloze compartilhada, a leitura contínua da Academia e o exportador JSON de auditoria
-// dos flashcards, sem entrar na Home inicial.
-const FAMED_GZIP_LIMIT = 23 * 1024;
+// cloze compartilhada, o exportador JSON de auditoria e o menu simplificado que
+// restaura a separação por tópicos preservando o progresso local legado. O último
+// ajuste acrescentou 0,23 KiB medido e permanece sem entrar na Home inicial.
+const FAMED_GZIP_LIMIT = 23.5 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + QUESTION_CURATION_GZIP_LIMIT

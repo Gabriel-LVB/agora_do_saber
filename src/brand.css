@@ -858,6 +858,97 @@ html.agora-theme-fallback .agora-shell *::after {
   background: var(--surface-strong);
 }
 
+.agora-shell .famed-topic-menu__back {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: 1.5rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.agora-shell .famed-topic-menu__back:hover,
+.agora-shell .famed-topic-row__action,
+.agora-shell .famed-topic-row__status.is-progress {
+  color: var(--accent);
+}
+
+.agora-shell .famed-topic-menu__help {
+  margin-top: .75rem;
+  color: var(--muted);
+  font-size: .875rem;
+  line-height: 1.625;
+}
+
+.agora-shell .famed-topic-row {
+  display: flex;
+  width: 100%;
+  min-height: 4.75rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  color: var(--text);
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface-strong);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.agora-shell .famed-topic-row:hover {
+  border-color: var(--accent);
+  background: var(--surface-muted);
+}
+
+.agora-shell .famed-topic-row__number {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  font-size: .875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.agora-shell .famed-topic-row__number.is-complete {
+  color: #27845d;
+  background: color-mix(in srgb, #27845d 12%, var(--surface));
+}
+
+.agora-shell .famed-topic-row__status {
+  display: block;
+  margin-top: .25rem;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.agora-shell .famed-topic-row__status.is-complete {
+  color: #27845d;
+}
+
+.agora-shell .famed-topic-row__action {
+  flex: none;
+  font-size: .875rem;
+  font-weight: 700;
+}
+
+@media (max-width: 420px) {
+  .agora-shell .famed-topic-row {
+    gap: .75rem;
+    padding: .9rem;
+  }
+
+  .agora-shell .famed-topic-row__action {
+    font-size: .75rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
   ::view-transition-new(root) {

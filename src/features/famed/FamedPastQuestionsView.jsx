@@ -49,7 +49,7 @@ export default function FamedPastQuestionsView({
     <div className="mb-7">
       <p className="mb-2 text-xs font-bold uppercase tracking-widest opacity-45">FAMED · Questões antigas</p>
       <h2 className="font-serif text-3xl font-bold leading-tight text-yellow-600">{subject?.title}</h2>
-      <p className={`mt-2 max-w-3xl text-sm leading-relaxed ${darkMode?'text-gray-400':'text-gray-600'}`}>Guarde aqui as provas anteriores desta aula, inclusive questões que dependem de imagens. Elas também orientam a seleção dos flashcards essenciais.</p>
+      {isAdmin&&<p className={`mt-2 max-w-3xl text-sm leading-relaxed ${darkMode?'text-gray-400':'text-gray-600'}`}>Guarde aqui as provas anteriores desta aula, inclusive questões que dependem de imagens. Elas também orientam a seleção dos flashcards essenciais.</p>}
     </div>
 
     {isAdmin&&<section className={`mb-6 rounded-2xl border p-5 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
@@ -69,12 +69,12 @@ export default function FamedPastQuestionsView({
     </section>}
 
     <section className={`rounded-2xl border p-5 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      {isAdmin&&<div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="font-serif text-xl font-bold">Blocos importados</h3>
           <p className="mt-1 text-xs opacity-50">{study.pastQuestionSets.reduce((total,set)=>total + (set.questions || []).length,0)} questões em {study.pastQuestionSets.length} bloco(s)</p>
         </div>
-      </div>
+      </div>}
       {!study.pastQuestionSets.length&&<div className={`rounded-xl border border-dashed px-4 py-10 text-center text-sm ${darkMode?'border-gray-700 text-gray-500':'border-gray-300 text-gray-400'}`}>Nenhuma questão antiga adicionada.</div>}
       <div className="space-y-2">
         {study.pastQuestionSets.map((set,index)=><div key={set.id || index} className={`flex items-center gap-3 rounded-xl border p-3 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-white'}`}>

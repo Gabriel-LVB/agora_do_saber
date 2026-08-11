@@ -117,6 +117,12 @@ function AcademiaTopicView({
     setSettings(ns);
     saveSettings(ns);
   };
+  const questionPlacement = settings.academiaQuestionPlacement === 'end' ? 'end' : 'inline';
+  const setQuestionPlacement = placement => {
+    const ns = { ...settings, academiaQuestionPlacement:placement };
+    setSettings(ns);
+    saveSettings(ns);
+  };
   const parseLessonText = (text) => parseHtmlText ? parseHtmlText(text) : text;
 
   // Renderiza markdown da aula com suporte a tabelas, listas e parágrafos
@@ -417,6 +423,17 @@ function AcademiaTopicView({
       {/* Conteúdo */}
       {hasLesson && !academiaGenerating && (
         <div>
+          {allFixqs.length > 0 && (
+            <div className={`mb-8 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+              <div>
+                <p className={`text-sm font-bold ${darkMode?'text-gray-200':'text-gray-800'}`}>Quando mostrar as questões?</p>
+                <p className={`mt-1 text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>Você pode responder durante a leitura ou deixar tudo para o final.</p>
+              </div>
+              <div role="group" aria-label="Posição das questões de fixação" className={`grid shrink-0 grid-cols-2 rounded-xl p-1 ${darkMode?'bg-gray-800':'bg-gray-200/70'}`}>
+                {[['inline','Durante a aula'],['end','Ao final']].map(([value,label]) => <button key={value} type="button" aria-pressed={questionPlacement===value} onClick={()=>setQuestionPlacement(value)} className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${questionPlacement===value?(darkMode?'bg-yellow-700 text-white':'bg-white text-yellow-700 shadow-sm'):(darkMode?'text-gray-400 hover:text-gray-200':'text-gray-500 hover:text-gray-800')}`}>{label}</button>)}
+              </div>
+            </div>
+          )}
           {subtopics.length > 1 && (
             <nav aria-label="Sumário da aula" className={`mb-10 rounded-2xl border p-5 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
               <p className={`mb-3 text-xs font-bold uppercase tracking-widest ${darkMode?'text-yellow-400':'text-yellow-700'}`}>Nesta aula</p>
@@ -433,14 +450,14 @@ function AcademiaTopicView({
             const section = liveTopic.lessonSections?.[idx];
             const chapterQuestions = liveTopic.fixationQuestions?.[idx] || [];
             return (
-              <section id={`academia-chapter-${liveTopic.id}-${idx}`} key={idx} className={`scroll-mt-6 py-8 first:pt-0 ${idx>0?(darkMode?'border-t border-gray-800':'border-t border-gray-200'):''}`}>
+              <section id={`academia-chapter-${liveTopic.id}-${idx}`} key={idx} className="scroll-mt-6 py-8 first:pt-0">
                 <h2 className={`mb-6 font-serif text-2xl font-bold leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}><span className="mr-3 text-base font-bold tabular-nums text-yellow-600">{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
                 {section?.content ? (
                   <div className="reading-content mb-8 space-y-3">{renderLesson(section.content)}</div>
                 ) : (
                   <p className={`mb-8 text-sm italic ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este capítulo.</p>
                 )}
-                {chapterQuestions.length > 0 && (
+                {questionPlacement === 'inline' && chapterQuestions.length > 0 && (
                   <div className={`mt-8 rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
                     <div className="mb-5 flex items-center justify-between gap-3">
                       <div><p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Fixação do capítulo</p><p className="mt-1 text-xs opacity-50">{chapterQuestions.length} questão{chapterQuestions.length!==1?'ões':'ão'}</p></div>
@@ -451,6 +468,18 @@ function AcademiaTopicView({
               </section>
             );
           })}
+
+          {questionPlacement === 'end' && allFixqs.length > 0 && (
+            <section className="mt-10 pt-4">
+              <div className="mb-6">
+                <h2 className={`font-serif text-2xl font-bold ${darkMode?'text-gray-100':'text-gray-900'}`}>Questões de fixação</h2>
+                <p className={`mt-1 text-sm ${darkMode?'text-gray-500':'text-gray-500'}`}>{allFixqs.length} questão{allFixqs.length!==1?'ões':'ão'} sobre este tópico.</p>
+              </div>
+              <div className={`rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
+                {allFixqs.map((question,questionIndex)=>renderFixQ(question,questionIndex))}
+              </div>
+            </section>
+          )}
 
           {/* Baterias extras */}
 	          {(liveTopic.extraBattery||[]).map((bloco, blocoIdx) => {

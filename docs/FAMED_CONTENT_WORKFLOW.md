@@ -12,7 +12,7 @@ O conteúdo é criado dentro do site usando exatamente o mesmo fluxo da Academia
 4. Escolha formato da aula, profundidade e configurações das questões de fixação.
 5. Gere e revise a estrutura.
 6. Confirme para voltar à FAMED.
-7. Abra os tópicos e use os mesmos controles da Academia para gerar ou regenerar aula, fixação e baterias extras. Para o aluno, a ação **Academia** não mostra essa etapa administrativa: abre a aula inteira, com sumário e questões logo abaixo de cada capítulo.
+7. Abra os tópicos e use os mesmos controles da Academia para gerar ou regenerar aula, fixação e baterias extras. Para o aluno, a ação **Academia** abre primeiro um menu simplificado de tópicos, sem controles administrativos; ao escolher um tópico, ele pode ver as questões durante a aula, logo após cada capítulo, ou reuni-las ao final. Essa preferência é salva nas configurações do usuário.
 8. Publique para os alunos somente depois de conferir todas as aulas, gabaritos e explicações.
 
 ## Questões antigas e flashcards essenciais

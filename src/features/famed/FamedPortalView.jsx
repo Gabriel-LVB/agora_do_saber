@@ -44,6 +44,10 @@ const readStoredObject = key => {
 };
 
 const topicFixationQuestions = topic => Object.values(topic?.fixationQuestions || {}).flat();
+const topicDisplayTitle = (title, index) => String(title || `Tópico ${index + 1}`)
+  .replace(/^\s*(?:t[oó]pico|unidade|m[oó]dulo)\s*\d+\s*[:.\-–—]\s*/i, '')
+  .trim() || `Tópico ${index + 1}`;
+const hasCompletedAnswer = answer => answer != null && answer !== '' && answer !== 'SKIPPED';
 const normalizeQuestions = questions => (questions || []).map(question => ({
   ...question,
   libraryQuestionKind:question.libraryQuestionKind || (question.isFlashcard ? 'flashcard' : question.caseContext ? 'clinical' : 'direct'),
@@ -152,43 +156,38 @@ export default function FamedPortalView() {
   const legacyContentItems = React.useMemo(() => contentItems.filter(item => item.creationMode !== 'academia'), [contentItems]);
   const activeContent = contentItems.find(item => item.id === activeContentId) || null;
   const activeSubject = React.useMemo(() => famedContentToAcademiaSubject(activeContent), [activeContent]);
-  const studentLessonSubject = React.useMemo(() => {
-    if (!activeSubject || isAdmin) return activeSubject;
-    const inlineKey = `${activeSubject.famedMeta.contentId}:academy:inline`;
-    let chapterIndex = 0;
-    const mergedTopic = {
-      id:'__all__',
-      title:activeSubject.title,
-      subtopics:[],
-      lessonSections:{},
-      fixationQuestions:{},
-      lessonGenerated:(activeSubject.topics || []).some(topic => topic.lessonGenerated),
-      extraBattery:[],
-      answers:answersByBlock[inlineKey] || {},
-      favorites:favoritesByBlock[inlineKey] || [],
-      errorNotebook:[],
+  const activeSubjectWithProgress = React.useMemo(() => {
+    if (!activeSubject) return null;
+    const contentId = activeSubject.famedMeta.contentId;
+    const legacyAnswers = answersByBlock[`${contentId}:academy:inline`] || {};
+    const legacyFavorites = favoritesByBlock[`${contentId}:academy:inline`] || [];
+    return {
+      ...activeSubject,
+      topics:(activeSubject.topics || []).map(topic => {
+        const questionIds = new Set(topicFixationQuestions(topic).map(question => String(question.id)));
+        const inheritedAnswers = Object.fromEntries(
+          Object.entries(legacyAnswers).filter(([questionId]) => questionIds.has(String(questionId))),
+        );
+        const inheritedFavorites = legacyFavorites.filter(questionId => questionIds.has(String(questionId)));
+        const blockKey = `${contentId}:${topic.id}:fixation:main`;
+        return {
+          ...topic,
+          answers:{
+            ...(topic.answers || {}),
+            ...inheritedAnswers,
+            ...(answersByBlock[blockKey] || {}),
+          },
+          favorites:Array.from(new Set([
+            ...(topic.favorites || []),
+            ...inheritedFavorites,
+            ...(favoritesByBlock[blockKey] || []),
+          ])),
+        };
+      }),
     };
-    (activeSubject.topics || []).forEach(topic => {
-      (topic.subtopics || []).forEach((subtopic,index) => {
-        mergedTopic.subtopics.push(subtopic);
-        mergedTopic.lessonSections[chapterIndex] = topic.lessonSections?.[index] || { title:subtopic, content:'' };
-        mergedTopic.fixationQuestions[chapterIndex] = topic.fixationQuestions?.[index] || [];
-        chapterIndex += 1;
-      });
-    });
-    return { ...activeSubject, topics:[mergedTopic] };
-  }, [activeSubject, answersByBlock, favoritesByBlock, isAdmin]);
-  const activeSubjectWithProgress = React.useMemo(() => activeSubject ? ({
-    ...activeSubject,
-    topics:(activeSubject.topics || []).map(topic => ({
-      ...topic,
-      answers:{
-        ...(topic.answers || {}),
-        ...(answersByBlock[`${activeSubject.famedMeta.contentId}:${topic.id}:fixation:main`] || {}),
-      },
-    })),
-  }) : null, [activeSubject, answersByBlock]);
-  const activeTopic = (isAdmin ? activeSubject : studentLessonSubject)?.topics?.find(topic => String(topic.id) === String(activeTopicId)) || null;
+  }, [activeSubject, answersByBlock, favoritesByBlock]);
+  const activeTopicSource = isAdmin ? activeSubject : activeSubjectWithProgress;
+  const activeTopic = activeTopicSource?.topics?.find(topic => String(topic.id) === String(activeTopicId)) || null;
 
   const returnToSchedule = () => {
     setActivePanel('schedule');
@@ -198,10 +197,9 @@ export default function FamedPortalView() {
     window.scrollTo?.({ top:0, behavior:'smooth' });
   };
   const openSubject = content => {
-    const subject = famedContentToAcademiaSubject(content);
     setActiveContentId(content.id);
-    setActiveTopicId(!isAdmin ? '__all__' : null);
-    setActivePanel(!isAdmin ? 'topic' : 'subject');
+    setActiveTopicId(null);
+    setActivePanel(isAdmin ? 'subject' : 'student-topics');
     window.scrollTo?.({ top:0, behavior:'smooth' });
   };
   const openCourseLesson = lesson => {
@@ -245,11 +243,11 @@ export default function FamedPortalView() {
   };
   const persistStudentLessonProgress = subject => {
     if (isAdmin || !activeSubject?.famedMeta?.contentId) return;
-    const inlineKey = `${activeSubject.famedMeta.contentId}:academy:inline`;
-    const topic = subject?.topics?.[0];
+    const topic = subject?.topics?.find(item => String(item.id) === String(activeTopicId));
     if (!topic) return;
-    saveAnswers({...answersByBlock,[inlineKey]:topic.answers || {}});
-    saveFavorites({...favoritesByBlock,[inlineKey]:topic.favorites || []});
+    const blockKey = `${activeSubject.famedMeta.contentId}:${topic.id}:fixation:main`;
+    saveAnswers({...answersByBlock,[blockKey]:topic.answers || {}});
+    saveFavorites({...favoritesByBlock,[blockKey]:topic.favorites || []});
   };
   const openQuestions = (subject, topic, kind='fixation', block=null) => {
     const questions = kind === 'extra' ? (block?.questions || block || []) : topicFixationQuestions(topic);
@@ -596,7 +594,7 @@ export default function FamedPortalView() {
       darkMode={darkMode}
       displayMode={settings.questionDisplayMode || 'list'}
       onDisplayModeChange={mode=>{const next={...settings,questionDisplayMode:mode};setSettings(next);saveSettings(next);}}
-      onGoToAula={()=>setActivePanel(activeTopic?'topic':'subject')}
+      onGoToAula={()=>setActivePanel(activeTopic?'topic':isAdmin?'subject':'student-topics')}
       goToAulaLabel="Abrir aula da Academia"
     /></div>;
   }
@@ -614,10 +612,41 @@ export default function FamedPortalView() {
     addToast={addToast}
   /></React.Suspense>;
 
+  if (activePanel === 'student-topics' && activeContent && activeSubjectWithProgress) {
+    const topics = activeSubjectWithProgress.topics || [];
+    return <div className="desktop-content-limit famed-topic-menu">
+      <button type="button" onClick={returnToSchedule} className="famed-topic-menu__back">← Voltar às aulas</button>
+      <header className="mb-7">
+        <p className="mb-2 text-xs font-bold uppercase tracking-widest text-yellow-600">Academia · {activeContent.discipline}</p>
+        <h1 className="mobile-title-lg mobile-wrap font-serif text-3xl font-bold leading-tight">{activeSubjectWithProgress.title}</h1>
+        <p className="famed-topic-menu__help">Escolha um tópico. Dentro dele, leia a aula e responda às questões logo abaixo.</p>
+      </header>
+      <section aria-labelledby="famed-topic-menu-title">
+        <h2 id="famed-topic-menu-title" className="mb-3 text-base font-bold">Tópicos da aula</h2>
+        <div className="space-y-3">
+          {topics.map((topic,index) => {
+            const questions = topicFixationQuestions(topic);
+            const answered = questions.filter(question => hasCompletedAnswer(topic.answers?.[question.id])).length;
+            const completed = questions.length > 0 && answered === questions.length;
+            const status = completed ? 'Concluído' : answered > 0 ? `${answered} de ${questions.length} respondidas` : 'Começar';
+            return <button key={topic.id} type="button" onClick={()=>{setActiveTopicId(topic.id);setActivePanel('topic');window.scrollTo?.({top:0,behavior:'smooth'});}} className="famed-topic-row">
+              <span className={`famed-topic-row__number${completed?' is-complete':''}`}>{String(index+1).padStart(2,'0')}</span>
+              <span className="min-w-0 flex-1">
+                <strong className="mobile-wrap block text-base leading-snug">{topicDisplayTitle(topic.title,index)}</strong>
+                <span className={`famed-topic-row__status${completed?' is-complete':answered>0?' is-progress':''}`}>{status}</span>
+              </span>
+              <span className="famed-topic-row__action">Abrir →</span>
+            </button>;
+          })}
+        </div>
+      </section>
+    </div>;
+  }
+
   if (activePanel === 'topic' && activeSubject && activeTopic) return <div className="desktop-content-limit"><React.Suspense fallback={<div className="py-20 text-center text-yellow-600">Abrindo Academia…</div>}><AcademiaTopicView
     topic={activeTopic}
-    subject={isAdmin?activeSubject:studentLessonSubject}
-    library={[isAdmin?activeSubject:studentLessonSubject]}
+    subject={isAdmin?activeSubject:activeSubjectWithProgress}
+    library={[isAdmin?activeSubject:activeSubjectWithProgress]}
     darkMode={darkMode}
     isAdmin={isAdmin}
     canCreateFlashcards={isAdmin}
@@ -640,7 +669,7 @@ export default function FamedPortalView() {
     getKey={getKey}
     callWithRotation={callWithRotation}
     parseHtmlText={parseHtmlText}
-    onBack={()=>setActivePanel(isAdmin?'subject':'schedule')}
+    onBack={()=>setActivePanel(isAdmin?'subject':'student-topics')}
     reviewQueue={reviewQueue}
     setSrModal={setSrModal}
     trackQuestionAnswered={trackQuestionAnswered}
