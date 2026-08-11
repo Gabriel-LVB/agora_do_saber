@@ -1112,12 +1112,12 @@ ${isFlashcard || openMode ? '' : DISTRACTOR_CORRUPTION_PROMPT_RULE}
 ${isFlashcard ? (isCloze ? `FORMATO OBRIGATÓRIO:
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
-Extra: [explicação curta do porquê/como do termo oculto]
+Extra: [explicação causal ou discriminativa que ensine por que a lacuna é correta; não repita a frase nem faça comentário vazio]
 ---` : `FORMATO OBRIGATÓRIO:
 ## Flashcard N
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [explicação curta do porquê/como da resposta]
+Explicação: [explicação causal ou discriminativa que ensine por que a resposta é correta; não repita o gabarito nem faça comentário vazio]
 ---`) : openMode ? `FORMATO OBRIGATÓRIO:
 ## Questão N
 [Enunciado]
@@ -11894,6 +11894,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (famedCreationTarget) {
       const famedSubject = {
         ...ns,
+        ...(famedCreationTarget.famedStudy ? { famedStudy:famedCreationTarget.famedStudy } : {}),
         storageTarget:'famed',
         famedMeta:{
           contentId:famedCreationTarget.id,
@@ -13416,6 +13417,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     originalSubjectOptions,
     parseVideoaulasData,
     parseHtmlText,
+    parseGeneratedQuestionsByTypes,
     pauseCourseCatalogAnalysis,
     pauseCourseLessonReview,
     pauseSharedLibraryAutomation,

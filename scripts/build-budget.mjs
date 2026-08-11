@@ -26,6 +26,11 @@ let spacedReview = null;
 let courseStudents = null;
 let disabledCourseQuestions = null;
 let sharedLibraryRepair = null;
+let famedPortal = null;
+let famedPastQuestions = null;
+let famedQuestionPackage = null;
+let fflateVendor = null;
+let famedStudyMaterials = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -45,6 +50,11 @@ for (const file of jsFiles) {
   if (file.startsWith('CourseStudentsView-')) courseStudents = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('disabledCourseQuestions-')) disabledCourseQuestions = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('sharedLibraryRepair-')) sharedLibraryRepair = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('FamedPortalView-')) famedPortal = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('FamedPastQuestionsView-')) famedPastQuestions = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('famedQuestionPackage-')) famedQuestionPackage = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('fflate-vendor-')) fflateVendor = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('famedStudyMaterials-')) famedStudyMaterials = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -60,7 +70,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // menos de 1 KiB ao núcleo, sem alterar o primeiro carregamento de dados.
 // O feedback completo de "Não sei" alterou os hashes dos chunks e acrescentou
 // menos de 0,1 KiB medido ao núcleo; a margem continua restrita e auditável.
-const CORE_TOTAL_GZIP_LIMIT = 447.25 * 1024;
+// O filtro pedagógico v9 da FAMED acrescenta contexto ao chunk compartilhado de prompts:
+// cardinalidade, listas parciais, teste contrafactual e proibição de inventários.
+const CORE_TOTAL_GZIP_LIMIT = 445.5 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 // Curadoria, seleção automática, publicação e exportação de auditoria ficam
 // juntas em um único módulo administrativo carregado somente sob demanda.
@@ -86,6 +98,13 @@ const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 3 * 1024;
 // A reparação de questões incompletas é administrativa e só deve ser baixada
 // quando o botão correspondente for acionado na Fábrica.
 const SHARED_LIBRARY_REPAIR_GZIP_LIMIT = 3 * 1024;
+// A FAMED inteira continua lazy. Questões antigas são carregadas apenas ao abrir
+// o respectivo painel, e prompt/seleção de flashcards só entram após a ação admin.
+// O importador ZIP e o descompactador ficam em chunks próprios, baixados somente
+// quando o admin seleciona um pacote. O aumento medido também cobre a apresentação
+// cloze compartilhada, a leitura contínua da Academia e o exportador JSON de auditoria
+// dos flashcards, sem entrar na Home inicial.
+const FAMED_GZIP_LIMIT = 23 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + QUESTION_CURATION_GZIP_LIMIT
@@ -96,9 +115,15 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + REVIEW_DASHBOARD_GZIP_LIMIT
   + COURSE_STUDENTS_GZIP_LIMIT
   + DISABLED_COURSE_QUESTIONS_GZIP_LIMIT
-  + SHARED_LIBRARY_REPAIR_GZIP_LIMIT;
+  + SHARED_LIBRARY_REPAIR_GZIP_LIMIT
+  + FAMED_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
+const famedGzip = (famedPortal?.gzip || 0)
+  + (famedPastQuestions?.gzip || 0)
+  + (famedQuestionPackage?.gzip || 0)
+  + (fflateVendor?.gzip || 0)
+  + (famedStudyMaterials?.gzip || 0);
 const coreGzip = totalGzip
   - (quickContent?.gzip || 0)
   - (ecgCaseBank?.gzip || 0)
@@ -109,7 +134,8 @@ const coreGzip = totalGzip
   - (spacedReview?.gzip || 0)
   - (courseStudents?.gzip || 0)
   - (disabledCourseQuestions?.gzip || 0)
-  - (sharedLibraryRepair?.gzip || 0);
+  - (sharedLibraryRepair?.gzip || 0)
+  - famedGzip;
 
 assert.ok(
   entry.raw <= ENTRY_RAW_LIMIT,
@@ -175,6 +201,15 @@ assert.ok(
   sharedLibraryRepair.gzip <= SHARED_LIBRARY_REPAIR_GZIP_LIMIT,
   `Reparo da Biblioteca passou do budget: ${fmt(sharedLibraryRepair.gzip)} > ${fmt(SHARED_LIBRARY_REPAIR_GZIP_LIMIT)}`
 );
+assert.ok(famedPortal, 'O portal FAMED deve permanecer em modulo lazy proprio.');
+assert.ok(famedPastQuestions, 'A importacao de questoes antigas FAMED deve permanecer lazy.');
+assert.ok(famedQuestionPackage, 'O parser do pacote FAMED deve permanecer lazy.');
+assert.ok(fflateVendor, 'O descompactador ZIP deve permanecer fora do bundle inicial.');
+assert.ok(famedStudyMaterials, 'Os derivados de estudo FAMED devem permanecer fora do bundle inicial.');
+assert.ok(
+  famedGzip <= FAMED_GZIP_LIMIT,
+  `Modulos FAMED passaram do budget: ${fmt(famedGzip)} > ${fmt(FAMED_GZIP_LIMIT)}`
+);
 assert.ok(totalGzip <= TOTAL_GZIP_LIMIT, `JS total passou do budget: ${fmt(totalGzip)} > ${fmt(TOTAL_GZIP_LIMIT)}`);
 
-console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; ${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; alunos ${fmt(courseStudents.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
+console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; ${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; alunos ${fmt(courseStudents.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);

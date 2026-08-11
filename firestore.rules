@@ -152,10 +152,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Coleção legada: mantida acessível apenas ao admin para a limpeza única
-    // dos arquivos do antigo importador por ZIP.
+    // Imagens das questões antigas FAMED. O documento acompanha o estado
+    // publicado do conteúdo pai; gravação e remoção continuam exclusivas do admin.
     match /famed_assets/{assetId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin() || (hasCourseAccess() && resource.data.published == true);
+      allow write: if isAdmin();
     }
 
     match /access_logs/{logId} {

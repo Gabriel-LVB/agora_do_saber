@@ -1,6 +1,7 @@
 import React from 'react';
 import { FAMED_S5_SCHEDULE, FAMED_S5_SCHEDULE_STATS } from './famedSchedule.js';
 import { courseLessonStableIds } from './famedCourseLessonMap.js';
+import { getFamedFlashcardState, getFamedStudyMaterials } from './famedStudyMaterials.js';
 
 const BookOpen = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>;
 const FileText = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>;
@@ -8,6 +9,7 @@ const PlusIcon = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000
 const PlayIcon = ({ className='h-3.5 w-3.5' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"/></svg>;
 const DownloadIcon = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>;
 const TrashIcon = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 15H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>;
+const CardsIcon = ({ className='h-4 w-4' }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/><path d="M7 2h10"/></svg>;
 
 const disciplineTone = (_discipline, darkMode) => darkMode
   ? 'border-gray-800 bg-gray-900/30'
@@ -18,10 +20,6 @@ const actionClass = (enabled, darkMode, primary=false) => `inline-flex min-h-[40
     ? 'border-yellow-600 bg-yellow-600 text-white hover:bg-yellow-700'
     : darkMode?'border-gray-600 bg-gray-900 text-gray-200 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 bg-white text-gray-700 hover:border-yellow-500 hover:text-yellow-700'
   : darkMode?'cursor-not-allowed border-gray-700 bg-gray-900 text-gray-600':'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'}`;
-
-const contentQuestionCount = content => (content?.academiaSubject?.topics || []).reduce((total,topic) => total
-  + Object.values(topic.fixationQuestions || {}).flat().length
-  + (topic.extraBattery || []).reduce((sum,block)=>sum + (block.questions || block || []).length, 0), 0);
 
 const normalizeLabel = value => String(value || '')
   .normalize('NFD')
@@ -54,7 +52,7 @@ const linkedLessonsDuration = lessons => formatCourseDuration(
 const isCourseLessonWatched = (lesson, watchedAulas) => courseLessonStableIds(lesson)
   .some(id => !!watchedAulas?.[id]);
 
-export default function FamedScheduleView({ darkMode, isAdmin=false, contentByScheduleId={}, contentLoading=false, courseCatalogReady=false, courseLessonsByScheduleId={}, watchedAulas={}, removingContentId=null, onOpenCourseLesson, onExportCourseCatalog, onOpenLesson, onOpenQuestions, onCreate, onRemoveContent }) {
+export default function FamedScheduleView({ darkMode, isAdmin=false, contentByScheduleId={}, contentLoading=false, courseCatalogReady=false, courseLessonsByScheduleId={}, watchedAulas={}, removingContentId=null, generatingFlashcardsId=null, onOpenCourseLesson, onExportCourseCatalog, onOpenLesson, onOpenPastQuestions, onOpenFlashcards, onCreate, onRemoveContent }) {
   return (
     <div className="famed-schedule space-y-4">
       <section className="famed-schedule-summary px-1 py-1">
@@ -88,7 +86,11 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
             <div className="space-y-3">
               {items.map(item => {
                 const content = contentByScheduleId[item.id];
-                const questionCount = contentQuestionCount(content);
+                const subject = content?.academiaSubject || null;
+                const study = getFamedStudyMaterials(subject);
+                const pastQuestionCount = study.pastQuestionSets.reduce((total,set)=>total + (set.questions || []).length,0);
+                const flashcardState = getFamedFlashcardState(subject);
+                const generatingFlashcards = generatingFlashcardsId === content?.id;
                 const details = supplementaryTopics(item);
                 const linkedCourseLessons = courseLessonsByScheduleId[item.id] || [];
                 const courseDuration = linkedLessonsDuration(linkedCourseLessons);
@@ -129,10 +131,11 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
                       })}
                     </div>
                   </div>}
-                  {(content||isAdmin)&&<div className="famed-actions mt-3 grid grid-cols-2 gap-2">
-                    {content&&<button type="button" onClick={()=>onOpenLesson?.(content)} className={actionClass(true,darkMode,true)}><BookOpen/>Aula da Academia</button>}
-                    {content&&<button type="button" disabled={!questionCount} onClick={()=>questionCount&&onOpenQuestions?.(content)} className={actionClass(!!questionCount,darkMode)}><FileText/>{questionCount?`${questionCount} questões`:'Questões'}</button>}
-                    {isAdmin&&!content&&<button type="button" onClick={()=>onCreate?.(item)} className={`${actionClass(true,darkMode,true)} col-span-2`}><PlusIcon/>Criar aula</button>}
+                  {(content||isAdmin)&&<div className="famed-actions mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {content&&<button type="button" onClick={()=>onOpenLesson?.(content)} className={actionClass(true,darkMode,true)}><BookOpen/>Academia</button>}
+                    {content&&<button type="button" disabled={!isAdmin&&!pastQuestionCount} onClick={()=>onOpenPastQuestions?.(content)} className={actionClass(isAdmin||pastQuestionCount>0,darkMode)} title={pastQuestionCount?`${pastQuestionCount} questões antigas`:'Nenhuma questão antiga disponível'}><FileText/>Questões antigas</button>}
+                    {content&&<button type="button" title={!flashcardState.lessonReady?'Gere todas as aulas da Academia primeiro.':!flashcardState.pastQuestionCount?'Adicione as questões antigas primeiro.':flashcardState.stale?'A aula ou as questões mudaram; atualize os flashcards.':'Selecionados a partir da aula e das questões antigas.'} disabled={generatingFlashcards||(!flashcardState.prerequisitesMet&&!flashcardState.fresh)} onClick={()=>onOpenFlashcards?.(content)} className={actionClass(!generatingFlashcards&&(flashcardState.prerequisitesMet||flashcardState.fresh),darkMode)}><CardsIcon/>Flashcards</button>}
+                    {isAdmin&&!content&&<button type="button" onClick={()=>onCreate?.(item)} className={`${actionClass(true,darkMode,true)} sm:col-span-3`}><PlusIcon/>Criar aula</button>}
                   </div>}
                 </article>;
               })}

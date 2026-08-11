@@ -405,7 +405,8 @@ html.agora-theme-fallback .agora-shell *::after {
 
 /* Long-form reading */
 .agora-shell .reading-content {
-  max-width: 74ch;
+  width: 100%;
+  max-width: none;
   color: var(--text);
   letter-spacing: .002em;
 }

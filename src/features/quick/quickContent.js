@@ -148,8 +148,7 @@ ${distractorRule}
 ${adminExplanationFormat}
 
 REGRAS DOS FLASHCARDS:
-- Gere de 5 a 8 flashcards. Nunca gere menos de 5.
-- Crie somente a quantidade útil para memorizar a lacuna, sem pilha excessiva.
+- Decida a quantidade pela complexidade e pela densidade da lacuna. Não siga limite, faixa, meta ou sugestão numérica e cubra toda memória realmente necessária sem criar volume artificial.
 - Cada flashcard deve ter um alvo claro de recuperação, ser autossuficiente e não redundante.
 - "Atômico" não significa separar tudo: agrupe 2 a 4 itens quando eles formam uma unidade natural, como principais efeitos adversos, monitorização obrigatória, tríade ou fármacos que compartilham uma interação.
 - Separe em cards diferentes quando os itens têm mecanismos, decisões ou explicações diferentes.
@@ -197,7 +196,7 @@ Alternativas:
 ## Flashcard 1
 Pergunta: [pergunta objetiva e específica?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [explicação curta do porquê/como da resposta]
+Explicação: [explique o mecanismo, a justificativa clínica ou o critério que torna a resposta correta]
 ---
 `.trim();
 };

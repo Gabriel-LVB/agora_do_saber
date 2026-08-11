@@ -50,7 +50,8 @@ assert.match(famedContentBlock, /allow read: if isAdmin\(\) \|\| \(hasCourseAcce
 assert.match(famedContentBlock, /allow write: if isAdmin\(\);/);
 
 const famedAssetsBlock = ruleBlock('/famed_assets/{assetId}');
-assert.match(famedAssetsBlock, /allow read, write: if isAdmin\(\);/);
+assert.match(famedAssetsBlock, /allow read: if isAdmin\(\) \|\| \(hasCourseAccess\(\) && resource\.data\.published == true\);/);
+assert.match(famedAssetsBlock, /allow write: if isAdmin\(\);/);
 
 assert.match(compact, /match \/{document=\*\*} \{ allow read, write: if false; \} \} \}$/);
 

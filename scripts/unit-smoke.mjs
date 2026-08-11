@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { strToU8, zipSync } from 'fflate';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { cleanFirestoreData } from '../src/lib/firestoreData.js';
@@ -83,6 +84,16 @@ import {
   FAMED_COURSE_LESSON_MAP,
   resolveFamedCourseLessons,
 } from '../src/features/famed/famedCourseLessonMap.js';
+import {
+  buildFamedFlashcardAuditExport,
+  FAMED_FLASHCARD_GENERATION_VERSION,
+  famedFlashcardSourceSignature,
+  famedPastQuestions,
+  getFamedFlashcardState,
+  hasFamedGeneratedLesson,
+} from '../src/features/famed/famedStudyMaterials.js';
+import { buildFamedEssentialFlashcardsPrompt, buildFamedQuestionPackagePrompt } from '../src/agora_prompts.js';
+import { parseFamedQuestionPackage } from '../src/features/famed/famedQuestionPackage.js';
 import {
   buildDailyEffortSchedule,
   buildEffortBalancedSchedule,
@@ -223,10 +234,169 @@ const fullQuickPrompt = buildQuickPracticePrompt({
   distractorRule:'REGRA DOS DISTRATORES',
 });
 assert.match(fullQuickPrompt, /Gere de 4 a 6 quest/);
-assert.match(fullQuickPrompt, /Nunca gere menos de 5/);
+assert.match(fullQuickPrompt, /Não siga limite, faixa, meta ou sugestão numérica/);
+assert.doesNotMatch(fullQuickPrompt, /Gere de 5 a 8 flashcards|Nunca gere menos de 5/);
 assert.match(fullQuickPrompt, /REGRA DOS DISTRATORES/);
 assert.match(buildQuickPracticePrompt({title:'Teste', outputs:['questions']}), /N.o gere flashcards/);
 assert.match(extractQuickSection('## Questoes\n## Questao 1\nEnunciado\n## Flashcards\n## Flashcard 1\nPergunta', 'Questoes'), /Questao 1/);
+
+const famedStudyFixture = {
+  title:'Valvopatias',
+  topics:[{
+    id:'estenose-aortica',
+    title:'Estenose aórtica',
+    lessonGenerated:true,
+    lessonSections:{ 0:{ content:'A estenose aórtica sintomática grave exige avaliação para troca valvar.' } },
+  }],
+  famedStudy:{
+    pastQuestionSets:[{
+      id:'av1-2025',
+      title:'AV1 2025',
+      questions:[{
+        id:'q1',
+        statement:'Qual achado indica gravidade?',
+        options:[
+          { letter:'A', text:'Síncope aos esforços', isCorrect:true },
+          { letter:'B', text:'Sopro inocente', isCorrect:false },
+        ],
+        explanation:'Sintomas aos esforços mudam prognóstico e conduta.',
+      }],
+    }],
+    essentialFlashcards:[],
+  },
+};
+assert.equal(hasFamedGeneratedLesson(famedStudyFixture), true);
+assert.equal(famedPastQuestions(famedStudyFixture).length, 1);
+assert.equal(getFamedFlashcardState(famedStudyFixture).prerequisitesMet, true);
+const famedStudySignature = famedFlashcardSourceSignature(famedStudyFixture);
+const famedStudyWithCards = {
+  ...famedStudyFixture,
+  famedStudy:{
+    ...famedStudyFixture.famedStudy,
+    essentialFlashcards:[{ id:'f1', statement:'Qual sintoma aos esforços marca gravidade na estenose aórtica?', expectedAnswer:'Síncope.', explanation:'A síncope aos esforços marca repercussão hemodinâmica.', isFlashcard:true }],
+    flashcardSourceSignature:famedStudySignature,
+    flashcardGenerationVersion:FAMED_FLASHCARD_GENERATION_VERSION,
+  },
+};
+assert.equal(getFamedFlashcardState(famedStudyWithCards).fresh, true);
+const famedFlashcardAudit = buildFamedFlashcardAuditExport(famedStudyWithCards, {
+  content:{ id:'famed-valvopatias', title:'Valvopatias', discipline:'Cardiologia' },
+  exportedAt:'2026-08-10T12:00:00.000Z',
+});
+assert.equal(famedFlashcardAudit.schema, 'agora-famed-flashcard-audit-v1');
+assert.equal(famedFlashcardAudit.exportedAt, '2026-08-10T12:00:00.000Z');
+assert.equal(famedFlashcardAudit.content.discipline, 'Cardiologia');
+assert.equal(famedFlashcardAudit.generation.version, FAMED_FLASHCARD_GENERATION_VERSION);
+assert.equal(famedFlashcardAudit.generation.sourcesStillMatch, true);
+assert.equal(famedFlashcardAudit.flashcards.length, 1);
+assert.equal(famedFlashcardAudit.flashcards[0].statement, famedStudyWithCards.famedStudy.essentialFlashcards[0].statement);
+assert.equal(famedFlashcardAudit.flashcards[0].expectedAnswer, 'Síncope.');
+assert.match(famedFlashcardAudit.sourceEvidence.lessonText, /estenose aórtica sintomática grave/);
+assert.match(famedFlashcardAudit.sourceEvidence.pastQuestionsText, /Qual achado indica gravidade/);
+assert.match(famedFlashcardAudit.reviewChecklist.join(' '), /back exige um item curto/);
+assert.equal(getFamedFlashcardState({
+  ...famedStudyWithCards,
+  famedStudy:{ ...famedStudyWithCards.famedStudy, flashcardGenerationVersion:'famed-essential-direct-v8' },
+}).stale, true);
+assert.equal(getFamedFlashcardState({
+  ...famedStudyWithCards,
+  topics:[{ ...famedStudyWithCards.topics[0], lessonSections:{ 0:{ content:'Aula modificada.' } } }],
+}).stale, true);
+assert.equal(hasFamedGeneratedLesson({ ...famedStudyFixture, topics:[{ ...famedStudyFixture.topics[0], lessonGenerated:false }] }), false);
+const famedFlashcardPrompt = buildFamedEssentialFlashcardsPrompt({
+  title:famedStudyFixture.title,
+  lessonText:'Aula sobre estenose aórtica.',
+  pastQuestionsText:'Questão antiga sobre síncope.',
+});
+assert.match(famedFlashcardPrompt, /Isto é realmente essencial para esta aula/);
+assert.match(famedFlashcardPrompt, /Eu preciso de um flashcard para aprender ou reter isto/);
+assert.match(famedFlashcardPrompt, /pode ser deduzido por bom senso ou lógica genérica/);
+assert.match(famedFlashcardPrompt, /O cartão só pode existir se passar claramente por TODOS os filtros/);
+assert.match(famedFlashcardPrompt, /FORMATO DIRETO E ATOMIZAÇÃO/);
+assert.match(famedFlashcardPrompt, /pergunta direta, curta e autossuficiente/);
+assert.match(famedFlashcardPrompt, /retenha SOMENTE os 20% mais importantes/);
+assert.match(famedFlashcardPrompt, /Dê peso maior à prova somente depois de filtrar a qualidade da cobrança/);
+assert.match(famedFlashcardPrompt, /Questões antigas médias, difíceis ou realmente discriminativas/);
+assert.match(famedFlashcardPrompt, /Ignore como sinal de prioridade toda questão fácil, elementar, óbvia/);
+assert.match(famedFlashcardPrompt, /Questão classificada como fácil fornece ZERO peso de prova/);
+assert.match(famedFlashcardPrompt, /recorrência de cobrança trivial continua sendo trivial/);
+assert.match(famedFlashcardPrompt, /Use o espaço liberado pelas cobranças triviais/);
+assert.match(famedFlashcardPrompt, /não a complete com questões fáceis/);
+assert.match(famedFlashcardPrompt, /A barra de entrada pelo eixo “vida real” também é alta/);
+assert.match(famedFlashcardPrompt, /Ser interessante, moderno, complementar, “potencialmente eficaz”/);
+assert.match(famedFlashcardPrompt, /Manobras de nicho, cortes etários isolados/);
+assert.match(famedFlashcardPrompt, /Aplique o teste contrafactual da relevância/);
+assert.match(famedFlashcardPrompt, /Proporções técnicas de procedimento, metas gerais já conhecidas pelo público/);
+assert.match(famedFlashcardPrompt, /Não confunda facilidade de formular uma pergunta com importância/);
+assert.match(famedFlashcardPrompt, /Os 20% são um filtro de importância, não uma quantidade fixa de cartões/);
+assert.match(famedFlashcardPrompt, /Questões antigas que mandam citar, listar, enumerar ou nomear uma coleção/);
+assert.match(famedFlashcardPrompt, /o inventário pedido recebe ZERO peso como memória de flashcard/);
+assert.match(famedFlashcardPrompt, /se a cobrança se resume a reproduzir a lista, não crie cartão/);
+assert.match(famedFlashcardPrompt, /REGRA RÍGIDA DO BACK — NO MÁXIMO DOIS ITENS/);
+assert.match(famedFlashcardPrompt, /A Resposta deve exigir UM item por padrão e pode exigir DOIS/);
+assert.match(famedFlashcardPrompt, /Nunca exija três ou mais itens/);
+assert.match(famedFlashcardPrompt, /NÃO fabrique automaticamente um cartão para cada item/);
+assert.match(famedFlashcardPrompt, /FLASHCARD NÃO É INVENTÁRIO/);
+assert.match(famedFlashcardPrompt, /São proibidas perguntas iniciadas ou estruturadas como “cite”, “liste”, “enumere”/);
+assert.match(famedFlashcardPrompt, /Citar três exames e perguntar pelos outros dois/);
+assert.match(famedFlashcardPrompt, /Não pergunte pelo conjunto de classes de medicamentos de primeira escolha/);
+assert.match(famedFlashcardPrompt, /qual fármaco ou classe possui um papel ÚNICO/);
+assert.match(famedFlashcardPrompt, /qual exame possui uma finalidade ÚNICA/);
+assert.match(famedFlashcardPrompt, /Também é proibido mostrar parte de uma lista na Pergunta e pedir os itens restantes/);
+assert.match(famedFlashcardPrompt, /Rejeite qualquer pergunta que use “além de X”/);
+assert.match(famedFlashcardPrompt, /não podem ser o restante de uma tríade/);
+assert.match(famedFlashcardPrompt, /Faça a concordância de cardinalidade/);
+assert.match(famedFlashcardPrompt, /pergunta no singular.*exige exatamente um item sem alternativas/);
+assert.match(famedFlashcardPrompt, /Nunca responda a uma pergunta no singular com alternativas unidas por “ou”, barra ou parênteses/);
+assert.match(famedFlashcardPrompt, /DIREÇÃO DA PERGUNTA — NÚCLEO SEMÂNTICO/);
+assert.match(famedFlashcardPrompt, /apresente W e Z na Pergunta e peça Y na Resposta/);
+assert.match(famedFlashcardPrompt, /apenas pede para recitar uma das próprias pistas/);
+assert.match(famedFlashcardPrompt, /TESTES DE QUALIDADE DA PERGUNTA/);
+assert.match(famedFlashcardPrompt, /Não transforme uma lista antiga em “qual item falta\?”/);
+assert.match(famedFlashcardPrompt, /Cardinalidade verificável/);
+assert.match(famedFlashcardPrompt, /Pergunta e Explicação precisam afirmar a mesma coisa com o mesmo grau de certeza/);
+assert.match(famedFlashcardPrompt, /“as diretrizes recomendam”, “há boa evidência”, “esta definição é crucial”/);
+assert.match(famedFlashcardPrompt, /como o distinguem da alternativa plausível mais próxima/);
+assert.match(famedFlashcardPrompt, /## Flashcard N/);
+assert.match(famedFlashcardPrompt, /Pergunta: \[pergunta direta/);
+assert.match(famedFlashcardPrompt, /Resposta: \[um item curto; excepcionalmente dois itens curtos/);
+assert.doesNotMatch(famedFlashcardPrompt, /\{\{c1::|## Cloze N|cloze deletion/);
+assert.doesNotMatch(famedFlashcardPrompt, /Limite absoluto|maxCards|quantidade mínima|quantidade máxima|até \d+ flashcards/i);
+assert.match(famedFlashcardPrompt, /Distratores das questões antigas não são fatos verdadeiros/);
+assert.match(famedFlashcardPrompt, /comentários metalinguísticos/);
+
+const famedPackagePrompt = buildFamedQuestionPackagePrompt({ title:'Valvopatias' });
+assert.match(famedPackagePrompt, /arquivo ZIP baixável/);
+assert.match(famedPackagePrompt, /questions\.json na raiz/);
+assert.match(famedPackagePrompt, /agora-famed-question-package-v1/);
+assert.match(famedPackagePrompt, /images\/q1-figura\.png/);
+const famedPackageZip = zipSync({
+  'questions.json':strToU8(JSON.stringify({
+    schema:'agora-famed-question-package-v1',
+    title:'AV1 2025',
+    questions:[{
+      id:'q1',
+      statement:'Qual é o achado?',
+      caseContext:'Paciente com dispneia.',
+      options:[
+        { letter:'A', text:'Achado correto', isCorrect:true, explanation:'Explica o mecanismo.' },
+        { letter:'B', text:'Distrator', isCorrect:false, explanation:'Não corresponde ao mecanismo.' },
+      ],
+      explanation:'A alternativa A decorre do mecanismo descrito.',
+      expectedAnswer:'',
+      isOpen:false,
+      isEssay:false,
+      images:[{ file:'images/q1.png', altText:'Radiografia de tórax', credit:'' }],
+    }],
+  })),
+  'images/q1.png':new Uint8Array([137,80,78,71,13,10,26,10]),
+});
+const parsedFamedPackage = await parseFamedQuestionPackage(famedPackageZip,'famed-test');
+assert.equal(parsedFamedPackage.title,'AV1 2025');
+assert.equal(parsedFamedPackage.questions.length,1);
+assert.equal(parsedFamedPackage.questions[0].images[0].file,'images/q1.png');
+assert.equal(parsedFamedPackage.assets.length,1);
+assert.match(parsedFamedPackage.assets[0].dataUrl,/^data:image\/png;base64,/);
 
 assert.equal(normalizeAuditText('Nó SA e eletrocardiograma'), 'no_sinoatrial e ecg');
 assert.equal(getQuestionCorrectAnswer({
@@ -1862,6 +2032,9 @@ assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenA
 assert.match(questionFeatureSource, /const isAnswerCorrect = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /const isFinalObjectiveAnswer = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /normalizeDisplayedAlternativeReferences\(opt\.explanation, opt\.letter\)/);
+assert.match(questionFeatureSource, /const renderClozeSentence =/);
+assert.match(questionFeatureSource, /Revelar informação/);
+assert.match(questionFeatureSource, />Entenda</);
 
 const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
 assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
@@ -1876,6 +2049,9 @@ assertNoFreeIdentifiers(vqGenModalSource, 'VqGenModal');
 
 const academiaTopicViewSource = await readFile(new URL('../src/features/academia/AcademiaTopicView.jsx', import.meta.url), 'utf8');
 assert.match(academiaTopicViewSource, /export default AcademiaTopicView/);
+assert.match(academiaTopicViewSource, /Sumário da aula/);
+assert.match(academiaTopicViewSource, /chapterQuestions\.map/);
+assert.match(academiaTopicViewSource, /Fixação do capítulo/);
 
 const bulkGenerateModalSource = await readFile(new URL('../src/features/bulk/BulkGenerateModal.jsx', import.meta.url), 'utf8');
 assert.match(bulkGenerateModalSource, /export default function BulkGenerateModal/);
@@ -1976,8 +2152,25 @@ assert.match(famedPortalViewSource, /resolveFamedCourseLessons/);
 assert.match(famedPortalViewSource, /agora-famed-catalogo-curso-/);
 assert.match(famedPortalViewSource, /removeScheduleContent/);
 assert.match(famedPortalViewSource, /As videoaulas do Portal do Curso não serão alteradas/);
+assert.match(famedPortalViewSource, /parseGeneratedQuestionsByTypes/);
+assert.match(famedPortalViewSource, /buildFamedEssentialFlashcardsPrompt/);
+assert.match(famedPortalViewSource, /flashcardSourceSignature/);
+assert.match(famedPortalViewSource, /FAMED_FLASHCARD_GENERATION_VERSION/);
+assert.match(famedPortalViewSource, /\['flashcard'\]/);
+assert.doesNotMatch(famedPortalViewSource, /\['cloze'\]/);
+assert.match(famedPortalViewSource, /Nunca peça listas, inventários de medicamentos\/exames/);
+assert.match(famedPortalViewSource, /Faça singular\/plural corresponder exatamente ao back/);
+assert.match(famedPortalViewSource, /deleteEssentialFlashcards/);
+assert.match(famedPortalViewSource, /buildFamedFlashcardAuditExport/);
+assert.match(famedPortalViewSource, /Exportar para revisar o prompt/);
+assert.match(famedPortalViewSource, /famed-flashcards-auditoria-/);
+assert.doesNotMatch(famedPortalViewSource, /rejectedFlashcards|getFamedEssentialClozeIssue/);
+assert.match(famedPortalViewSource, /saveFamedQuestionAssets/);
+assert.match(famedPortalViewSource, /loadFamedQuestionAssets/);
+assert.match(famedPortalViewSource, /id:'__all__'/);
+assert.doesNotMatch(famedPortalViewSource, /maxCards|maxTokens|slice\(0,\s*20\)/);
 assert.doesNotMatch(famedPortalViewSource, /matchFamedScheduleCourseLessons/);
-assert.doesNotMatch(famedPortalViewSource, /FamedManualEditor|FamedPackageImporter|\.zip/i);
+assert.doesNotMatch(famedPortalViewSource, /FamedManualEditor|FamedPackageImporter/);
 assert.doesNotMatch(famedPortalViewSource, /const TABS|activeTab/);
 
 const famedCatalogSource = await readFile(new URL('../src/features/famed/famedCatalog.js', import.meta.url), 'utf8');
@@ -1996,8 +2189,11 @@ assert.doesNotMatch(famedScheduleSource, /2026-\d{2}-\d{2}|\d{2}:\d{2}|segunda-c
 
 const famedScheduleViewSource = await readFile(new URL('../src/features/famed/FamedScheduleView.jsx', import.meta.url), 'utf8');
 assert.match(famedScheduleViewSource, /Aulas e provas/);
-assert.match(famedScheduleViewSource, /Aula da Academia/);
-assert.match(famedScheduleViewSource, /onOpenQuestions/);
+assert.match(famedScheduleViewSource, />Academia</);
+assert.match(famedScheduleViewSource, />Questões antigas</);
+assert.match(famedScheduleViewSource, /<CardsIcon\/>Flashcards/);
+assert.match(famedScheduleViewSource, /sm:grid-cols-3/);
+assert.doesNotMatch(famedScheduleViewSource, /onOpenQuestions/);
 assert.match(famedScheduleViewSource, /Exportar aulas do curso/);
 assert.match(famedScheduleViewSource, />No curso</);
 assert.match(famedScheduleViewSource, /linkedLessonsDuration/);
@@ -2007,11 +2203,24 @@ assert.doesNotMatch(famedScheduleViewSource, />Assistida<\/span>/);
 assert.match(famedScheduleViewSource, /lesson\.duration/);
 assert.match(famedScheduleViewSource, /onRemoveContent/);
 assert.match(famedScheduleViewSource, /Remover conteúdo da FAMED/);
+assert.match(famedScheduleViewSource, /Adicione as questões antigas primeiro/);
 assert.doesNotMatch(famedScheduleViewSource, /courseIndex \?\?|Ver mais|expandedCourseLinks/);
 assert.doesNotMatch(famedScheduleViewSource, /Nenhuma correspondência direta encontrada/);
 assert.doesNotMatch(famedScheduleViewSource, /Cronograma interativo|Sequência de referência/);
 assert.doesNotMatch(famedScheduleViewSource, /Fontes, avaliação de Pneumo e observações|FAMED_S5_SCHEDULE_META/);
 assert.doesNotMatch(famedScheduleViewSource, /formatScheduleDate|item\.date|item\.time|item\.instructor/);
+
+const famedPastQuestionsViewSource = await readFile(new URL('../src/features/famed/FamedPastQuestionsView.jsx', import.meta.url), 'utf8');
+assert.match(famedPastQuestionsViewSource, /Adicionar pacote de questões antigas/);
+assert.match(famedPastQuestionsViewSource, /buildFamedQuestionPackagePrompt/);
+assert.match(famedPastQuestionsViewSource, /accept="\.zip,application\/zip/);
+assert.doesNotMatch(famedPastQuestionsViewSource, /<textarea|buildExternalPrompt/);
+
+const famedQuestionPackageSource = await readFile(new URL('../src/features/famed/famedQuestionPackage.js', import.meta.url), 'utf8');
+assert.match(famedQuestionPackageSource, /FAMED_QUESTION_PACKAGE_SCHEMA/);
+assert.match(famedQuestionPackageSource, /unzipSync/);
+assert.match(famedQuestionPackageSource, /isSafeRelativePath/);
+assert.match(famedQuestionPackageSource, /libraryQuestionKind:'old_exam'/);
 
 const famedContentServiceSource = await readFile(new URL('../src/services/famedContent.js', import.meta.url), 'utf8');
 assert.match(famedContentServiceSource, /CONTENT_COLLECTION = 'famed_content'/);
@@ -2019,8 +2228,11 @@ assert.match(famedContentServiceSource, /saveFamedAcademiaSubject/);
 assert.match(famedContentServiceSource, /famedContentToAcademiaSubject/);
 assert.match(famedContentServiceSource, /deleteFamedContent/);
 assert.match(famedContentServiceSource, /deleteLegacyFamedContent/);
+assert.match(famedContentServiceSource, /saveFamedQuestionAssets/);
+assert.match(famedContentServiceSource, /loadFamedQuestionAssets/);
+assert.match(famedContentServiceSource, /deleteFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /creationMode:'academia'/);
-assert.doesNotMatch(famedContentServiceSource, /fflate|unzip|firebase\/storage/);
+assert.doesNotMatch(famedContentServiceSource, /firebase\/storage/);
 
 assert.match(appSource, /const \[famedCreationTarget, setFamedCreationTarget\]/);
 assert.match(appSource, /const FamedIcon = \(\{ className \}\) => \(/);
@@ -2028,6 +2240,7 @@ assert.match(appSource, /viewBox="0 0 64 64"/);
 assert.match(appSource, /M13 23h38v17\.5/);
 assert.doesNotMatch(appSource, /const FamedIcon\s+= ic\(/);
 assert.match(appSource, /const startFamedAcademiaCreation = scheduleItem =>/);
+assert.match(appSource, /famedCreationTarget\.famedStudy/);
 assert.match(appSource, /const persistAcademiaSubject = async subject =>/);
 assert.match(appSource, /\n\s+bulkActionMenu,\n\s+bulkGenerateModal,/);
 assert.match(appSource, /\n\s+setBulkActionMenu,\n\s+setBulkGenerateModal,/);
@@ -2036,8 +2249,7 @@ assert.match(questionFeatureSource, /ClinicalCaseIntro/);
 assert.match(questionFeatureSource, /Use este caso para responder/);
 assert.match(questionFeatureSource, /hideCaseContext/);
 assert.doesNotMatch(questionFeatureSource, />Decisão<\/div>/);
-assert.match(academiaTopicViewSource, /lessonPresentationVersion/);
-assert.match(academiaTopicViewSource, /continuousNarrativeContent/);
+assert.doesNotMatch(academiaTopicViewSource, /continuousNarrativeContent/);
 const promptsSource = await readFile(new URL('../src/agora_prompts.js', import.meta.url), 'utf8');
 assert.match(promptsSource, /Toda alternativa deve conter algum núcleo plausível ou verdadeiro/);
 assert.match(promptsSource, /PRINCÍPIO DE EFICIÊNCIA E ALTO RENDIMENTO/);

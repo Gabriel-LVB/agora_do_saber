@@ -1351,11 +1351,38 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
   );
 };
 
+const CLOZE_TOKEN_RE = /\{\{c(\d+)::([\s\S]*?)(?:::([^{}]*))?\}\}/gi;
+const renderClozeSentence = (clozeText, revealed, darkMode) => {
+  const source = String(clozeText || '');
+  const parts = [];
+  let cursor = 0;
+  let match;
+  CLOZE_TOKEN_RE.lastIndex = 0;
+  while ((match = CLOZE_TOKEN_RE.exec(source))) {
+    if (match.index > cursor) parts.push(<React.Fragment key={`text-${cursor}`}>{parseHtmlTextChat(source.slice(cursor,match.index))}</React.Fragment>);
+    const answer = match[2]?.trim() || '';
+    const hint = match[3]?.trim() || '';
+    parts.push(<span key={`cloze-${match.index}`} className={`mx-1 inline-flex min-w-[3.25rem] items-center justify-center rounded-md border px-2 py-0.5 align-baseline font-bold transition-colors ${revealed?(darkMode?'border-yellow-700 bg-yellow-900/35 text-yellow-200':'border-yellow-300 bg-yellow-50 text-yellow-800'):(darkMode?'border-gray-600 bg-gray-800 text-gray-300':'border-gray-300 bg-gray-100 text-gray-500')}`}>{revealed?parseHtmlTextChat(answer):(hint || '…')}</span>);
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < source.length) parts.push(<React.Fragment key={`text-${cursor}`}>{parseHtmlTextChat(source.slice(cursor))}</React.Fragment>);
+  return parts.length ? parts : parseHtmlTextChat(source);
+};
+
+const FlashcardExplanation = ({ explanation, darkMode }) => explanation ? (
+  <div className={`mt-6 rounded-xl border p-4 text-left text-sm leading-relaxed md:text-base ${darkMode?'border-gray-700 bg-gray-950/45 text-gray-300':'border-gray-200 bg-gray-50 text-gray-700'}`}>
+    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-yellow-600">Entenda</p>
+    <div className="select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(explanation)}</div>
+  </div>
+) : null;
+
 const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false, front=null }) => {
   const dm = darkMode;
   const [revealed, setRevealed] = useState(!!savedAnswer);
   useEffect(() => { setRevealed(!!savedAnswer); }, [savedAnswer, question?.id]);
   const answered = savedAnswer === FLASHCARD_CORRECT || savedAnswer === FLASHCARD_WRONG;
+  const isCloze = !!(question?.isCloze && question?.clozeText);
+  const revealLabel = isCloze ? 'Revelar informação' : 'Mostrar resposta';
   if (large) {
     return (
       <div className="flex-1 min-h-0 flex flex-col">
@@ -1364,7 +1391,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
             <section className="flashcard-study-card w-full rounded-2xl px-5 py-8 shadow-[0_18px_60px_rgba(0,0,0,0.28)] md:px-12 md:py-11">
               <div className="flashcard-study-card-inner min-h-[42vh] md:min-h-[46vh] flex flex-col justify-center">
                 <div className="mx-auto max-w-2xl text-center text-lg md:text-2xl font-semibold leading-relaxed select-text" style={{userSelect:'text'}}>
-                  {front || parseHtmlTextChat(question.statement)}
+                  {isCloze ? renderClozeSentence(question.clozeText,revealed,dm) : (front || parseHtmlTextChat(question.statement))}
                 </div>
                 {revealed && (
                   <div className="mx-auto mt-8 max-w-2xl">
@@ -1373,14 +1400,8 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
                       style={{height:2, background:'linear-gradient(90deg, transparent, #d19a2d 18%, #d19a2d 82%, transparent)'}}
                       aria-hidden="true"
                     />
-                    <div className="text-center text-lg md:text-2xl font-bold leading-snug text-[#111827] select-text" style={{userSelect:'text'}}>
-                      {parseHtmlTextChat(question.expectedAnswer || '')}
-                    </div>
-                    {question.explanation && (
-                      <div className="mx-auto mt-6 text-left text-base leading-relaxed text-[#4b5563] select-text" style={{userSelect:'text'}}>
-                        {parseHtmlTextChat(question.explanation)}
-                      </div>
-                    )}
+                    {!isCloze&&<div className={`text-center text-lg font-bold leading-snug md:text-2xl ${dm?'text-gray-100':'text-gray-900'} select-text`} style={{userSelect:'text'}}>{parseHtmlTextChat(question.expectedAnswer || '')}</div>}
+                    <FlashcardExplanation explanation={question.explanation} darkMode={dm}/>
                   </div>
                 )}
               </div>
@@ -1394,7 +1415,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
               onClick={()=>setRevealed(true)}
               className={`flashcard-reveal-btn mx-auto w-full max-w-md min-h-[54px] px-7 py-3.5 rounded-2xl border font-black transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] ${dm?'border-yellow-700 bg-yellow-900/40 text-yellow-100 hover:bg-yellow-900/60':'border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100'}`}
             >
-              <BookOpen className="w-4 h-4"/>Mostrar resposta
+              <BookOpen className="w-4 h-4"/>{revealLabel}
             </button>
           ) : (
             <div className="flashcard-answer-grid mx-auto grid w-full max-w-xl grid-cols-2 gap-3">
@@ -1430,13 +1451,14 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
   return (
     <div className={large ? 'flex-1 min-h-0 flex flex-col' : 'space-y-5'}>
       {!revealed ? (
-        <div className={`${minHeight} rounded-2xl border-2 border-dashed flex flex-col items-center ${large?'justify-end pb-6 md:pb-8':'justify-center'} text-center px-5 md:px-8 py-8 ${dm?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-gray-50'}`}>
+        <div className={`${minHeight} rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center px-5 md:px-8 py-8 ${dm?'border-gray-700 bg-gray-950/40':'border-gray-200 bg-gray-50'}`}>
+          {isCloze&&<div className={`mb-7 max-w-2xl text-lg font-semibold leading-relaxed md:text-xl ${dm?'text-gray-100':'text-gray-900'}`}>{renderClozeSentence(question.clozeText,false,dm)}</div>}
           <button
             type="button"
             onClick={()=>setRevealed(true)}
             className="w-full sm:w-auto min-h-[52px] px-7 py-3.5 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.99]"
           >
-            <BookOpen className="w-4 h-4"/>Mostrar resposta
+            <BookOpen className="w-4 h-4"/>{revealLabel}
           </button>
         </div>
       ) : (
@@ -1447,14 +1469,8 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
               style={{height:2, background:'linear-gradient(90deg, transparent, #d19a2d 18%, #d19a2d 82%, transparent)'}}
               aria-hidden="true"
             />
-            <div className="text-base md:text-xl font-bold leading-snug text-center select-text" style={{userSelect:'text'}}>
-              {parseHtmlTextChat(question.expectedAnswer || '')}
-            </div>
-            {question.explanation && (
-              <div className={`mt-5 pt-4 border-t text-base leading-relaxed select-text ${dm?'border-white/10':'border-black/10'}`} style={{userSelect:'text'}}>
-                {parseHtmlTextChat(question.explanation)}
-              </div>
-            )}
+            <div className="text-center text-lg font-bold leading-relaxed md:text-xl select-text" style={{userSelect:'text'}}>{isCloze?renderClozeSentence(question.clozeText,true,dm):parseHtmlTextChat(question.expectedAnswer || '')}</div>
+            <FlashcardExplanation explanation={question.explanation} darkMode={dm}/>
           </div>
 	          <div className="grid grid-cols-2 gap-3 mt-7">
 	            <button
@@ -1854,14 +1870,14 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               </div>
             </section>
           )}
-          <section className={questionText.caseContext ? 'mb-6' : ''}>
+          {!question.isCloze&&<section className={questionText.caseContext ? 'mb-6' : ''}>
             <div
               className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg font-normal ${questionText.caseContext?'leading-relaxed':'mb-6 leading-relaxed'}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
               style={{userSelect:'text'}}
             >
               {parseHtmlTextChat(questionText.statement)}
             </div>
-          </section>
+          </section>}
           {!!question.images?.length&&(
             <div className="mb-6 grid gap-3 sm:grid-cols-2">
               {question.images.map((image, imageIndex)=><figure key={image.id||image.url||imageIndex} className={`overflow-hidden rounded-xl border ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>

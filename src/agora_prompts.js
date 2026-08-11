@@ -109,6 +109,7 @@ REGRAS DA EXPLICAÇÃO:
 - Se o card pergunta uma interação, contraindicação ou risco, a explicação mostra a cadeia causal do problema.
 - Se o card pergunta uma definição/classificação, a explicação mostra o critério que diferencia isso de algo parecido.
 - Não use a explicação para despejar teoria, histórico, listas, "curso" ou informações que não ajudem a entender a resposta daquele card.
+- Não escreva comentários metalinguísticos como "isso é importante", "cai em prova", "vale lembrar" ou "ajuda a memorizar" sem explicar o mecanismo, a razão clínica ou a diferença relevante.
 - Tamanho da explicação: normalmente 2 a 4 frases curtas. Pode ser 1 frase se ela realmente explicar; pode passar disso apenas se for necessário para entender a resposta.
 - Teste de reprovação: se a explicação só trocar a resposta por sinônimos, listar a resposta de novo, ou disser apenas "é usado porque é eficaz/primeira linha", ela está ruim.
 - Exemplo ruim:
@@ -130,18 +131,19 @@ FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Flashcard N
 Pergunta: [pergunta curta e objetiva?]
 Resposta: [resposta curta, poucas palavras]
-Explicação: [explicação curta do porquê/como da resposta, sem virar aula]
+Explicação: [explique o mecanismo, a justificativa clínica ou o critério que torna a resposta correta]
 ---`,
 
   cloze: `
 TIPO: FLASHCARD CLOZE DELETION
 Crie flashcards cloze deletion em português do Brasil, no estilo AnKing.
-OBJETIVO: transformar fatos de alto rendimento em frases curtas com uma lacuna testável, usando o formato nativo do Anki. O aluno deve recuperar o termo oculto e, no Extra, entender por que ele é a resposta.
+OBJETIVO: transformar fatos de alto rendimento em frases rápidas com lacunas testáveis, usando o formato nativo do Anki. O aluno deve recuperar a unidade de memória ocultada e, no Extra, entender por que ela é correta.
 REGRAS CRÍTICAS:
 - Use sintaxe Anki real: {{c1::resposta}} ou, quando ajudar, {{c1::resposta::dica curta}}.
-- Cada bloco deve ter um alvo claro de recuperação. Se houver duas lacunas independentes com raciocínios diferentes, crie dois Clozes separados.
-- Se o fato é uma lista curta que funciona como unidade natural, use uma lacuna única com o conjunto completo: {{c1::item A, item B e item C}}.
-- Preferência forte: use sempre c1 em cada nota, para manter um cartão por nota e evitar cartões irmãos desnecessários.
+- Cada bloco deve ter um alvo claro de recuperação. Se houver lacunas independentes com raciocínios diferentes, crie notas separadas.
+- Quando vários trechos pertencem à mesma unidade natural de memória, marque todos com c1 na mesma nota. Eles devem ser ocultados e revelados juntos.
+- Agrupe listas fechadas, comparações, sequências, critérios e relações que façam sentido como uma única recuperação. Não pulverize uma ideia coerente em cartões minúsculos.
+- Use sempre c1 em cada nota para manter uma nota por unidade de memória e evitar cartões irmãos desnecessários.
 - A frase deve ser curta, natural e autossuficiente. O aluno deve entender o contexto sem ler uma explicação antes.
 - Cloze bom não é frase copiada do material: reescreva como afirmação testável, curta e com contexto suficiente.
 - A parte ocultada deve ser pequena: 1 a 6 palavras. Não oculte parágrafos, listas longas ou frases inteiras.
@@ -151,12 +153,14 @@ REGRAS CRÍTICAS:
 - Cada cloze deve ser testável em prova ou útil na vida real. Se não muda desempenho em prova, decisão clínica ou compreensão causal, exclua.
 - O campo Extra é explicação, não curso: explique por que o termo oculto pertence ali ou como ele produz o efeito perguntado.
 - O Extra NÃO pode apenas repetir a frase cloze com mais palavras. Se o cloze cobra efeito colateral, explique o motivo do efeito; se cobra escolha/conduta, explique a propriedade que justifica a escolha; se cobra risco/interação, explique a cadeia causal.
+- O Extra deve ter a qualidade de uma explicação de questão direta ou clínica: ensine o mecanismo, a justificativa da conduta ou o critério que diferencia opções próximas.
+- Não escreva comentários metalinguísticos como "isso é importante", "cai em prova", "vale lembrar" ou "ajuda a memorizar" sem explicar a razão médica.
 - Tamanho do Extra: normalmente 2 a 4 frases curtas, só o necessário para a resposta fazer sentido.
 - Antes de finalizar, revise: lacuna previsível? quantidade exata? lista curta agrupada quando deveria? lista longa dividida quando deveria? duplicação? card óbvio? corrija.
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
-Extra: [explicação curta do porquê/como do termo oculto, sem virar aula]
+Extra: [explique o mecanismo, a justificativa clínica ou o critério que torna a lacuna correta]
 ---`,
 };
 
@@ -192,13 +196,13 @@ const memoryCardFormat = (types = []) => onlyClozeCards(types) ? `
 FORMATO OBRIGATÓRIO:
 ## Cloze 1
 Texto: [frase curta com {{c1::termo oculto}}]
-Extra: [explicação curta do porquê/como do termo oculto]
+Extra: [explicação causal ou discriminativa que ensine por que a lacuna é correta]
 ---` : `
 FORMATO OBRIGATÓRIO:
 ## Flashcard 1
 Pergunta: [pergunta objetiva?]
 Resposta: [resposta curta]
-Explicação: [explicação curta do porquê/como da resposta]
+Explicação: [explicação causal ou discriminativa que ensine por que a resposta é correta]
 ---`;
 
 export const STYLE_INST = {
@@ -1387,8 +1391,8 @@ REGRA DE FIXAÇÃO (CRÍTICA):
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
 ${onlyFlashcards ? `REGRAS DA EXPLICAÇÃO:
-- Explique o porquê/como da resposta ou lacuna. A explicação deve ajudar quem errou a entender a resposta, sem virar aula.
-- Não repita o gabarito com mais palavras.` : explanationInst}
+- Explique o porquê/como da resposta ou lacuna com raciocínio causal, funcional ou discriminativo, como numa boa explicação de questão direta ou clínica.
+- Não repita o gabarito com mais palavras e não use comentários vazios como "isso é importante", "cai em prova" ou "vale lembrar".` : explanationInst}
 ${onlyFlashcards ? memoryCardFormat(types) : TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, caseSeries)}
 
 ${onlyFlashcards ? `Use IDs sequenciais simples: ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 1, ## ${onlyClozeCards(types) ? 'Cloze' : 'Flashcard'} 2...` : `Use IDs no formato SUBTOPICO.QUESTAO, sem colchetes, apenas para indicar o subtópico MAIS RELACIONADO à questão:
@@ -1406,6 +1410,199 @@ ${onlyFlashcards ? `Gere a bateria de ${memoryCardName(types)} sem interromper.`
 };
 
 // ─── PROMPT: BATERIA EXTRA DA ACADEMIA ────────────────────────────────────────
+
+export const buildFamedEssentialFlashcardsPrompt = ({
+  title,
+  lessonText,
+  pastQuestionsText,
+} = {}) => {
+  return `Você é um professor de medicina criando flashcards diretos essenciais para a aula "${title || 'Aula FAMED'}".
+
+OBJETIVO:
+Crie somente flashcards realmente essenciais, cruzando duas fontes:
+1. a aula da Academia, que define o conteúdo médico correto e importante para a prática;
+2. as questões antigas, que mostram como a disciplina costuma cobrar esse conteúdo em prova.
+
+FILTRO OBRIGATÓRIO EM CASCATA:
+Antes de incluir cada cartão, faça silenciosamente todas estas perguntas:
+- "Isto é realmente essencial para esta aula?"
+- "Eu preciso de um flashcard para aprender ou reter isto?"
+- "A recuperação ativa deste ponto realmente me ajudaria a lembrá-lo quando necessário?"
+- "Isto não pode ser deduzido por bom senso ou lógica genérica no momento da prova ou da prática?"
+
+O cartão só pode existir se passar claramente por TODOS os filtros. Rejeite qualquer candidato que seja importante, mas não precise ser memorizado por flashcard.
+
+Para passar pelo filtro de essencialidade, o conteúdo deve atender a pelo menos um destes critérios:
+- muda diagnóstico, conduta, prognóstico, segurança ou raciocínio clínico na vida real;
+- representa um fundamento sem o qual os demais conceitos da aula não podem ser entendidos;
+- corresponde a uma cobrança central ou recorrente evidenciada pelas questões antigas;
+- resolve uma diferenciação ou pegadinha de alto rendimento necessária para acertar a maioria da prova.
+
+FILTRO DE UTILIDADE DO FLASHCARD:
+- Flashcard serve para recuperar uma informação que precisa estar disponível de memória. Não o use para ensinar pela primeira vez um raciocínio longo, uma interpretação complexa ou uma conclusão que nasce naturalmente de dados apresentados.
+- Se o aluno consegue chegar à resposta por bom senso, lógica cotidiana, eliminação óbvia ou conselho genérico, não crie o cartão.
+- Se uma conclusão é consequência óbvia de uma regra central já transformada em cartão, mantenha apenas a regra central; não crie outro cartão para cada consequência dedutível.
+- Se o conteúdo é melhor aprendido resolvendo uma questão clínica, acompanhando uma explicação ou entendendo um mecanismo, não force um flashcard. Transforme em cartão apenas o pré-requisito essencial que realmente precise ser lembrado.
+- Não crie cartões sobre atitudes universais como monitorar, individualizar, orientar, avaliar risco-benefício, tratar a causa ou encaminhar casos graves, salvo quando houver um critério médico específico e não dedutível que precise ser memorizado.
+
+REGRAS DE SELEÇÃO:
+- Trabalhe pela regra 80/20: depois de levantar os candidatos, ordene-os por rendimento e retenha SOMENTE os 20% mais importantes para acertar a prova e atuar com segurança na vida real.
+- Dê peso maior à prova somente depois de filtrar a qualidade da cobrança. Questões antigas médias, difíceis ou realmente discriminativas são a principal evidência de quais conceitos, distinções, critérios, valores e condutas têm maior probabilidade de cobrança relevante.
+- Antes de usar uma questão antiga como evidência, classifique silenciosamente sua dificuldade real. Ignore como sinal de prioridade toda questão fácil, elementar, óbvia, respondível por bom senso, resolvida por eliminação de distratores absurdos, entregue pelo próprio enunciado ou que cobre uma recordação básica sem poder discriminativo.
+- A dificuldade depende do raciocínio necessário e da plausibilidade dos erros, não do tamanho do enunciado. Uma vinheta longa com resposta evidente continua fácil; uma pergunta curta que exige diferenciação não óbvia pode ser difícil.
+- Questão classificada como fácil fornece ZERO peso de prova: não crie um cartão para cobri-la, não preserve seu detalhe só porque apareceu no gabarito e não a use para completar a seleção.
+- Uma questão aparecer na prova ou se repetir não basta para torná-la high-yield: recorrência de cobrança trivial continua sendo trivial e não merece flashcard.
+- Nas questões médias e difíceis, priorize o conhecimento necessário para chegar ao gabarito, as diferenças entre alternativas plausíveis, integração de dados, critérios não óbvios, valores decisivos, exceções relevantes e pegadinhas que realmente mudam a resposta.
+- Ignorar uma questão fácil como evidência de prova não apaga o conceito correspondente da medicina. Ele só pode voltar à seleção se, independentemente daquela questão, for indispensável para diagnóstico, conduta, prognóstico ou segurança na vida real e também precisar genuinamente de memorização.
+- Use o espaço liberado pelas cobranças triviais para valorizar conhecimentos de maior utilidade clínica. Se a evidência de prova útil for pequena, não a complete com questões fáceis: componha o núcleo 20/80 com decisões, riscos e fundamentos de alto impacto na vida real.
+- A barra de entrada pelo eixo “vida real” também é alta: esquecer o ponto deve poder causar erro relevante de diagnóstico, escolha terapêutica, reconhecimento de risco ou segurança. Ser interessante, moderno, complementar, “potencialmente eficaz”, uma otimização modesta ou um detalhe que pode ser consultado não basta.
+- Manobras de nicho, cortes etários isolados, listas de rotina e opções complementares só entram sem apoio de questão média/difícil quando mudarem uma decisão clínica importante e não dedutível.
+- Aplique o teste contrafactual da relevância: “Se o aluno esquecer este dado, ele provavelmente errará uma questão média/difícil ou tomará uma decisão clínica materialmente pior antes de poder consultar a informação?”. Se a resposta for não, descarte o candidato.
+- Proporções técnicas de procedimento, metas gerais já conhecidas pelo público, números isolados sem consequência decisória, manobras de nicho e detalhes fáceis de consultar não pertencem ao núcleo 20/80 por serem específicos. Exija evidência clara de cobrança discriminativa ou impacto clínico antes de incluí-los.
+- Não confunda facilidade de formular uma pergunta com importância de memorizar a resposta. Um fato que produz um card bonito, curto e objetivo ainda deve ser excluído se for periférico.
+- Não transforme cada parágrafo, alternativa ou detalhe da aula em cartão. Estar na aula não torna um fato high-yield.
+- Não crie um cartão para cada questão antiga. Use as questões para ranquear conceitos, agrupar cobranças equivalentes e identificar o pequeno núcleo que explica a maior parte do desempenho.
+- Questões antigas que mandam citar, listar, enumerar ou nomear uma coleção não autorizam um flashcard de lista, mesmo quando essa era a resposta oficial. Elas podem indicar que o tema geral é relevante, mas o inventário pedido recebe ZERO peso como memória de flashcard.
+- Não copie a forma da questão antiga. Extraia apenas uma decisão ou diferenciação clinicamente útil que possa ser testada isoladamente; se a cobrança se resume a reproduzir a lista, não crie cartão a partir dela.
+- Distratores das questões antigas não são fatos verdadeiros. A aula é a referência para validar o conteúdo.
+- Corte curiosidades, exceções raras, números de baixo rendimento, listas periféricas, conselhos genéricos e detalhes que podem ser consultados quando necessários.
+- Elimine cartões redundantes e sobrepostos.
+- Os 20% são um filtro de importância, não uma quantidade fixa de cartões. A quantidade final deve ser consequência de quantas memórias atômicas sobreviverem ao filtro, sem teto, piso, faixa ou meta de cartões.
+
+FORMATO DIRETO E ATOMIZAÇÃO:
+- Depois da seleção, transforme cada memória aprovada em uma pergunta direta, curta e autossuficiente com resposta igualmente curta. Não use lacunas, frases para completar nem sintaxe do Anki.
+- Cada pergunta deve testar uma única relação: diagnóstico a partir de pistas, exame de escolha, conduta prioritária, fármaco/classe preferencial, efeito adverso decisivo, contraindicação específica, mecanismo central, limiar que muda decisão ou diferenciação entre conceitos próximos.
+- Não coloque diagnóstico, exame, mecanismo, conduta e prognóstico na mesma pergunta apenas porque pertencem à mesma doença.
+- A pergunta precisa deixar inequívoco O QUE deve ser recuperado e qual é o recorte. Prefira formulações como “Qual diagnóstico...?”, “Qual exame...?”, “Qual conduta...?”, “Qual fármaco...?” ou “Qual limiar...?” quando elas eliminarem ambiguidade.
+- Evite perguntas vagas como “O que você sabe sobre...?”, “Explique...”, “Quais são as características...?”, “Como manejar...?” ou “O que inclui...?”. Elas escondem vários alvos e produzem backs grandes.
+
+REGRA RÍGIDA DO BACK — NO MÁXIMO DOIS ITENS:
+- A Resposta deve exigir UM item por padrão e pode exigir DOIS somente quando ambos forem necessários para formar um par curto, inseparável e naturalmente recuperado junto.
+- Nunca exija três ou mais itens. Não peça listas de medicamentos, exames, achados, critérios, etapas, fatores de risco, indicações ou contraindicações.
+- “Item” significa uma unidade independente que o aluno precisaria conferir para decidir se acertou. Uma frase com três adjetivos, três critérios separados por vírgula, duas classes acompanhadas de alternativas ou uma enumeração disfarçada continua tendo vários itens.
+- Cada item deve ser curto: nome, diagnóstico, achado, exame, fármaco, classe, conduta, valor ou expressão médica compacta. A explicação e as ressalvas pertencem ao campo Explicação, não à Resposta.
+- Se o conteúdo essencial originalmente for uma lista longa, NÃO faça uma pergunta pedindo a lista inteira e NÃO fabrique automaticamente um cartão para cada item. Selecione apenas o item ou par com papel discriminativo próprio que também sobreviva ao filtro 20/80; se nenhum tiver valor isolado, não crie flashcard sobre a lista.
+- Se dois itens forem aceitos, a pergunta deve anunciar explicitamente que pede dois e a resposta deve conter somente esse par. Nunca faça o aluno descobrir quantos itens o avaliador esperava.
+- Faça a concordância de cardinalidade: pergunta no singular (“qual”, “que exame”, “que fármaco”, “qual conduta”) exige exatamente um item sem alternativas; pergunta que aceita o par excepcional precisa dizer explicitamente “quais dois” e o back precisa conter exatamente dois itens.
+- Nunca responda a uma pergunta no singular com alternativas unidas por “ou”, barra ou parênteses. Escolha uma resposta única adequada ao contexto ou reformule a pergunta para cobrar o conceito comum que engloba as alternativas. Barra permanece aceitável apenas dentro de notações indivisíveis, como uma razão ou medida padronizada, nunca como separador de respostas.
+
+FLASHCARD NÃO É INVENTÁRIO:
+- São proibidas perguntas iniciadas ou estruturadas como “cite”, “liste”, “enumere”, “quais são”, “mencione”, “nomeie as classes”, “quais exames” ou qualquer comando para recuperar uma coleção.
+- Também é proibido mostrar parte de uma lista na Pergunta e pedir os itens restantes. Citar três exames e perguntar pelos outros dois continua sendo memorização de lista e não se torna um bom card por reduzir o back.
+- Rejeite qualquer pergunta que use “além de X” para pedir outros membros do mesmo conjunto. Os dois itens permitidos precisam constituir o conjunto completo cobrado; não podem ser o restante de uma tríade, lista de sintomas, rotina, classificação ou relação maior parcialmente revelada na frente.
+- Não pergunte pelo conjunto de classes de medicamentos de primeira escolha, pela rotina de exames, por todos os critérios diagnósticos, por todos os efeitos adversos ou por todas as opções terapêuticas.
+- Para medicamentos, pergunte no máximo qual fármaco ou classe possui um papel ÚNICO em um cenário definido: preferência por determinada comorbidade, contraindicação decisiva, mecanismo discriminativo ou efeito adverso que muda a escolha.
+- Para exames, pergunte no máximo qual exame possui uma finalidade ÚNICA em um cenário definido: confirmação de uma hipótese, rastreamento de uma causa específica, avaliação inicial prioritária ou achado que muda estratificação/conduta.
+- A mera pertença de um medicamento a uma classe ou de um exame a uma rotina não é uma memória suficientemente útil. Se não houver papel individual e decisório, descarte o candidato.
+- O par excepcional de dois itens não pode ser usado para começar uma lista. Ele precisa constituir uma unidade consagrada e indivisível; caso contrário, mantenha apenas o item decisivo ou não crie o cartão.
+
+DIREÇÃO DA PERGUNTA — NÚCLEO SEMÂNTICO:
+- Antes de escrever, identifique: (a) a entidade central a ser reconhecida ou decidida; (b) as pistas, causas, critérios ou consequências que permitem reconhecê-la; e (c) a relação entre elas.
+- Quando pistas W e Z identificam a entidade Y, apresente W e Z na Pergunta e peça Y na Resposta. Não pergunte por uma pista periférica apenas porque ela aparecia no fim da frase original.
+- Direções adequadas: um padrão pressórico pergunta qual é o diagnóstico; uma tríade discriminativa pergunta qual doença ela sugere; uma quantidade de classes em uso pergunta como a hipertensão é classificada.
+- Pergunte por um atributo, exame, fármaco, valor ou conduta somente quando ele for o alvo pedagógico central e houver uma única resposta relevante — ou um par explicitamente solicitado e inseparável.
+- Faça o teste de direção: “Minha pergunta cobra aquilo que as pistas identificam ou apenas pede para recitar uma das próprias pistas?”. Se for apenas recitação periférica, inverta a pergunta ou descarte o cartão.
+
+TESTES DE QUALIDADE DA PERGUNTA:
+- Resposta única: se mais de uma resposta não equivalente puder ser considerada correta, especifique melhor o contexto ou descarte o cartão.
+- Cardinalidade verificável: conte os itens independentes do back e compare com o comando da pergunta. Singular com duas respostas, plural sem quantidade definida ou “quais dois” com mais/menos de dois são erros e o cartão deve ser reescrito ou descartado.
+- Granularidade: se o aluno puder lembrar o conceito principal, mas ainda assim “errar” por esquecer o terceiro item de uma lista, o card está mal formulado.
+- Utilidade: se a resposta estiver praticamente escrita na pergunta, for dedutível pelos danos enumerados ou apenas completar uma frase óbvia, não crie o cartão.
+- Não transforme uma lista antiga em “qual item falta?” e não pergunte “quais são” quando o back ultrapassaria dois itens.
+- Antes de aprovar, procure verbos de inventário na Pergunta e enumerações explícitas ou implícitas na Resposta. Se encontrar, descarte o cartão; não tente consertá-lo repartindo a lista.
+- Pergunta e Explicação precisam afirmar a mesma coisa com o mesmo grau de certeza. Se a Explicação precisa corrigir a pergunta com “embora”, “principalmente”, “em geral”, “nos não seletivos” ou outra ressalva, reescreva a pergunta para não transformar cautela em contraindicação absoluta nem associação em regra universal.
+
+EXPLICAÇÃO OBRIGATÓRIA:
+- O campo Explicação deve ensinar quem errou: explique por que a resposta é verdadeira, como o mecanismo funciona, qual achado a diferencia de alternativas próximas ou por que ela muda a conduta.
+- Não repita apenas a resposta e não escreva comentários metalinguísticos como "isso é importante", "cai em prova" ou "vale lembrar" sem explicar a razão médica.
+- Frases como “as diretrizes recomendam”, “há boa evidência”, “esta definição é crucial”, “é uma forma grave” ou “exige avaliação especializada” não constituem explicação por si mesmas. Diga o mecanismo, a consequência decisória ou a diferença para o concorrente mais próximo.
+- Quando a pergunta apresenta pistas para recuperar um diagnóstico ou conceito, a Explicação deve mostrar por que essas pistas apontam para ele e como o distinguem da alternativa plausível mais próxima.
+- Quando a Resposta cobra um valor ou limiar, explique o que muda clinicamente nesse ponto. Se não houver consequência relevante além de decorar o número, o cartão provavelmente não passou pelo filtro de essencialidade.
+- Use a mesma qualidade causal e discriminativa esperada na explicação de uma questão direta ou clínica.
+- Seja conciso: encerre a explicação assim que o motivo daquele alvo estiver claro. Não transforme a Explicação em resumo da aula nem acrescente fatos periféricos.
+
+FORMATO OBRIGATÓRIO (repita para cada cartão aprovado):
+## Flashcard N
+Pergunta: [pergunta direta, curta, autossuficiente e inequívoca]
+Resposta: [um item curto; excepcionalmente dois itens curtos se a pergunta pedir explicitamente o par]
+Explicação: [explicação causal, funcional ou discriminativa que realmente ensine o porquê ou o como]
+---
+
+AULA DA ACADEMIA:
+${String(lessonText || '')}
+
+QUESTÕES ANTIGAS:
+${String(pastQuestionsText || '')}
+
+Antes de responder, revise silenciosamente cada cartão nesta ordem: dificuldade e rendimento do conteúdo; teste contrafactual de relevância; necessidade real de flashcard; direção do núcleo semântico; ausência de lista parcial; concordância singular/plural; quantidade de itens no back; resposta única; qualidade da Explicação. Entregue somente os flashcards diretos aprovados. Não entregue relatório, justificativa da seleção, categorias ou conteúdo fora do formato.`;
+};
+
+export const buildFamedQuestionPackagePrompt = ({ title } = {}) => `Vou anexar uma prova antiga, gabarito e, quando existirem, páginas ou imagens complementares. Converta esse material em um pacote importável pela área FAMED da Ágora do Saber para a aula "${title || 'Aula FAMED'}".
+
+ENTREGA OBRIGATÓRIA:
+- Sua resposta final deve ser um arquivo ZIP baixável, não texto, Markdown, bloco de código, link fictício nem conteúdo em base64.
+- O ZIP não pode ter senha e deve conter questions.json na raiz e, somente quando necessário, uma pasta images/.
+- Não inclua relatório, README, arquivos temporários ou qualquer item fora dessa estrutura.
+
+FIDELIDADE À PROVA:
+- Transcreva integralmente todos os enunciados, casos, comandos e alternativas, preservando conteúdo, ordem e sentido. Corrija apenas ruído inequívoco de OCR e formatação quebrada.
+- Nunca resuma, modernize, complete ou reescreva uma questão antiga.
+- Use o gabarito oficial anexado. Não invente resposta. Se uma questão estiver ilegível ou não tiver gabarito confiável, não a fabrique: registre o problema antes de gerar o ZIP e peça o arquivo faltante.
+- Em explanation, produza uma explicação médica útil: explique por que o gabarito está correto e, nas objetivas, por que os distratores estão errados. Não use comentários vazios como "é a correta", "cai em prova" ou "vale lembrar".
+- Em options[].explanation, explique especificamente o acerto ou o erro daquela alternativa, com raciocínio causal, clínico ou discriminativo.
+
+IMAGENS:
+- Toda figura necessária para compreender ou responder a uma questão deve ser extraída para um arquivo próprio dentro de images/ e vinculada à questão correspondente.
+- Recorte apenas a figura relevante; não use uma captura da página inteira quando for possível isolar a imagem.
+- Preserve letras, setas, escalas e legendas que façam parte da figura. Não redesenhe nem gere uma imagem nova.
+- Use PNG, JPG, JPEG, WEBP ou GIF. Comprima cada imagem para ficar abaixo de 600 KB sem perder informação diagnóstica.
+- Use nomes únicos, minúsculos, sem acentos nem espaços, por exemplo images/q12-radiografia.png.
+- altText deve descrever o tipo de figura sem revelar o diagnóstico nem a resposta.
+- Se a questão não depende de imagem, use images: [].
+
+CONTRATO EXATO DE questions.json:
+{
+  "schema": "agora-famed-question-package-v1",
+  "title": "nome da prova ou avaliação",
+  "questions": [
+    {
+      "id": "q1",
+      "statement": "enunciado da questão",
+      "caseContext": "caso clínico separado, ou string vazia",
+      "options": [
+        {
+          "letter": "A",
+          "text": "texto integral da alternativa",
+          "isCorrect": false,
+          "explanation": "por que esta alternativa está correta ou errada"
+        }
+      ],
+      "explanation": "explicação didática completa do gabarito",
+      "expectedAnswer": "resposta esperada apenas para questão aberta",
+      "isOpen": false,
+      "isEssay": false,
+      "images": [
+        {
+          "file": "images/q1-figura.png",
+          "altText": "descrição neutra da figura",
+          "credit": "fonte, quando constar no original"
+        }
+      ]
+    }
+  ]
+}
+
+REGRAS DO JSON:
+- JSON UTF-8 válido, sem comentários, vírgulas finais ou campos fora do contrato.
+- IDs de questões devem ser únicos e estáveis.
+- Em questão objetiva, options deve preservar todas as alternativas e exatamente uma deve ter isCorrect: true.
+- Em questão aberta/dissertativa, use options: [], isOpen: true e preencha expectedAnswer com base no gabarito oficial.
+- Use quebras de linha escapadas como \\n dentro de strings quando necessário.
+- Cada caminho images[].file deve corresponder exatamente a um arquivo existente no ZIP; não deixe imagem sem vínculo nem vínculo sem arquivo.
+
+Antes de entregar, valide silenciosamente o JSON, confira todos os gabaritos, abra cada imagem e confirme que o ZIP contém tudo de que o site precisa. Depois devolva somente o arquivo ZIP.`;
+
+// ─── PROMPT: FLASHCARDS ESSENCIAIS DA FAMED ──────────────────────────────────
 
 export const buildAcademiaExtraBatteryPrompt = (topicTitle, subtopics, s, lessonText = '', previousQuestions = '', questionPlan = null) => {
   const na = effectiveAlternativeCount(s);

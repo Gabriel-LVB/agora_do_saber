@@ -92,6 +92,13 @@ try {
   await assertFails(getDoc(doc(studentDb, 'famed_content', 'cardio-rascunho')));
   await assertSucceeds(getDocs(query(collection(studentDb, 'famed_content'), where('published', '==', true))));
   await assertSucceeds(getDoc(doc(adminDb, 'famed_content', 'cardio-rascunho')));
+  await assertFails(setDoc(doc(studentDb, 'famed_assets', 'figura-publicada'), { published:true }));
+  await assertSucceeds(setDoc(doc(adminDb, 'famed_assets', 'figura-publicada'), { published:true, dataUrl:'data:image/png;base64,AA==' }));
+  await assertSucceeds(setDoc(doc(adminDb, 'famed_assets', 'figura-rascunho'), { published:false, dataUrl:'data:image/png;base64,AA==' }));
+  await assertSucceeds(getDoc(doc(studentDb, 'famed_assets', 'figura-publicada')));
+  await assertFails(getDoc(doc(otherStudentDb, 'famed_assets', 'figura-publicada')));
+  await assertFails(getDoc(doc(studentDb, 'famed_assets', 'figura-rascunho')));
+  await assertSucceeds(getDoc(doc(adminDb, 'famed_assets', 'figura-rascunho')));
   await assertSucceeds(getDoc(doc(studentDb, 'config', 'site_ui')));
   await assertSucceeds(getDoc(doc(studentDb, 'config', 'access_whitelist')));
   await assertSucceeds(getDoc(doc(otherStudentDb, 'config', 'access_whitelist')));

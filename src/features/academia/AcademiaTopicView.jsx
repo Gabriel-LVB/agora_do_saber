@@ -107,12 +107,6 @@ function AcademiaTopicView({
   const liveTopic = liveSubject?.topics?.find(t => t.id === topic.id) || topic;
   const subtopics = liveTopic.subtopics || [];
   const hasLesson = liveTopic.lessonGenerated;
-  const hideSubtopicTitles = true;
-  const isContinuousNarrative = liveTopic.lessonFormat === 'narrative'
-    && Number(liveTopic.lessonPresentationVersion || 0) >= 2;
-  const continuousNarrativeContent = isContinuousNarrative
-    ? subtopics.map((_, index) => liveTopic.lessonSections?.[index]?.content || '').filter(Boolean).join('\n\n')
-    : '';
   const setLessonLength = (length) => {
     const ns = { ...settings, explanationLength: length };
     setSettings(ns);
@@ -319,7 +313,6 @@ function AcademiaTopicView({
   );
 
   const allFixqs = subtopics.flatMap((_, idx) => liveTopic.fixationQuestions?.[idx] || []);
-  const allFixAnswered = allFixqs.length > 0 && allFixqs.every(q => hasSavedAnswer(q.id));
   const fixationErrorReviews = findErrorNotebookReviewsForSource ? findErrorNotebookReviewsForSource({
     subjectTitle:[liveSubject.title, 'Fixação'],
     topicTitle:[liveTopic.title, 'Questões de fixação'],
@@ -332,9 +325,9 @@ function AcademiaTopicView({
         <ArrowLeft className="w-4 h-4"/>Voltar
       </button>
       <div className="mb-10">
-        <div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{liveSubject.title}</div>
+        {liveTopic.id!=='__all__'&&<div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{liveSubject.title}</div>}
         <h1 className={`text-3xl mobile-title-lg mobile-wrap font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{liveTopic.title}</h1>
-        {hasLesson && (
+        {hasLesson && (isAdmin || canUseAcademia) && (
           <div className="flex items-center gap-3 mt-4 flex-wrap">
 	            <button onClick={()=>setAcademiaExportModal({topic:liveTopic, subject:liveSubject})}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
@@ -424,63 +417,40 @@ function AcademiaTopicView({
       {/* Conteúdo */}
       {hasLesson && !academiaGenerating && (
         <div>
-          {/* Explicações */}
+          {subtopics.length > 1 && (
+            <nav aria-label="Sumário da aula" className={`mb-10 rounded-2xl border p-5 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+              <p className={`mb-3 text-xs font-bold uppercase tracking-widest ${darkMode?'text-yellow-400':'text-yellow-700'}`}>Nesta aula</p>
+              <ol className="grid gap-2 md:grid-cols-2">
+                {subtopics.map((subtopic, idx) => {
+                  const section = liveTopic.lessonSections?.[idx];
+                  return <li key={`summary-${idx}`}><button type="button" onClick={()=>document.getElementById(`academia-chapter-${liveTopic.id}-${idx}`)?.scrollIntoView({behavior:'smooth',block:'start'})} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${darkMode?'hover:bg-gray-800 text-gray-300':'hover:bg-white text-gray-700'}`}><span className="font-bold tabular-nums text-yellow-600">{String(idx+1).padStart(2,'0')}</span><span className="leading-snug">{section?.title || subtopic}</span></button></li>;
+                })}
+              </ol>
+            </nav>
+          )}
 
-          {isContinuousNarrative ? (
-            continuousNarrativeContent
-              ? <div className="reading-content mb-8">{renderLesson(continuousNarrativeContent)}</div>
-              : <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível.</p>
-          ) : subtopics.map((subtopic, idx) => {
-	            const section = liveTopic.lessonSections?.[idx];
+          {subtopics.map((subtopic, idx) => {
+            const section = liveTopic.lessonSections?.[idx];
+            const chapterQuestions = liveTopic.fixationQuestions?.[idx] || [];
             return (
-              <div key={idx} className={hideSubtopicTitles ? 'mb-5' : 'mb-8'}>
-                {!hideSubtopicTitles && (
-                  <h2 className={`text-base font-semibold leading-snug mb-5 ${darkMode?'text-gray-100':'text-gray-900'}`}><span className={`text-sm font-bold tabular-nums mr-2 ${darkMode?'text-yellow-500':'text-yellow-600'}`}>{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
-                )}
+              <section id={`academia-chapter-${liveTopic.id}-${idx}`} key={idx} className={`scroll-mt-6 py-8 first:pt-0 ${idx>0?(darkMode?'border-t border-gray-800':'border-t border-gray-200'):''}`}>
+                <h2 className={`mb-6 font-serif text-2xl font-bold leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}><span className="mr-3 text-base font-bold tabular-nums text-yellow-600">{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
                 {section?.content ? (
-                  <div className={`reading-content space-y-3 ${hideSubtopicTitles?'mb-5':'mb-8'}`}>{renderLesson(section.content)}</div>
+                  <div className="reading-content mb-8 space-y-3">{renderLesson(section.content)}</div>
                 ) : (
-                  <p className={`italic text-sm mb-8 ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este subtópico.</p>
+                  <p className={`mb-8 text-sm italic ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este capítulo.</p>
                 )}
-              </div>
+                {chapterQuestions.length > 0 && (
+                  <div className={`mt-8 rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
+                    <div className="mb-5 flex items-center justify-between gap-3">
+                      <div><p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Fixação do capítulo</p><p className="mt-1 text-xs opacity-50">{chapterQuestions.length} questão{chapterQuestions.length!==1?'ões':'ão'}</p></div>
+                    </div>
+                    {chapterQuestions.map((question, questionIndex)=>renderFixQ(question,questionIndex))}
+                  </div>
+                )}
+              </section>
             );
           })}
-
-          {/* Fixação no final */}
-          {allFixqs.length > 0 && (
-            <div className={`mt-4 pt-12 border-t ${darkMode?'border-gray-800':'border-gray-100'}`}>
-              <div className="flex items-center justify-between mb-8 gap-3">
-                <p className={`text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Questões de fixação</p>
-                {!!setSrModal && (allFixAnswered || fixReviewCount>0) && (
-                  <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                    <RepeatIcon className="w-3.5 h-3.5"/>{fixReviewCount>0?`Gerenciar (${fixReviewCount})`:'Revisão'}
-                  </button>
-                )}
-              </div>
-              <div className={`rounded-2xl border p-5 text-center ${darkMode?'bg-gray-900 border-gray-800':'bg-gray-50 border-gray-100'}`}>
-                <p className={`text-sm mb-4 ${darkMode?'text-gray-400':'text-gray-500'}`}>{allFixqs.length} questão{allFixqs.length!==1?'s':''} de fixação disponível{allFixqs.length!==1?'is':''} no banco de questões.</p>
-                <button onClick={()=>onOpenAcademiaQuestions?.(liveSubject, liveTopic, 'fixation')}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-yellow-600 text-white hover:bg-yellow-700">
-                  <GraduationCap className="w-4 h-4"/>Questões de fixação
-                </button>
-                {fixationErrorReviews.length > 0 && (
-                  <button onClick={()=>openErrorNotebookReviewResult?.(fixationErrorReviews[0])}
-                    className={`ml-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-yellow-700 text-yellow-400 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-700 hover:bg-yellow-50'}`}>
-                    <BookOpen className="w-4 h-4"/>{fixationErrorReviews.length>1?`Revisões geradas (${fixationErrorReviews.length})`:'Revisão gerada'}
-                  </button>
-                )}
-              </div>
-              {!!setSrModal && (allFixAnswered || fixReviewCount>0) && (
-                <div className="text-center mt-4">
-                  <button onClick={()=>openAcademiaReview(allFixqs, fixReviewBlockId, 'Questões de fixação')}
-                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:bg-gray-800':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                    <RepeatIcon className="w-4 h-4"/>{fixReviewCount>0?`Gerenciar revisão (${fixReviewCount})`:'Adicionar à revisão'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Baterias extras */}
 	          {(liveTopic.extraBattery||[]).map((bloco, blocoIdx) => {
@@ -523,14 +493,12 @@ function AcademiaTopicView({
 	          })}
 
           {/* Gerar bateria extra */}
-          <div className={`mt-16 pt-10 border-t text-center ${darkMode?'border-gray-800':'border-gray-100'}`}>
-            {canUseAcademia && (
+          {canUseAcademia&&<div className={`mt-16 pt-10 border-t text-center ${darkMode?'border-gray-800':'border-gray-100'}`}>
               <button onClick={()=>setAcademiaExtraModal({topic:liveTopic, subject:liveSubject})} disabled={academiaExtraBusy}
                 className={`text-sm font-bold px-6 py-3 rounded-xl border-2 transition-all disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
                 {academiaExtraBusy?'Gerando...':'+ Gerar bateria extra'}
               </button>
-            )}
-          </div>
+          </div>}
 
           {/* Regenerar */}
           {canUseAcademia && (

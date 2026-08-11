@@ -1,6 +1,6 @@
 # Ágora do Saber — guia de contexto para IAs
 
-> Última conferência manual: 30 de julho de 2026.
+> Última conferência manual: 10 de agosto de 2026.
 >
 > Este é o documento principal para dar contexto a uma IA antes de pedir análise ou alterações no projeto. Ele descreve o produto, a arquitetura, os dados, as permissões e as regras que não devem ser quebradas. O código continua sendo a fonte de verdade: se este guia divergir do código, confirme a implementação atual e atualize este arquivo.
 
@@ -730,6 +730,28 @@ Quando uma criação nasce do cronograma FAMED, o assunto recebe:
 
 `persistAcademiaSubject` então delega a `saveFamedAcademiaSubject`, em vez de gravar na biblioteca do admin.
 
+O `academiaSubject` também pode manter materiais de estudo próprios da aula:
+
+```js
+famedStudy: {
+  pastQuestionSets: [{ id, title, importedAt, packageSchema, questions: [...] }],
+  essentialFlashcards: [...],
+  flashcardSourceSignature,
+  flashcardGeneratedAt,
+  flashcardGenerationVersion: 'famed-essential-direct-v9'
+}
+```
+
+Cada card de aula publicado expõe exatamente três ações de estudo: **Academia**, **Questões antigas** e **Flashcards**. Para o aluno, Academia abre a aula inteira em leitura contínua, com sumário no início e as questões de fixação logo abaixo do capítulo correspondente; a lista administrativa de tópicos não aparece como etapa intermediária.
+
+Questões antigas são importadas por um ZIP versionado (`agora-famed-question-package-v1`) com `questions.json` na raiz e figuras em `images/`. A interface fornece um prompt completo para gerar esse pacote no GPT. Os dados estruturais ficam no conjunto de `famedStudy`; cada descritor de imagem guarda um `assetId`, enquanto o `dataUrl` correspondente fica em `famed_assets/{assetId}` para não inflar o documento principal. O site valida caminhos, formatos, tamanho, gabaritos e vínculos antes de salvar, hidrata as imagens ao abrir o bloco e continua usando o `QuestionView`.
+
+Flashcards só podem ser gerados quando todos os tópicos possuem aula efetivamente gerada e existe ao menos uma questão antiga. A geração cruza a aula, como fonte factual, com as provas antigas, como evidência de prioridade, e aplica dois filtros obrigatórios antes de criar qualquer cartão: o conteúdo precisa ser essencial e também precisar genuinamente de recuperação por flashcard. Pontos dedutíveis por bom senso, lógica genérica, consequência óbvia de uma regra já coberta ou atitudes universais devem ser descartados, mesmo que sejam importantes. Antes de atribuir peso de prova, o modelo classifica silenciosamente a dificuldade das questões antigas: cobranças fáceis, elementares, óbvias, entregues pelo enunciado ou resolvíveis por bom senso/distratores absurdos recebem peso zero, ainda que recorrentes. O peso maior da prova vem das questões médias, difíceis e discriminativas; o espaço liberado pelas triviais deve favorecer decisões, riscos e fundamentos de alto impacto clínico. Ignorar uma questão fácil não proíbe seu conceito de entrar por relevância médica própria, mas essa entrada exige que esquecê-lo possa causar erro relevante de diagnóstico, tratamento, reconhecimento de risco ou segurança; novidade, otimização modesta, opção complementar e detalhe consultável não bastam. Depois dessa seleção, aplique a regra 80/20 sem transformar a proporção em teto, piso, faixa ou meta de cartões.
+
+Os cartões da FAMED são diretos, sem cloze: a frente é uma pergunta curta e autossuficiente, e o back exige um item curto por padrão. Dois itens curtos só são permitidos quando formam um par inseparável e a pergunta anuncia explicitamente que espera dois; três ou mais itens são proibidos. Não peça listas de medicamentos, exames, achados, critérios, etapas, fatores ou condutas. Verbos de inventário como “cite”, “liste”, “enumere”, “quais são”, “mencione” e equivalentes são proibidos; questões antigas desse tipo podem priorizar o tema, mas sua lista recebe peso zero como memória. Também não mostre parte da lista para pedir o restante: construções “além de X” são proibidas, e o par excepcional deve constituir o conjunto completo, nunca o resto de uma tríade/lista. Pergunta no singular exige exatamente um item sem alternativas; o par precisa ser anunciado como “quais dois” e conter exatamente dois. Não use “ou”/barra para oferecer respostas alternativas a uma pergunta singular, salvo notação indivisível. Medicamentos e exames só podem ser cobrados individualmente por um papel decisório específico, nunca por mera pertença a uma classe ou rotina. Não fragmente automaticamente uma lista de baixo rendimento em vários cartões apenas para contornar o limite: cada item precisa sobreviver sozinho ao filtro 20/80 e ter papel discriminativo próprio. Detalhes periféricos passam pelo teste contrafactual: se esquecê-los não causar provavelmente erro em questão média/difícil ou decisão clínica materialmente pior antes de consulta, ficam fora. A direção segue o núcleo semântico: quando pistas/causas/critérios W e Z identificam a entidade Y, apresente W e Z na pergunta e peça Y na resposta. Pergunta e Explicação precisam preservar o mesmo grau de certeza; uma ressalva não pode corrigir uma generalização absoluta. A Explicação deve ensinar mecanismo, consequência decisória ou diferença para a alternativa plausível mais próxima; apelos vazios a diretrizes, evidência, gravidade ou importância não bastam. Um valor/limiar só merece cartão quando a Explicação esclarece o que muda clinicamente naquele ponto. Preserve a assinatura das fontes e a versão da política: se aula, questões antigas ou versão de geração mudarem, o conjunto fica desatualizado, deve sumir para alunos e aparecer ao admin como **Atualizar flashcards**. O admin também pode apagar o conjunto para gerá-lo novamente.
+
+O card administrativo de Flashcards também oferece **Exportar para revisar o prompt**. A ação baixa `agora-famed-flashcard-audit-v1` com os flashcards salvos, metadados/assinaturas da geração, checklist e as fontes textuais da aula e das questões antigas. Trata-se de auditoria para calibrar versões futuras do prompt; não crie uma quarta ação de estudo, não filtre o resultado no cliente e não altere a persistência ao exportar.
+
 Escopo vigente:
 
 - currículo PPC 2018;
@@ -739,11 +761,11 @@ Escopo vigente:
 - S1–S4 e internato fora do escopo;
 - não importar datas, horários, professores, segundas chamadas ou AFs de cronogramas antigos.
 
-Não crie editor paralelo, importação ZIP, geração externa em lote ou dependência de Firebase Storage. O conteúdo deve continuar reutilizando o fluxo da Academia. Alunos veem apenas itens `published == true`; rascunhos são admin-only.
+Não crie editor paralelo, geração externa da aula em lote ou dependência de Firebase Storage. A única importação ZIP autorizada é o pacote versionado de questões antigas e suas figuras. O conteúdo da aula deve continuar reutilizando o fluxo da Academia. Alunos veem apenas itens e assets com `published == true`; rascunhos são admin-only.
 
 Hoje respostas e favoritos específicos da UI FAMED são mantidos em `localStorage` (`agora_famed_answers` e `agora_famed_favorites`). Não presuma sincronização multi-dispositivo sem implementar explicitamente uma migração.
 
-O admin pode remover uma Academia FAMED diretamente no card. Essa exclusão remove somente `famed_content/{id}` — conteúdo, aulas e questões embutidas —, preserva as videoaulas do Portal do Curso e mantém o item estático do cronograma disponível para recriação. A confirmação deve explicitar essa separação.
+O admin pode remover uma Academia FAMED diretamente no card. Essa exclusão remove `famed_content/{id}` e os documentos `famed_assets` ligados a esse conteúdo — aulas, questões e figuras do pacote —, preserva as videoaulas do Portal do Curso e mantém o item estático do cronograma disponível para recriação. A confirmação deve explicitar essa separação.
 
 Os cards do cronograma FAMED também podem mostrar videoaulas do Portal do Curso que cobrem o mesmo assunto. O vínculo é exclusivamente curado por IDs estáveis em `features/famed/famedCourseLessonMap.js`; nunca o infira por palavras do título, tópico ou descrição. A resolução sempre preserva `courseIndex`, a ordem real do catálogo aplicado. Somente o admin vê **Exportar aulas do curso**, que gera um JSON sem transcrições nem URLs com a ordem e os identificadores necessários para revisar e versionar esse mapa. O snapshot conferido fica em `data/famed/course-catalog.snapshot.json`; o atual foi exportado em 1º de agosto de 2026 e contém 488 aulas. Há 15 itens FAMED vinculados e quatro conscientemente sem cobertura direta, registrados em `FAMED_COURSE_LESSON_MAP.unmapped`. Sem vínculo curado, o aluno não vê mensagem alegando que a aula não existe. Não confunda esse atalho com o conteúdo próprio da Academia FAMED.
 
@@ -826,7 +848,7 @@ Geração pode ser longa, parcial e retomável. Preserve flags `generating`, ín
 | `shared_library/{id}` + `chunks` | conteúdo global do curso | admin ou curso+publicado | admin |
 | `shared_library/{id}/metadata_chunks/{id}` | metadados e progresso da curadoria | admin | admin |
 | `famed_content/{id}` | aula FAMED | admin ou curso+publicado | admin |
-| `famed_assets/{id}` | coleção legada para limpeza | admin | admin |
+| `famed_assets/{id}` | imagens de questões antigas FAMED | admin ou curso+publicado | admin |
 | `access_logs/{id}` | auditoria de acesso | admin; criação pelo próprio usuário | próprio usuário/admin |
 | `user_devices/{id}` | presença/dispositivos | admin; criação pelo próprio usuário | próprio usuário/admin |
 
@@ -935,7 +957,7 @@ Use `deferInteractionWork`. Não bloqueie o feedback esperando Firestore.
 - Alguns fluxos FAMED persistem progresso apenas localmente.
 - O modo backend Gemini não cobre streaming nem chaves individuais por usuário.
 - O e-mail admin existe tanto em configuração de frontend quanto nas regras; ao trocar, alinhe deploy, regras e testes.
-- A coleção legada `famed_assets` existe somente para limpeza administrativa.
+- `famed_assets` guarda imagens compactadas dos pacotes de questões antigas; o campo `published` precisa acompanhar o conteúdo FAMED pai.
 - Carregamento de PDF/DOCX injeta PDF.js e Mammoth a partir de CDN no navegador.
 - A integração Anki depende de AnkiConnect local e das limitações de CORS do navegador.
 - No Windows, algumas asserções de `scripts/unit-smoke.mjs` ainda presumem quebra de linha LF e podem falhar se `src/App.jsx` estiver em CRLF, mesmo sem alteração funcional.
