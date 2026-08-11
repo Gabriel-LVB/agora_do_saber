@@ -2,6 +2,12 @@
  * ÁGORA DO SABER — PROMPTS
  */
 
+import {
+  CLOZE_FLASHCARD_RULES,
+  DIRECT_FLASHCARD_RULES,
+  MEMORY_CARD_SELECTION_RULES,
+} from './prompts/memoryCardPolicy.js';
+
 export const SYLLABUS_LIMITS = {
   oracle: {
     minTopics: 2,
@@ -72,91 +78,21 @@ NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa corr
 
   flashcard: `
 TIPO: FLASHCARD
-Crie flashcards em português do Brasil como especialista em educação médica, residência e neurociência da aprendizagem.
-OBJETIVO: os cartões devem ensinar por recuperação ativa. O aluno deve tentar responder, errar se não souber, ler a explicação e pensar "agora entendi"; na próxima revisão, deve conseguir responder.
-QUANTIDADE: não use quantidade fixa. Gere o menor conjunto útil que preserve cobertura de alto rendimento. Para caderno de erros, lacunas declaradas pelo usuário ou conteúdo explicitamente marcado como crítico, trate tudo como lacuna importante e não omita pontos acionáveis.
-PRINCÍPIO DE GRANULARIDADE:
-- "Atômico" não significa separar tudo em cards minúsculos. Significa que o aluno sabe exatamente o que precisa recuperar.
-- Agrupe itens quando eles formam uma unidade natural de prova ou prática, como "3 efeitos adversos que mais limitam o uso", "monitorização obrigatória", "tríade clássica" ou "fármacos que aumentam lítio". Nesses casos, o conjunto curto é uma única memória.
-- Separe em cards diferentes quando os itens têm usos, mecanismos, decisões ou explicações diferentes e seriam estudados melhor isoladamente.
-- Não crie três cards fracos para três efeitos adversos se um card bom perguntando "quais 3 principais efeitos adversos?" resolve melhor. Crie cards separados apenas para efeitos que exigem mecanismo, conduta ou pegadinha própria.
-- Listas são permitidas se forem curtas, fechadas e úteis. Limite normal: 2 a 4 itens. Nunca peça lista aberta.
-
-REGRAS DA PERGUNTA:
-- Frente curta, direta e previsível. Prefira 6 a 18 palavras, mas inclua contexto suficiente para uma única resposta justa.
-- Toda pergunta deve terminar com ponto de interrogação.
-- Evite começar muitos cartões com "Qual a principal indicação/característica/conduta". Varie a formulação e deixe claro o alvo da memória.
-- Evite perguntas abertas genéricas como "O que é X?", "Defina X" ou "Qual a principal característica de X?" quando a resposta puder ser ampla demais.
-- Evite perguntas de sim/não. Em vez de "Lamotrigina trata mania aguda?", prefira "Lamotrigina: em qual fase bipolar ela é fraca/ineficaz?".
-- PROIBIDO "cite um efeito adverso" com resposta contendo várias opções. Se quer um exemplo, a resposta deve ter um exemplo; se quer o conjunto, pergunte o conjunto.
-- Se a pergunta disser "dois", "três", "(2)" ou "(3)", a resposta deve ter exatamente essa quantidade. Nunca peça 2 e responda 3.
-- Não use "ou" na resposta salvo quando a pergunta pedir explicitamente alternativas equivalentes. Preferencialmente escolha um conjunto fixo ou divida o card.
-- Use dificuldade desejável: force recuperação ativa sem entregar a resposta por familiaridade, gramática, tamanho ou pista semântica.
-- Zero ambiguidade: a falha deve ser de memória/raciocínio, nunca de interpretação.
-
-REGRAS DA RESPOSTA:
-- A resposta deve ser o alvo de memória, não uma explicação.
-- Ideal: 1 a 6 palavras. Para conjuntos naturais, use 2 a 4 itens curtos separados por vírgula.
-- Respostas genéricas como "conduta adequada", "monitorar", "avaliar risco-benefício", "doença crônica" ou "processo multifatorial" são proibidas, salvo se a pergunta pedir exatamente essa classificação com contexto técnico.
-- PROIBIDO cartão de bom senso genérico que qualquer pessoa acertaria sem estudar, como "reavaliar necessidade", "monitorar paciente", "tratar a causa", "orientar adesão", "psicoeducação", "simplificar o regime", "revisar medicamentos", "desprescrever fármacos desnecessários" ou "encaminhar se grave", salvo se exigir conhecimento técnico específico.
-- PROIBIDO cartão cujo enunciado pergunte "qual princípio", "qual estratégia geral", "como otimizar", "qual medida inicial para reduzir riscos" ou variações, quando a resposta for conselho universal aplicável a quase qualquer paciente.
-
-REGRAS DA EXPLICAÇÃO:
-- O campo Explicação existe para quando o aluno não sabe a resposta. Ele deve explicar por que a resposta é aquela ou como ela acontece, sem virar aula completa.
-- A Explicação NÃO pode repetir a resposta com mais palavras. Ela deve acrescentar entendimento causal, funcional ou discriminativo diretamente ligado à pergunta.
-- Se o card pergunta efeitos colaterais, a resposta lista os efeitos e a explicação diz por que eles ocorrem ou por que importam.
-- Se o card pergunta uma conduta, indicação ou escolha de fármaco, a explicação diz qual propriedade do fármaco ou do quadro clínico justifica a escolha. Não basta dizer que é "primeira linha", "eficaz", "preferido" ou "indicado".
-- Se o card pergunta uma interação, contraindicação ou risco, a explicação mostra a cadeia causal do problema.
-- Se o card pergunta uma definição/classificação, a explicação mostra o critério que diferencia isso de algo parecido.
-- Não use a explicação para despejar teoria, histórico, listas, "curso" ou informações que não ajudem a entender a resposta daquele card.
-- Não escreva comentários metalinguísticos como "isso é importante", "cai em prova", "vale lembrar" ou "ajuda a memorizar" sem explicar o mecanismo, a razão clínica ou a diferença relevante.
-- Tamanho da explicação: normalmente 2 a 4 frases curtas. Pode ser 1 frase se ela realmente explicar; pode passar disso apenas se for necessário para entender a resposta.
-- Teste de reprovação: se a explicação só trocar a resposta por sinônimos, listar a resposta de novo, ou disser apenas "é usado porque é eficaz/primeira linha", ela está ruim.
-- Exemplo ruim:
-Pergunta: Quais indicações do valproato no bipolar I?
-Resposta: Mania aguda, episódios mistos, ciclagem rápida.
-Explicação: O valproato é primeira linha para mania e episódios mistos, sendo útil na ciclagem rápida.
-- Exemplo bom:
-Pergunta: Valproato no bipolar I: em quais quadros ele é especialmente útil?
-Resposta: Mania, episódios mistos, ciclagem rápida.
-Explicação: O valproato tem efeito antimaníaco robusto e costuma funcionar melhor que opções mais "limpas" quando há quadro misto ou instabilidade frequente. A utilidade vem do perfil amplo de estabilização, não apenas de ser um anticonvulsivante.
-
-REGRAS DE COBERTURA E QUALIDADE:
-- Teste de serventia: se acertar o cartão não melhora desempenho em prova, decisão prática real ou compreensão causal de outro conceito, exclua ou reescreva.
-- Quando o material do usuário pedir um foco específico, obedeça esse foco de forma literal. Não substitua uma solicitação específica por princípios amplos, conselhos gerais ou tópicos administrativos.
-- Não repita a mesma memória com outra frase. Exemplo ruim: um card "lítio reduz suicídio" e outro "benefício único do lítio: redução do suicídio".
-- Cubra o essencial antes de detalhes. Não faça card sobre detalhe periférico enquanto faltam escolhas, riscos, mecanismos, apresentações ou comparações centrais do tópico.
-- Antes de finalizar, revise: há pergunta pedindo N e resposta com quantidade diferente? há resposta com "ou" vago? há duplicação? há atomização burra? há card genérico? corrija.
+Crie flashcards em português do Brasil para recuperação ativa eficiente.
+${MEMORY_CARD_SELECTION_RULES}
+${DIRECT_FLASHCARD_RULES}
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Flashcard N
-Pergunta: [pergunta curta e objetiva?]
-Resposta: [resposta curta, poucas palavras]
+Pergunta: [pergunta direta, autossuficiente e inequívoca?]
+Resposta: [um item curto; excepcionalmente dois itens curtos se a pergunta pedir explicitamente o par]
 Explicação: [explique o mecanismo, a justificativa clínica ou o critério que torna a resposta correta]
 ---`,
 
   cloze: `
 TIPO: FLASHCARD CLOZE DELETION
-Crie flashcards cloze deletion em português do Brasil, no estilo AnKing.
-OBJETIVO: transformar fatos de alto rendimento em frases rápidas com lacunas testáveis, usando o formato nativo do Anki. O aluno deve recuperar a unidade de memória ocultada e, no Extra, entender por que ela é correta.
-REGRAS CRÍTICAS:
-- Use sintaxe Anki real: {{c1::resposta}} ou, quando ajudar, {{c1::resposta::dica curta}}.
-- Cada bloco deve ter um alvo claro de recuperação. Se houver lacunas independentes com raciocínios diferentes, crie notas separadas.
-- Quando vários trechos pertencem à mesma unidade natural de memória, marque todos com c1 na mesma nota. Eles devem ser ocultados e revelados juntos.
-- Agrupe listas fechadas, comparações, sequências, critérios e relações que façam sentido como uma única recuperação. Não pulverize uma ideia coerente em cartões minúsculos.
-- Use sempre c1 em cada nota para manter uma nota por unidade de memória e evitar cartões irmãos desnecessários.
-- A frase deve ser curta, natural e autossuficiente. O aluno deve entender o contexto sem ler uma explicação antes.
-- Cloze bom não é frase copiada do material: reescreva como afirmação testável, curta e com contexto suficiente.
-- A parte ocultada deve ser pequena: 1 a 6 palavras. Não oculte parágrafos, listas longas ou frases inteiras.
-- Para conjuntos naturais, a parte ocultada pode ter 2 a 4 itens curtos. Não crie c1, c2 e c3 para uma lista que deve ser lembrada como bloco.
-- Evite lacunas óbvias por gramática. A frase não pode entregar a resposta por concordância, tamanho, oposição simplória ou pistas semânticas.
-- Proibido cartão de bom senso genérico: adesão, psicoeducação, revisar medicação, desprescrever, monitorar, avaliar risco-benefício, otimizar tratamento ou condutas universais, salvo se houver critério/fármaco/mecanismo específico.
-- Cada cloze deve ser testável em prova ou útil na vida real. Se não muda desempenho em prova, decisão clínica ou compreensão causal, exclua.
-- O campo Extra é explicação, não curso: explique por que o termo oculto pertence ali ou como ele produz o efeito perguntado.
-- O Extra NÃO pode apenas repetir a frase cloze com mais palavras. Se o cloze cobra efeito colateral, explique o motivo do efeito; se cobra escolha/conduta, explique a propriedade que justifica a escolha; se cobra risco/interação, explique a cadeia causal.
-- O Extra deve ter a qualidade de uma explicação de questão direta ou clínica: ensine o mecanismo, a justificativa da conduta ou o critério que diferencia opções próximas.
-- Não escreva comentários metalinguísticos como "isso é importante", "cai em prova", "vale lembrar" ou "ajuda a memorizar" sem explicar a razão médica.
-- Tamanho do Extra: normalmente 2 a 4 frases curtas, só o necessário para a resposta fazer sentido.
-- Antes de finalizar, revise: lacuna previsível? quantidade exata? lista curta agrupada quando deveria? lista longa dividida quando deveria? duplicação? card óbvio? corrija.
+Crie flashcards cloze deletion em português do Brasil para recuperação rápida de termos essenciais.
+${MEMORY_CARD_SELECTION_RULES}
+${CLOZE_FLASHCARD_RULES}
 FORMATO OBRIGATÓRIO (siga à risca, sem alternativas):
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
@@ -593,11 +529,10 @@ export const buildOracleQuestionPrompt = (s, focusBlock = '', autoMode = false) 
   const estruturaInst = onlyFlashcards
     ? `
 ESTRUTURA PARA ${onlyClozeCards(types) ? 'CLOZES' : 'FLASHCARDS'}:
-- Cubra os subtópicos/conceitos obrigatórios quando eles forem fornecidos.
+- Use os subtópicos/conceitos fornecidos como fontes de candidatos, sem obrigação de criar cartão para cada um.
 - Não use meta numérica fixa. Crie apenas ${memoryCardName(types)} de alto rendimento, sem redundância.
-- Priorize conceitos cobrados, esquecíveis, diferenciadores, testáveis em prova ou úteis na vida real.
-- Corte cartões de conselho geral, adesão, polifarmácia, risco-benefício, "otimização" e "revisão terapêutica" quando a resposta não exigir conhecimento técnico específico.
-- O conjunto final deve permitir revisar o conteúdo essencial sem reler o material. Não omita mecanismo, conduta, diagnóstico, diferencial ou pegadinha central quando forem parte do tópico.`
+- Priorize somente conceitos cobrados, esquecíveis e diferenciadores que realmente precisem estar disponíveis de memória.
+- Não tente substituir a aula nem cobrir cada detalhe: retenha só o núcleo que passar pela política global de cartões.`
     : autoQuestionCount
     ? `
 ESTRUTURA (quantidade de questões automática):
@@ -650,7 +585,7 @@ ${memoryCardFormat(types).trim()}
 
 REGRA DE QUANTIDADE:
 - Ignore qualquer quantidade fixa citada em outras seções.
-- Gere a quantidade ideal de ${memoryCardName(types)} para cobrir os conceitos essenciais do tópico e dos subtópicos, sem redundância.
+- Gere a quantidade ideal de ${memoryCardName(types)} para o núcleo de maior rendimento, sem redundância e sem cota por subtópico.
 - Faça cobranças específicas, de recuperação ativa, com resposta/lacuna curta e explicação real do porquê/como da resposta.
 - Não aceite cartão que só ensine conduta óbvia, conselho geral ou princípio administrativo.` : onlyOpen ? `
 FORMATO OBRIGATÓRIO para cada questão (separe com ---):
@@ -1054,10 +989,10 @@ ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
 ${vofSpecificRules(meta)}
 
-SUBTÓPICOS (${onlyFlashcards ? 'cubra os conceitos essenciais, sem quantidade fixa' : caseSeries ? 'cubra todos; os casos podem integrar vários subtópicos relacionados' : 'gere 1 questão por subtópico, nesta ordem exata'}):
+SUBTÓPICOS (${onlyFlashcards ? 'fontes de candidatos; não há cota de cartões por subtópico' : caseSeries ? 'cubra todos; os casos podem integrar vários subtópicos relacionados' : 'gere 1 questão por subtópico, nesta ordem exata'}):
 ${subtopicsArr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-${onlyFlashcards ? `QUANTIDADE: a IA deve decidir a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar a aula/bloco sem reler a transcrição, com cobranças específicas e explicações que ensinem o porquê/como da resposta. Corte cartões de conselho geral e mantenha só itens testáveis em prova ou úteis na vida real.` : `TOTAL: EXATAMENTE ${total} questões.`}
+${onlyFlashcards ? `QUANTIDADE: a IA deve decidir a quantidade ideal de ${memoryCardName(types)}. Não tente substituir a aula nem cobrir todo o bloco; retenha somente as memórias que passarem pela política global, com cobranças específicas e explicações que ensinem o porquê/como da resposta.` : `TOTAL: EXATAMENTE ${total} questões.`}
 ${caseSeries ? 'ORGANIZAÇÃO: decida a quantidade ideal de casos para o bloco inteiro. Não crie um caso por subtópico; um caso pode integrar vários subtópicos. Organize a bateria por caso e cubra todos os subtópicos ao longo dela.' : ''}
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? memoryCardFormat(types) : `${REGRAS_ALTERNATIVAS}
@@ -1369,24 +1304,24 @@ export const buildAcademiaFixationPrompt = (subtopics, topicTitle, s, lessonText
 
 ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}${vofSpecificRules(s)}
-SUBTÓPICOS DA AULA${onlyFlashcards ? ' (cubra alto rendimento, sem quantidade fixa)' : ' E QUANTIDADE OBRIGATÓRIA'}:
+SUBTÓPICOS DA AULA${onlyFlashcards ? ' (fontes de candidatos, sem cota de cartões)' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((s, i) => onlyFlashcards ? `${i + 1}. ${s}` : `${i + 1}. ${s} → ${plan[i] || 2} questões`).join('\n')}
 
-${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(types)} para revisar o essencial da aula, sem redundância. O conjunto deve permitir reconstruir a aula ativa e clinicamente, como uma revisão AnKing-like.` : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
+${onlyFlashcards ? `QUANTIDADE: gere a quantidade ideal de ${memoryCardName(types)} para o núcleo de maior rendimento, sem redundância. Não tente reconstruir toda a aula por cartões.` : `TOTAL OBRIGATÓRIO: EXATAMENTE ${totalQuestions} questões.`}
 
 REGRA DE FIXAÇÃO (CRÍTICA):
-- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico; use o menor conjunto de cartões que preserve cobertura de alto rendimento.' : caseSeries ? 'Use a quantidade individual indicada como meta de COBERTURA de cada subtópico, mas organize a bateria pelos casos. Um caso pode integrar vários subtópicos relacionados; não crie um caso por subtópico.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
-- A bateria será usada pelo aluno como principal revisão ativa da aula: ela deve cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo.
+- ${onlyFlashcards ? 'Não use mínimo fixo por subtópico. Retenha somente o núcleo 20/80 que realmente precise de memorização por cartões; 20/80 é importância, não quantidade.' : caseSeries ? 'Use a quantidade individual indicada como meta de COBERTURA de cada subtópico, mas organize a bateria pelos casos. Um caso pode integrar vários subtópicos relacionados; não crie um caso por subtópico.' : 'Siga exatamente a quantidade individual indicada acima. Quando o plano pedir 1, faça uma única questão forte e suficiente.'}
+- A bateria será usada pelo aluno como revisão ativa da aula: ela deve ${onlyFlashcards ? 'priorizar prova e decisões clínicas relevantes sem tentar reproduzir todo o conteúdo' : 'cobrir os 80% mais importantes, cobrados e esquecíveis do conteúdo'}.
 - Distribua a bateria entre os conceitos centrais da aula, sem concentrar questões demais em uma única frase ou seção.
 - ${onlyFlashcards ? 'Use a regra do menor esforço: gere cartões suficientes para revisar o essencial, mas corte redundância, pistas óbvias e detalhes de baixo rendimento.' : 'Não seja econômico demais. Gere quantidade suficiente para que um aluno que leu a aula consiga revisar os conceitos centrais pelas questões sem precisar reler tudo.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais importantes ou mais densos podem receber mais cartões, desde que cada cartão cobre uma ideia diferente.' : 'A quantidade já reflete a densidade do objetivo; não aumente nem reduza o plano.'}
-- Cada subtópico deve ter ${onlyFlashcards ? 'cartões' : 'questões'} suficientes para revisar seus conceitos centrais sem virar repetição.
+- ${onlyFlashcards ? 'Um subtópico pode não receber cartão quando nenhum candidato sobreviver ao filtro global; isso é preferível a fabricar cobertura.' : 'Cada subtópico deve ter questões suficientes para revisar seus conceitos centrais sem virar repetição.'}
 - Cada questão deve ter um eixo de cobrança próprio: definição, mecanismo, diagnóstico, achado, classificação, conduta, complicação, diferencial ou pegadinha.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para completar quantidade.
 - É proibido criar duas questões que testem praticamente a mesma ideia, mesmo com enunciados, casos ou alternativas diferentes.
 - Se subtópicos vizinhos falarem do mesmo fenômeno, una mentalmente a cobrança e varie o eixo; não repita a pergunta.
 - Não crie questão sobre conteúdo que não apareceu na aula/material.
-- Antes de finalizar, confira se cada subtópico recebeu exatamente a quantidade pedida e se não há repetição conceitual.${caseSeries ? ' Confira também se a quantidade de casos foi decidida para o tópico inteiro e se cada sequência aprofunda o caso de verdade.' : ''}
+- Antes de finalizar, ${onlyFlashcards ? 'confira se cada cartão passou individualmente pelos filtros de essencialidade, necessidade e cardinalidade' : 'confira se cada subtópico recebeu exatamente a quantidade pedida e se não há repetição conceitual'}.${caseSeries ? ' Confira também se a quantidade de casos foi decidida para o tópico inteiro e se cada sequência aprofunda o caso de verdade.' : ''}
 
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : REGRAS_ALTERNATIVAS}
@@ -1422,6 +1357,9 @@ OBJETIVO:
 Crie somente flashcards realmente essenciais, cruzando duas fontes:
 1. a aula da Academia, que define o conteúdo médico correto e importante para a prática;
 2. as questões antigas, que mostram como a disciplina costuma cobrar esse conteúdo em prova.
+
+${MEMORY_CARD_SELECTION_RULES}
+${DIRECT_FLASHCARD_RULES}
 
 FILTRO OBRIGATÓRIO EM CASCATA:
 Antes de incluir cada cartão, faça silenciosamente todas estas perguntas:
@@ -1628,16 +1566,16 @@ ESTILO: ${styleInst}
 ${typeInst ? typeInst + '\n' : ''}${vofSpecificRules(s)}
 ESTRUTURA${onlyFlashcards ? '' : ' E QUANTIDADE OBRIGATÓRIA'}:
 ${subtopicsArr.map((sub, i) => onlyFlashcards ? `- Subtópico ${i + 1}: "${sub}"` : `- Subtópico ${i + 1}: "${sub}" → ${plan[i] || 2} questões`).join('\n')}
-${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(types)}, cobrindo alto rendimento sem repetição. O conjunto deve permitir revisar ativamente o essencial sem reler a aula.` : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
+${onlyFlashcards ? `Quantidade: gere a quantidade ideal de ${memoryCardName(types)} para o núcleo de maior rendimento, sem repetição e sem tentar substituir a aula.` : `Total: EXATAMENTE ${totalQuestions} questões, na ordem acima.`}
 
 REGRA DA BATERIA EXTRA:
-- ${onlyFlashcards ? 'Use a mesma lógica dos flashcards de fixação: atomização, alto rendimento, zero ambiguidade, recuperação ativa e menor número útil de cartões.' : caseSeries ? 'Use as quantidades por subtópico como metas de cobertura, mas decida a quantidade ideal de casos para o tópico inteiro. Um caso pode integrar vários subtópicos relacionados; não crie um caso por subtópico.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
+- ${onlyFlashcards ? 'Use a mesma política global dos cartões de fixação: essencialidade, necessidade real de memorização, alto rendimento, zero ambiguidade e cardinalidade rigorosa.' : caseSeries ? 'Use as quantidades por subtópico como metas de cobertura, mas decida a quantidade ideal de casos para o tópico inteiro. Um caso pode integrar vários subtópicos relacionados; não crie um caso por subtópico.' : 'Siga exatamente a quantidade indicada para cada subtópico, inclusive quando for 1.'}
 - ${onlyFlashcards ? 'Subtópicos maiores, mais densos, mais importantes ou com mais contrastes podem receber mais cartões, se cada um cobrar uma ideia diferente.' : 'Não aumente a quantidade para preencher volume; cada questão precisa ter cobrança própria.'}
 - Priorize conteúdo relevante ainda não cobrado e amplie a cobertura para além da bateria de fixação.
 - A bateria extra deve variar cenário, foco e distratores em relação às questões anteriores.
 - Não repita a mesma cobrança com palavras diferentes.
 - Cada questão/flashcard deve ser testável em prova ou útil na vida real. Não use bom senso, adesão genérica, revisão de medicação, psicoeducação, simplificação de regime ou risco-benefício genérico para preencher volume.
-- Cubra todos os subtópicos e não crie questões fora do plano.${caseSeries ? ' Organize a ordem final pelas sequências dos casos, não pela lista de subtópicos.' : ''}
+- ${onlyFlashcards ? 'Use todos os subtópicos como fontes, mas não crie cartão para os que não tiverem memória aprovada pelo filtro global.' : 'Cubra todos os subtópicos e não crie questões fora do plano.'}${caseSeries ? ' Organize a ordem final pelas sequências dos casos, não pela lista de subtópicos.' : ''}
 
 ${REGRAS_ENUNCIADO}
 ${onlyFlashcards ? '' : `${REGRAS_ALTERNATIVAS}

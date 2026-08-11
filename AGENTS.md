@@ -254,6 +254,8 @@ Utilitários:
 
 `src/agora_prompts.js` contém builders grandes de prompts. Ele **não pode** voltar a ser importado estaticamente no `App.jsx`; existe um loader dinâmico para manter o bundle inicial menor.
 
+Flashcards e clozes obedecem à política global versionada de `src/prompts/memoryCardPolicy.js`. Academia, Oráculo, importação externa, Questões do Curso, Dúvida Rápida, caderno de erros, reparo e FAMED devem incorporar essa fonte compartilhada, sem manter cópias divergentes. A IA decide a quantidade sem teto, piso, faixa ou meta; o filtro 20/80 representa importância, não contagem. Todo candidato precisa ser essencial, beneficiar-se realmente de recuperação ativa e não ser dedutível por bom senso. Flashcard direto exige um item curto por padrão e, excepcionalmente, dois itens inseparáveis anunciados na pergunta; listas e inventários são proibidos. Cloze usa exatamente um `{{c1::termo curto}}`, sem dica e sem múltiplos trechos ocultos. A seleção ocorre no prompt: parsers e UI preservam tudo que o modelo devolveu e não fazem descarte pedagógico posterior.
+
 ## Fluxo geral dos dados
 
 ```text
@@ -624,6 +626,8 @@ Conceitualmente:
 ```
 
 Use `persistReviewQueueChanges`; não persista `vq_review` diretamente no `App.jsx`.
+
+Ao apagar todo o progresso do curso, remova também os cartões e os estados de revisão das videoaulas, mas preserve revisões de materiais pessoais em documentos `lib_*`. A limpeza remota é responsabilidade de `services/courseReviewReset.js`; o `App.jsx` apenas atualiza estado e cache com a fila pessoal restante.
 
 As respostas da revisão atualizam a UI primeiro. Em cartões longitudinais, acerto avança o intervalo e erro reduz/reagenda; em complementares/reservas do curso, qualquer resultado conclui a exposição única. A fila pode apontar para questões do curso e da biblioteca pessoal, portanto qualquer remoção/regeneração deve executar a poda das referências órfãs.
 

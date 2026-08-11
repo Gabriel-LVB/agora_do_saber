@@ -15,6 +15,7 @@ let totalJs = 0;
 let totalGzip = 0;
 let entry = null;
 let quickContent = null;
+let memoryCardPolicy = null;
 let ecgCaseBank = null;
 let questionCuration = null;
 let fsrsScheduler = null;
@@ -26,6 +27,7 @@ let spacedReview = null;
 let courseStudents = null;
 let disabledCourseQuestions = null;
 let sharedLibraryRepair = null;
+let courseReviewReset = null;
 let famedPortal = null;
 let famedPastQuestions = null;
 let famedQuestionPackage = null;
@@ -39,6 +41,7 @@ for (const file of jsFiles) {
   totalGzip += gzipSize;
   if (file.startsWith('index-')) entry = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('quickContent-')) quickContent = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('memoryCardPolicy-')) memoryCardPolicy = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('EcgCaseBankView-')) ecgCaseBank = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('QuestionCurationView-')) questionCuration = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('fsrsScheduler-')) fsrsScheduler = { file, raw:data.length, gzip:gzipSize };
@@ -50,6 +53,7 @@ for (const file of jsFiles) {
   if (file.startsWith('CourseStudentsView-')) courseStudents = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('disabledCourseQuestions-')) disabledCourseQuestions = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('sharedLibraryRepair-')) sharedLibraryRepair = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('courseReviewReset-')) courseReviewReset = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('FamedPortalView-')) famedPortal = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('FamedPastQuestionsView-')) famedPastQuestions = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('famedQuestionPackage-')) famedQuestionPackage = { file, raw:data.length, gzip:gzipSize };
@@ -76,6 +80,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // medido ao módulo lazy compartilhado, sem alterar o bundle de entrada.
 const CORE_TOTAL_GZIP_LIMIT = 446 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
+// A política pedagógica de flashcards/clozes é compartilhada pelos prompts lazy
+// gerais e pela Dúvida Rápida, sem duplicar regras nem entrar no bundle inicial.
+const MEMORY_CARD_POLICY_GZIP_LIMIT = 3 * 1024;
 // Curadoria, seleção automática, publicação e exportação de auditoria ficam
 // juntas em um único módulo administrativo carregado somente sob demanda.
 const QUESTION_CURATION_GZIP_LIMIT = 15 * 1024;
@@ -100,6 +107,9 @@ const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 3 * 1024;
 // A reparação de questões incompletas é administrativa e só deve ser baixada
 // quando o botão correspondente for acionado na Fábrica.
 const SHARED_LIBRARY_REPAIR_GZIP_LIMIT = 3 * 1024;
+// A limpeza integral das revisões do curso é rara e permanece em módulo lazy,
+// preservando os cartões pessoais sem pesar no carregamento principal.
+const COURSE_REVIEW_RESET_GZIP_LIMIT = 1 * 1024;
 // A FAMED inteira continua lazy. Questões antigas são carregadas apenas ao abrir
 // o respectivo painel, e prompt/seleção de flashcards só entram após a ação admin.
 // O importador ZIP e o descompactador ficam em chunks próprios, baixados somente
@@ -110,6 +120,7 @@ const SHARED_LIBRARY_REPAIR_GZIP_LIMIT = 3 * 1024;
 const FAMED_GZIP_LIMIT = 23.5 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
+  + MEMORY_CARD_POLICY_GZIP_LIMIT
   + QUESTION_CURATION_GZIP_LIMIT
   + ECG_CASE_BANK_GZIP_LIMIT
   + FSRS_SCHEDULER_GZIP_LIMIT
@@ -119,6 +130,7 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + COURSE_STUDENTS_GZIP_LIMIT
   + DISABLED_COURSE_QUESTIONS_GZIP_LIMIT
   + SHARED_LIBRARY_REPAIR_GZIP_LIMIT
+  + COURSE_REVIEW_RESET_GZIP_LIMIT
   + FAMED_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
@@ -129,6 +141,7 @@ const famedGzip = (famedPortal?.gzip || 0)
   + (famedStudyMaterials?.gzip || 0);
 const coreGzip = totalGzip
   - (quickContent?.gzip || 0)
+  - (memoryCardPolicy?.gzip || 0)
   - (ecgCaseBank?.gzip || 0)
   - (questionCuration?.gzip || 0)
   - fsrsSchedulerGzip
@@ -138,6 +151,7 @@ const coreGzip = totalGzip
   - (courseStudents?.gzip || 0)
   - (disabledCourseQuestions?.gzip || 0)
   - (sharedLibraryRepair?.gzip || 0)
+  - (courseReviewReset?.gzip || 0)
   - famedGzip;
 
 assert.ok(
@@ -156,6 +170,11 @@ assert.ok(quickContent, 'Modulo lazy quickContent-*.js nao encontrado. O prompt 
 assert.ok(
   quickContent.gzip <= QUICK_CONTENT_GZIP_LIMIT,
   `Modulo quickContent passou do budget: ${fmt(quickContent.gzip)} > ${fmt(QUICK_CONTENT_GZIP_LIMIT)}`
+);
+assert.ok(memoryCardPolicy, 'A política global de cartões deve permanecer em módulo compartilhado próprio.');
+assert.ok(
+  memoryCardPolicy.gzip <= MEMORY_CARD_POLICY_GZIP_LIMIT,
+  `Política global de cartões passou do budget: ${fmt(memoryCardPolicy.gzip)} > ${fmt(MEMORY_CARD_POLICY_GZIP_LIMIT)}`
 );
 assert.ok(ecgCaseBank, 'Banco de ECG deve permanecer em módulo lazy próprio.');
 assert.ok(
@@ -204,6 +223,11 @@ assert.ok(
   sharedLibraryRepair.gzip <= SHARED_LIBRARY_REPAIR_GZIP_LIMIT,
   `Reparo da Biblioteca passou do budget: ${fmt(sharedLibraryRepair.gzip)} > ${fmt(SHARED_LIBRARY_REPAIR_GZIP_LIMIT)}`
 );
+assert.ok(courseReviewReset, 'A limpeza das revisoes do curso deve permanecer em modulo lazy proprio.');
+assert.ok(
+  courseReviewReset.gzip <= COURSE_REVIEW_RESET_GZIP_LIMIT,
+  `Reset das revisoes do curso passou do budget: ${fmt(courseReviewReset.gzip)} > ${fmt(COURSE_REVIEW_RESET_GZIP_LIMIT)}`
+);
 assert.ok(famedPortal, 'O portal FAMED deve permanecer em modulo lazy proprio.');
 assert.ok(famedPastQuestions, 'A importacao de questoes antigas FAMED deve permanecer lazy.');
 assert.ok(famedQuestionPackage, 'O parser do pacote FAMED deve permanecer lazy.');
@@ -215,4 +239,4 @@ assert.ok(
 );
 assert.ok(totalGzip <= TOTAL_GZIP_LIMIT, `JS total passou do budget: ${fmt(totalGzip)} > ${fmt(TOTAL_GZIP_LIMIT)}`);
 
-console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; ${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; alunos ${fmt(courseStudents.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
+console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; alunos ${fmt(courseStudents.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);

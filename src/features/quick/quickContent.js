@@ -1,3 +1,8 @@
+import {
+  DIRECT_FLASHCARD_RULES,
+  MEMORY_CARD_SELECTION_RULES,
+} from '../../prompts/memoryCardPolicy.js';
+
 const stripLooseMarkdownAsterisks = (text = '') => String(text || '').replace(/\*/g, '');
 
 export const extractQuickSection = (text = '', heading = '') => {
@@ -148,22 +153,8 @@ ${distractorRule}
 ${adminExplanationFormat}
 
 REGRAS DOS FLASHCARDS:
-- Decida a quantidade pela complexidade e pela densidade da lacuna. Não siga limite, faixa, meta ou sugestão numérica e cubra toda memória realmente necessária sem criar volume artificial.
-- Cada flashcard deve ter um alvo claro de recuperação, ser autossuficiente e não redundante.
-- "Atômico" não significa separar tudo: agrupe 2 a 4 itens quando eles formam uma unidade natural, como principais efeitos adversos, monitorização obrigatória, tríade ou fármacos que compartilham uma interação.
-- Separe em cards diferentes quando os itens têm mecanismos, decisões ou explicações diferentes.
-- Se a pergunta disser "dois", "três", "(2)" ou "(3)", a resposta deve ter exatamente essa quantidade.
-- Não use "cite um" com resposta contendo várias opções. Se quer conjunto, pergunte o conjunto; se quer um exemplo, responda um exemplo.
-- Use dificuldade desejável: a pergunta deve exigir recuperação ativa, não reconhecimento passivo.
-- Zero ambiguidade: a pergunta deve ter contexto suficiente para uma única resposta justa.
-- Teste de previsibilidade: se uma pessoa que entendeu o tema não conseguir adivinhar o tipo exato de resposta esperada, reescreva a pergunta. Proibido fazer perguntas abertas genéricas como "O que é X?" quando a resposta seria "doença autoimune", "condição crônica" ou outra definição ampla.
-- Evite perguntas de sim/não; transforme em uma pergunta que peça a informação substantiva.
-- Toda pergunta deve terminar com ponto de interrogação.
-- Resposta curta: 1 a 6 palavras ou, em conjuntos naturais, 2 a 4 itens curtos.
-- Depois da resposta curta, a explicação deve ensinar por que aquela resposta é correta ou como ela acontece. Ela não pode repetir a resposta com mais palavras nem virar curso.
-- Se o card perguntar efeitos colaterais, a resposta lista os efeitos e a explicação diz por que eles ocorrem ou por que importam. Se perguntar uma escolha/conduta, a explicação diz qual propriedade do fármaco ou do quadro clínico justifica aquela opção.
-- Explicação ruim: "é usado porque é eficaz/primeira linha/indicado". Explicação boa: conecta fármaco/quadro clínico → propriedade relevante → motivo da resposta.
-- Não faça cartões que cobrem detalhes inúteis; faça cartões que, juntos, permitam revisar a dúvida inteira depois.
+${MEMORY_CARD_SELECTION_RULES}
+${DIRECT_FLASHCARD_RULES}
 
 FORMATO FINAL OBRIGATÓRIO:
 - Inclua apenas as seções selecionadas no objetivo.

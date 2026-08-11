@@ -19,6 +19,12 @@ import {
   extractQuickSection,
 } from '../src/features/quick/quickContent.js';
 import {
+  CLOZE_FLASHCARD_RULES,
+  DIRECT_FLASHCARD_RULES,
+  MEMORY_CARD_POLICY_VERSION,
+  MEMORY_CARD_SELECTION_RULES,
+} from '../src/prompts/memoryCardPolicy.js';
+import {
   auditQuestionCollection,
   collectAuditableQuestions,
   getQuestionCorrectAnswer,
@@ -78,6 +84,7 @@ import {
   compareFsrsWithLegacy,
   FSRS_SCHEDULER_VERSION,
 } from '../src/services/fsrsScheduler.js';
+import { pruneCourseReviewQueue } from '../src/services/courseReviewReset.js';
 import { executeGeminiRotation } from '../src/services/geminiRotation.js';
 import {
   buildFamedCourseCatalogExport,
@@ -92,7 +99,17 @@ import {
   getFamedFlashcardState,
   hasFamedGeneratedLesson,
 } from '../src/features/famed/famedStudyMaterials.js';
-import { buildFamedEssentialFlashcardsPrompt, buildFamedQuestionPackagePrompt } from '../src/agora_prompts.js';
+import {
+  buildAcademiaExtraBatteryPrompt,
+  buildAcademiaFixationPrompt,
+  buildExternalPrompt,
+  buildFamedEssentialFlashcardsPrompt,
+  buildFamedQuestionPackagePrompt,
+  buildOracleQuestionPrompt,
+  buildQuestionRepairPrompt,
+  buildTypeInst,
+  buildVqBlockPrompt,
+} from '../src/agora_prompts.js';
 import { parseFamedQuestionPackage } from '../src/features/famed/famedQuestionPackage.js';
 import {
   buildDailyEffortSchedule,
@@ -234,8 +251,41 @@ const fullQuickPrompt = buildQuickPracticePrompt({
   distractorRule:'REGRA DOS DISTRATORES',
 });
 assert.match(fullQuickPrompt, /Gere de 4 a 6 quest/);
-assert.match(fullQuickPrompt, /Não siga limite, faixa, meta ou sugestão numérica/);
+assert.match(fullQuickPrompt, /Não existe teto, piso, faixa, meta nem sugestão numérica de cartões/);
 assert.doesNotMatch(fullQuickPrompt, /Gere de 5 a 8 flashcards|Nunca gere menos de 5/);
+assert.equal(MEMORY_CARD_POLICY_VERSION, 'agora-memory-card-policy-v1');
+assert.match(MEMORY_CARD_SELECTION_RULES, /regra 80\/20 é um filtro de importância, não uma quantidade/);
+assert.match(MEMORY_CARD_SELECTION_RULES, /Eu preciso de um flashcard para aprender ou reter isto/);
+assert.match(MEMORY_CARD_SELECTION_RULES, /deduzido por bom senso ou lógica genérica/);
+assert.match(MEMORY_CARD_SELECTION_RULES, /aplicativo preservará todos os cartões retornados/);
+assert.match(DIRECT_FLASHCARD_RULES, /exige UM item curto por padrão/);
+assert.match(DIRECT_FLASHCARD_RULES, /exatamente DOIS itens curtos somente/);
+assert.match(DIRECT_FLASHCARD_RULES, /Nunca exija três ou mais itens/);
+assert.match(DIRECT_FLASHCARD_RULES, /mostrar parte de uma lista e pedir o restante/);
+assert.match(CLOZE_FLASHCARD_RULES, /EXATAMENTE UM marcador cloze/);
+assert.match(CLOZE_FLASHCARD_RULES, /somente UM termo curto/);
+assert.match(CLOZE_FLASHCARD_RULES, /terceiro campo de dica dentro do marcador é proibido/);
+assert.match(CLOZE_FLASHCARD_RULES, /deixe W e Z visíveis e marque somente Y/);
+const directMemoryPrompt = buildTypeInst(['flashcard']);
+const clozeMemoryPrompt = buildTypeInst(['cloze']);
+for (const prompt of [directMemoryPrompt, clozeMemoryPrompt, fullQuickPrompt]) {
+  assert.match(prompt, new RegExp(MEMORY_CARD_POLICY_VERSION));
+}
+assert.match(directMemoryPrompt, /FLASHCARD NÃO É INVENTÁRIO|listas ou inventários/);
+assert.match(clozeMemoryPrompt, /\{\{c1::termo curto\}\}/);
+assert.doesNotMatch(directMemoryPrompt, /2 a 4 itens|1 a 6 palavras|Listas são permitidas/);
+assert.doesNotMatch(clozeMemoryPrompt, /::dica|2 a 4 itens|1 a 6 palavras|marque todos com c1 na mesma nota/);
+const globalMemoryPromptFixtures = [
+  buildOracleQuestionPrompt({ questionTypes:['flashcard'], numSubtopics:1, qPerSub:1 }),
+  buildExternalPrompt({ questionTypes:['cloze'], numSubtopics:1, qPerSub:1 }),
+  buildVqBlockPrompt({ title:'Bloco' }, { aulaTitle:'Aula', questionTypes:['flashcard'] }, ['Conceito'], '', ''),
+  buildAcademiaFixationPrompt(['Conceito'], 'Aula', { questionTypes:['cloze'] }),
+  buildAcademiaExtraBatteryPrompt('Aula', ['Conceito'], { questionTypes:['flashcard'] }),
+  buildQuestionRepairPrompt({ generatedText:'## Flashcard 1\nPergunta: Teste?\nResposta: Teste\nExplicação: Teste', expectedQuestionCount:1, settings:{ questionTypes:['flashcard'] } }),
+];
+for (const prompt of globalMemoryPromptFixtures) {
+  assert.match(prompt, new RegExp(MEMORY_CARD_POLICY_VERSION));
+}
 assert.match(fullQuickPrompt, /REGRA DOS DISTRATORES/);
 assert.match(buildQuickPracticePrompt({title:'Teste', outputs:['questions']}), /N.o gere flashcards/);
 assert.match(extractQuickSection('## Questoes\n## Questao 1\nEnunciado\n## Flashcards\n## Flashcard 1\nPergunta', 'Questoes'), /Questao 1/);
@@ -308,6 +358,7 @@ const famedFlashcardPrompt = buildFamedEssentialFlashcardsPrompt({
   lessonText:'Aula sobre estenose aórtica.',
   pastQuestionsText:'Questão antiga sobre síncope.',
 });
+assert.match(famedFlashcardPrompt, new RegExp(MEMORY_CARD_POLICY_VERSION));
 assert.match(famedFlashcardPrompt, /Isto é realmente essencial para esta aula/);
 assert.match(famedFlashcardPrompt, /Eu preciso de um flashcard para aprender ou reter isto/);
 assert.match(famedFlashcardPrompt, /pode ser deduzido por bom senso ou lógica genérica/);
@@ -991,6 +1042,23 @@ assert.equal(reviewQueueSummary.total, 2);
 assert.equal(reviewQueueSummary.due, 0);
 assert.equal(reviewQueueSummary.nextDue, reviewCard.dueDate);
 assert.equal(reviewQueueSummary.fsrs.compared, 0);
+const courseReviewReset = pruneCourseReviewQueue({
+  queue:{
+    'course-aula':{ block:{ q1:reviewCard } },
+    'legacy-course-aula':{ block:{ q2:{ dueDate:reviewNow } } },
+    'lib_personal':{ topic:{
+      personal:{ source:'academia', cardKey:'academia/subject/topic/personal' },
+      misplacedCourse:{ source:'curso', cardKey:'course/aula/q3' },
+    } },
+    'lib_known_course':{ block:{ legacy:{ dueDate:reviewNow } } },
+  },
+  courseAulaIds:['course-aula','lib_known_course'],
+});
+assert.equal(courseReviewReset.removedCardCount, 4);
+assert.deepEqual(courseReviewReset.removedAulaIds.sort(), ['course-aula','legacy-course-aula','lib_known_course']);
+assert.deepEqual(Object.keys(courseReviewReset.queue), ['lib_personal']);
+assert.deepEqual(Object.keys(courseReviewReset.queue.lib_personal.topic), ['personal']);
+assert.equal(courseReviewReset.changedEntries.length, 1);
 const firstFsrsState = advanceFsrsCard({
   correct:true,
   legacyDue:reviewNow + 7 * REVIEW_DAY_MS,
@@ -1962,6 +2030,15 @@ assert.match(sharedLibraryProgressSource, /answers:\{\}/);
 const reviewQueueSource = await readFile(new URL('../src/services/reviewQueue.js', import.meta.url), 'utf8');
 assert.match(reviewQueueSource, /persistReviewQueueChanges/);
 assert.match(reviewQueueSource, /Promise\.all/);
+
+const courseReviewResetSource = await readFile(new URL('../src/services/courseReviewReset.js', import.meta.url), 'utf8');
+assert.match(courseReviewResetSource, /pruneCourseReviewQueue/);
+assert.match(courseReviewResetSource, /resetCourseReviewQueue/);
+assert.match(courseReviewResetSource, /startsWith\('lib_'\)/);
+assert.match(appSource, /import\('\.\/services\/courseReviewReset\.js'\)/);
+assert.match(appSource, /Progresso e revisões do curso apagados com sucesso/);
+assert.match(appSource, /suas revisões pessoais não serão afetadas/);
+assert.doesNotMatch(appSource, /const reviewSnap = await getDocs\(collection\(db,'users',user\.uid,'vq_review'\)\)/);
 
 const courseProgressSource = await readFile(new URL('../src/services/courseProgress.js', import.meta.url), 'utf8');
 assert.match(courseProgressSource, /saveWatchedAulas/);

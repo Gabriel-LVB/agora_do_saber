@@ -1089,8 +1089,8 @@ ${isFlashcard
   : `Gerar EXATAMENTE ${total} questões novas, sendo ${perError} questão(ões) para cada questão errada listada abaixo.`}
 ${isFlashcard ? `Para cada erro:
 1. Identifique o conceito que provavelmente causou o erro.
-2. Crie ${isCloze ? 'clozes' : 'flashcards'} atômicos e autossuficientes sobre esse conceito, suas pegadinhas e diferenciações próximas.
-3. Não repita cartões sobre a mesma cobrança.` : `Para cada questão errada:
+2. Trate esse conceito, suas pegadinhas e diferenciações próximas apenas como candidatos; crie ${isCloze ? 'clozes' : 'flashcards'} somente para as memórias que passarem pela política global de essencialidade e necessidade real de recuperação.
+3. Uma questão errada não cria cota de cartões. Não repita cobranças e não transforme alternativas ou listas em vários cards.` : `Para cada questão errada:
 1. A primeira questão deve cobrar o conceito central que provavelmente causou o erro.
 2. Se houver mais questões por erro, as seguintes devem cobrar variações, pegadinhas, aplicações clínicas ou diferenciações próximas.`}
 
@@ -5699,6 +5699,12 @@ export default function QuestionBankApp() {
   const resetCourseProgress = async () => {
     if (!user || user.isAnonymous) return;
     try {
+      const blocksSnap = await getDocs(collection(db,'users',user.uid,'vq_blocks'));
+      const courseAulaIds = [
+        ...blocksSnap.docs.map(entry => entry.id),
+        ...Object.keys(courseReviewLessonStatesRef.current || {}),
+      ];
+
       // 1. Clear watched status
       await saveWatchedAulas({ userId:user.uid, watched:{} });
       watchedAulasRef.current = {};
@@ -5707,17 +5713,16 @@ export default function QuestionBankApp() {
       touchCache(userWatchedTouchedKey(user.uid));
 
       // 2. Delete all vq_blocks docs
-      const blocksSnap = await getDocs(collection(db,'users',user.uid,'vq_blocks'));
       await Promise.all(blocksSnap.docs.map(d => deleteDoc(d.ref)));
       setVqBlocks({});
       persistVqBlocksCache({});
 
-      // 3. Delete all vq_review docs
-      const reviewSnap = await getDocs(collection(db,'users',user.uid,'vq_review'));
-      await Promise.all(reviewSnap.docs.map(d => deleteDoc(d.ref)));
-      reviewQueueRef.current = {};
-      setReviewQueue({});
-      persistReviewQueueCache({});
+      // 3. Delete course reviews while preserving personal-material reviews.
+      const { resetCourseReviewQueue } = await import('./services/courseReviewReset.js');
+      const reviewReset = await resetCourseReviewQueue({ userId:user.uid, courseAulaIds });
+      reviewQueueRef.current = reviewReset.queue;
+      setReviewQueue(reviewReset.queue);
+      persistReviewQueueCache(reviewReset.queue);
       courseReviewLessonStatesRef.current = {};
       setCourseReviewLessonStates({});
       await setDoc(doc(db, 'users', user.uid, 'curso_prefs', 'main'), {
@@ -5726,7 +5731,7 @@ export default function QuestionBankApp() {
 
       setResetCourseModal(false);
       setResetCourseInput('');
-      addToast('Progresso do curso apagado com sucesso.', 'success', 5000);
+      addToast('Progresso e revisões do curso apagados com sucesso.', 'success', 5000);
     } catch(e) {
       console.error('Reset failed:', e);
       addToast('Erro ao apagar progresso. Tente novamente.', 'info', 4000);
@@ -15759,8 +15764,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               Isso vai apagar permanentemente:<br/>
               • Todas as aulas marcadas como assistidas<br/>
               • Todas as questões geradas no curso<br/>
-              • Toda a agenda de revisões<br/><br/>
-              <strong>A biblioteca do Oráculo não será afetada.</strong>
+              • Todas as revisões do curso<br/><br/>
+              <strong>A biblioteca do Oráculo e suas revisões pessoais não serão afetadas.</strong>
             </p>
             <p className={`text-xs font-bold mb-2 ${darkMode?'text-gray-400':'text-gray-600'}`}>
               Digite <strong>APAGAR</strong> para confirmar:
