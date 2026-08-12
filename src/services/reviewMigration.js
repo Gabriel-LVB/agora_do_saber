@@ -5,20 +5,23 @@ import {
 } from './reviewScheduler.js';
 import { questionHasUnresolvedRequiredVisual } from './questionVisual.js';
 
-export const INDIVIDUAL_REVIEW_PLAN_VERSION = 'curated-progressive-essential-fsrs-v9';
+export const INDIVIDUAL_REVIEW_PLAN_VERSION = 'curated-progressive-essential-fsrs-v10';
 const LEGACY_PROGRESSIVE_PLAN_VERSION = 'curated-progressive-essential-fsrs-v5';
 const BROKEN_SIBLING_REPLAN_VERSION = 'curated-progressive-essential-fsrs-v6';
 const BROKEN_CALENDAR_RECOVERY_STRATEGY = 'v6-calendar-recovery';
 const PROGRESSIVE_REVIEW_ROLLOUT_AT = Date.parse('2026-08-02T07:00:00-03:00');
 const LEGACY_BACKLOG_ROLLOUT_DAYS = 29;
+const FIRST_EXPOSURE_MAX_DAYS = 30;
+const DAILY_FIRST_EXPOSURE_STRATEGY = 'daily-decreasing-v1';
 export const FSRS_PENDING_SCHEDULER_VERSION = 'fsrs-pending-first-review-v1';
-export const REVIEW_FIRST_EXPOSURE_WAVES = Object.freeze([
-  Object.freeze({ percentage:35, dayOffset:0 }),
-  Object.freeze({ percentage:30, dayOffset:1 }),
-  Object.freeze({ percentage:20, dayOffset:4 }),
-  Object.freeze({ percentage:10, dayOffset:8 }),
-  Object.freeze({ percentage:5, dayOffset:15 }),
-]);
+const firstExposureWeightTotal = FIRST_EXPOSURE_MAX_DAYS * (FIRST_EXPOSURE_MAX_DAYS + 1) / 2;
+export const REVIEW_FIRST_EXPOSURE_WAVES = Object.freeze(Array.from(
+  { length:FIRST_EXPOSURE_MAX_DAYS },
+  (_, dayOffset) => Object.freeze({
+    percentage:(FIRST_EXPOSURE_MAX_DAYS - dayOffset) / firstExposureWeightTotal * 100,
+    dayOffset,
+  }),
+));
 
 const answerIsCorrect = (question, answer) => {
   if (!answer) return false;
@@ -35,10 +38,16 @@ const blockEntries = blocks => Array.isArray(blocks)
 
 export const allocateReviewFirstExposureWaves = total => {
   const cleanTotal = Math.max(0, Math.floor(Number(total) || 0));
+  const activeDays = Math.min(cleanTotal, FIRST_EXPOSURE_MAX_DAYS);
+  const activeWeightTotal = activeDays * (activeDays + 1) / 2;
+  const remainingAfterDailyBase = cleanTotal - activeDays;
   const rows = REVIEW_FIRST_EXPOSURE_WAVES.map((wave, index) => {
-    const exact = cleanTotal * wave.percentage / 100;
-    const count = Math.floor(exact);
-    return { ...wave, count, fraction:exact - count, index };
+    const exact = index < activeDays && remainingAfterDailyBase
+      ? remainingAfterDailyBase * (activeDays - index) / activeWeightTotal
+      : 0;
+    const extraCount = Math.floor(exact);
+    const count = (index < activeDays ? 1 : 0) + extraCount;
+    return { ...wave, count, fraction:exact - extraCount, index };
   });
   let remaining = cleanTotal - rows.reduce((sum, row) => sum + row.count, 0);
   [...rows]
@@ -48,7 +57,12 @@ export const allocateReviewFirstExposureWaves = total => {
       rows[row.index].count += 1;
       remaining -= 1;
     });
-  return rows.map(({ fraction:_fraction, index:_index, ...row }) => row);
+  const descendingCounts = rows.slice(0, activeDays).map(row => row.count).sort((left, right) => right - left);
+  return rows.map(({ fraction:_fraction, index, ...row }) => ({
+    ...row,
+    count:index < activeDays ? descendingCounts[index] : 0,
+    percentage:cleanTotal ? (index < activeDays ? descendingCounts[index] : 0) / cleanTotal * 100 : 0,
+  }));
 };
 
 const outcomeScore = outcome => outcome === 'wrong' ? 3000000 : outcome === 'unseen' ? 2000000 : 1000000;
@@ -88,7 +102,7 @@ const siblingCollisionPenalty = (row, bucketRows = []) => {
 
 // A prioridade decide qual representante de cada família chega primeiro. A
 // distribuição decide o dia: clusters redundantes, conceito primário e
-// conceitos compartilhados são espalhados entre as ondas enquanto houver vaga.
+// conceitos compartilhados são espalhados entre os dias enquanto houver vaga.
 export const distributeReviewFirstExposureRows = (orderedRows = [], waves = []) => {
   const buckets = waves.map(wave => ({ ...wave, rows:[] }));
   orderedRows.forEach(row => {
@@ -127,7 +141,7 @@ export const distributeReviewFirstExposureRows = (orderedRows = [], waves = []) 
 
 // Importancia e qualidade dominam a ordem; dentro de questoes pedagogicamente
 // proximas, conceitos ainda nao apresentados recebem preferencia para ampliar
-// a cobertura da aula desde a primeira onda.
+// a cobertura da aula desde os primeiros dias.
 export const orderReviewFirstExposureRows = (rows = []) => {
   const remaining = [...rows];
   const ordered = [];
@@ -213,7 +227,7 @@ const buildFirstExposurePlan = ({
           dueDate:firstExposureDueDate({ dayOffset:wave.dayOffset, now:rowAnchor, slot }),
           percentage:wave.percentage,
           sequenceIndex:cursor - 1,
-          siblingStrategy:'metadata-v1',
+          siblingStrategy:DAILY_FIRST_EXPOSURE_STRATEGY,
           plannedAt:rowAnchor,
         });
       });
@@ -425,8 +439,9 @@ const buildLegacyBacklogPlan = ({
 
 // Constroi uma unica agenda por questao para as aulas ativadas pelo aluno.
 // Aulas adicionadas no fluxo progressivo recebem uma primeira exposição nas
-// ondas 35/30/20/10/5. A migração não transforma retroativamente todo o estoque
-// complementar legado em dívida: preserva o núcleo antigo e estaciona o backlog.
+// parcelas diárias decrescentes por até 30 dias. A migração não transforma
+// retroativamente todo o estoque complementar legado em dívida: preserva o
+// núcleo antigo e distribui o backlog.
 // Depois da primeira exposição, somente as essenciais seguem para o FSRS.
 export const buildWatchedLessonsIndividualPlan = ({
   lessons = [],
@@ -519,6 +534,12 @@ export const buildWatchedLessonsIndividualPlan = ({
       && Number.isFinite(createdAt)
       && createdAt < lessonProgressiveAnchor;
     row.repairBrokenCalendar = shouldRepairBrokenCalendar(existingItem);
+    row.redistributeUnseenFirstExposure = !!existingItem
+      && !row.legacyCohort
+      && !row.repairBrokenCalendar
+      && !hasObservedReview(existingItem)
+      && existingItem?.adaptiveState !== 'manual'
+      && firstExposure?.version !== INDIVIDUAL_REVIEW_PLAN_VERSION;
   });
 
   const isLegacyBacklogRow = row => ['complementary', 'reserve'].includes(row.policy?.tier)
@@ -566,6 +587,7 @@ export const buildWatchedLessonsIndividualPlan = ({
       && !row.legacyCohort
       && !policyBlocksReview(row.policy)
       && !questionHasUnresolvedRequiredVisual(row.question)
+      && !hasObservedReview(row.existing)
       && row.adaptiveState !== 'completed-once');
   const firstExposure = buildFirstExposurePlan({
     rows:firstExposureRows,
@@ -664,9 +686,24 @@ export const buildWatchedLessonsIndividualPlan = ({
     const repairLegacyEnrollment = row.legacyCohort && !hasObservedReview(existing)
       && existing?.adaptiveState !== 'manual';
     const replaceLegacyBacklogDue = legacyBacklogQuestion && !!backlogPlan;
-    const repairDue = repairBrokenPlan || replaceLegacyBacklogDue;
-    const firstExposurePlan = savedFirstExposure?.version === INDIVIDUAL_REVIEW_PLAN_VERSION
+    const redistributeUnseenFirstExposure = row.redistributeUnseenFirstExposure && plan.dayOffset != null;
+    const repairDue = repairBrokenPlan || replaceLegacyBacklogDue || redistributeUnseenFirstExposure;
+    const firstExposurePlan = savedFirstExposure && hasObservedReview(existing)
       ? savedFirstExposure
+      : savedFirstExposure?.version === INDIVIDUAL_REVIEW_PLAN_VERSION
+      ? savedFirstExposure
+      : redistributeUnseenFirstExposure
+        ? {
+            version:INDIVIDUAL_REVIEW_PLAN_VERSION,
+            bucketIndex:plan.bucketIndex,
+            dayOffset:plan.dayOffset,
+            percentage:plan.percentage,
+            sequenceIndex:plan.sequenceIndex,
+            siblingStrategy:DAILY_FIRST_EXPOSURE_STRATEGY,
+            plannedAt:now,
+            redistributedAt:now,
+            previousVersion:savedFirstExposure?.version || null,
+          }
       : repairLegacyEnrollment
         ? {
             version:INDIVIDUAL_REVIEW_PLAN_VERSION,

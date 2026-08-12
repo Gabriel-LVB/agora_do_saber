@@ -487,7 +487,7 @@ O único write autorizado nessa aba é o botão administrativo, confirmado, **In
 
 O executor da Curadoria segue o padrão resiliente da criação: exibe logs com horário por aula, lote, tentativa, chave, validação, salvamento e publicação; permite pausar/continuar e parar após a requisição ativa; usa o mesmo pool administrativo deduplicado da criação — chaves atuais e backups encontrados nos perfis, sem registrar seus valores — e mantém um cursor rotativo entre chamadas; tenta outra chave em cota, chave inválida, timeout, sobrecarga, conexão, JSON truncado ou lote incompleto; valida exatamente os IDs esperados antes de salvar; e, se uma aula esgotar as tentativas, marca seu manifesto como pausado e continua a matéria. As chamadas mecânicas de curadoria desativam o thinking, pedem `application/json` nativo e admitem até 180 segundos nos lotes de 30. Lotes concluídos nunca são descartados. O resumo final separa publicadas, pendentes e não iniciadas.
 
-FSRS é o motor ativo por cartão para questões essenciais do curso e para materiais pessoais, nunca um experimento exclusivo desta coleção. A integração usa `ts-fsrs@5.4.1`: `services/reviewMigration.js` considera somente questões de aulas explicitamente ativadas **com seleção pedagógica publicada** e distribui a primeira exposição de todas as elegíveis nas ondas 35/30/20/10/5. Depois da resposta real, essenciais seguem longitudinalmente e `services/fsrsScheduler.js` grava `fsrs`; complementares e reservas passam a `adaptiveState: 'completed-once'`, sem novo vencimento. Aula sem curadoria e publicação não cria cartões novos. Se houver cartão legado, ele fica em `adaptiveState: 'awaiting-curation'`, `dueDate: null` e não conta nem aparece como pendência. Preserve o import dinâmico, `cardKey`, `parkedDueDate` e `legacyFallback`. A UI é uma fila única; a partição por aula em `vq_review` é apenas armazenamento. Leia `docs/LEARNING_ENGINE_ROADMAP.md` antes de mexer nessas áreas.
+FSRS é o motor ativo por cartão para questões essenciais do curso e para materiais pessoais, nunca um experimento exclusivo desta coleção. A integração usa `ts-fsrs@5.4.1`: `services/reviewMigration.js` considera somente questões de aulas explicitamente ativadas **com seleção pedagógica publicada** e distribui a primeira exposição de todas as elegíveis diariamente por até 30 dias, com carga, importância e qualidade não crescentes. Depois da resposta real, essenciais seguem longitudinalmente e `services/fsrsScheduler.js` grava `fsrs`; complementares e reservas passam a `adaptiveState: 'completed-once'`, sem novo vencimento. Aula sem curadoria e publicação não cria cartões novos. Se houver cartão legado, ele fica em `adaptiveState: 'awaiting-curation'`, `dueDate: null` e não conta nem aparece como pendência. Preserve o import dinâmico, `cardKey`, `parkedDueDate` e `legacyFallback`. A UI é uma fila única; a partição por aula em `vq_review` é apenas armazenamento. Leia `docs/LEARNING_ENGINE_ROADMAP.md` antes de mexer nessas áreas.
 
 Durante a sessão de Revisões, o administrador recebe uma faixa de auditoria em cada questão do curso com `qualityScore`, importância e tier vindos do `learningPolicy` publicado pela Curadoria. A interface não recalcula essas notas. Políticas ausentes ou ainda em `awaiting_curation` aparecem como sem nota válida, nunca como qualidade zero; materiais pessoais não exibem essa faixa.
 
@@ -655,17 +655,19 @@ resultado anterior para rollback e comparação das essenciais. Se o cálculo FS
 a resposta e a persistência legadas devem continuar.
 
 Quando existe uma seleção publicada, questões de aulas adicionadas já no fluxo progressivo
-entram uma vez no plano de primeira exposição: 35% no dia da ativação, 30% no dia seguinte,
-20% no quarto dia, 10% no oitavo e 5% no décimo quinto. A divisão usa o método dos maiores
-restos para somar exatamente o total da aula. Dentro das ondas, erros anteriores vêm
-primeiro; depois, metadados priorizam `essential`, importância, qualidade, papel cognitivo,
-baixa redundância e diversidade de conceitos, deixando complementares e reservas mais
-fracas para depois. A alocação `v9` também espalha questões irmãs entre dias diferentes
+entram uma vez no plano de primeira exposição diária por até 30 dias. Com pelo menos 30
+questões elegíveis, todos os dias recebem conteúdo; conjuntos menores ocupam dias consecutivos
+enquanto houver itens. A quantidade é não crescente e a soma permanece exatamente igual ao
+total da aula. Erros anteriores vêm primeiro; depois, metadados priorizam `essential`,
+importância, qualidade, papel cognitivo, baixa redundância e diversidade de conceitos,
+deixando complementares e reservas mais fracas para depois. A alocação `v10` também espalha questões irmãs entre dias diferentes
 sempre que houver capacidade: primeiro por `redundancyClusterId`/`canonicalQuestionId`,
 depois por `primaryConceptId` e sobreposição de `conceptIds`. As quantidades 35/30/20/10/5
-continuam exatas; a primeira representante de cada família preserva sua prioridade e as
+foram aposentadas; a primeira representante de cada família preserva sua prioridade e as
 variações são adiadas em favor de cobertura conceitual. Essa distribuição vale para cartões
-novos. A migração v9 corrige a matrícula retroativa defeituosa da v5/v6 e a reconstrução
+novos e para cartões de planos anteriores que ainda não tiveram revisão real. A migração v10
+reancora somente esses inéditos a partir do momento da migração e preserva integralmente
+`FSRS`, `lastReview`, `reps`, resultados e datas do que já foi revisado. Ela mantém também as correções da matrícula retroativa defeituosa da v5/v6 e da reconstrução
 superatrasada da v7: cartões do núcleo legado retomam o calendário gradual que já possuíam,
 enquanto todo o backlog complementar/reserva legado inédito recebe datas entre amanhã e o
 29º dia futuro. A alocação `legacy-backlog-balanced-v1` equilibra a carga já prevista nos
@@ -678,7 +680,7 @@ primeira resposta real, somente questões `essential` recebem nova data pelo FSR
 desativadas, `deprecated`, `review_required`, `reviewEligible: false` ou que exigem visual
 ainda não resolvido não entram. Sem curadoria **e seleção publicada**, a aula não cria
 cartões novos; cartões legados ficam em `awaiting-curation`, sem vencimento e fora da
-contagem. A migração v9 aposenta vencimentos antigos de complementares/reservas já
+contagem. A migração v10 aposenta vencimentos antigos de complementares/reservas já
 respondidas sem apagar o histórico, remove ativações legadas de reforço e preserva
 respostas, pausas e datas válidas das essenciais. O rollout progressivo é identificado pelo
 marco de criação/primeiro planejamento; não confunda backlog anterior com aula recém-adicionada.
@@ -686,7 +688,7 @@ marco de criação/primeiro planejamento; não confunda backlog anterior com aul
 O banco completo da aula e a revisão longitudinal continuam com experiências diferentes.
 Questões do Curso permite percorrer o banco diretamente; nas aulas adicionadas já no fluxo
 progressivo, Revisões garante que toda questão curada e elegível seja vista pelo menos uma
-vez nas cinco ondas. O backlog legado também aparece uma vez, distribuído pela janela de
+vez no fluxo diário de até 30 dias. O backlog legado também aparece uma vez, distribuído pela janela de
 30 dias da migração balanceada. Depois da primeira exposição, somente o núcleo essencial se transforma em
 revisão longitudinal; complementares e reservas ampliam a cobertura inicial sem inflar a dívida futura.
 

@@ -5489,7 +5489,7 @@ export default function QuestionBankApp() {
     const todayCount = Number(plan.introduction?.buckets?.find(bucket => bucket.dayOffset === 0)?.count) || 0;
     const laterCount = Math.max(0, Number(plan.introduction?.total) - todayCount);
     addToast(
-      `${plan.introduction?.total || plan.added} questões distribuídas · ${todayCount} para hoje${laterCount ? ` e ${laterCount} ao longo das próximas ondas` : ''}.`,
+      `${plan.introduction?.total || plan.added} questões distribuídas · ${todayCount} para hoje${laterCount ? ` e ${laterCount} gradualmente nos próximos dias` : ''}.`,
       'success',
       5200,
     );
