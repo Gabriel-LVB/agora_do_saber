@@ -420,7 +420,7 @@ const touchCache = (key) => writeStorageText(key, String(Date.now()));
 const userLibraryCacheKey = (uid) => `agora_library_${uid}_cache_v2`;
 const userWatchedTouchedKey = (uid) => `agora_watched_${uid}_touched_at`;
 const userVqBlocksCacheKey = (uid) => `agora_vq_blocks_${uid}_cache_v1`;
-const userReviewQueueCacheKey = (uid) => `agora_vq_review_${uid}_cache_v1`;
+const userReviewQueueCacheKey = (uid) => `agora_vq_review_${uid}_cache_v2`;
 const normalizeEmailList = (emails = []) => Array.from(new Set((Array.isArray(emails) ? emails : [])
   .map(e => String(e || '').trim().toLowerCase())
   .filter(Boolean)));
@@ -3836,7 +3836,6 @@ export default function QuestionBankApp() {
   const [cursoTab, setCursoTab]           = useState('videoaulas');
   const [reviewQueue, setReviewQueue]     = useState({});  // { aulaId: { blockId: { qId: { interval, dueDate, seed } } } }
   const reviewQueueRef = useRef({});
-  const reviewLoadStartedRef = useRef(false);
   const [reviewLoaded, setReviewLoaded]   = useState(false);
   const [resetCourseModal, setResetCourseModal] = useState(false);
   const [resetCourseInput, setResetCourseInput] = useState('');
@@ -4806,14 +4805,15 @@ export default function QuestionBankApp() {
     }
   }, [user, canSeeVideoaulas]);
 
-  // Load reviewQueue sob demanda quando revisão/curso precisam da fila.
+  // O cache antecipa a primeira pintura, mas nunca decide a fila autoritativa.
+  // A assinatura mantém outras abas, dispositivos e origens em sincronia.
   useEffect(() => {
-    if (!user || user.isAnonymous || !needsReviewQueueData || reviewLoadStartedRef.current) return;
-    reviewLoadStartedRef.current = true;
+    if (!user || user.isAnonymous || !needsReviewQueueData) return undefined;
+    let active = true;
     setReviewLoaded(false);
     const cacheKey = userReviewQueueCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.reviewQueue, null);
-    if (cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
+    if (cached.fresh && cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)) {
       const filteredCache = disabledCourseQuestionRuntimeRef.current?.disableCourseReviewQueueItems(
         cached.value,
         disabledCourseQuestionsRef.current,
@@ -4821,20 +4821,18 @@ export default function QuestionBankApp() {
       ) || cached.value;
       reviewQueueRef.current = filteredCache;
       setReviewQueue(filteredCache);
-      if (cached.fresh) {
-        setReviewLoaded(true);
-        return;
-      }
     }
-    (async () => {
+
+    const applyRemoteSnapshot = async snap => {
+      if (snap.metadata.fromCache) return;
       try {
-        const snap = await getDocs(collection(db, 'users', user.uid, 'vq_review'));
         const loaded = {};
         snap.forEach(d => { loaded[d.id] = d.data(); });
         const runtime = disabledCourseQuestionRuntimeRef.current
           || (disabledCourseQuestionsRef.current.length
             ? await import('./services/disabledCourseQuestions.js')
             : null);
+        if (!active) return;
         if (runtime) disabledCourseQuestionRuntimeRef.current = runtime;
         const filtered = runtime?.disableCourseReviewQueueItems(
           loaded,
@@ -4844,16 +4842,26 @@ export default function QuestionBankApp() {
         reviewQueueRef.current = filtered;
         setReviewQueue(filtered);
         writeTimedCache(cacheKey, filtered);
-      } catch(e) {
-        console.warn('review queue load failed:', e?.code || e?.message || e);
-      } finally {
         setReviewLoaded(true);
+      } catch(e) {
+        console.warn('review queue sync failed:', e?.code || e);
       }
-    })();
-  }, [user, needsReviewQueueData]); // eslint-disable-line
+    };
+
+    const unsubscribe = onSnapshot(
+      collection(db, 'users', user.uid, 'vq_review'),
+      { includeMetadataChanges:true },
+      snap => { applyRemoteSnapshot(snap); },
+      error => console.warn('review queue sync failed:', error?.code || error),
+    );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [user?.uid, user?.isAnonymous, needsReviewQueueData]); // eslint-disable-line
 
   useEffect(() => {
-    if (!user) { reviewLoadStartedRef.current = false; setReviewLoaded(false); reviewQueueRef.current = {}; setReviewQueue({}); }
+    if (!user) { setReviewLoaded(false); reviewQueueRef.current = {}; setReviewQueue({}); }
   }, [user]);
 
   const saveCronStartDate = async (dateStr) => {
@@ -5689,7 +5697,7 @@ export default function QuestionBankApp() {
   };
 
   // Total de revisões pendentes (para badge)
-  const dueCount = getDueReviews().length;
+  const dueCount = reviewLoaded ? getDueReviews().length : 0;
   const reviewSummary = useMemo(() => summarizeReviewQueue(reviewQueue), [reviewQueue]);
   const reviewForecast = useMemo(() => buildReviewForecast(reviewQueue, { days:30 }), [reviewQueue]);
   const reviewScheduledCount = reviewSummary.total;

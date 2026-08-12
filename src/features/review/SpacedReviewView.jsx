@@ -1,5 +1,7 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import { getReviewCurationAudit } from './reviewCurationAudit.js';
+import { reconcileReviewSessionWithQueue } from './reviewSessionSync.js';
 
 export default function SpacedReviewView() {
   const {
@@ -25,6 +27,7 @@ export default function SpacedReviewView() {
     restoreReturnTarget,
     reviewForecast,
     reviewLoaded,
+    reviewQueue,
     reviewScheduledCount,
     reviewSession,
     setReviewNotebook,
@@ -38,21 +41,25 @@ export default function SpacedReviewView() {
   const [forecastRange, setForecastRange] = React.useState(7);
   const reviewSessionTopRef = React.useRef(null);
   const dm = darkMode;
-  const dueItems = getDueReviews();
+  const dueItems = reviewLoaded ? getDueReviews() : [];
   const dueFlashcardItems = dueItems.filter(item => item.question?.isFlashcard);
   const dueQuestionItems = dueItems.filter(item => !item.question?.isFlashcard);
   const reviewEvents = Object.values(dailyStats?.reviewEvents || {});
   const trackedReviewKeys = Object.keys(dailyStats?.questionKeys || {}).filter(key => key.startsWith('review:')).length;
   const completedToday = Math.max(reviewEvents.length, trackedReviewKeys);
   const correctToday = reviewEvents.filter(event => event?.correct).length;
-  const remainingNow = reviewForecast?.dueNow ?? dueItems.length;
+  const remainingNow = reviewLoaded ? (reviewForecast?.dueNow ?? dueItems.length) : 0;
   const todayWork = completedToday + remainingNow;
   const todayProgress = todayWork ? Math.round(completedToday / todayWork * 100) : 100;
-  const forecastDays = (reviewForecast?.days || []).slice(0, forecastRange);
+  const forecastDays = reviewLoaded ? (reviewForecast?.days || []).slice(0, forecastRange) : [];
   const maxForecastCount = Math.max(1, ...forecastDays.map(day => day.total));
   const nextReviewLabel = nextReviewAt
     ? new Intl.DateTimeFormat('pt-BR', { day:'2-digit', month:'long' }).format(new Date(nextReviewAt))
     : null;
+  React.useEffect(() => {
+    if (!reviewLoaded) return;
+    setReviewSession(session => reconcileReviewSessionWithQueue(session, reviewQueue));
+  }, [reviewLoaded, reviewQueue, setReviewSession]);
   const forecastDayLabel = (day, index) => {
     if (forecastRange >= 14) {
       return new Intl.DateTimeFormat('pt-BR', { day:'2-digit', month:'2-digit' }).format(new Date(day.date));
@@ -73,6 +80,7 @@ export default function SpacedReviewView() {
       completed = false,
     } = reviewSession;
     const current = sessionItems[index];
+    const curationAudit = getReviewCurationAudit(current);
     const sessionItemKey = current?.item?.cardKey || `${current?.aulaId}/${current?.blockId}/${current?.qId}`;
     const total = sessionItems.length;
     const done = Object.keys(sessionAnswers).length;
@@ -141,6 +149,17 @@ export default function SpacedReviewView() {
         <div className={`mb-5 h-2 overflow-hidden rounded-full ${dm?'bg-gray-800':'bg-gray-100'}`}>
           <div className="h-full rounded-full bg-yellow-500 transition-all" style={{width:`${done / total * 100}%`}}/>
         </div>
+        {isAdmin&&curationAudit&&<section aria-label="Auditoria da Curadoria" className={`mb-3 rounded-xl border px-4 py-3 ${dm?'border-blue-900/70 bg-blue-950/20':'border-blue-200 bg-blue-50/70'}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[10px] font-bold uppercase tracking-[.16em] ${dm?'text-blue-300':'text-blue-700'}`}>Curadoria</span>
+            {curationAudit.status==='curated' ? <>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${dm?'bg-blue-900/60 text-blue-200':'bg-white text-blue-800'}`}>Qualidade {curationAudit.qualityScore}/100</span>
+              {curationAudit.importance!==null&&<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-700'}`}>Importância {curationAudit.importance}/5</span>}
+              {curationAudit.tierLabel&&<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-700'}`}>{curationAudit.tierLabel}</span>}
+            </> : <span className={`text-xs font-bold ${dm?'text-gray-300':'text-gray-700'}`}>Sem nota de curadoria válida</span>}
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-500">Valores do snapshot publicado; a Revisão não recalcula nem altera essas notas.</p>
+        </section>}
         <QuestionCard
           question={reviewQuestion}
           index={index}
@@ -186,18 +205,18 @@ export default function SpacedReviewView() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[.16em] text-yellow-600">Hoje</p>
             <h2 className="mt-1 font-serif text-3xl font-bold text-yellow-600">Revisões</h2>
-            <p className={`mt-1 text-sm ${dm?'text-gray-400':'text-gray-600'}`}>{dueItems.length ? `${dueItems.length} item${dueItems.length===1?'':'s'} esperando por você.` : 'Tudo em dia.'}</p>
+            <p className={`mt-1 text-sm ${dm?'text-gray-400':'text-gray-600'}`}>{!reviewLoaded ? 'Confirmando sua fila no servidor...' : dueItems.length ? `${dueItems.length} item${dueItems.length===1?'':'s'} esperando por você.` : 'Tudo em dia.'}</p>
           </div>
           <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto lg:min-w-[430px]">
             <button
-              disabled={!dueQuestionItems.length}
+              disabled={!reviewLoaded||!dueQuestionItems.length}
               onClick={()=>setReviewSession({items:dueQuestionItems,index:0,sessionAnswers:{}})}
               className="flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700 disabled:opacity-35"
             >
               <RepeatIcon className="h-4 w-4"/>Responder questões <span className="rounded-full bg-black/15 px-2 py-0.5">{dueQuestionItems.length}</span>
             </button>
             <button
-              disabled={!dueFlashcardItems.length}
+              disabled={!reviewLoaded||!dueFlashcardItems.length}
               onClick={()=>setReviewSession({items:dueFlashcardItems,index:0,sessionAnswers:{}})}
               className={`flex min-h-[52px] items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold disabled:opacity-35 ${dm?'border-yellow-700 text-yellow-300 hover:bg-yellow-900/20':'border-yellow-400 text-yellow-800 hover:bg-yellow-50'}`}
             >

@@ -155,6 +155,8 @@ O motor será um serviço comum e não ficará acoplado a `SpacedReviewView`.
 - depois da primeira resposta real, o pacote oficial `ts-fsrs@5.4.1` grava `fsrs` e seu `nextDue` passa a controlar a fila;
 - o cálculo legado continua salvo em `legacyFallback`, permitindo comparação e reversão;
 - a comparação acumulada entre as duas datas aparece para admin na tela de Revisões;
+- durante uma sessão, o administrador vê em cada questão do curso a qualidade, a importância e o tier exatamente como publicados no snapshot da Curadoria; ausência ou pendência aparece como sem nota válida, nunca como nota zero;
+- o cache local da fila antecipa somente a primeira pintura; uma assinatura do Firestore confirma a fila antes de liberar a sessão e propaga reagendamentos entre abas, dispositivos e origens diferentes;
 - a biblioteca FSRS fica em chunks lazy próprios e só é baixada na primeira resposta de revisão.
 
 ### FSRS ativo por cartão

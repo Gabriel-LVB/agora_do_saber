@@ -105,6 +105,7 @@ import {
   FSRS_SCHEDULER_VERSION,
 } from '../src/services/fsrsScheduler.js';
 import { pruneCourseReviewQueue } from '../src/services/courseReviewReset.js';
+import { reconcileReviewSessionWithQueue } from '../src/features/review/reviewSessionSync.js';
 import { executeGeminiRotation } from '../src/services/geminiRotation.js';
 import {
   buildFamedCourseCatalogExport,
@@ -160,6 +161,7 @@ import {
   questionHasEcgImage,
   questionRequestsEcgImage,
 } from '../src/services/questionVisual.js';
+import { getReviewCurationAudit } from '../src/features/review/reviewCurationAudit.js';
 
 const traverse = traverseModule.default;
 const assertNoFreeIdentifiers = (source, label) => {
@@ -211,6 +213,40 @@ assert.deepEqual(cleanFirestoreData(input), {
     null,
   ],
 });
+
+assert.deepEqual(getReviewCurationAudit({
+  source:'curso',
+  item:{ learningPolicy:{ qualityScore:72, importance:2, tier:'reserve', status:'active' } },
+}), {
+  status:'curated',
+  qualityScore:72,
+  importance:2,
+  tier:'reserve',
+  tierLabel:'Reserva',
+});
+assert.deepEqual(getReviewCurationAudit({
+  source:'curso',
+  item:{ learningPolicy:{ qualityScore:0, status:'awaiting_curation', selectionSource:'awaiting-curation' } },
+}), { status:'unavailable' });
+assert.deepEqual(getReviewCurationAudit({
+  source:'curso',
+  question:{ learningPolicy:{ qualityScore:'91', importance:'5', tier:'essential' } },
+}), {
+  status:'curated',
+  qualityScore:91,
+  importance:5,
+  tier:'essential',
+  tierLabel:'Essencial',
+});
+assert.deepEqual(getReviewCurationAudit({
+  source:'curso',
+  question:{ learningPolicy:null },
+  item:{ learningPolicy:{ qualityScore:88, importance:4, tier:'complementary' } },
+}), { status:'unavailable' });
+assert.equal(getReviewCurationAudit({
+  source:'oraculo',
+  item:{ learningPolicy:{ qualityScore:50 } },
+}), null);
 
 const bigQuestionText = 'x'.repeat(350000);
 const chunkPrepared = prepareSharedLibraryContentForWrite({
@@ -1259,6 +1295,39 @@ assert.deepEqual(courseReviewReset.removedAulaIds.sort(), ['course-aula','legacy
 assert.deepEqual(Object.keys(courseReviewReset.queue), ['lib_personal']);
 assert.deepEqual(Object.keys(courseReviewReset.queue.lib_personal.topic), ['personal']);
 assert.equal(courseReviewReset.changedEntries.length, 1);
+const reviewSyncNow = 10_000;
+const scheduledReviewItem = (id, dueDate, adaptiveState = 'core') => ({
+  source:'curso',
+  cardKey:`course/aula/${id}`,
+  dueDate,
+  adaptiveState,
+  learningPolicy:{ tier:'essential' },
+});
+const syncedDueItem = scheduledReviewItem('due', reviewSyncNow - 100);
+const answeredCompletedItem = scheduledReviewItem('answered', null, 'completed-once');
+const reconciledSession = reconcileReviewSessionWithQueue({
+  items:[
+    { aulaId:'aula', blockId:'main', qId:'due', item:scheduledReviewItem('due', reviewSyncNow - 500) },
+    { aulaId:'aula', blockId:'main', qId:'future', item:scheduledReviewItem('future', reviewSyncNow - 500) },
+    { aulaId:'aula', blockId:'main', qId:'answered', item:scheduledReviewItem('answered', reviewSyncNow - 500) },
+  ],
+  index:1,
+  sessionAnswers:{ 'course/aula/answered':'A' },
+}, {
+  aula:{ main:{
+    due:syncedDueItem,
+    future:scheduledReviewItem('future', reviewSyncNow + 500),
+    answered:answeredCompletedItem,
+  } },
+}, reviewSyncNow);
+assert.deepEqual(reconciledSession.items.map(item => item.qId), ['due','answered']);
+assert.equal(reconciledSession.items[0].item, syncedDueItem);
+assert.equal(reconciledSession.index, 1);
+assert.equal(reconcileReviewSessionWithQueue({
+  items:[{ aulaId:'aula', blockId:'main', qId:'gone', item:scheduledReviewItem('gone', reviewSyncNow - 500) }],
+  index:0,
+  sessionAnswers:{},
+}, {}, reviewSyncNow), null);
 const firstFsrsState = advanceFsrsCard({
   correct:true,
   legacyDue:reviewNow + 7 * REVIEW_DAY_MS,
@@ -2219,6 +2288,11 @@ assert.match(appSource, /cached\.fresh \|\| !needsPersonalLibraryData/);
 assert.match(appSource, /saveSharedLibraryAnswerPatch/);
 assert.doesNotMatch(appSource, /setDoc\(doc\(db, ['"]users['"], user\.uid, SHARED_LIBRARY_PROGRESS_COLLECTION/);
 assert.match(appSource, /persistReviewQueueChanges/);
+assert.match(appSource, /onSnapshot\(\s*collection\(db, 'users', user\.uid, 'vq_review'\)/);
+assert.match(appSource, /snap\.metadata\.fromCache/);
+assert.doesNotMatch(appSource, /if \(cached\.fresh\) \{\s*setReviewLoaded\(true\)/);
+assert.match(appSource, /agora_vq_review_\$\{uid\}_cache_v2/);
+assert.doesNotMatch(appSource, /agora_vq_review_\$\{uid\}_cache_v1/);
 assert.doesNotMatch(appSource, /setDoc\(doc\(db, ['"]users['"], user\.uid, ['"]vq_review['"]/);
 assert.match(appSource, /saveWatchedAulas/);
 assert.match(appSource, /saveDailyStats/);
@@ -2803,6 +2877,8 @@ assert.match(appSource, /saveVqBlockPatch\([\s\S]*?errorNotebook:nextList\(previ
 assert.match(spacedReviewViewSource, /useFeatureContext/);
 assert.match(spacedReviewViewSource, />Revisões</);
 assert.match(spacedReviewViewSource, /reviewScheduledCount/);
+assert.match(spacedReviewViewSource, /disabled=\{!reviewLoaded\|\|!dueQuestionItems\.length\}/);
+assert.match(spacedReviewViewSource, /reconcileReviewSessionWithQueue\(session, reviewQueue\)/);
 assert.match(spacedReviewViewSource, /Responder questões/);
 assert.match(spacedReviewViewSource, /allowGiveUp/);
 assert.match(questionFeatureSource, /DONT_KNOW/);
@@ -2811,6 +2887,10 @@ assert.match(questionFeatureSource, />\s*Não sei\s*<\/button>/);
 assert.match(questionFeatureSource, /hover:-translate-y-0\.5 hover:shadow-md/);
 assert.doesNotMatch(spacedReviewViewSource, /appendAdaptiveSupportToReviewSession|adaptiveSupportAdded/);
 assert.match(spacedReviewViewSource, /onAdminDisableQuestion/);
+assert.match(spacedReviewViewSource, /getReviewCurationAudit\(current\)/);
+assert.match(spacedReviewViewSource, /Auditoria da Curadoria/);
+assert.match(spacedReviewViewSource, /Qualidade \{curationAudit\.qualityScore\}\/100/);
+assert.match(spacedReviewViewSource, /Sem nota de curadoria válida/);
 assert.match(spacedReviewViewSource, /Revisar flashcards/);
 assert.match(spacedReviewViewSource, /Carga prevista/);
 assert.match(spacedReviewViewSource, /max-w-5xl/);
