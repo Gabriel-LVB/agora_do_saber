@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import BrandIdentity from './components/BrandIdentity.jsx';
 import './brand.css';
@@ -8,6 +8,7 @@ import { FeatureProvider } from './features/FeatureContext.jsx';
 import { adminEmail } from './config/environment.js';
 import { cleanFirestoreData } from './lib/firestoreData.js';
 import { deferInteractionWork } from './lib/interaction.js';
+import { normalizeQuestionTypesForGeneration, shouldGenerateHybridClinicalPass, toggleQuestionTypeSelection } from './lib/questionTypes.js';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
 import { useCourseDerivedState } from './hooks/useCourseDerivedState.js';
 import { useGeminiRuntime } from './hooks/useGeminiRuntime.js';
@@ -853,8 +854,6 @@ const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze
 const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
 const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
 const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
-const MIXED_QUESTION_STYLE = 'hybrid';
-const isMixedQuestionMode = (style = '') => style === MIXED_QUESTION_STYLE;
 const QUESTION_STYLE_OPTIONS = [
   { k:'hybrid', label:'Mistas', desc:'Gera diretas sobre os subtópicos e depois casos encadeados como teste clínico.' },
   { k:'mixed', label:'Casos encadeados', desc:'A IA decide quantos casos usar e faz várias questões progressivas sobre cada um.' },
@@ -3238,10 +3237,7 @@ const QUESTION_TYPES = [
 const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false, renderTypeDetails=null }) => {
   const dm = darkMode;
   const toggle = (k) => {
-    if (single) { onChange([k]); return; }
-    const next = selected.includes(k) ? selected.filter(x=>x!==k) : [...selected, k];
-    if (next.length === 0) return;
-    onChange(next);
+    onChange(toggleQuestionTypeSelection(selected, k, { single }));
   };
   const visibleTypes = QUESTION_TYPES
     .filter(t => includeExternalOnly || !t.externalOnly)
@@ -3676,6 +3672,7 @@ export default function QuestionBankApp() {
 
   // ── Features ──────────────────────────────────────────────────────────────
   const [showOnlyWrong, setShowOnlyWrong] = useState(false);
+  const [topicStudyPreference, setTopicStudyPreference] = useState(null);
 
   // Whitelist global — alunos com curso e alunos sem curso
   const [allowedEmails, setAllowedEmails]       = useState([]);
@@ -3989,9 +3986,29 @@ export default function QuestionBankApp() {
       setDisabledCourseQuestions([]);
       return undefined;
     }
-    return onSnapshot(doc(db, 'config', DISABLED_COURSE_QUESTIONS_CONFIG_DOC), snapshot => {
-      applyDisabledCourseQuestionEntries(snapshot.exists() ? snapshot.data() : []).catch(console.warn);
+    let rootEntries = [];
+    let batchEntries = [];
+    let applyChain = Promise.resolve();
+    const queueCombinedEntries = () => {
+      const combined = [...rootEntries, ...batchEntries];
+      applyChain = applyChain.then(() => applyDisabledCourseQuestionEntries(combined)).catch(console.warn);
+    };
+    const unsubscribeRoot = onSnapshot(doc(db, 'config', DISABLED_COURSE_QUESTIONS_CONFIG_DOC), snapshot => {
+      rootEntries = snapshot.exists() ? (snapshot.data()?.entries || []) : [];
+      queueCombinedEntries();
     }, console.warn);
+    const unsubscribeBatches = onSnapshot(query(
+      collection(db, 'config'),
+      where('configType', '==', 'disabled-course-question-batch'),
+    ), snapshot => {
+      batchEntries = [];
+      snapshot.forEach(entry => batchEntries.push(...(entry.data()?.entries || [])));
+      queueCombinedEntries();
+    }, console.warn);
+    return () => {
+      unsubscribeRoot();
+      unsubscribeBatches();
+    };
   }, [user?.uid, user?.isAnonymous, isAdmin, canSeeVideoaulas, applyDisabledCourseQuestionEntries]);
 
   const isCourseQuestionGloballyDisabled = useCallback((context = {}) => (
@@ -4045,7 +4062,10 @@ export default function QuestionBankApp() {
         updatedAt:Date.now(),
         updatedBy:user?.email || user?.uid || null,
       }), { merge:true });
-      await applyDisabledCourseQuestionEntries(entries);
+      await applyDisabledCourseQuestionEntries(runtime.normalizeDisabledCourseQuestions([
+        ...disabledCourseQuestionsRef.current,
+        entry,
+      ]));
       addToast('Questão inativada para todos.', 'success', 4200);
       return true;
     } catch {
@@ -4102,7 +4122,10 @@ export default function QuestionBankApp() {
         updatedAt:Date.now(),
         updatedBy:user?.email || user?.uid || null,
       }), { merge:true });
-      await applyDisabledCourseQuestionEntries(entries);
+      await applyDisabledCourseQuestionEntries(runtime.normalizeDisabledCourseQuestions([
+        ...disabledCourseQuestionsRef.current,
+        policyEntry,
+      ]));
       addToast(`${candidates.length} pergunta(s) metadidática(s) inativada(s).`, 'success', 5000);
       return true;
     } catch {
@@ -4111,6 +4134,100 @@ export default function QuestionBankApp() {
     } finally {
       disableCourseQuestionInFlightRef.current = false;
       setNonContentQuestionCleanupRunning(false);
+    }
+  };
+
+  const inactivateQuestionBankSizingCandidates = async ({
+    candidates = [],
+    reportSchema = null,
+    reportGeneratedAt = null,
+  } = {}) => {
+    if (!isAdmin || disableCourseQuestionInFlightRef.current) return { ok:false, added:0, skipped:0 };
+    const runtime = disabledCourseQuestionRuntimeRef.current
+      || await import('./services/disabledCourseQuestions.js');
+    disabledCourseQuestionRuntimeRef.current = runtime;
+    const uniqueCandidates = [];
+    const seen = new Set();
+    (candidates || []).forEach(candidate => {
+      const key = `${candidate?.sharedLibraryItemId || candidate?.aulaId || ''}::${candidate?.questionId || ''}`;
+      if (!candidate?.questionId || seen.has(key)) return;
+      seen.add(key);
+      if (runtime.isCourseQuestionDisabled(disabledCourseQuestionsRef.current, {
+        aulaId:candidate.aulaId,
+        lessonId:candidate.lessonId,
+        sharedLibraryItemId:candidate.sharedLibraryItemId,
+        lessonAliases:candidate.lessonAliases,
+        questionId:candidate.questionId,
+      })) return;
+      uniqueCandidates.push(candidate);
+    });
+    const skipped = Math.max(0, (candidates || []).length - uniqueCandidates.length);
+    if (!uniqueCandidates.length) {
+      addToast('Todas as candidatas deste retrato já estão inativas.', 'info', 4000);
+      return { ok:true, added:0, skipped };
+    }
+    const confirmed = window.confirm(
+      `Inativar ${uniqueCandidates.length.toLocaleString('pt-BR')} questão(ões) do cenário amplo deste retrato? `
+      + 'Elas sumirão do banco ativo, favoritos e revisões. O conteúdo original e o lote desta decisão serão preservados para auditoria.'
+    );
+    if (!confirmed) return { ok:false, added:0, skipped };
+    disableCourseQuestionInFlightRef.current = true;
+    let operationStage = 'preparação dos registros';
+    try {
+      const disabledAt = Date.now();
+      const disabledBy = user?.email || user?.uid || null;
+      operationStage = 'carregamento do gravador';
+      const store = await import('./services/disabledCourseQuestionStore.js');
+      operationStage = 'preparação dos registros';
+      const entries = store.prepareQuestionBankSizingDisabledEntries({
+        candidates:uniqueCandidates,
+        disabledAt,
+        disabledBy,
+      });
+      const mergedEntries = runtime.normalizeDisabledCourseQuestions([
+        ...disabledCourseQuestionsRef.current,
+        ...entries,
+      ]);
+      operationStage = 'gravação atômica no Firestore';
+      const saved = await store.saveQuestionBankSizingDisabledBatch({
+        entries,
+        disabledBy,
+        reportSchema,
+        reportGeneratedAt,
+      });
+      // A confirmação do botão depende somente do commit atômico. Filtrar dezenas
+      // de milhares de questões, revisões e caches é trabalho local posterior e
+      // não pode transformar uma gravação concluída em um falso erro de persistência.
+      disabledCourseQuestionsRef.current = mergedEntries;
+      setDisabledCourseQuestions(mergedEntries);
+      deferInteractionWork(() => applyDisabledCourseQuestionEntries(mergedEntries)).catch(error => {
+        console.error('question bank sizing local refresh failed after persistence:', error);
+      });
+      addToast(
+        `${saved.entryCount.toLocaleString('pt-BR')} questão(ões) inativada(s) em ${saved.batchCount} lote(s).`,
+        'success',
+        6000,
+      );
+      return { ok:true, added:saved.entryCount, skipped, runId:saved.runId };
+    } catch(error) {
+      console.error('question bank sizing inactivation failed:', error);
+      const failureCode = String(error?.code || '')
+        .replace(/^firestore\//, '')
+        .replace(/^FirebaseError:\s*/i, '')
+        .trim();
+      const failureMessage = String(error?.message || error || 'erro desconhecido')
+        .replace(/^FirebaseError:\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 220);
+      addToast(
+        `Falha durante ${operationStage}${failureCode ? ` (${failureCode})` : ''}: ${failureMessage}. Nada parcial foi gravado.`,
+        'warning',
+        9000,
+      );
+      return { ok:false, added:0, skipped };
+    } finally {
+      disableCourseQuestionInFlightRef.current = false;
     }
   };
 
@@ -7955,7 +8072,9 @@ export default function QuestionBankApp() {
   });
 
   const getPrompt = async (forAPI=false, areas=[]) => {
-    const s = withAdminQuestionPromptSettings(settingsRef.current);
+    const rawSettings = withAdminQuestionPromptSettings(settingsRef.current);
+    const questionTypes = normalizeQuestionTypesForGeneration(rawSettings.questionTypes);
+    const s = { ...rawSettings, questionTypes, ...(isOnlyMemoryCardType(questionTypes) ? { questionStyle:'direct' } : {}) };
     const focusBlock = getFocusInst(areas);
     const buildOracleQuestionPrompt = await getPromptBuilder('buildOracleQuestionPrompt');
     return buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
@@ -7963,7 +8082,9 @@ export default function QuestionBankApp() {
 
   const getExternalPrompt = async () => {
     const buildExternalPrompt = await getPromptBuilder('buildExternalPrompt');
-    return buildExternalPrompt(withAdminQuestionPromptSettings(settingsRef.current));
+    const rawSettings = withAdminQuestionPromptSettings(settingsRef.current);
+    const questionTypes = normalizeQuestionTypesForGeneration(rawSettings.questionTypes);
+    return buildExternalPrompt({ ...rawSettings, questionTypes, ...(isOnlyMemoryCardType(questionTypes) ? { questionStyle:'direct' } : {}) });
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -9872,7 +9993,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   const getDefaultBulkConfig = (mode = 'generate') => ({
     explanationLength:settingsRef.current.explanationLength || 'complete',
     questionStyle:settingsRef.current.questionStyle || 'mixed',
-    questionTypes:filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], { isAdmin, canCreateFlashcards:canUseAdvancedFeatures }),
+    questionTypes:normalizeQuestionTypesForGeneration(filterQuestionTypesForAccess(settingsRef.current.questionTypes || ['direct'], { isAdmin, canCreateFlashcards:canUseAdvancedFeatures })),
     qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
     qPerSubAuto:true,
     numAlternatives:settingsRef.current.numAlternatives || 5,
@@ -10645,7 +10766,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setRegenPrompt('');
     setOracleRegenConfig({
       questionStyle:topic?.questionStyle || settingsRef.current.questionStyle || 'mixed',
-      questionTypes:filterQuestionTypesForAccess(topic?.questionTypes || settingsRef.current.questionTypes || ['direct'], questionTypeAccess),
+      questionTypes:normalizeQuestionTypesForGeneration(filterQuestionTypesForAccess(topic?.questionTypes || settingsRef.current.questionTypes || ['direct'], questionTypeAccess)),
       qPerSub:Math.max(1, parseInt(settingsRef.current.qPerSub, 10) || 1),
       qPerSubAuto:true,
       numAlternatives:settingsRef.current.numAlternatives || 5,
@@ -10751,11 +10872,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const qPerSub = oracleAutoMode && promptSubtopicCount === 1 && baseQPerSub === 1
       ? 2
       : baseQPerSub;
-    const topicTypes = settingsOverride?.questionTypes || clearedTopic.questionTypes || generationSettings.questionTypes || ['direct'];
-    const mixedQuestionMode = isMixedQuestionMode(topicStyle);
+    const topicTypes = normalizeQuestionTypesForGeneration(settingsOverride?.questionTypes || clearedTopic.questionTypes || generationSettings.questionTypes || ['direct']);
     const promptTopicTypes = topicTypes;
-    const countAutoMode = mixedQuestionMode ? false : qPerSubAuto;
     const flashcardOnly = isOnlyMemoryCardType(promptTopicTypes);
+    const mixedQuestionMode = shouldGenerateHybridClinicalPass(topicStyle, promptTopicTypes);
+    const countAutoMode = mixedQuestionMode ? false : qPerSubAuto;
     const studyPlan = flashcardOnly ? [] : getTopicStudyPlan(clearedTopic, subtopicsArr);
     const hasStudyPlan = studyPlan.length > 0;
     const effectiveQPerSub = mixedQuestionMode ? 1 : qPerSub;
@@ -10795,7 +10916,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       numSubtopics: promptSubtopicCount,
       qPerSub:effectiveQPerSub,
       qPerSubAuto:hasStudyPlan ? false : countAutoMode,
-      questionStyle: mixedQuestionMode ? 'direct' : topicStyle,
+      questionStyle: mixedQuestionMode || flashcardOnly ? 'direct' : topicStyle,
       questionTypes: promptTopicTypes,
     };
     const na = getEffectiveAlternativeCount(s);
@@ -10946,11 +11067,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const qPerSub = oracleAutoMode && promptSubtopicCount === 1 && baseQPerSub === 1
       ? 2
       : baseQPerSub;
-    const topicTypes = filterQuestionTypesForAccess(settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'], questionTypeAccess);
-    const mixedQuestionMode = isMixedQuestionMode(topicStyle);
+    const topicTypes = normalizeQuestionTypesForGeneration(filterQuestionTypesForAccess(settingsOverride?.questionTypes || topic.questionTypes || generationSettings.questionTypes || ['direct'], questionTypeAccess));
     const promptTopicTypes = topicTypes;
-    const countAutoMode = mixedQuestionMode ? false : qPerSubAuto;
     const flashcardOnly = isOnlyMemoryCardType(promptTopicTypes);
+    const mixedQuestionMode = shouldGenerateHybridClinicalPass(topicStyle, promptTopicTypes);
+    const countAutoMode = mixedQuestionMode ? false : qPerSubAuto;
     const studyPlan = flashcardOnly ? [] : getTopicStudyPlan(topic, subtopicsArr);
     const hasStudyPlan = studyPlan.length > 0;
     const effectiveQPerSub = mixedQuestionMode ? 1 : qPerSub;
@@ -10993,7 +11114,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       numSubtopics: promptSubtopicCount,
       qPerSub:effectiveQPerSub,
       qPerSubAuto:hasStudyPlan ? false : countAutoMode,
-      questionStyle: mixedQuestionMode ? 'direct' : topicStyle,
+      questionStyle: mixedQuestionMode || flashcardOnly ? 'direct' : topicStyle,
       questionTypes: promptTopicTypes,
     };
     const na = getEffectiveAlternativeCount(s);
@@ -11926,7 +12047,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   // ── ACADEMIA: geração da aula ─────────────────────────────────────────────
 
   const generateAcademiaLessonForSubject = async (topic, subject, lessonSettings = {}, { onProgress } = {}) => {
-    const s = withAdminQuestionPromptSettings({ ...settingsRef.current, ...lessonSettings });
+    const rawSettings = withAdminQuestionPromptSettings({ ...settingsRef.current, ...lessonSettings });
+    const s = { ...rawSettings, questionTypes:normalizeQuestionTypesForGeneration(rawSettings.questionTypes) };
     const material = subject.sourceMaterials || '';
     const subtopics = topic.subtopics || [];
     const generationMode = s.generationMode || 'full';
@@ -12007,10 +12129,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       // Requisição B: questões de fixação da aula como um todo
       onProgress?.('Gerando questões de fixação...');
       fixQuestions = [];
-      const mixedQuestionMode = isMixedQuestionMode(s.questionStyle || '');
-      const fixationSettings = mixedQuestionMode
-        ? { ...s, questionStyle:'direct', questionTypes:['direct'] }
-        : s;
+      const fixationFlashcardOnly = isOnlyMemoryCardType(s.questionTypes || ['direct']);
+      const mixedQuestionMode = shouldGenerateHybridClinicalPass(s.questionStyle || '', s.questionTypes);
+      const fixationSettings = fixationFlashcardOnly
+        ? { ...s, questionStyle:'direct' }
+        : mixedQuestionMode
+          ? { ...s, questionStyle:'direct', questionTypes:['direct'] }
+          : s;
       const fixationPlans = buildQuestionPlansFromCounts(subtopics, fixationPlan);
       const totalFixationQuestions = fixationPlans.reduce((sum, plan) => sum + plan.questions, 0);
       const shouldChunkFixation = shouldSplitQuestionRequest({
@@ -12143,7 +12268,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     }
   };
 
-  const openAcademiaQuestionsInOracle = async (subject, topic, kind='fixation', bloco=null) => {
+  const openAcademiaQuestionsInOracle = async (subject, topic, kind='fixation', bloco=null, options={}) => {
     const questions = kind === 'extra'
       ? (bloco?.questions || bloco || [])
       : Object.values(topic.fixationQuestions || {}).flat();
@@ -12172,6 +12297,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setActiveFolderId(oracle.folder?.id || null);
     setActiveSubjectId(oracle.subject.id);
     setActiveTopicId(oracle.topic.id);
+    setTopicStudyPreference(options.studyKind ? {
+      subjectId:oracle.subject.id,
+      topicId:oracle.topic.id,
+      kind:options.studyKind,
+    } : null);
     setShowOnlyWrong(false);
     setView('topic');
   };
@@ -12204,13 +12334,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const mode = bulkGenerateModal?.mode || 'generate';
     const operation = getBulkOperationMeta(mode, initialSubject.source);
     const bulkConfig = bulkGenerateModal?.config || getDefaultBulkConfig(mode);
+    const operationQuestionTypes = normalizeQuestionTypesForGeneration(bulkConfig.questionTypes);
     const operationSettings = {
       explanationLength:bulkConfig.explanationLength,
       questionStyle:bulkConfig.questionStyle,
-      questionTypes:bulkConfig.questionTypes,
+      questionTypes:operationQuestionTypes,
       qPerSub:bulkConfig.qPerSub,
       qPerSubAuto:true,
-      numAlternatives:(bulkConfig.questionTypes || [])[0] === 'vof' ? 5 : bulkConfig.numAlternatives,
+      numAlternatives:operationQuestionTypes[0] === 'vof' ? 5 : bulkConfig.numAlternatives,
       vofStatementCount:bulkConfig.vofStatementCount || 5,
       geminiThinkingEnabled:!!bulkConfig.geminiThinkingEnabled,
       adminChunkedQuestions:QUESTION_BATCHING_ENABLED,
@@ -12311,7 +12442,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   const generateAcademiaExtraBatteryForSubject = async (topic, subject, extraSettings = null) => {
-    const s = extraSettings || settingsRef.current;
+    const rawSettings = extraSettings || settingsRef.current;
+    const s = { ...rawSettings, questionTypes:normalizeQuestionTypesForGeneration(rawSettings.questionTypes) };
     const subtopics = topic.subtopics || [];
 	      const lessonText = Object.values(topic.lessonSections || {}).map(sec => `${sec?.title || ''}\n${sec?.content || ''}`).join('\n\n');
 	      const previousQuestions = summarizeQuestionsForPrompt(getTopicReviewQuestions({source:'academia'}, topic));
@@ -12321,10 +12453,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        : buildAcademiaFixationPlan(subtopics, topic.lessonSections || {});
     const extraPlans = buildQuestionPlansFromCounts(subtopics, questionPlan);
     const totalExtraQuestions = extraPlans.reduce((sum, plan) => sum + plan.questions, 0);
-    const mixedQuestionMode = isMixedQuestionMode(s.questionStyle || '');
-    const extraPromptSettings = mixedQuestionMode
-      ? { ...s, questionStyle:'direct', questionTypes:['direct'] }
-      : s;
+    const extraFlashcardOnly = isOnlyMemoryCardType(s.questionTypes || ['direct']);
+    const mixedQuestionMode = shouldGenerateHybridClinicalPass(s.questionStyle || '', s.questionTypes);
+    const extraPromptSettings = extraFlashcardOnly
+      ? { ...s, questionStyle:'direct' }
+      : mixedQuestionMode
+        ? { ...s, questionStyle:'direct', questionTypes:['direct'] }
+        : s;
     const shouldChunkExtra = shouldSplitQuestionRequest({
       total:totalExtraQuestions,
       plans:extraPlans,
@@ -13296,6 +13431,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     curWeek,
     dailyStats,
     darkMode,
+    disabledCourseQuestions,
     DEFAULT_COURSE_CATALOG_DELAY_SECONDS,
     DEFAULT_HOME_MOTTO,
     deferInteractionWork,
@@ -13363,6 +13499,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     HomeMottoEditor,
     inactivateCourseQuestion,
     inactivateNonContentCourseQuestions,
+    inactivateQuestionBankSizingCandidates,
     isAcademiaMirrorRootFolder,
     isAdmin,
     isAnswerCorrect,
@@ -14588,7 +14725,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               ? <AdminStudyMapTopicList
                   subject={activeSubject}
                   darkMode={darkMode}
-                  onOpenTopic={topic=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}}
+                  onOpenTopic={topic=>{setActiveTopicId(topic.id);setTopicStudyPreference(null);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}}
                 />
               : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...activeSubject.topics].map(topic=>{
@@ -14609,7 +14746,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                const topicActionMenuId = `topic-actions-${topic.id}`;
 	                const hasTopicActions = isAcademiaTopic && fixTotal > 0;
                 return (
-                  <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} relative p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
+                  <div key={topic.id} onClick={()=>{setActiveTopicId(topic.id);setTopicStudyPreference(null);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}} className={`${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'} relative p-4 rounded-xl border flex items-center justify-between hover:border-yellow-500 cursor-pointer group transition-all`}>
                     <div className="flex items-center gap-3 flex-1 truncate pr-3">
                       <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-yellow-600 flex-shrink-0">{isAcademiaTopic?<AcademiaIcon className="w-5 h-5"/>:<BlockIcon className="w-5 h-5"/>}</div>
                       <div className="truncate">
@@ -14684,10 +14821,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <QuestionView
               title={activeTopic.title}
               onBack={()=>{
+                setTopicStudyPreference(null);
                 viewReturnTarget?.view ? restoreReturnTarget('subject') : setView('subject');
               }}
               backLabel="Voltar"
               questions={activeTopic.questions||[]}
+              initialStudyKind={topicStudyPreference?.subjectId === activeSubject?.id && topicStudyPreference?.topicId === activeTopic.id ? topicStudyPreference.kind : 'auto'}
               answers={activeTopic.answers||{}}
               favorites={activeTopic.favorites||[]}
               onAnswer={(qId,l)=>handleAnswer(qId,l)}

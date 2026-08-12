@@ -1,5 +1,9 @@
 import React from 'react';
-import { FAMED_S5_SCHEDULE, FAMED_S5_SCHEDULE_STATS } from './famedSchedule.js';
+import {
+  FAMED_S5_ARCHIVED_ITEMS,
+  FAMED_S5_DISCIPLINES,
+  FAMED_S5_SCHEDULE,
+} from './famedSchedule.js';
 import { courseLessonStableIds } from './famedCourseLessonMap.js';
 import { getFamedFlashcardState, getFamedStudyMaterials } from './famedStudyMaterials.js';
 
@@ -36,6 +40,16 @@ const supplementaryTopics = item => {
   });
 };
 
+const SCHEDULE_MONTHS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+const formatScheduleDate = value => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  return `${Number(match[3])} ${SCHEDULE_MONTHS[Number(match[2]) - 1]}`;
+};
+
+const scheduleWhen = item => [formatScheduleDate(item?.date), item?.time].filter(Boolean).join(' · ');
+
 const formatCourseDuration = seconds => {
   const totalMinutes = Math.round((Number(seconds) || 0) / 60);
   if (totalMinutes <= 0) return '';
@@ -52,14 +66,30 @@ const linkedLessonsDuration = lessons => formatCourseDuration(
 const isCourseLessonWatched = (lesson, watchedAulas) => courseLessonStableIds(lesson)
   .some(id => !!watchedAulas?.[id]);
 
-export default function FamedScheduleView({ darkMode, isAdmin=false, contentByScheduleId={}, contentLoading=false, courseCatalogReady=false, courseLessonsByScheduleId={}, watchedAulas={}, removingContentId=null, generatingFlashcardsId=null, onOpenCourseLesson, onExportCourseCatalog, onOpenLesson, onOpenPastQuestions, onOpenFlashcards, onCreate, onRemoveContent }) {
+export default function FamedScheduleView({ darkMode, isAdmin=false, disciplineIds=[], heading='Aulas e provas', description='', emptyMessage='', contentByScheduleId={}, contentLoading=false, courseCatalogReady=false, courseLessonsByScheduleId={}, watchedAulas={}, removingContentId=null, generatingFlashcardsId=null, onOpenCourseLesson, onExportCourseCatalog, onOpenLesson, onOpenPastQuestions, onOpenFlashcards, onCreate, onRemoveContent }) {
+  const visibleDisciplineIds = new Set(disciplineIds.length ? disciplineIds : FAMED_S5_DISCIPLINES.map(discipline => discipline.id));
+  const visibleSchedule = FAMED_S5_SCHEDULE.filter(item => visibleDisciplineIds.has(item.discipline));
+  const visibleDisciplines = FAMED_S5_DISCIPLINES.filter(discipline => visibleDisciplineIds.has(discipline.id));
+  const contentForItem = item => contentByScheduleId[item.id]
+    || (item.legacyContentIds || []).map(id => contentByScheduleId[id]).find(Boolean)
+    || null;
+  const activeContentIds = new Set(visibleSchedule.map(contentForItem).filter(Boolean).map(content => content.id));
+  const archivedWithContent = FAMED_S5_ARCHIVED_ITEMS
+    .map(item => ({ item, content:contentByScheduleId[item.id] }))
+    .filter(({ item, content }) => visibleDisciplineIds.has(item.discipline) && content && !activeContentIds.has(content.id));
+  const activeContentCount = activeContentIds.size;
+  const visibleStats = visibleSchedule.reduce((stats,item) => {
+    if (item.kind === 'lesson') stats.lessons += 1;
+    else stats.assessments += 1;
+    return stats;
+  }, { lessons:0, assessments:0 });
   return (
     <div className="famed-schedule space-y-4">
       <section className="famed-schedule-summary px-1 py-1">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="font-serif text-2xl font-bold">Aulas e provas</h2>
-            <p className={`mt-2 text-sm ${darkMode?'text-gray-400':'text-gray-600'}`}>Ordem provisória baseada na turma anterior.</p>
+            <h2 className="font-serif text-2xl font-bold">{heading}</h2>
+            <p className={`mt-2 text-sm ${darkMode?'text-gray-400':'text-gray-600'}`}>{description || 'Cronogramas da turma 2026.2 · somente aulas teóricas e primeiras chamadas.'}</p>
           </div>
           {isAdmin&&<button type="button" disabled={!courseCatalogReady} onClick={onExportCourseCatalog}
             className={`inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${darkMode?'border-gray-700 text-gray-300 hover:border-yellow-600 hover:text-yellow-300':'border-gray-200 bg-white text-gray-700 hover:border-yellow-500 hover:text-yellow-700'}`}>
@@ -68,24 +98,27 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
         </div>
         <div className="famed-schedule-stats mt-5 grid grid-cols-3 gap-2">
           {[
-            [FAMED_S5_SCHEDULE_STATS.lessons,'aulas'],
-            [FAMED_S5_SCHEDULE_STATS.assessments,'provas'],
-            [Object.keys(contentByScheduleId).length,contentLoading?'carregando':isAdmin?'criadas':'publicadas'],
+            [visibleStats.lessons,'aulas'],
+            [visibleStats.assessments,'provas'],
+            [activeContentCount,contentLoading?'carregando':isAdmin?'criadas':'publicadas'],
           ].map(([value,label])=><div key={label} className={`famed-stat rounded-xl border px-3 py-3 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-gray-50'}`}><strong className="block text-xl text-yellow-600">{value}</strong><span className="mt-0.5 block text-xs opacity-50">{label}</span></div>)}
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {['Cardiologia','Pneumologia'].map(discipline => {
-          const items = FAMED_S5_SCHEDULE.filter(item => item.discipline === discipline);
-          return <section key={discipline} className="app-card famed-discipline rounded-2xl p-4 md:p-5">
+      {!visibleSchedule.length?<section className={`app-card rounded-2xl border border-dashed p-8 text-center ${darkMode?'border-gray-700':'border-gray-200'}`}>
+        <h3 className="font-serif text-xl font-bold">Cronograma ainda não disponível</h3>
+        <p className={`mx-auto mt-2 max-w-xl text-sm ${darkMode?'text-gray-400':'text-gray-600'}`}>{emptyMessage || 'Esta parte do semestre será preenchida quando o cronograma oficial estiver disponível.'}</p>
+      </section>:<div className={`grid gap-4 ${visibleDisciplines.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
+        {visibleDisciplines.map(discipline => {
+          const items = visibleSchedule.filter(item => item.discipline === discipline.id);
+          return <section key={discipline.id} className="app-card famed-discipline rounded-2xl p-4 md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="font-serif text-xl font-bold">{discipline}</h3>
-              <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${disciplineTone(discipline,darkMode)}`}>{items.filter(item=>item.kind==='lesson').length} aulas</span>
+              <h3 className="font-serif text-xl font-bold">{discipline.label}</h3>
+              <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${disciplineTone(discipline.id,darkMode)}`}>{items.filter(item=>item.kind==='lesson').length} aulas</span>
             </div>
             <div className="space-y-3">
               {items.map(item => {
-                const content = contentByScheduleId[item.id];
+                const content = contentForItem(item);
                 const subject = content?.academiaSubject || null;
                 const study = getFamedStudyMaterials(subject);
                 const pastQuestionCount = study.pastQuestionSets.reduce((total,set)=>total + (set.questions || []).length,0);
@@ -94,7 +127,7 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
                 const details = supplementaryTopics(item);
                 const linkedCourseLessons = courseLessonsByScheduleId[item.id] || [];
                 const courseDuration = linkedLessonsDuration(linkedCourseLessons);
-                if (item.kind !== 'lesson') return <article key={item.id} className={`famed-assessment rounded-xl border border-dashed p-4 ${darkMode?'border-red-900 bg-red-900 bg-opacity-10':'border-red-200 bg-red-50'}`}><div className="flex items-center gap-3"><span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-red-100 text-xs font-bold text-red-700">{item.sequence}</span><div className="min-w-0"><span className="text-xs font-bold uppercase tracking-wide text-red-600">Prova</span><h4 className="mt-0.5 font-serif font-bold mobile-safe-text">{item.title}</h4></div></div></article>;
+                if (item.kind !== 'lesson') return <article key={item.id} className={`famed-assessment rounded-xl border border-dashed p-4 ${darkMode?'border-red-900 bg-red-900 bg-opacity-10':'border-red-200 bg-red-50'}`}><div className="flex items-center gap-3"><span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-red-100 text-xs font-bold text-red-700">{item.sequence}</span><div className="min-w-0"><span className="text-xs font-bold uppercase tracking-wide text-red-600">Prova</span><h4 className="mt-0.5 font-serif font-bold mobile-safe-text">{item.title}</h4><p className="mt-1 text-xs font-semibold opacity-60"><time dateTime={item.date}>{scheduleWhen(item)}</time></p>{isAdmin&&item.dateNote&&<p className="mt-1 text-[11px] text-yellow-600">{item.dateNote}</p>}</div></div></article>;
                 return <article key={item.id} className={`famed-lesson-card rounded-xl border p-4 ${disciplineTone(item.discipline,darkMode)}`}>
                   <div className="flex items-start gap-3">
                     <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold ${darkMode?'bg-gray-900 text-yellow-400':'bg-white text-yellow-700'}`}>{item.sequence}</span>
@@ -107,7 +140,9 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
                             className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${darkMode?'text-gray-500 hover:bg-red-950/40 hover:text-red-400':'text-gray-400 hover:bg-red-50 hover:text-red-600'}`}><TrashIcon/></button>}
                         </div>
                       </div>
+                      <p className="mt-1 text-xs font-semibold opacity-60"><time dateTime={item.date}>{scheduleWhen(item)}</time>{item.instructor?` · ${item.instructor}`:''}</p>
                       {!!details.length&&<p className="mt-1 text-xs opacity-50">{details.join(' · ')}</p>}
+                      {isAdmin&&item.dateNote&&<p className="mt-1 text-[11px] text-yellow-600">{item.dateNote}</p>}
                     </div>
                   </div>
                   {!!linkedCourseLessons.length&&<div className={`mt-4 border-t pt-3 ${darkMode?'border-gray-800':'border-gray-200'}`}>
@@ -142,7 +177,30 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, contentBySc
             </div>
           </section>;
         })}
-      </div>
+      </div>}
+      {!!archivedWithContent.length&&<section className="app-card rounded-2xl p-4 md:p-5">
+        <div className="mb-4">
+          <h3 className="font-serif text-xl font-bold">Materiais preservados</h3>
+          <p className={`mt-1 text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>Aulas já criadas que não fazem parte do cronograma 2026.2.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {archivedWithContent.map(({ item, content }) => {
+            const study = getFamedStudyMaterials(content.academiaSubject);
+            const pastQuestionCount = study.pastQuestionSets.reduce((total,set)=>total + (set.questions || []).length,0);
+            const flashcardState = getFamedFlashcardState(content.academiaSubject);
+            const generatingFlashcards = generatingFlashcardsId === content.id;
+            return <article key={item.id} className={`rounded-xl border p-4 ${disciplineTone(item.discipline,darkMode)}`}>
+              <p className="text-[10px] font-bold uppercase tracking-widest opacity-45">{item.discipline} · grade anterior</p>
+              <h4 className="mt-1 font-serif font-bold mobile-safe-text">{item.title}</h4>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button type="button" onClick={()=>onOpenLesson?.(content)} className={actionClass(true,darkMode,true)}><BookOpen/>Academia</button>
+                <button type="button" disabled={!isAdmin&&!pastQuestionCount} onClick={()=>onOpenPastQuestions?.(content)} className={actionClass(isAdmin||pastQuestionCount>0,darkMode)}><FileText/>Questões antigas</button>
+                <button type="button" disabled={generatingFlashcards||(!flashcardState.prerequisitesMet&&!flashcardState.fresh)} onClick={()=>onOpenFlashcards?.(content)} className={actionClass(!generatingFlashcards&&(flashcardState.prerequisitesMet||flashcardState.fresh),darkMode)}><CardsIcon/>Flashcards</button>
+              </div>
+            </article>;
+          })}
+        </div>
+      </section>}
     </div>
   );
 }

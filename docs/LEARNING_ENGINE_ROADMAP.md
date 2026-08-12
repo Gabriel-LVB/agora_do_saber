@@ -103,6 +103,21 @@ Não existe uma segunda aba para revisar milhares de decisões manualmente. Quan
 
 A primeira auditoria real mostrou inflação de notas máximas, uso excessivo de `core` e um núcleo maior que o desejado. A calibração v2 passou a reservar extremos para casos realmente discriminantes, exigir conceitos diretamente cobrados, comparar redundância dentro do lote e selecionar um núcleo diverso por conceito e cluster. Manifestos v1 não são tratados como curadoria atual: a aula precisa ser reprocessada para publicar o snapshot v2.
 
+### Dimensionamento do banco antes de mudanças destrutivas
+
+A Fábrica possui um diagnóstico manual, local e somente de leitura para estimar a redução do banco antes de alterar a fila ou excluir conteúdo. Ele cobre:
+
+- inventário total, diretas, clínicas, aulas e cobertura válida da curadoria;
+- tiers, importância, qualidade, papel de aprendizagem, nível cognitivo e status;
+- núcleo forte atual para revisão longitudinal, definido pelo tier `essential` elegível;
+- corte conservador por metadados, cenário amplo de reserva/desativadas e as uniões sem dupla contagem;
+- duplicatas textuais prováveis por matéria, agrupadas para contar somente as questões excedentes depois de preservar a melhor representante;
+- totais equivalentes por matéria, sem expor enunciados.
+
+O diagnóstico não lê a subcoleção privada de metadados: usa apenas o snapshot publicado quando sua versão e assinatura ainda correspondem às questões. O conteúdo sem curadoria válida permanece visível como pendente e participa da similaridade, mas não recebe uma classificação artificial. A varredura começa apenas por ação do administrador e roda fora da thread da interface.
+
+Depois de conferir o retrato, o administrador pode confirmar a inativação do cenário amplo parcial. A ação não cria uma regra futura: ela materializa somente os IDs atualmente candidatos, ignora os já inativos e preserva as fontes. Cada execução é atômica e auditável em documentos irmãos de até 250 entradas sob `config/disabled_course_questions__batch__*`, marcados com `configType: 'disabled-course-question-batch'`, evitando o limite de tamanho do documento pai e reutilizando a autorização já publicada para `config`. O runtime combina as entradas manuais/políticas da raiz com os lotes, deduplica e indexa a consulta. O próximo retrato retira essas questões do banco ativo e as informa como já inativas. Não há exclusão física.
+
 ### Uso adaptativo da seleção, implementado
 
 - essenciais e questões de maior importância/qualidade ocupam as primeiras ondas das aulas ativadas;

@@ -6,6 +6,17 @@ import traverseModule from '@babel/traverse';
 import { cleanFirestoreData } from '../src/lib/firestoreData.js';
 import { deferInteractionWork } from '../src/lib/interaction.js';
 import {
+  normalizeQuestionTypesForGeneration,
+  shouldGenerateHybridClinicalPass,
+  toggleQuestionTypeSelection,
+} from '../src/lib/questionTypes.js';
+import {
+  DECLARED_CORRECT_ALTERNATIVE_REFERENCE_PATTERNS,
+  DISPLAYED_ALTERNATIVE_REFERENCE_PATTERNS,
+  normalizeDeclaredCorrectAlternativeReferences,
+  normalizeDisplayedAlternativeReferences,
+} from '../src/lib/questionExplanation.js';
+import {
   mergeSharedLibraryQuestionChunks,
   prepareSharedLibraryContentForWrite,
   sharedLibraryChunkDocId,
@@ -46,6 +57,10 @@ import {
   selectLearningQuestions,
 } from '../src/services/questionMetadata.js';
 import {
+  buildQuestionBankSizingReport,
+  QUESTION_BANK_SIZING_VERSION,
+} from '../src/services/questionBankSizing.js';
+import {
   buildReviewForecast,
   buildReviewCardKey,
   completeCourseReviewFirstExposure,
@@ -70,15 +85,20 @@ import {
 import {
   createNonContentCourseQuestionPolicyEntry,
   createDisabledCourseQuestionEntry,
+  createQuestionBankSizingDisabledEntries,
+  chunkDisabledCourseQuestionEntries,
   detectNonContentCourseQuestion,
   disableCourseReviewQueueItems,
   filterDisabledCourseQuestionsFromVqBlocks,
   findNonContentCourseQuestions,
   isCourseQuestionDisabled,
   isNonContentCourseQuestionPolicyEnabled,
+  mergeDisabledCourseQuestions,
+  normalizeDisabledCourseQuestions,
   pruneDisabledCourseQuestionsFromSession,
   upsertDisabledCourseQuestion,
 } from '../src/services/disabledCourseQuestions.js';
+import { prepareQuestionBankSizingDisabledEntries } from '../src/services/disabledCourseQuestionStore.js';
 import {
   advanceFsrsCard,
   compareFsrsWithLegacy,
@@ -91,6 +111,11 @@ import {
   FAMED_COURSE_LESSON_MAP,
   resolveFamedCourseLessons,
 } from '../src/features/famed/famedCourseLessonMap.js';
+import {
+  FAMED_S5_ARCHIVED_ITEMS,
+  FAMED_S5_SCHEDULE,
+  FAMED_S5_SCHEDULE_STATS,
+} from '../src/features/famed/famedSchedule.js';
 import {
   buildFamedFlashcardAuditExport,
   FAMED_FLASHCARD_GENERATION_VERSION,
@@ -243,6 +268,42 @@ assert.equal(savedRepairItem.questionRepairMeta.repairedCount, 2);
 assert.equal(repairFixtureResult.confirmedFixed, 2);
 assert.equal(repairFixtureResult.remaining, 0);
 assert.match(repairLogs.find(entry => entry.type === 'warning')?.message || '', /1\/2/);
+
+assert.deepEqual(normalizeQuestionTypesForGeneration(['direct', 'flashcard']), ['flashcard']);
+assert.deepEqual(normalizeQuestionTypesForGeneration(['direct', 'cloze']), ['cloze']);
+assert.deepEqual(normalizeQuestionTypesForGeneration(['direct', 'open']), ['direct', 'open']);
+assert.equal(shouldGenerateHybridClinicalPass('hybrid', ['direct']), true);
+assert.equal(shouldGenerateHybridClinicalPass('hybrid', ['flashcard']), false);
+assert.equal(shouldGenerateHybridClinicalPass('hybrid', ['direct', 'flashcard']), false);
+assert.equal(shouldGenerateHybridClinicalPass('clinical', ['direct']), false);
+assert.deepEqual(toggleQuestionTypeSelection(['direct'], 'flashcard'), ['flashcard']);
+assert.deepEqual(toggleQuestionTypeSelection(['flashcard'], 'direct'), ['direct']);
+assert.deepEqual(toggleQuestionTypeSelection(['flashcard'], 'cloze'), ['cloze']);
+assert.equal(DECLARED_CORRECT_ALTERNATIVE_REFERENCE_PATTERNS.length >= 2, true);
+assert.equal(DISPLAYED_ALTERNATIVE_REFERENCE_PATTERNS.length > DECLARED_CORRECT_ALTERNATIVE_REFERENCE_PATTERNS.length, true);
+assert.equal(
+  normalizeDeclaredCorrectAlternativeReferences(
+    'Certa. A alternativa correta é a A. A conduta indicada é observar.',
+    'B',
+  ),
+  'Certa. A alternativa correta é a B. A conduta indicada é observar.',
+);
+assert.equal(
+  normalizeDeclaredCorrectAlternativeReferences('O gabarito oficial: **C**.', 'A'),
+  'O gabarito oficial: **A**.',
+);
+assert.equal(
+  normalizeDeclaredCorrectAlternativeReferences('A resposta correta é a alternativa C.', 'E'),
+  'A resposta correta é a alternativa E.',
+);
+assert.equal(
+  normalizeDisplayedAlternativeReferences('A alternativa **A** está incorreta.', 'D'),
+  'A alternativa **D** está incorreta.',
+);
+assert.equal(
+  normalizeDeclaredCorrectAlternativeReferences('A alternativa A está incorreta.', 'D'),
+  'A alternativa A está incorreta.',
+);
 
 const fullQuickPrompt = buildQuickPracticePrompt({
   title:'Estenose mitral',
@@ -685,12 +746,25 @@ const changedClinicalCatalog = [...famedCourseCatalogSnapshot.courseLessons].rev
 );
 assert.deepEqual(buildClinicalPrioritySchedule(changedClinicalCatalog), changedClinicalCatalog);
 const famedSnapshotIds = new Set(famedCourseCatalogSnapshot.courseLessons.flatMap(lesson => lesson.stableIds || []).map(String));
-Object.values(FAMED_COURSE_LESSON_MAP.links).flat().forEach(lessonId => {
+const famedCurrentScheduleById = new Map(FAMED_S5_SCHEDULE.map(item => [item.id,item]));
+assert.equal(FAMED_S5_SCHEDULE_STATS.lessons, 32);
+assert.equal(FAMED_S5_SCHEDULE_STATS.assessments, 5);
+assert.equal(FAMED_S5_SCHEDULE.length, 37);
+assert.equal(famedCurrentScheduleById.get('cardio-estratificacao-risco')?.sequence, 1);
+assert.equal(famedCurrentScheduleById.get('cardio-valvopatias')?.date, '2026-09-14');
+assert.equal(famedCurrentScheduleById.get('cardio-ap2')?.date, '2026-10-01');
+assert.equal(famedCurrentScheduleById.get('cardio-ap2')?.sourceDate, '31/09/2026');
+assert.equal(famedCurrentScheduleById.get('pneumo-intersticial-espirometria')?.sequence, 3);
+assert.equal(famedCurrentScheduleById.get('pneumo-pneumonias-tep')?.sequence, 4);
+assert.equal(FAMED_S5_SCHEDULE.filter(item => item.discipline === 'ABS' && item.kind === 'lesson').length, 15);
+assert.equal(FAMED_S5_SCHEDULE.some(item => /prática|ambulatório|enfermaria/i.test(item.title)), false);
+assert.equal(FAMED_S5_ARCHIVED_ITEMS.some(item => item.id === 'cardio-pericardiopatias'), true);
+Object.values({ ...FAMED_COURSE_LESSON_MAP.links, ...FAMED_COURSE_LESSON_MAP.legacyLinks }).flat().forEach(lessonId => {
   assert.equal(famedSnapshotIds.has(String(lessonId)), true, `Vínculo FAMED ausente do snapshot: ${lessonId}`);
 });
-const famedSnapshotScheduleLessons = famedCourseCatalogSnapshot.famedSchedule
+const famedSnapshotScheduleLessons = FAMED_S5_SCHEDULE
   .filter(item => item.kind === 'lesson')
-  .map(item => item.scheduleItemId)
+  .map(item => item.id)
   .sort();
 const famedClassifiedScheduleLessons = [
   ...Object.keys(FAMED_COURSE_LESSON_MAP.links),
@@ -700,11 +774,12 @@ assert.deepEqual(famedClassifiedScheduleLessons, famedSnapshotScheduleLessons);
 const famedSnapshotLessonByStableId = new Map(famedCourseCatalogSnapshot.courseLessons.flatMap(lesson =>
   (lesson.stableIds || []).map(stableId => [String(stableId), lesson])
 ));
-const famedSnapshotScheduleById = new Map(famedCourseCatalogSnapshot.famedSchedule.map(item => [item.scheduleItemId, item]));
+const famedSnapshotScheduleById = new Map(FAMED_S5_SCHEDULE.map(item => [item.id, item]));
 Object.entries(FAMED_COURSE_LESSON_MAP.links).forEach(([scheduleItemId, lessonIds]) => {
   const scheduleItem = famedSnapshotScheduleById.get(scheduleItemId);
   const linkedLessons = lessonIds.map(lessonId => famedSnapshotLessonByStableId.get(String(lessonId)));
-  assert.equal(linkedLessons.every(lesson => lesson?.subject === scheduleItem?.discipline), true, `Matéria divergente no vínculo ${scheduleItemId}`);
+  const courseSubjects = scheduleItem?.courseSubjects || [scheduleItem?.discipline];
+  assert.equal(linkedLessons.every(lesson => courseSubjects.includes(lesson?.subject)), true, `Matéria divergente no vínculo ${scheduleItemId}`);
   assert.deepEqual(
     linkedLessons.map(lesson => lesson.courseIndex),
     linkedLessons.map(lesson => lesson.courseIndex).sort((left,right) => left - right),
@@ -947,6 +1022,131 @@ const siblingSelectionSnapshot = buildLearningSelectionSnapshot({
 });
 assert.equal(siblingSelectionSnapshot.questionPolicies['metadata-q-1'].redundancyClusterId, 'cluster-sibling');
 assert.equal(siblingSelectionSnapshot.questionPolicies['metadata-q-1'].canonicalQuestionId, 'metadata-q-1');
+
+const sizingDirectQuestions = [
+  { id:'sizing-core', statement:'Qual é a conduta inicial recomendada neste cenário clínico?', options:[{ letter:'A', text:'Conduta A', isCorrect:true }] },
+  { id:'sizing-duplicate', statement:'Qual é a conduta inicial recomendada neste cenário clínico?', options:[{ letter:'A', text:'Conduta A', isCorrect:true }] },
+];
+const sizingClinicalQuestions = [
+  { id:'sizing-low-quality', statement:'Caso clínico distinto com uma pergunta mal construída.', caseContext:'Paciente em avaliação.', options:[{ letter:'A', text:'Resposta', isCorrect:true }] },
+];
+const sizingQuestions = [
+  ...sizingDirectQuestions.map(question => ({ ...question, libraryQuestionKind:'direct' })),
+  ...sizingClinicalQuestions.map(question => ({ ...question, libraryQuestionKind:'clinical' })),
+];
+const sizingReport = buildQuestionBankSizingReport({
+  sharedLibraryItems:[
+    {
+      id:'sizing-lesson',
+      subject:'Cardiologia',
+      directQuestions:sizingDirectQuestions,
+      clinicalQuestions:sizingClinicalQuestions,
+      learningSelection:{
+        version:LEARNING_SELECTION_VERSION,
+        questionSignature:questionSetSignature(sizingQuestions),
+        questionPolicies:{
+          'sizing-core':{ tier:'essential', importance:5, qualityScore:95, learningRole:'core', cognitiveLevel:'reasoning', status:'active', reviewEligible:true },
+          'sizing-duplicate':{ tier:'reserve', importance:2, qualityScore:70, learningRole:'variation', cognitiveLevel:'recognition', status:'reserve', reviewEligible:true },
+          'sizing-low-quality':{ tier:'complementary', importance:4, qualityScore:50, learningRole:'reinforcement', cognitiveLevel:'application', status:'active', reviewEligible:true },
+        },
+      },
+    },
+    {
+      id:'sizing-pending',
+      subject:'Pneumologia',
+      directQuestions:[{ id:'pending-question', statement:'Pergunta ainda sem curadoria publicada.', options:[{ letter:'A', text:'Resposta', isCorrect:true }] }],
+      clinicalQuestions:[],
+    },
+  ],
+});
+assert.equal(sizingReport.schema, QUESTION_BANK_SIZING_VERSION);
+assert.deepEqual(sizingReport.inventory, {
+  total:4,
+  stored:4,
+  alreadyInactive:0,
+  alreadyInactiveDirect:0,
+  alreadyInactiveClinical:0,
+  direct:3,
+  clinical:1,
+  curated:3,
+  pending:1,
+  lessons:{ total:2, curated:1, pending:1 },
+});
+assert.equal(sizingReport.review.essential.total, 1);
+assert.equal(sizingReport.removal.conservativeMetadata.total, 2);
+assert.equal(sizingReport.removal.probableDuplicates.total, 1);
+assert.equal(sizingReport.removal.conservativeCombined.total, 2);
+assert.equal(sizingReport.subjects.find(row => row.subject === 'Cardiologia').duplicateExcess, 1);
+assert.equal(sizingReport.actions.broadCandidates.length, 2);
+const sizingDisabledEntries = createQuestionBankSizingDisabledEntries({
+  candidates:[sizingReport.actions.broadCandidates.find(candidate => candidate.questionId === 'sizing-duplicate')],
+  disabledAt:123,
+  disabledBy:'admin@example.com',
+});
+assert.equal(sizingDisabledEntries.length, 1);
+assert.equal(sizingDisabledEntries[0].reason, 'question-bank-sizing-broad-v1');
+assert.equal(mergeDisabledCourseQuestions(sizingDisabledEntries, sizingDisabledEntries).length, 1);
+const storePreparedSizingEntries = prepareQuestionBankSizingDisabledEntries({
+  candidates:[{
+    aulaId:'aula-store',
+    lessonId:'lesson-store',
+    sharedLibraryItemId:'shared-store',
+    lessonAliases:['alias-store'],
+    questionId:'question-store',
+  }],
+  disabledAt:123,
+  disabledBy:'admin@example.com',
+});
+assert.equal(storePreparedSizingEntries.length, 1);
+assert.equal(storePreparedSizingEntries[0].questionId, 'question-store');
+assert.equal(storePreparedSizingEntries[0].reason, 'question-bank-sizing-broad-v1');
+const sizingScaleEntries = createQuestionBankSizingDisabledEntries({
+  candidates:Array.from({ length:3057 }, (_, index) => ({
+    aulaId:`lesson-${Math.floor(index / 50)}`,
+    sharedLibraryItemId:`shared-${Math.floor(index / 50)}`,
+    questionId:`bulk-question-${index}`,
+  })),
+});
+assert.equal(sizingScaleEntries.length, 3057);
+assert.equal(normalizeDisabledCourseQuestions(sizingScaleEntries), sizingScaleEntries);
+assert.deepEqual(chunkDisabledCourseQuestionEntries(sizingScaleEntries).map(chunk => chunk.length), [
+  250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 57,
+]);
+assert.equal(isCourseQuestionDisabled(sizingScaleEntries, {
+  sharedLibraryItemId:'shared-61',
+  questionId:'bulk-question-3056',
+}), true);
+const sizingAfterPartialInactivation = buildQuestionBankSizingReport({
+  sharedLibraryItems:[
+    {
+      id:'sizing-lesson',
+      subject:'Cardiologia',
+      directQuestions:sizingDirectQuestions,
+      clinicalQuestions:sizingClinicalQuestions,
+      learningSelection:{
+        version:LEARNING_SELECTION_VERSION,
+        questionSignature:questionSetSignature(sizingQuestions),
+        questionPolicies:{
+          'sizing-core':{ tier:'essential', importance:5, qualityScore:95, learningRole:'core', cognitiveLevel:'reasoning', status:'active', reviewEligible:true },
+          'sizing-duplicate':{ tier:'reserve', importance:2, qualityScore:70, learningRole:'variation', cognitiveLevel:'recognition', status:'reserve', reviewEligible:true },
+          'sizing-low-quality':{ tier:'complementary', importance:4, qualityScore:50, learningRole:'reinforcement', cognitiveLevel:'application', status:'active', reviewEligible:true },
+        },
+      },
+    },
+    {
+      id:'sizing-pending',
+      subject:'Pneumologia',
+      directQuestions:[{ id:'pending-question', statement:'Pergunta ainda sem curadoria publicada.', options:[{ letter:'A', text:'Resposta', isCorrect:true }] }],
+      clinicalQuestions:[],
+    },
+  ],
+  disabledCourseQuestions:sizingDisabledEntries,
+});
+assert.equal(sizingAfterPartialInactivation.inventory.total, 3);
+assert.equal(sizingAfterPartialInactivation.inventory.stored, 4);
+assert.equal(sizingAfterPartialInactivation.inventory.alreadyInactive, 1);
+assert.equal(sizingAfterPartialInactivation.removal.broadCombined.total, 1);
+assert.deepEqual(sizingAfterPartialInactivation.actions.broadCandidates.map(row => row.questionId), ['sizing-low-quality']);
 
 const rotatedKeyCalls = [];
 let rotateCount = 0;
@@ -1950,6 +2150,13 @@ assert.match(appSource, /promptModulePromise = lazyWithRetry\(\(\) => import\(['
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)\)\)/);
+assert.match(appSource, /const inactivateQuestionBankSizingCandidates = async/);
+assert.match(appSource, /saveQuestionBankSizingDisabledBatch/);
+assert.match(appSource, /where\('configType', '==', 'disabled-course-question-batch'\)/);
+assert.match(appSource, /question bank sizing local refresh failed after persistence/);
+assert.match(appSource, /deferInteractionWork\(\(\) => applyDisabledCourseQuestionEntries\(mergedEntries\)\)/);
+assert.match(appSource, /Falha durante \$\{operationStage\}/);
+assert.match(appSource, /inactivateQuestionBankSizingCandidates,/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/famed\/FamedPortalView\.jsx['"]\)\)\)/);
 assert.match(appSource, /import\(['"]\.\/features\/questions\/QuestionFeature\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/exporting\/ExportModals\.jsx['"]\)/);
@@ -2109,12 +2316,19 @@ assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenA
 assert.match(questionFeatureSource, /const isAnswerCorrect = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /const isFinalObjectiveAnswer = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /normalizeDisplayedAlternativeReferences\(opt\.explanation, opt\.letter\)/);
+assert.match(questionFeatureSource, /normalizeDeclaredCorrectAlternativeReferences\(/);
 assert.match(questionFeatureSource, /const renderClozeSentence =/);
 assert.match(questionFeatureSource, /Revelar informação/);
 assert.match(questionFeatureSource, />Entenda</);
+assert.match(questionFeatureSource, /const hasMixedStudyKinds = memoryCardQuestions\.length > 0 && ordinaryQuestions\.length > 0/);
+assert.match(questionFeatureSource, /studyKind === 'flashcards' \? memoryCardQuestions : ordinaryQuestions/);
+assert.match(questionFeatureSource, /aria-label="Modo de estudo"/);
+assert.match(questionFeatureSource, /`Questões \(\$\{ordinaryQuestions\.length\}\)`/);
+assert.match(questionFeatureSource, /`Flashcards \(\$\{memoryCardQuestions\.length\}\)`/);
 
 const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
 assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
+assert.match(exportModalsSource, /normalizeDeclaredCorrectAlternativeReferences\(/);
 
 const workflowModalsSource = await readFile(new URL('../src/features/modals/WorkflowModals.jsx', import.meta.url), 'utf8');
 assert.match(workflowModalsSource, /export \{ SRModal, ExternalPromptModal \}/);
@@ -2127,7 +2341,10 @@ assertNoFreeIdentifiers(vqGenModalSource, 'VqGenModal');
 const academiaTopicViewSource = await readFile(new URL('../src/features/academia/AcademiaTopicView.jsx', import.meta.url), 'utf8');
 assert.match(academiaTopicViewSource, /export default AcademiaTopicView/);
 assert.match(academiaTopicViewSource, /Sumário da aula/);
-assert.match(academiaTopicViewSource, /chapterQuestions\.map/);
+assert.match(academiaTopicViewSource, /chapterPracticeQuestions\.map/);
+assert.match(academiaTopicViewSource, /const memoryFixqs = allFixqs\.filter\(question => isMemoryCard\(question\)\)/);
+assert.match(academiaTopicViewSource, /\{ studyKind:'flashcards' \}/);
+assert.match(academiaTopicViewSource, /Revise em uma sessão própria, um cartão por vez/);
 assert.match(academiaTopicViewSource, /Fixação do capítulo/);
 assert.match(academiaTopicViewSource, /academiaQuestionPlacement/);
 assert.match(academiaTopicViewSource, /Durante a aula/);
@@ -2136,6 +2353,12 @@ assert.match(academiaTopicViewSource, /questionPlacement === 'inline'/);
 assert.match(academiaTopicViewSource, /questionPlacement === 'end'/);
 assert.doesNotMatch(academiaTopicViewSource, /Depois da aula/);
 assert.doesNotMatch(academiaTopicViewSource, /idx>0\?\(darkMode\?'border-t/);
+assert.match(appSource, /const \[topicStudyPreference, setTopicStudyPreference\] = useState\(null\)/);
+assert.match(appSource, /initialStudyKind=\{topicStudyPreference\?\.subjectId === activeSubject\?\.id/);
+assert.match(appSource, /const mixedQuestionMode = shouldGenerateHybridClinicalPass\(topicStyle, promptTopicTypes\)/);
+assert.match(appSource, /const mixedQuestionMode = shouldGenerateHybridClinicalPass\(s\.questionStyle \|\| '', s\.questionTypes\)/);
+assert.match(appSource, /const fixationSettings = fixationFlashcardOnly\s*\? \{ \.\.\.s, questionStyle:'direct' \}/);
+assert.match(appSource, /const extraPromptSettings = extraFlashcardOnly\s*\? \{ \.\.\.s, questionStyle:'direct' \}/);
 
 const bulkGenerateModalSource = await readFile(new URL('../src/features/bulk/BulkGenerateModal.jsx', import.meta.url), 'utf8');
 assert.match(bulkGenerateModalSource, /export default function BulkGenerateModal/);
@@ -2150,13 +2373,50 @@ assert.match(sharedLibraryViewSource, /if \(!isAdmin\) return null/);
 assert.match(sharedLibraryViewSource, /EcgCaseBankView/);
 assert.match(sharedLibraryViewSource, /id:'ecg', label:'Banco de ECG'/);
 assert.match(sharedLibraryViewSource, /QuestionCurationView = React\.lazy/);
+assert.match(sharedLibraryViewSource, /QuestionBankSizingView = React\.lazy/);
+assert.match(sharedLibraryViewSource, /id:'sizing', label:'Dimensionar'/);
+assert.match(sharedLibraryViewSource, /factorySection === 'sizing'/);
 assert.doesNotMatch(sharedLibraryViewSource, /QuestionSelectionView|id:'selection'|label:'Seleção'/);
 assert.doesNotMatch(sharedLibraryViewSource, /sharedLibraryAudienceMode|Prévia aluno|setSharedLibraryAudienceMode/);
 assert.doesNotMatch(sharedLibraryViewSource, /id:'exams'|id:'pharmacology'|id:'famed'/);
 assert.match(sharedLibraryViewSource, /questionMatchesSearch/);
 assert.match(sharedLibraryViewSource, /Buscar questão/);
+assert.match(sharedLibraryViewSource, /function ProgressiveLessonList/);
+assert.match(sharedLibraryViewSource, /items\.slice\(0, visibleCount\)/);
+assert.match(sharedLibraryViewSource, /Carregar mais aulas/);
+assert.match(sharedLibraryViewSource, /showSubjectOverview = sharedLibrarySubject === 'all' && !searchNeedle/);
+assert.match(sharedLibraryViewSource, /Escolha uma matéria para listar aulas individuais/);
+assert.match(sharedLibraryViewSource, /const generationBaseLessons = automationOpen \? getSharedLibraryTargets\(\) : \[\]/);
+assert.match(sharedLibraryViewSource, /const repairScopeItems = automationOpen \?/);
 assert.match(sharedLibraryViewSource, /Inativar perguntas sobre a própria aula/);
 assert.match(sharedLibraryViewSource, /Filtro de perguntas metadidáticas ativo/);
+
+const questionBankSizingViewSource = await readFile(new URL('../src/features/question-factory/QuestionBankSizingView.jsx', import.meta.url), 'utf8');
+assert.match(questionBankSizingViewSource, /Retrato sob demanda/);
+assert.match(questionBankSizingViewSource, /a inativação exige o botão e uma confirmação separada/);
+assert.match(questionBankSizingViewSource, /new Worker\(new URL\('\.\.\/\.\.\/workers\/questionBankSizing\.worker\.js'/);
+assert.match(questionBankSizingViewSource, /Calcular retrato/);
+assert.match(questionBankSizingViewSource, /Nenhum enunciado é exibido; somente quantidades/);
+assert.match(questionBankSizingViewSource, /corte conservador combinado/);
+assert.match(questionBankSizingViewSource, /Inativar cenário amplo/);
+assert.match(questionBankSizingViewSource, /inactivateQuestionBankSizingCandidates/);
+assert.match(questionBankSizingViewSource, /disabledCourseQuestions/);
+assert.doesNotMatch(questionBankSizingViewSource, /loadQuestionMetadata|callWithRotation|deleteDoc|setDoc/);
+const questionBankSizingWorkerSource = await readFile(new URL('../src/workers/questionBankSizing.worker.js', import.meta.url), 'utf8');
+assert.match(questionBankSizingWorkerSource, /buildQuestionBankSizingReport/);
+assert.match(questionBankSizingWorkerSource, /type:'progress'/);
+const disabledCourseQuestionStoreSource = await readFile(new URL('../src/services/disabledCourseQuestionStore.js', import.meta.url), 'utf8');
+assert.match(disabledCourseQuestionStoreSource, /chunkDisabledCourseQuestionEntries/);
+assert.match(disabledCourseQuestionStoreSource, /prepareQuestionBankSizingDisabledEntries/);
+assert.match(disabledCourseQuestionStoreSource, /createDisabledCourseQuestionEntry/);
+assert.match(disabledCourseQuestionStoreSource, /writeBatch\(db\)/);
+assert.match(disabledCourseQuestionStoreSource, /question-bank-sizing-broad-v1|QUESTION_BANK_SIZING_BROAD_REASON/);
+assert.match(disabledCourseQuestionStoreSource, /DISABLED_COURSE_QUESTIONS_CONFIG_DOC\}__batch__/);
+assert.match(disabledCourseQuestionStoreSource, /configType:DISABLED_COURSE_QUESTION_BATCH_CONFIG_TYPE/);
+assert.doesNotMatch(disabledCourseQuestionStoreSource, /collection\(db,\s*'config',\s*DISABLED_COURSE_QUESTIONS_CONFIG_DOC/);
+assert.match(appSource, /where\('configType', '==', 'disabled-course-question-batch'\)/);
+assert.doesNotMatch(appSource, /runtime\.createQuestionBankSizingDisabledEntries/);
+assert.doesNotMatch(appSource, /runtime\.mergeDisabledCourseQuestions/);
 assert.match(appSource, /findNonContentCourseQuestions\(sharedLibraryItems\)/);
 assert.match(appSource, /createNonContentCourseQuestionPolicyEntry/);
 
@@ -2261,6 +2521,10 @@ assert.doesNotMatch(famedPortalViewSource, /maxCards|maxTokens|slice\(0,\s*20\)/
 assert.doesNotMatch(famedPortalViewSource, /matchFamedScheduleCourseLessons/);
 assert.doesNotMatch(famedPortalViewSource, /FamedManualEditor|FamedPackageImporter/);
 assert.doesNotMatch(famedPortalViewSource, /const TABS|activeTab/);
+assert.match(famedPortalViewSource, /activeTrackId/);
+assert.match(famedPortalViewSource, /aria-label="Partes do S5"/);
+assert.match(famedPortalViewSource, /setActiveTrackId\(track\.id\)/);
+assert.match(famedPortalViewSource, /disciplineIds=\{activeTrack\.subjects\}/);
 
 const famedCatalogSource = await readFile(new URL('../src/features/famed/famedCatalog.js', import.meta.url), 'utf8');
 assert.match(famedCatalogSource, /curriculum:'PPC 2018'/);
@@ -2268,13 +2532,21 @@ assert.match(famedCatalogSource, /semesters:\[5, 6, 7, 8\]/);
 assert.doesNotMatch(famedCatalogSource, /length:\s*12|S1|S2|S3|S4|S9|S10|S11|S12|Internato/i);
 assert.match(famedCatalogSource, /Cardio \+ Pneumo/);
 assert.match(famedCatalogSource, /id:'cardio-pneumo'/);
-assert.match(famedCatalogSource, /id:'endocrino-nutro-gastro'/);
+assert.match(famedCatalogSource, /id:'abs-gestante-rn'/);
+assert.match(famedCatalogSource, /id:'gastro-endocrino'/);
+assert.match(famedCatalogSource, /selectorLabel:'1ª metade'/);
+assert.match(famedCatalogSource, /selectorLabel:'2ª metade'/);
+assert.match(famedCatalogSource, /subtitle:'Semestre inteiro'/);
 
 const famedScheduleSource = await readFile(new URL('../src/features/famed/famedSchedule.js', import.meta.url), 'utf8');
-assert.match(famedScheduleSource, /status:'previous-class-reference'/);
+assert.match(famedScheduleSource, /status:'current-class-schedule'/);
 assert.match(famedScheduleSource, /cardio-valvopatias/);
 assert.match(famedScheduleSource, /pneumo-dpoc-asma/);
-assert.doesNotMatch(famedScheduleSource, /2026-\d{2}-\d{2}|\d{2}:\d{2}|segunda-chamada|cardio-af/i);
+assert.match(famedScheduleSource, /abs-alojamento-semiologia-neonatal/);
+assert.match(famedScheduleSource, /date:'2026-08-10'/);
+assert.match(famedScheduleSource, /pneumologyCohort:'A1'/);
+assert.match(famedScheduleSource, /FAMED_S5_ARCHIVED_ITEMS/);
+assert.doesNotMatch(famedScheduleSource, /segunda-chamada|cardio-af/i);
 
 const famedScheduleViewSource = await readFile(new URL('../src/features/famed/FamedScheduleView.jsx', import.meta.url), 'utf8');
 assert.match(famedScheduleViewSource, /Aulas e provas/);
@@ -2297,7 +2569,10 @@ assert.doesNotMatch(famedScheduleViewSource, /courseIndex \?\?|Ver mais|expanded
 assert.doesNotMatch(famedScheduleViewSource, /Nenhuma correspondência direta encontrada/);
 assert.doesNotMatch(famedScheduleViewSource, /Cronograma interativo|Sequência de referência/);
 assert.doesNotMatch(famedScheduleViewSource, /Fontes, avaliação de Pneumo e observações|FAMED_S5_SCHEDULE_META/);
-assert.doesNotMatch(famedScheduleViewSource, /formatScheduleDate|item\.date|item\.time|item\.instructor/);
+assert.match(famedScheduleViewSource, /formatScheduleDate|item\.date|item\.time|item\.instructor/);
+assert.match(famedScheduleViewSource, /Materiais preservados/);
+assert.match(famedScheduleViewSource, /visibleDisciplineIds/);
+assert.match(famedScheduleViewSource, /Cronograma ainda não disponível/);
 
 const famedPastQuestionsViewSource = await readFile(new URL('../src/features/famed/FamedPastQuestionsView.jsx', import.meta.url), 'utf8');
 assert.match(famedPastQuestionsViewSource, /Adicionar pacote de questões antigas/);
@@ -2323,6 +2598,8 @@ assert.match(famedContentServiceSource, /saveFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /loadFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /deleteFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /creationMode:'academia'/);
+assert.match(famedContentServiceSource, /famedTrackForDiscipline/);
+assert.match(famedContentServiceSource, /'gastro-endocrino'/);
 assert.doesNotMatch(famedContentServiceSource, /firebase\/storage/);
 
 assert.match(appSource, /const \[famedCreationTarget, setFamedCreationTarget\]/);

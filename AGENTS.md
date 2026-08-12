@@ -22,7 +22,7 @@ O **Ágora do Saber** é uma plataforma privada de estudo médico. É uma SPA em
 - videoaulas hospedadas no Bunny e seus bancos de questões;
 - plano de estudos semanal, metas diárias e revisão adaptativa;
 - simulados, favoritos, caderno de erros e exportação para Anki;
-- uma área acadêmica FAMED, atualmente focada no S5 de Cardiologia e Pneumologia;
+- uma área acadêmica FAMED, atualmente focada no S5 de Cardiologia, Pneumologia e ABS da Gestante e do RN;
 - ferramentas administrativas de publicação, auditoria, organização do curso e controle de acesso.
 
 A aplicação não usa React Router. A “rota” atual é o estado `view` dentro de `src/App.jsx`. O backend de dados é Firebase Auth + Firestore. A geração de conteúdo usa Gemini 2.5 Flash, normalmente com as chaves dos próprios usuários no cliente.
@@ -256,6 +256,10 @@ Utilitários:
 
 Flashcards e clozes obedecem à política global versionada de `src/prompts/memoryCardPolicy.js`. Academia, Oráculo, importação externa, Questões do Curso, Dúvida Rápida, caderno de erros, reparo e FAMED devem incorporar essa fonte compartilhada, sem manter cópias divergentes. A IA decide a quantidade sem teto, piso, faixa ou meta; o filtro 20/80 representa importância, não contagem. Todo candidato precisa ser essencial, beneficiar-se realmente de recuperação ativa e não ser dedutível por bom senso. Flashcard direto exige um item curto por padrão e, excepcionalmente, dois itens inseparáveis anunciados na pergunta; listas e inventários são proibidos. Cloze usa exatamente um `{{c1::termo curto}}`, sem dica e sem múltiplos trechos ocultos. A seleção ocorre no prompt: parsers e UI preservam tudo que o modelo devolveu e não fazem descarte pedagógico posterior.
 
+Tipos de memorização são exclusivos na configuração de geração: escolher **Flashcards** ou **Preencher lacunas** desmarca tipos comuns e o outro formato de memória. Em qualquer executor, uma configuração que contenha um tipo de memória é normalizada para esse único tipo antes do prompt. Estilos de questões clínicas, inclusive o modo híbrido de duas passadas, nunca podem acrescentar questões diretas ou clínicas a uma geração de cartões.
+
+Na experiência de estudo, `QuestionView` separa apenas visualmente flashcards/clozes das questões comuns quando ambos estão armazenados no mesmo tópico. Nada é descartado ou movido: o aluno alterna entre **Questões** e **Flashcards**, e a segunda trilha usa o mesmo modo dedicado da FAMED — um cartão por vez, layout amplo, tela cheia, progresso e repetição dos erros. A aula da Academia não renderiza cartões de memória como questões corridas entre os capítulos; ela abre essa mesma sessão dedicada.
+
 ## Fluxo geral dos dados
 
 ```text
@@ -409,7 +413,7 @@ Tipos disponíveis no seletor:
 - flashcard, para usuários avançados;
 - cloze, somente admin.
 
-Nunca determine acerto apenas comparando letras sem olhar o helper `isAnswerCorrect` e a forma atual das opções. O parser embaralha distratores e letras de maneira determinística.
+Nunca determine acerto apenas comparando letras sem olhar o helper `isAnswerCorrect` e a forma atual das opções. O parser embaralha distratores e letras de maneira determinística. Explicações legadas podem citar a letra anterior ao embaralhamento; a lista compartilhada de regex e os normalizadores de `src/lib/questionExplanation.js` corrigem referências como “A alternativa correta é a A”, “gabarito: B” e, na análise local de uma opção, “alternativa C”. A explicação geral só deve usar os padrões que declaram explicitamente o gabarito, para não trocar menções legítimas a distratores.
 
 Ao alterar a experiência de questões, inspecione em conjunto:
 
@@ -477,6 +481,10 @@ A curadoria de metadados é uma quarta linha de processamento, separada da gera�
 
 A calibração vigente é `agora-question-metadata-v2`/`agora-learning-selection-v2`. Ela é deliberadamente conservadora: `importance=5`, `learningRole=core`, `qualityScore>=90` e `factualConfidence=high` devem ser minoritários e justificados; conceitos de fundo não devem ser anexados à questão. A seleção cobre os conceitos importantes com preferência por questões `core`, evita repetir clusters redundantes, diversifica conceitos primários e limita complementação automática a um núcleo enxuto. Alterar esses critérios exige nova versão de análise para não misturar lotes produzidos por prompts diferentes.
 
+A aba administrativa **Dimensionar** calcula manualmente um retrato do banco para decidir seu futuro antes da migração de Revisões. Ela usa exclusivamente as questões já carregadas, o `learningSelection` publicado cuja assinatura ainda corresponde ao conjunto atual e a auditoria textual local; não lê `metadata_chunks` nem chama Gemini. O relatório separa total/diretas/clínicas, cobertura curada, tiers, importância, qualidade, papel e estilo cognitivo. O núcleo longitudinal é o tier `essential`. O corte conservador reúne bloqueios objetivos, qualidade abaixo de 60 e reservas com outro sinal fraco; o cenário amplo inclui toda reserva/desativada. Duplicatas prováveis são agrupadas por matéria e contadas como questões excedentes após preservar uma representante, nunca como quantidade bruta de pares. Uniões de cenários removem dupla contagem. Questões sem curadoria válida entram no inventário e na similaridade, mas não recebem julgamento de qualidade/importância. O cálculo pesado só começa no botão e roda em Web Worker para não bloquear a interface.
+
+O único write autorizado nessa aba é o botão administrativo, confirmado, **Inativar cenário amplo**. Ele aplica exatamente os IDs do retrato parcial atual, ignora questões que já ficaram inativas e não cria uma política automática para curadorias futuras. O original não é apagado. Como milhares de entradas não cabem com segurança em um único documento, cada execução é auditável e atômica, dividida em documentos irmãos de até 250 entradas em `config/disabled_course_questions__batch__*`, identificados por `configType: 'disabled-course-question-batch'`; o documento `config/disabled_course_questions` continua guardando entradas manuais, políticas compactas e o resumo da última execução. Esse formato reutiliza a autorização já existente da coleção `config`, sem depender da publicação de uma regra nova para subcoleção. Admin grava, alunos do curso apenas leem. O sucesso do botão é determinado pelo commit atômico. A filtragem local do banco, das revisões e dos caches é adiada para depois do primeiro frame e não pode converter um commit concluído em um falso aviso de falha. O runtime reúne raiz + lotes, deduplica e usa índice em memória, evitando busca linear por milhares de IDs. Dimensionamentos seguintes mostram somente o banco ativo nos cenários e informam separadamente quantas questões já estão inativas. Não converta isso em exclusão física.
+
 O executor da Curadoria segue o padrão resiliente da criação: exibe logs com horário por aula, lote, tentativa, chave, validação, salvamento e publicação; permite pausar/continuar e parar após a requisição ativa; usa o mesmo pool administrativo deduplicado da criação — chaves atuais e backups encontrados nos perfis, sem registrar seus valores — e mantém um cursor rotativo entre chamadas; tenta outra chave em cota, chave inválida, timeout, sobrecarga, conexão, JSON truncado ou lote incompleto; valida exatamente os IDs esperados antes de salvar; e, se uma aula esgotar as tentativas, marca seu manifesto como pausado e continua a matéria. As chamadas mecânicas de curadoria desativam o thinking, pedem `application/json` nativo e admitem até 180 segundos nos lotes de 30. Lotes concluídos nunca são descartados. O resumo final separa publicadas, pendentes e não iniciadas.
 
 FSRS é o motor ativo por cartão para questões essenciais do curso e para materiais pessoais, nunca um experimento exclusivo desta coleção. A integração usa `ts-fsrs@5.4.1`: `services/reviewMigration.js` considera somente questões de aulas explicitamente ativadas **com seleção pedagógica publicada** e distribui a primeira exposição de todas as elegíveis nas ondas 35/30/20/10/5. Depois da resposta real, essenciais seguem longitudinalmente e `services/fsrsScheduler.js` grava `fsrs`; complementares e reservas passam a `adaptiveState: 'completed-once'`, sem novo vencimento. Aula sem curadoria e publicação não cria cartões novos. Se houver cartão legado, ele fica em `adaptiveState: 'awaiting-curation'`, `dueDate: null` e não conta nem aparece como pendência. Preserve o import dinâmico, `cardKey`, `parkedDueDate` e `legacyFallback`. A UI é uma fila única; a partição por aula em `vq_review` é apenas armazenamento. Leia `docs/LEARNING_ENGINE_ROADMAP.md` antes de mexer nessas áreas.
@@ -496,6 +504,8 @@ Questões grandes são removidas do documento principal e gravadas em chunks de 
 - hidrata os chunks após a consulta.
 
 Na interface atual, a Fábrica de Questões é exclusiva do administrador (`homeCanSeeSharedLibrary`) e não possui modo ou prévia de aluno. Os dados publicados alimentam questões prontas do curso por outros fluxos, mas a tela da Fábrica nunca deve ser aberta a alunos apenas porque as regras permitem ler documentos publicados.
+
+Na subaba **Criar**, a entrada sem filtro mostra primeiro as matérias, não centenas de aulas simultâneas. Depois de escolher uma matéria ou pesquisar, as aulas são montadas progressivamente. O seletor de aula específica só enumera aulas quando uma matéria foi escolhida, e os cálculos pesados de reparo/fila da automação só rodam quando o painel é aberto. Preserve esse carregamento progressivo; um `<details>` fechado ainda monta seus filhos e não serve sozinho como lazy loading.
 
 Ao responder, grave somente:
 
@@ -698,7 +708,7 @@ As metas diárias padrão são 120 questões e 90 minutos, configuráveis pelo u
 
 ## FAMED
 
-FAMED é um destino separado de Meus materiais:
+FAMED é um destino separado de Meus materiais. No S5, depois do seletor de semestre, a interface separa **1ª metade · Cardio/Pneumo**, **2ª metade · Gastro/Endócrino** e **ABS · semestre inteiro**; não apresente ABS como uma terceira disciplina empilhada abaixo da primeira metade:
 
 ```text
 famed_content/{scheduleItemId}
@@ -713,7 +723,7 @@ O documento guarda metadados e um `academiaSubject` completo:
   discipline,
   semester: 'S5',
   curriculum: 'PPC 2018',
-  track: 'cardio-pneumo',
+  track: 'cardio-pneumo' | 'gastro-endocrino' | 'abs-gestante-rn',
   title,
   creationMode: 'academia',
   academiaSubject,
@@ -761,9 +771,9 @@ Escopo vigente:
 - currículo PPC 2018;
 - semestres visíveis S5–S8;
 - somente S5 ativo;
-- prioridade atual: Cardiologia + Pneumologia;
+- prioridade atual: Cardiologia + Pneumologia + ABS da Gestante e do RN;
 - S1–S4 e internato fora do escopo;
-- não importar datas, horários, professores, segundas chamadas ou AFs de cronogramas antigos.
+- usar datas, horários e professores somente dos cronogramas oficiais da turma 2026.2; práticas, segundas chamadas e AFs ficam fora.
 
 Não crie editor paralelo, geração externa da aula em lote ou dependência de Firebase Storage. A única importação ZIP autorizada é o pacote versionado de questões antigas e suas figuras. O conteúdo da aula deve continuar reutilizando o fluxo da Academia. Alunos veem apenas itens e assets com `published == true`; rascunhos são admin-only.
 
@@ -771,7 +781,9 @@ Hoje respostas e favoritos específicos da UI FAMED são mantidos em `localStora
 
 O admin pode remover uma Academia FAMED diretamente no card. Essa exclusão remove `famed_content/{id}` e os documentos `famed_assets` ligados a esse conteúdo — aulas, questões e figuras do pacote —, preserva as videoaulas do Portal do Curso e mantém o item estático do cronograma disponível para recriação. A confirmação deve explicitar essa separação.
 
-Os cards do cronograma FAMED também podem mostrar videoaulas do Portal do Curso que cobrem o mesmo assunto. O vínculo é exclusivamente curado por IDs estáveis em `features/famed/famedCourseLessonMap.js`; nunca o infira por palavras do título, tópico ou descrição. A resolução sempre preserva `courseIndex`, a ordem real do catálogo aplicado. Somente o admin vê **Exportar aulas do curso**, que gera um JSON sem transcrições nem URLs com a ordem e os identificadores necessários para revisar e versionar esse mapa. O snapshot conferido fica em `data/famed/course-catalog.snapshot.json`; o atual foi exportado em 1º de agosto de 2026 e contém 488 aulas. Há 15 itens FAMED vinculados e quatro conscientemente sem cobertura direta, registrados em `FAMED_COURSE_LESSON_MAP.unmapped`. Sem vínculo curado, o aluno não vê mensagem alegando que a aula não existe. Não confunda esse atalho com o conteúdo próprio da Academia FAMED.
+Os cards do cronograma FAMED também podem mostrar videoaulas do Portal do Curso que cobrem o mesmo assunto. O vínculo é exclusivamente curado por IDs estáveis em `features/famed/famedCourseLessonMap.js`; nunca o infira por palavras do título, tópico ou descrição. A resolução sempre preserva `courseIndex`, a ordem real do catálogo aplicado. Somente o admin vê **Exportar aulas do curso**, que gera um JSON sem transcrições nem URLs com a ordem e os identificadores necessários para revisar e versionar esse mapa. O snapshot conferido fica em `data/famed/course-catalog.snapshot.json`; o atual foi exportado em 1º de agosto de 2026 e contém 488 aulas. A grade 2026.2 tem 32 aulas: 23 com vínculos diretos e nove conscientemente sem substituto aproximado. ABS é interdisciplinar e pode apontar para Obstetrícia, Pediatria, Ginecologia e Infectologia quando o vínculo for direto e explícito. Sem vínculo curado, o aluno não vê mensagem alegando que a aula não existe. Não confunda esse atalho com o conteúdo próprio da Academia FAMED.
+
+O cronograma preserva IDs já usados. Conteúdos da turma anterior que não aparecem na grade 2026.2 não são apagados nem recebem novo ID: quando existentes, aparecem em **Materiais preservados**.
 
 Leia obrigatoriamente:
 

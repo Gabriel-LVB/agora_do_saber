@@ -1,6 +1,6 @@
 # Produção de conteúdo FAMED pela Academia
 
-A área FAMED usa o PPC 2018 e contempla somente S5, S6, S7 e S8. O foco atual é S5 Cardio/Pneumo. A ordem exibida veio da turma anterior e serve apenas como referência; datas, horários, professores, segundas chamadas e AFs não entram no site.
+A área FAMED usa o PPC 2018 e contempla somente S5, S6, S7 e S8. Dentro do S5 há um segundo seletor com três trilhas: **1ª metade · Cardio/Pneumo**, **2ª metade · Gastro/Endócrino** e **ABS · semestre inteiro**. A grade atual vem dos cronogramas oficiais da turma 2026.2 e inclui datas, horários, aulas teóricas e primeiras chamadas; práticas, feriados, segundas chamadas e AFs são excluídos. A segunda metade permanece selecionável, mas mostra um estado vazio até a chegada do cronograma correspondente.
 
 ## Fluxo atual
 
@@ -42,6 +42,8 @@ A IA também não pode contornar a regra quebrando automaticamente uma lista de 
 
 O conjunto salvo recebe uma assinatura derivada da aula e das questões antigas. Se qualquer uma dessas fontes mudar, os flashcards ficam desatualizados: deixam de aparecer aos alunos e o administrador recebe a ação **Atualizar flashcards**. O administrador também pode usar **Apagar flashcards e refazer**. Questões antigas e flashcards usam o mesmo `QuestionView` já compartilhado pelas demais áreas da aplicação. **Refazer estrutura** preserva os blocos de questões antigas, mas a nova aula invalida naturalmente os flashcards até uma nova geração.
 
+Esse compartilhamento inclui a experiência completa de revisão: Meus materiais e a Academia também isolam visualmente flashcards/clozes em uma sessão dedicada, com um cartão por vez, progresso, tela cheia e repetição dos erros. Em tópicos mistos, a separação é apenas de interface; questões e cartões permanecem íntegros no mesmo conteúdo persistido.
+
 No card administrativo de Flashcards, **Exportar para revisar o prompt** baixa um JSON `agora-famed-flashcard-audit-v1`. Essa é uma ferramenta de auditoria, não uma quarta ação de estudo. O arquivo inclui os cartões exatamente como foram salvos, versão e assinatura da geração, checklist de revisão e os textos da aula e das questões antigas usados como evidência. Ele não altera, filtra nem exclui conteúdo. O administrador pode anexá-lo em uma conversa para diagnosticar erros de seleção, atomização, contexto e explicação antes de versionar outra política.
 
 Enquanto estiver em preparação, o conteúdo fica como rascunho e aparece apenas para o administrador. **Refazer estrutura** reabre o criador da Academia para aquela aula do cronograma. **Apagar tudo** remove a estrutura, as aulas e as questões vinculadas.
@@ -56,7 +58,9 @@ Os atalhos exibidos nos cards da FAMED não são inferidos pelo título ou pela 
 
 O administrador pode usar **Exportar aulas do curso** no topo da lista. O JSON contém a ordem aplicada, matéria, tópico, títulos, duração e IDs estáveis, mas deliberadamente não inclui transcrições nem URLs. O snapshot conferido fica em `data/famed/course-catalog.snapshot.json`, e os vínculos aprovados ficam no mapa versionado do projeto. Se ainda não houver vínculo curado, o aluno não recebe uma conclusão automática de que o curso não cobre aquele assunto.
 
-O snapshot de 1º de agosto de 2026 contém 488 aulas. A curadoria atual cobre diretamente 15 dos 19 itens de aula do cronograma FAMED. Quatro permanecem conscientemente sem substituto aproximado: estratificação de risco cardiovascular, cirurgia cardíaca, cardiopatias congênitas e tomografia do tórax. Esse estado está registrado em `FAMED_COURSE_LESSON_MAP.unmapped` e deve ser revisto quando o catálogo ganhar novas aulas.
+O snapshot de 1º de agosto de 2026 contém 488 aulas. O cronograma atual tem 32 itens de aula: 23 possuem um ou mais vínculos diretos e nove permanecem conscientemente sem substituto aproximado. O estado fica registrado em `FAMED_COURSE_LESSON_MAP.links`/`unmapped` e deve ser revisto quando o catálogo ganhar novas aulas. Como ABS é interdisciplinar, seus atalhos podem apontar para Obstetrícia, Pediatria, Ginecologia e Infectologia, sempre por IDs explicitamente curados.
+
+Itens da turma anterior não são apagados. IDs equivalentes continuam canônicos; conteúdos já criados que saíram da grade aparecem em **Materiais preservados**, sem serem contados como aulas de 2026.2.
 
 ## Regras editoriais
 

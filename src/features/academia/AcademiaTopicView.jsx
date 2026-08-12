@@ -319,6 +319,15 @@ function AcademiaTopicView({
   );
 
   const allFixqs = subtopics.flatMap((_, idx) => liveTopic.fixationQuestions?.[idx] || []);
+  const memoryFixqs = allFixqs.filter(question => isMemoryCard(question));
+  const ordinaryFixqs = allFixqs.filter(question => !isMemoryCard(question));
+  const openFixationFlashcards = () => onOpenAcademiaQuestions?.(
+    liveSubject,
+    liveTopic,
+    'fixation',
+    null,
+    { studyKind:'flashcards' }
+  );
   const fixationErrorReviews = findErrorNotebookReviewsForSource ? findErrorNotebookReviewsForSource({
     subjectTitle:[liveSubject.title, 'Fixação'],
     topicTitle:[liveTopic.title, 'Questões de fixação'],
@@ -346,9 +355,9 @@ function AcademiaTopicView({
               </button>
             )}
             {allFixqs.length > 0 && (
-              <button onClick={()=>onOpenAcademiaQuestions?.(liveSubject, liveTopic, 'fixation')}
+              <button onClick={()=>memoryFixqs.length > 0 && ordinaryFixqs.length === 0 ? openFixationFlashcards() : onOpenAcademiaQuestions?.(liveSubject, liveTopic, 'fixation')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${darkMode?'border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400':'border-gray-200 text-gray-500 hover:border-yellow-500 hover:text-yellow-600'}`}>
-                <GraduationCap className="w-3.5 h-3.5"/>Questões de fixação
+                <GraduationCap className="w-3.5 h-3.5"/>{ordinaryFixqs.length === 0 ? 'Estudar flashcards' : 'Questões de fixação'}
               </button>
             )}
             {canUseAcademia && allFixqs.length === 0 && (
@@ -423,7 +432,7 @@ function AcademiaTopicView({
       {/* Conteúdo */}
       {hasLesson && !academiaGenerating && (
         <div>
-          {allFixqs.length > 0 && (
+          {ordinaryFixqs.length > 0 && (
             <div className={`mb-8 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
               <div>
                 <p className={`text-sm font-bold ${darkMode?'text-gray-200':'text-gray-800'}`}>Quando mostrar as questões?</p>
@@ -449,6 +458,7 @@ function AcademiaTopicView({
           {subtopics.map((subtopic, idx) => {
             const section = liveTopic.lessonSections?.[idx];
             const chapterQuestions = liveTopic.fixationQuestions?.[idx] || [];
+            const chapterPracticeQuestions = chapterQuestions.filter(question => !isMemoryCard(question));
             return (
               <section id={`academia-chapter-${liveTopic.id}-${idx}`} key={idx} className="scroll-mt-6 py-8 first:pt-0">
                 <h2 className={`mb-6 font-serif text-2xl font-bold leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}><span className="mr-3 text-base font-bold tabular-nums text-yellow-600">{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
@@ -457,27 +467,40 @@ function AcademiaTopicView({
                 ) : (
                   <p className={`mb-8 text-sm italic ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este capítulo.</p>
                 )}
-                {questionPlacement === 'inline' && chapterQuestions.length > 0 && (
+                {questionPlacement === 'inline' && chapterPracticeQuestions.length > 0 && (
                   <div className={`mt-8 rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
                     <div className="mb-5 flex items-center justify-between gap-3">
-                      <div><p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Fixação do capítulo</p><p className="mt-1 text-xs opacity-50">{chapterQuestions.length} questão{chapterQuestions.length!==1?'ões':'ão'}</p></div>
+                      <div><p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Fixação do capítulo</p><p className="mt-1 text-xs opacity-50">{chapterPracticeQuestions.length} questão{chapterPracticeQuestions.length!==1?'ões':'ão'}</p></div>
                     </div>
-                    {chapterQuestions.map((question, questionIndex)=>renderFixQ(question,questionIndex))}
+                    {chapterPracticeQuestions.map((question, questionIndex)=>renderFixQ(question,questionIndex))}
                   </div>
                 )}
               </section>
             );
           })}
 
-          {questionPlacement === 'end' && allFixqs.length > 0 && (
+          {questionPlacement === 'end' && ordinaryFixqs.length > 0 && (
             <section className="mt-10 pt-4">
               <div className="mb-6">
                 <h2 className={`font-serif text-2xl font-bold ${darkMode?'text-gray-100':'text-gray-900'}`}>Questões de fixação</h2>
-                <p className={`mt-1 text-sm ${darkMode?'text-gray-500':'text-gray-500'}`}>{allFixqs.length} questão{allFixqs.length!==1?'ões':'ão'} sobre este tópico.</p>
+                <p className={`mt-1 text-sm ${darkMode?'text-gray-500':'text-gray-500'}`}>{ordinaryFixqs.length} questão{ordinaryFixqs.length!==1?'ões':'ão'} sobre este tópico.</p>
               </div>
               <div className={`rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
-                {allFixqs.map((question,questionIndex)=>renderFixQ(question,questionIndex))}
+                {ordinaryFixqs.map((question,questionIndex)=>renderFixQ(question,questionIndex))}
               </div>
+            </section>
+          )}
+
+          {memoryFixqs.length > 0 && (
+            <section className={`mt-10 rounded-2xl border p-5 md:flex md:items-center md:justify-between md:gap-6 ${darkMode?'border-yellow-800/70 bg-yellow-950/10':'border-yellow-300 bg-yellow-50/70'}`}>
+              <div>
+                <p className={`font-serif text-xl font-bold ${darkMode?'text-gray-100':'text-gray-900'}`}>Flashcards da aula</p>
+                <p className={`mt-1 text-sm ${darkMode?'text-gray-400':'text-gray-600'}`}>Revise em uma sessão própria, um cartão por vez.</p>
+              </div>
+              <button type="button" onClick={openFixationFlashcards}
+                className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-yellow-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-yellow-700 md:mt-0 md:w-auto">
+                <RepeatIcon className="h-4 w-4"/>Estudar {memoryFixqs.length} flashcard{memoryFixqs.length!==1?'s':''}
+              </button>
             </section>
           )}
 

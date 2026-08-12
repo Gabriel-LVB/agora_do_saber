@@ -14,7 +14,7 @@ import {
 } from '../../services/famedContent.js';
 import { FAMED_PROGRAM } from './famedCatalog.js';
 import FamedScheduleView from './FamedScheduleView.jsx';
-import { FAMED_S5_SCHEDULE } from './famedSchedule.js';
+import { FAMED_S5_ALL_ITEMS, FAMED_S5_SCHEDULE } from './famedSchedule.js';
 import {
   buildFamedCourseCatalogExport,
   resolveFamedCourseLessons,
@@ -112,6 +112,7 @@ export default function FamedPortalView() {
   const [activeContentId, setActiveContentId] = React.useState(null);
   const [activeTopicId, setActiveTopicId] = React.useState(null);
   const [activePanel, setActivePanel] = React.useState('schedule');
+  const [activeTrackId, setActiveTrackId] = React.useState(FAMED_PROGRAM.tracks[0].id);
   const [activeQuestionSet, setActiveQuestionSet] = React.useState(null);
   const [answersByBlock, setAnswersByBlock] = React.useState(()=>readStoredObject('agora_famed_answers'));
   const [favoritesByBlock, setFavoritesByBlock] = React.useState(()=>readStoredObject('agora_famed_favorites'));
@@ -120,6 +121,7 @@ export default function FamedPortalView() {
   const [removingContentId, setRemovingContentId] = React.useState(null);
   const [generatingFlashcardsId, setGeneratingFlashcardsId] = React.useState(null);
   const [openingQuestionSetId, setOpeningQuestionSetId] = React.useState(null);
+  const activeTrack = FAMED_PROGRAM.tracks.find(track => track.id === activeTrackId) || FAMED_PROGRAM.tracks[0];
   React.useEffect(() => {
     window.dispatchEvent(new CustomEvent('agora-famed-detail-layout', {
       detail:{ active:activePanel !== 'schedule' },
@@ -691,7 +693,7 @@ export default function FamedPortalView() {
       {mode:'regenLesson', label:'Regenerar aula', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenLesson').length, danger:true},
       {mode:'regenQuestions', label:'Regenerar questões', icon:<RotateCcw className="w-4 h-4"/>, count:getBulkGenerateTargets(activeSubject,'regenQuestions').length, danger:true},
     ];
-    const scheduleItem = FAMED_S5_SCHEDULE.find(item => item.id === activeContent.scheduleItemId);
+    const scheduleItem = FAMED_S5_ALL_ITEMS.find(item => item.id === activeContent.scheduleItemId);
     const progress = subjectProgress(activeSubjectWithProgress || activeSubject);
     const study = getFamedStudyMaterials(activeSubject);
     const flashcardState = getFamedFlashcardState(activeSubject);
@@ -743,12 +745,24 @@ export default function FamedPortalView() {
     <section className="app-hero famed-hero rounded-2xl px-5 py-5 md:px-8 md:py-7">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-yellow-600">FAMED · {FAMED_PROGRAM.curriculum}</p>
       <h1 className="mt-2 font-serif text-3xl font-bold leading-tight md:text-4xl">Semestre 5</h1>
-      <p className={`mt-2 text-sm md:text-base ${darkMode?'text-gray-400':'text-gray-600'}`}>Cardiologia e Pneumologia</p>
+      <p className={`mt-2 text-sm md:text-base ${darkMode?'text-gray-400':'text-gray-600'}`}>{activeTrack.title} · {activeTrack.subtitle}</p>
     </section>
     <section aria-label="Semestres" className="app-card famed-semesters rounded-2xl p-2 md:p-3"><div className="grid grid-cols-4 gap-2">{FAMED_PROGRAM.semesters.map(semester=><button key={semester.id} type="button" disabled={!semester.available} aria-current={semester.available?'page':undefined} className={`famed-semester flex min-h-[60px] w-full flex-col items-center justify-center rounded-xl border px-2 text-center md:min-h-[68px] ${semester.available?(darkMode?'border-yellow-800 bg-yellow-900/10 text-yellow-300':'border-yellow-400 bg-yellow-50 text-yellow-800'):(darkMode?'border-gray-800 bg-transparent text-gray-600':'border-gray-100 bg-gray-50 text-gray-300')} disabled:cursor-not-allowed`}><strong className="text-base md:text-lg">{semester.label}</strong><span className="mt-0.5 text-[10px] font-bold uppercase tracking-wide">{semester.available?'Atual':'Em breve'}</span></button>)}</div></section>
+    <section aria-label="Partes do S5" className="app-card rounded-2xl p-2 md:p-3">
+      <div className="grid grid-cols-3 gap-2">{FAMED_PROGRAM.tracks.map(track => {
+        const selected = track.id === activeTrack.id;
+        return <button key={track.id} type="button" aria-pressed={selected} onClick={()=>setActiveTrackId(track.id)}
+          className={`flex min-h-[72px] min-w-0 flex-col items-center justify-center rounded-xl border px-2 py-2 text-center transition-colors ${selected
+            ? darkMode?'border-yellow-700 bg-yellow-900/20 text-yellow-300':'border-yellow-400 bg-yellow-50 text-yellow-800'
+            : darkMode?'border-gray-800 text-gray-400 hover:border-gray-600 hover:text-gray-200':'border-gray-100 text-gray-600 hover:border-gray-300 hover:text-gray-800'}`}>
+          <strong className="text-sm md:text-base">{track.selectorLabel}</strong>
+          <span className="mt-1 block max-w-full truncate text-[10px] font-bold uppercase tracking-wide opacity-60">{track.title}</span>
+        </button>;
+      })}</div>
+    </section>
     {contentError&&isAdmin&&<p className={`rounded-xl border px-4 py-3 text-sm ${darkMode?'border-red-900 bg-red-900 bg-opacity-20 text-red-200':'border-red-200 bg-red-50 text-red-800'}`}>{contentError}</p>}
     {isAdmin&&legacyContentItems.length>0&&<section className={`rounded-2xl border p-4 md:p-5 ${darkMode?'border-red-900 bg-red-950/20':'border-red-200 bg-red-50'}`}><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Limpeza do fluxo antigo</p><p className={`mt-1 text-sm ${darkMode?'text-gray-300':'text-gray-700'}`}>{legacyContentItems.length} conteúdo(s) antigo(s) estão ocultos e prontos para exclusão.</p></div><button type="button" disabled={cleaningLegacy} onClick={cleanLegacyContent} className="min-h-[44px] rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-40">{cleaningLegacy?'Apagando…':'Apagar conteúdo antigo'}</button></div></section>}
-    <FamedScheduleView darkMode={darkMode} isAdmin={isAdmin} contentByScheduleId={contentByScheduleId} contentLoading={contentLoading}
+    <FamedScheduleView darkMode={darkMode} isAdmin={isAdmin} disciplineIds={activeTrack.subjects} heading={activeTrack.heading} description={activeTrack.description} emptyMessage={activeTrack.description} contentByScheduleId={contentByScheduleId} contentLoading={contentLoading}
       courseCatalogReady={!!appliedVideoaulasData} courseLessonsByScheduleId={courseLessonsByScheduleId} watchedAulas={watchedAulas} onOpenCourseLesson={openCourseLesson}
       onExportCourseCatalog={exportCourseCatalog}
       removingContentId={removingContentId} onRemoveContent={removeScheduleContent}

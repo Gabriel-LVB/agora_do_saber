@@ -3,6 +3,11 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { callGemini } from '../../services/gemini.js';
 
 import { deferInteractionWork } from '../../lib/interaction.js';
+import {
+  normalizeDeclaredCorrectAlternativeReferences,
+  normalizeDisplayedAlternativeReferences,
+} from '../../lib/questionExplanation.js';
+import { toggleQuestionTypeSelection } from '../../lib/questionTypes.js';
 
 
 
@@ -202,15 +207,6 @@ const parseQuestionExplanationParts = (explanation = '') => {
 };
 
 const getCorrectLetter = (question) => question?.options?.find(o => o.isCorrect)?.letter;
-const normalizeDisplayedAlternativeReferences = (text = '', displayLetter = '') => {
-  const letter = String(displayLetter || '').trim().toUpperCase();
-  if (!letter) return String(text || '');
-
-  return String(text || '').replace(
-    /\b((?:[Aa]\s+)?(?:alternativa|op[cç][aã]o|letra)\s+)(\*{0,2})([A-H])(\*{0,2})(?=\b)/gi,
-    (_, prefix, open = '', _oldLetter, close = '') => `${prefix}${open}${letter}${close}`,
-  );
-};
 const isMemoryCard = (question) => !!(question?.isFlashcard || question?.isCloze);
 const isAnswerCorrect = (question, answer) => {
   if (!question || !answer || answer === 'SKIPPED') return false;
@@ -222,11 +218,6 @@ const isAnswerCorrect = (question, answer) => {
 };
 const isFinalObjectiveAnswer = (question, answer) =>
   !!question && !question.isOpen && !isMemoryCard(question) && answer != null && answer !== '' && answer !== 'SKIPPED';
-const isMemoryCardType = (type) => type === 'flashcard' || type === 'cloze';
-const isOnlyMemoryCardType = (types = []) => types.length === 1 && isMemoryCardType(types[0]);
-const memoryCardTypeName = (types = []) => types?.[0] === 'cloze' ? 'clozes' : 'flashcards';
-const MIXED_QUESTION_STYLE = 'hybrid';
-const isMixedQuestionMode = (style = '') => style === MIXED_QUESTION_STYLE;
 const QUESTION_STYLE_OPTIONS = [
   { k:'hybrid', label:'Mistas', desc:'Gera diretas sobre os subtópicos e depois casos encadeados como teste clínico.' },
   { k:'mixed', label:'Casos encadeados', desc:'A IA decide quantos casos usar e faz várias questões progressivas sobre cada um.' },
@@ -385,7 +376,7 @@ const parseHtmlTextChat = (text) => renderRichText(text, true);
 
 const QuestionView = ({
   title, onBack, backLabel='Voltar',
-  questions=[], answers={}, favorites=[],
+  questions:sourceQuestions=[], answers={}, favorites=[],
   onAnswer, onToggleFavorite,
   errorNotebook=[], onToggleErrorNotebook=null, showErrorNotebook=false,
   onReset, onReshuffle, onRegenerate, onExport,
@@ -420,8 +411,32 @@ const QuestionView = ({
 	  onDisplayModeChange=null,
 	  resumeAtFirstUnanswered=false,
 	  onExportAnki=null,
+	  initialStudyKind='auto',
 }) => {
   const dm = darkMode;
+  const memoryCardQuestions = useMemo(
+    () => sourceQuestions.filter(question => isMemoryCard(question)),
+    [sourceQuestions]
+  );
+  const ordinaryQuestions = useMemo(
+    () => sourceQuestions.filter(question => !isMemoryCard(question)),
+    [sourceQuestions]
+  );
+  const hasMixedStudyKinds = memoryCardQuestions.length > 0 && ordinaryQuestions.length > 0;
+  const resolveInitialStudyKind = () => {
+    if (initialStudyKind === 'flashcards' && memoryCardQuestions.length > 0) return 'flashcards';
+    if (initialStudyKind === 'questions' && ordinaryQuestions.length > 0) return 'questions';
+    return memoryCardQuestions.length > 0 && ordinaryQuestions.length === 0 ? 'flashcards' : 'questions';
+  };
+  const [studyKind, setStudyKind] = useState(resolveInitialStudyKind);
+  const questions = useMemo(() => {
+    if (!hasMixedStudyKinds) return sourceQuestions;
+    return studyKind === 'flashcards' ? memoryCardQuestions : ordinaryQuestions;
+  }, [hasMixedStudyKinds, memoryCardQuestions, ordinaryQuestions, sourceQuestions, studyKind]);
+  const sourceStudyShapeKey = useMemo(
+    () => sourceQuestions.map(question => `${question.id}:${isMemoryCard(question) ? 'memory' : 'question'}`).join('|'),
+    [sourceQuestions]
+  );
   const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
   const [flashcardFullscreen, setFlashcardFullscreen] = useState(false);
   const [pendingAnswers, setPendingAnswers] = useState({});
@@ -513,6 +528,22 @@ const QuestionView = ({
 	  const [flashcardMastered, setFlashcardMastered] = useState({});
 	  const [flashcardEntryAnswers, setFlashcardEntryAnswers] = useState({});
 	  const [flashcardAttempts, setFlashcardAttempts] = useState({});
+
+	  useEffect(() => {
+	    setStudyKind(resolveInitialStudyKind());
+	    setShowCompletion(false);
+	    setFlashcardFullscreen(false);
+	    setHeaderActionsOpen(false);
+	  }, [sourceStudyShapeKey, initialStudyKind]); // eslint-disable-line
+
+	  const switchStudyKind = (nextKind) => {
+	    if (nextKind === studyKind) return;
+	    setStudyKind(nextKind);
+	    setShowCompletion(false);
+	    setFlashcardFullscreen(false);
+	    setHeaderActionsOpen(false);
+	    setSingleIndex(0);
+	  };
 
 	  const isOpenAnswered = (q) => {
 	    if (!q.isOpen) return false;
@@ -619,6 +650,11 @@ const QuestionView = ({
 	  } : null;
   const actionMenuItems = questions.length>0 ? [
     onGoToAula ? { label:goToAulaLabel, icon:goToAulaIcon, fn:onGoToAula } : null,
+    hasMixedStudyKinds ? {
+      label:studyKind === 'flashcards' ? `Ver questões (${ordinaryQuestions.length})` : `Estudar flashcards (${memoryCardQuestions.length})`,
+      icon:studyKind === 'flashcards' ? <BlockIcon className="w-4 h-4"/> : <LayersIcon className="w-4 h-4"/>,
+      fn:()=>switchStudyKind(studyKind === 'flashcards' ? 'questions' : 'flashcards'),
+    } : null,
     displayModeAction,
     allFlashcards && singleMode ? {
       label:`Cartão ${Math.min(flashcardCursor + 1, Math.max(1, flashcardQueue.length))} de ${Math.max(1, flashcardQueue.length)}`,
@@ -794,8 +830,13 @@ const QuestionView = ({
       } : null,
     ].filter(Boolean);
     const navigationActions = [
+      hasMixedStudyKinds && studyKind === 'flashcards' ? {
+        label:`Ir para questões (${ordinaryQuestions.length})`,
+        icon:<BlockIcon className="w-4 h-4"/>,
+        fn:()=>switchStudyKind('questions'),
+      } : null,
       singleMode ? {
-        label:'Ver questões',
+        label:allFlashcards ? 'Rever flashcards' : 'Ver questões',
         icon:<ArrowLeft className="w-4 h-4"/>,
         fn:()=>setShowCompletion(false),
       } : null,
@@ -893,6 +934,26 @@ const QuestionView = ({
     );
   };
 
+  const renderStudyKindSwitch = () => hasMixedStudyKinds ? (
+    <div role="tablist" aria-label="Modo de estudo" className={`mb-4 grid flex-shrink-0 grid-cols-2 rounded-xl border p-1 ${dm?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-100'}`}>
+      {[
+        ['questions', `Questões (${ordinaryQuestions.length})`, BlockIcon],
+        ['flashcards', `Flashcards (${memoryCardQuestions.length})`, LayersIcon],
+      ].map(([kind, label, Icon]) => (
+        <button
+          key={kind}
+          type="button"
+          role="tab"
+          aria-selected={studyKind === kind}
+          onClick={()=>switchStudyKind(kind)}
+          className={`flex min-h-[40px] items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${studyKind===kind?(dm?'bg-yellow-700 text-white':'bg-white text-yellow-700 shadow-sm'):(dm?'text-gray-400 hover:text-gray-200':'text-gray-500 hover:text-gray-800')}`}
+        >
+          <Icon className="h-4 w-4"/>{label}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
   if (!isGenerating && questions.length > 0 && showCompletion && allDone) {
     return (
       <div className="w-full">
@@ -902,6 +963,7 @@ const QuestionView = ({
           </button>
           <h2 className={`${allFlashcards ? 'text-xl md:text-2xl' : 'text-2xl'} mobile-wrap font-serif font-bold text-yellow-600 leading-tight`}>{title}</h2>
         </div>
+        {studyKind === 'questions' && renderStudyKindSwitch()}
         {renderCompletion()}
       </div>
     );
@@ -909,6 +971,7 @@ const QuestionView = ({
 
   return (
     <div className={`w-full ${allFlashcards && singleMode ? `${flashcardFullscreen ? 'flashcard-fullscreen-stage' : 'flashcard-mobile-stage h-[calc(100dvh-84px)] md:h-[calc(100dvh-94px)] md:-my-6'} flex flex-col overflow-hidden` : ''}`}>
+      {!flashcardFullscreen && studyKind === 'questions' && renderStudyKindSwitch()}
       {/* ── Header ── */}
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center ${allFlashcards ? 'mb-2 pb-0 gap-1' : 'mb-6 pb-6 gap-4 border-b'} ${!allFlashcards ? (dm?'border-gray-700':'border-gray-200') : ''}`}>
         <div className="min-w-0 flex-1">
@@ -1512,10 +1575,7 @@ const QUESTION_TYPES = [
 const QuestionTypeSelector = ({ selected=[], onChange, darkMode, single=false, isAdmin=false, canCreateFlashcards=false, includeExternalOnly=false, renderTypeDetails=null }) => {
   const dm = darkMode;
   const toggle = (k) => {
-    if (single) { onChange([k]); return; }
-    const next = selected.includes(k) ? selected.filter(x=>x!==k) : [...selected, k];
-    if (next.length === 0) return;
-    onChange(next);
+    onChange(toggleQuestionTypeSelection(selected, k, { single }));
   };
   const visibleTypes = QUESTION_TYPES
     .filter(t => includeExternalOnly || !t.externalOnly)
@@ -2045,7 +2105,10 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             </button>
             {lessonExplanationOpen && (
               <div className={`border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700 text-gray-200':'border-gray-100 text-gray-800'}`}>
-                <div className="select-text text-[15px] leading-relaxed md:text-base" style={{userSelect:'text'}}>{parseHtmlTextChat(hasStructuredExplanations ? (question.explanationParts?.lesson || explanation) : explanation)}</div>
+                <div className="select-text text-[15px] leading-relaxed md:text-base" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDeclaredCorrectAlternativeReferences(
+                  hasStructuredExplanations ? (question.explanationParts?.lesson || explanation) : explanation,
+                  getCorrectLetter(question),
+                ))}</div>
                 {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
               </div>
             )}

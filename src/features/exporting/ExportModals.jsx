@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 
+import {
+  normalizeDeclaredCorrectAlternativeReferences,
+  normalizeDisplayedAlternativeReferences,
+} from '../../lib/questionExplanation.js';
+
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
 const Printer = ic('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>');
 const escapeXml = (s = '') => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
@@ -92,14 +97,6 @@ const parseQuestionExplanationParts = (explanation = '') => {
     alternatives,
   };
 };
-const normalizeDisplayedAlternativeReferences = (text = '', displayLetter = '') => {
-  const letter = String(displayLetter || '').trim().toUpperCase();
-  if (!letter) return String(text || '');
-  return String(text || '').replace(
-    /\b((?:[Aa]\s+)?(?:alternativa|op[cç][aã]o|letra)\s+)(\*{0,2})([A-H])(\*{0,2})(?=\b)/gi,
-    (_, prefix, open = '', _oldLetter, close = '') => `${prefix}${open}${letter}${close}`,
-  );
-};
 const questionTypeLabel = (question = {}) => question.isCloze
   ? 'Cloze'
   : question.isFlashcard
@@ -124,7 +121,11 @@ const getQuestionExportData = (question = {}) => {
     const explanation = opt.explanation || alternatives[originalLetter] || alternatives[letter] || '';
     return { ...opt, explanation:normalizeDisplayedAlternativeReferences(explanation, letter) };
   });
-  const lessonExplanation = cleanQuestionExplanation(question.explanationParts?.lesson || parsed.lesson || question.explanation || question.expectedAnswer || '');
+  const correctLetter = String((question.options || []).find(opt => opt.isCorrect)?.letter || '').toUpperCase();
+  const lessonExplanation = normalizeDeclaredCorrectAlternativeReferences(
+    cleanQuestionExplanation(question.explanationParts?.lesson || parsed.lesson || question.explanation || question.expectedAnswer || ''),
+    correctLetter,
+  );
   return {
     ...question,
     label:questionTypeLabel(question),

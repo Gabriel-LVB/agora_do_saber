@@ -1,10 +1,39 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
-import QuestionAuditReport from '../admin/QuestionAuditReport.jsx';
 
 const QuestionCurationView = React.lazy(() => import('../question-factory/QuestionCurationView.jsx'));
+const QuestionBankSizingView = React.lazy(() => import('../question-factory/QuestionBankSizingView.jsx'));
 const EcgCaseBankView = React.lazy(() => import('../question-factory/EcgCaseBankView.jsx'));
 const CourseStudentsView = React.lazy(() => import('../admin/CourseStudentsView.jsx'));
+const QuestionAuditReport = React.lazy(() => import('../admin/QuestionAuditReport.jsx'));
+
+const SHARED_LIBRARY_LESSON_PAGE_SIZE = 24;
+
+function ProgressiveLessonList({ items, resetKey, renderItem, darkMode }) {
+  const [visibleCount, setVisibleCount] = React.useState(SHARED_LIBRARY_LESSON_PAGE_SIZE);
+
+  React.useEffect(() => {
+    setVisibleCount(SHARED_LIBRARY_LESSON_PAGE_SIZE);
+  }, [resetKey]);
+
+  const visibleItems = items.slice(0, visibleCount);
+  const remaining = Math.max(0, items.length - visibleItems.length);
+
+  return (
+    <div className="space-y-2">
+      {visibleItems.map(renderItem)}
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={()=>setVisibleCount(count=>Math.min(items.length, count + SHARED_LIBRARY_LESSON_PAGE_SIZE))}
+          className={`w-full rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${darkMode?'border-gray-700 bg-gray-800 text-gray-300 hover:border-yellow-700':'border-gray-200 bg-white text-gray-700 hover:border-yellow-500'}`}
+        >
+          Carregar mais aulas <span className="opacity-50">({remaining} restantes)</span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function SharedLibraryView() {
   const {
@@ -90,6 +119,10 @@ export default function SharedLibraryView() {
 
             const [questionAuditOpen, setQuestionAuditOpen] = React.useState(false);
             const [factorySection, setFactorySection] = React.useState('create');
+            const [automationOpen, setAutomationOpen] = React.useState(false);
+            React.useEffect(() => {
+              if (sharedLibraryRun.running) setAutomationOpen(true);
+            }, [sharedLibraryRun.running]);
             if (!isAdmin) return null;
             const showSharedLibraryAdminTools = isAdmin;
             const tabs = [
@@ -100,20 +133,23 @@ export default function SharedLibraryView() {
             const currentSharedLibraryTab = visibleTabs.some(tab => tab.id === sharedLibraryTab)
               ? sharedLibraryTab
               : 'apostila';
-            const itemQuestions = item => {
-              const clinicalReady = !item.clinicalPartial
+            const isClinicalReady = item => !item.clinicalPartial
                 && !!item.clinicalCompletedAt
                 && supportsSharedLibraryClinicalVersion(item.clinicalGenerationVersion)
                 && item.clinicalSummaryVersion === item.summaryVersion;
+            const isEnabledQuestion = (item, question) => !isCourseQuestionGloballyDisabled({
+              aulaId:item.lessonId || item.id,
+              lessonId:item.lessonId,
+              sharedLibraryItemId:item.id,
+              question,
+            });
+            const itemHasQuestions = item => (item.directQuestions || []).some(question => isEnabledQuestion(item, question))
+              || (isClinicalReady(item) && (item.clinicalQuestions || []).some(question => isEnabledQuestion(item, question)));
+            const itemQuestions = item => {
               return [
                 ...(item.directQuestions || []).map(question => ({ ...question, libraryQuestionKind:'direct' })),
-                ...(clinicalReady ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : []),
-              ].filter(question => !isCourseQuestionGloballyDisabled({
-                aulaId:item.lessonId || item.id,
-                lessonId:item.lessonId,
-                sharedLibraryItemId:item.id,
-                question,
-              }));
+                ...(isClinicalReady(item) ? (item.clinicalQuestions || []).map(question => ({ ...question, libraryQuestionKind:'clinical' })) : []),
+              ].filter(question => isEnabledQuestion(item, question));
             };
             const searchNeedle = normalizeTextKey(sharedLibrarySearch);
             const questionMatchesSearch = question => !searchNeedle || normalizeTextKey(
@@ -173,10 +209,15 @@ export default function SharedLibraryView() {
                 && item.clinicalSummaryVersion === item.summaryVersion;
               return directComplete && clinicalComplete;
             };
-            const subjectCoverage = new Map(courseSubjects.map(subject => {
-              const lessons = sharedCourseLessons.filter(lesson => normalizeTextKey(lesson.subject) === normalizeTextKey(subject));
-              return [subject, { complete:lessons.filter(isSharedLessonComplete).length, total:lessons.length }];
-            }));
+            const subjectCoverage = new Map(courseSubjects.map(subject => [subject, { complete:0, total:0 }]));
+            const coverageSubjectByKey = new Map(courseSubjects.map(subject => [normalizeTextKey(subject), subject]));
+            sharedCourseLessons.forEach(lesson => {
+              const subject = coverageSubjectByKey.get(normalizeTextKey(lesson.subject));
+              if (!subject) return;
+              const coverage = subjectCoverage.get(subject);
+              coverage.total += 1;
+              if (isSharedLessonComplete(lesson)) coverage.complete += 1;
+            });
             const sharedLessonOrder = new Map(sharedCourseLessons.map((lesson, index) => [sharedLibraryDocIdForLesson(lesson), index]));
             const moveSubject = async (subject, direction) => {
               const index = subjectOrder.indexOf(subject);
@@ -190,7 +231,7 @@ export default function SharedLibraryView() {
               const hasContent = currentSharedLibraryTab === 'summary'
                 ? !!item.summaryText
                 : currentSharedLibraryTab === 'apostila'
-                  ? itemQuestions(item).length > 0
+                  ? itemHasQuestions(item)
                   : false;
               const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
               const matchesSearch = itemMatchesSearch(item);
@@ -198,18 +239,31 @@ export default function SharedLibraryView() {
             }).sort((a,b) => (subjectOrder.indexOf(a.subject) - subjectOrder.indexOf(b.subject))
               || (sharedLessonOrder.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
               || String(a.title).localeCompare(String(b.title),'pt'));
-            const repairScopeItems = displayedSharedLibraryItems.filter(item => {
+            const repairScopeItems = automationOpen ? displayedSharedLibraryItems.filter(item => {
               const matchesSubject = sharedLibrarySubject === 'all' || item.subject === sharedLibrarySubject;
               const matchesSearch = itemMatchesSearch(item);
               return matchesSubject && matchesSearch;
-            });
-            const incompleteQuestionCount = showSharedLibraryAdminTools ? countSharedLibraryIncompleteQuestions(repairScopeItems) : 0;
-            const generationBaseLessons = getSharedLibraryTargets();
+            }) : [];
+            const incompleteQuestionCount = showSharedLibraryAdminTools && automationOpen ? countSharedLibraryIncompleteQuestions(repairScopeItems) : 0;
+            const generationBaseLessons = automationOpen ? getSharedLibraryTargets() : [];
             const generationLessons = generationBaseLessons
               .filter(lesson => sharedLibraryGenerationSubject === 'all' || normalizeTextKey(lesson.subject) === normalizeTextKey(sharedLibraryGenerationSubject))
               .sort((a,b) => (sharedLessonOrder.get(sharedLibraryDocIdForLesson(a)) ?? Number.MAX_SAFE_INTEGER) - (sharedLessonOrder.get(sharedLibraryDocIdForLesson(b)) ?? Number.MAX_SAFE_INTEGER)
                 || String(a.title).localeCompare(String(b.title), 'pt'));
-            const factoryItems = displayedSharedLibraryItems.filter(item => itemQuestions(item).length > 0);
+            const factoryItems = factorySection === 'curation'
+              ? displayedSharedLibraryItems.filter(itemHasQuestions)
+              : factorySection === 'sizing'
+                ? displayedSharedLibraryItems.filter(item => (item.directQuestions || []).length || (item.clinicalQuestions || []).length)
+                : [];
+            const showSubjectOverview = sharedLibrarySubject === 'all' && !searchNeedle;
+            const availableItemsBySubject = new Map(subjectOrder.map(subject => [subject, []]));
+            availableItems.forEach(item => {
+              if (!availableItemsBySubject.has(item.subject)) availableItemsBySubject.set(item.subject, []);
+              availableItemsBySubject.get(item.subject).push(item);
+            });
+            const availableSubjectRows = subjectOrder
+              .map(subject => ({ subject, items:availableItemsBySubject.get(subject) || [] }))
+              .filter(row => row.items.length > 0);
             const sharedLibraryFieldClass = `mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${darkMode?'bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-yellow-600 disabled:bg-gray-800 disabled:text-gray-500':'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-yellow-500 disabled:bg-gray-100 disabled:text-gray-400'}`;
             const generationStageOptions = [
               { id:'summary', title:'Sumários internos', desc:'Base para questões e conferência. Prioridade máxima agora.' },
@@ -269,10 +323,11 @@ export default function SharedLibraryView() {
               />;
             }
             const factoryNavigation = showSharedLibraryAdminTools ? (
-              <nav className={`grid grid-cols-2 gap-1 rounded-xl border p-1 md:grid-cols-5 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`} aria-label="Etapas da Fábrica de Questões">
+              <nav className={`grid grid-cols-2 gap-1 rounded-xl border p-1 md:grid-cols-3 lg:grid-cols-6 ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`} aria-label="Etapas da Fábrica de Questões">
                 {[
                   { id:'create', label:'Criar', icon:<CheckCircle2 className="h-4 w-4"/> },
                   { id:'curation', label:'Curadoria', icon:<SettingsIcon className="h-4 w-4"/> },
+                  { id:'sizing', label:'Dimensionar', icon:<ShieldAlert className="h-4 w-4"/> },
                   { id:'ecg', label:'Banco de ECG', icon:<BookOpen className="h-4 w-4"/> },
                   { id:'students', label:'Alunos', icon:<UserIcon className="h-4 w-4"/> },
                   { id:'audit', label:'Auditoria', icon:<ShieldAlert className="h-4 w-4"/> },
@@ -286,6 +341,7 @@ export default function SharedLibraryView() {
                         return;
                       }
                       setFactorySection(section.id);
+                      setQuestionAuditOpen(false);
                       setSharedLibraryActiveItemId(null);
                     }}
                     className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-bold md:text-sm ${
@@ -314,6 +370,10 @@ export default function SharedLibraryView() {
                     ? <React.Suspense fallback={<LoadingState message="Abrindo Curadoria..."/>}>
                         <QuestionCurationView items={factoryItems} subjectOrder={subjectOrder}/>
                       </React.Suspense>
+                    : factorySection === 'sizing'
+                      ? <React.Suspense fallback={<LoadingState message="Abrindo dimensionamento..."/>}>
+                          <QuestionBankSizingView items={factoryItems}/>
+                        </React.Suspense>
                     : factorySection === 'students'
                         ? <React.Suspense fallback={<LoadingState message="Carregando alunos..."/>}>
                             <CourseStudentsView/>
@@ -322,13 +382,15 @@ export default function SharedLibraryView() {
                             <EcgCaseBankView darkMode={darkMode}/>
                           </React.Suspense>}
                   {questionAuditOpen&&(
-                    <QuestionAuditReport
-                      isAdmin={isAdmin}
-                      sharedLibraryItems={sharedLibraryItems}
-                      vqBlocks={vqBlocks}
-                      darkMode={darkMode}
-                      onClose={()=>setQuestionAuditOpen(false)}
-                    />
+                    <React.Suspense fallback={<LoadingState message="Abrindo auditoria..."/>}>
+                      <QuestionAuditReport
+                        isAdmin={isAdmin}
+                        sharedLibraryItems={sharedLibraryItems}
+                        vqBlocks={vqBlocks}
+                        darkMode={darkMode}
+                        onClose={()=>setQuestionAuditOpen(false)}
+                      />
+                    </React.Suspense>
                   )}
                 </div>
               );
@@ -371,7 +433,7 @@ export default function SharedLibraryView() {
                 </div>
 
                 {showSharedLibraryAdminTools&&(
-                  <details className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
+                  <details open={automationOpen} onToggle={event=>setAutomationOpen(event.currentTarget.open)} className={`rounded-2xl border p-5 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}>
                     <summary className="cursor-pointer font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4"/>Automação da Fábrica</summary>
                     <div className="mt-5 grid lg:grid-cols-[1.05fr_.95fr] gap-5">
                       <div className="space-y-4">
@@ -403,9 +465,10 @@ export default function SharedLibraryView() {
                             </label>
                             <label className="block text-xs font-bold">Aula específica
                               <select value={sharedLibraryGenerationLesson} disabled={sharedLibraryRun.running} onChange={e=>setSharedLibraryGenerationLesson(e.target.value)} className={sharedLibraryFieldClass} style={{colorScheme:darkMode?'dark':'light'}}>
-                                <option value="all">Todas as aulas do recorte</option>
-                                {generationLessons.map(lesson=><option key={sharedLibraryDocIdForLesson(lesson)} value={sharedLibraryDocIdForLesson(lesson)}>{lesson.subject} · {lesson.title}</option>)}
+                                <option value="all">{sharedLibraryGenerationSubject === 'all' ? 'Todas as aulas das matérias habilitadas' : 'Todas as aulas da matéria'}</option>
+                                {sharedLibraryGenerationSubject !== 'all' && generationLessons.map(lesson=><option key={sharedLibraryDocIdForLesson(lesson)} value={sharedLibraryDocIdForLesson(lesson)}>{lesson.title}</option>)}
                               </select>
+                              {sharedLibraryGenerationSubject === 'all' && <span className="mt-1 block text-[11px] font-normal opacity-50">Escolha uma matéria para listar aulas individuais.</span>}
                             </label>
                           </div>
                           {!sharedLibraryRun.running?<button onClick={startSharedLibraryGuidedGeneration} disabled={sharedLibraryLoading||sharedLibraryPurging} className="mt-4 w-full rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white py-3 font-bold flex items-center justify-center gap-2"><PlayIcon className="w-4 h-4"/>Gerar seleção</button>:<div className="mt-4 grid grid-cols-2 gap-2">
@@ -458,26 +521,47 @@ export default function SharedLibraryView() {
                     <select value={sharedLibrarySubject} onChange={e=>setSharedLibrarySubject(e.target.value)} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`}><option value="all">Todas as matérias</option>{subjectOrder.map(subject=>{const coverage=subjectCoverage.get(subject)||{complete:0,total:0};return <option key={subject} value={subject}>{subject} · {coverage.complete}/{coverage.total}</option>;})}</select>
                     {showSharedLibraryAdminTools&&sharedLibrarySubject!=='all'&&<button onClick={()=>restartSharedLibrarySubjectQuestions(sharedLibrarySubject)} disabled={sharedLibraryRun.running} className={`w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode?'border-red-900/70 text-red-400 hover:bg-red-950/30':'border-red-200 text-red-600 hover:bg-red-50'}`}><RotateCcw className="mr-1.5 inline h-3.5 w-3.5"/>Regerar questões da matéria</button>}
                   </div>
-                  <div className="space-y-2">
-                    {sharedLibraryLoading?<LoadingState message="Abrindo o acervo..."/>:availableItems.length===0?<EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há questões nesta seção" description="Use a automação acima para publicar as primeiras questões."/>:availableItems.map(item=>{
-                      const questions = itemQuestions(item);
-                      const answered = Object.keys(sharedLibraryProgress[item.id]?.answers || {}).filter(id=>questions.some(q=>String(q.id)===String(id))).length;
-                      return <button key={item.id} onClick={()=>setSharedLibraryActiveItemId(item.id)} className={`w-full rounded-xl border p-4 text-left flex items-center gap-3 transition-colors ${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'}`}>
-                        <span className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-gray-900 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>{currentSharedLibraryTab==='summary'?<BookOpen className="w-5 h-5"/>:<CheckCircle2 className="w-5 h-5"/>}</span>
-                        <span className="min-w-0 flex-1"><strong className="block truncate">{item.title}</strong><span className="block text-xs opacity-50 mt-0.5 truncate">{item.subject} · {item.topic}{currentSharedLibraryTab!=='summary'?` · ${questions.length} questões${answered?` · ${answered} respondidas`:''}`:''}</span></span>
-                        <ChevronRight className="w-4 h-4 opacity-35"/>
-                      </button>;
-                    })}
+                  <div>
+                    {sharedLibraryLoading
+                      ? <LoadingState message="Abrindo o acervo..."/>
+                      : availableItems.length===0
+                        ? <EmptyState icon={<BookOpen className="w-7 h-7"/>} title="Ainda não há questões nesta seção" description="Use a automação acima para publicar as primeiras questões."/>
+                        : showSubjectOverview
+                          ? <div className="grid gap-2 sm:grid-cols-2">
+                              {availableSubjectRows.map(({ subject, items }) => {
+                                const coverage = subjectCoverage.get(subject) || { complete:0, total:items.length };
+                                return <button key={subject} type="button" onClick={()=>setSharedLibrarySubject(subject)} className={`rounded-xl border p-4 text-left transition-colors ${darkMode?'border-gray-700 bg-gray-800 hover:border-yellow-600':'border-gray-200 bg-white hover:border-yellow-500'}`}>
+                                  <span className="flex items-center justify-between gap-3"><strong className="min-w-0 truncate">{subject}</strong><ChevronRight className="h-4 w-4 flex-shrink-0 opacity-35"/></span>
+                                  <span className="mt-1 block text-xs opacity-50">{items.length} aula{items.length!==1?'s':''} com conteúdo · {coverage.complete}/{coverage.total} completas</span>
+                                </button>;
+                              })}
+                            </div>
+                          : <ProgressiveLessonList
+                              items={availableItems}
+                              resetKey={`${currentSharedLibraryTab}:${sharedLibrarySubject}:${searchNeedle}`}
+                              darkMode={darkMode}
+                              renderItem={item=>{
+                                const questions = itemQuestions(item);
+                                const answered = Object.keys(sharedLibraryProgress[item.id]?.answers || {}).filter(id=>questions.some(q=>String(q.id)===String(id))).length;
+                                return <button key={item.id} onClick={()=>setSharedLibraryActiveItemId(item.id)} className={`w-full rounded-xl border p-4 text-left flex items-center gap-3 transition-colors ${darkMode?'bg-gray-800 border-gray-700 hover:border-yellow-600':'bg-white border-gray-200 hover:border-yellow-500'}`}>
+                                  <span className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-gray-900 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}>{currentSharedLibraryTab==='summary'?<BookOpen className="w-5 h-5"/>:<CheckCircle2 className="w-5 h-5"/>}</span>
+                                  <span className="min-w-0 flex-1"><strong className="block truncate">{item.title}</strong><span className="block text-xs opacity-50 mt-0.5 truncate">{item.subject} · {item.topic}{currentSharedLibraryTab!=='summary'?` · ${questions.length} questões${answered?` · ${answered} respondidas`:''}`:''}</span></span>
+                                  <ChevronRight className="w-4 h-4 opacity-35"/>
+                                </button>;
+                              }}
+                            />}
                   </div>
                 </div>
                 {questionAuditOpen&&showSharedLibraryAdminTools&&(
-                  <QuestionAuditReport
-                    isAdmin={isAdmin}
-                    sharedLibraryItems={sharedLibraryItems}
-                    vqBlocks={vqBlocks}
-                    darkMode={darkMode}
-                    onClose={()=>setQuestionAuditOpen(false)}
-                  />
+                  <React.Suspense fallback={<LoadingState message="Abrindo auditoria..."/>}>
+                    <QuestionAuditReport
+                      isAdmin={isAdmin}
+                      sharedLibraryItems={sharedLibraryItems}
+                      vqBlocks={vqBlocks}
+                      darkMode={darkMode}
+                      onClose={()=>setQuestionAuditOpen(false)}
+                    />
+                  </React.Suspense>
                 )}
               </div>
             );

@@ -6,6 +6,12 @@ const CONTENT_COLLECTION = 'famed_content';
 const ASSET_COLLECTION = 'famed_assets';
 const QUESTION_ASSET_VERSION = 'famed-question-package-v1';
 
+const famedTrackForDiscipline = discipline => discipline === 'ABS'
+  ? 'abs-gestante-rn'
+  : ['Gastroenterologia','Endocrinologia'].includes(discipline)
+    ? 'gastro-endocrino'
+    : 'cardio-pneumo';
+
 const famedAssetIdsFromSubject = subject => Array.from(new Set(
   (subject?.famedStudy?.pastQuestionSets || [])
     .flatMap(set => set?.questions || [])
@@ -47,6 +53,7 @@ export const famedContentToAcademiaSubject = content => {
       contentId:content.id,
       scheduleItemId:content.scheduleItemId,
       discipline:content.discipline,
+      track:content.track || famedTrackForDiscipline(content.discipline),
       semester:content.semester || 'S5',
       published:content.published === true,
     },
@@ -58,6 +65,8 @@ export const saveFamedAcademiaSubject = async (subject, overrides={}) => {
   const contentId = String(overrides.contentId || meta.contentId || meta.scheduleItemId || '').trim();
   if (!contentId) throw new Error('A aula da FAMED não possui identificador válido.');
   const published = overrides.published ?? meta.published ?? false;
+  const discipline = overrides.discipline || meta.discipline || '';
+  const track = overrides.track || meta.track || famedTrackForDiscipline(discipline);
   const academiaSubject = cleanFirestoreData({
     ...subject,
     source:'academia',
@@ -65,16 +74,18 @@ export const saveFamedAcademiaSubject = async (subject, overrides={}) => {
     famedMeta:{
       ...meta,
       contentId,
+      discipline,
+      track,
       published:published === true,
     },
   });
   const payload = cleanFirestoreData({
     id:contentId,
     scheduleItemId:overrides.scheduleItemId || meta.scheduleItemId || contentId,
-    discipline:overrides.discipline || meta.discipline || '',
+    discipline,
     semester:overrides.semester || meta.semester || 'S5',
     curriculum:'PPC 2018',
-    track:'cardio-pneumo',
+    track,
     title:academiaSubject.title || overrides.title || '',
     creationMode:'academia',
     academiaSubject,

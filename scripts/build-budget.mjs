@@ -26,6 +26,7 @@ let questionVisual = null;
 let spacedReview = null;
 let courseStudents = null;
 let disabledCourseQuestions = null;
+let disabledCourseQuestionStore = null;
 let sharedLibraryRepair = null;
 let courseReviewReset = null;
 let famedPortal = null;
@@ -33,6 +34,8 @@ let famedPastQuestions = null;
 let famedQuestionPackage = null;
 let fflateVendor = null;
 let famedStudyMaterials = null;
+let questionBankSizing = null;
+let questionBankSizingWorker = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -52,6 +55,7 @@ for (const file of jsFiles) {
   if (file.startsWith('SpacedReviewView-')) spacedReview = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('CourseStudentsView-')) courseStudents = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('disabledCourseQuestions-')) disabledCourseQuestions = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('disabledCourseQuestionStore-')) disabledCourseQuestionStore = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('sharedLibraryRepair-')) sharedLibraryRepair = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('courseReviewReset-')) courseReviewReset = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('FamedPortalView-')) famedPortal = { file, raw:data.length, gzip:gzipSize };
@@ -59,6 +63,8 @@ for (const file of jsFiles) {
   if (file.startsWith('famedQuestionPackage-')) famedQuestionPackage = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('fflate-vendor-')) fflateVendor = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('famedStudyMaterials-')) famedStudyMaterials = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('QuestionBankSizingView-')) questionBankSizing = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('questionBankSizing.worker-')) questionBankSizingWorker = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -78,7 +84,13 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // cardinalidade, listas parciais, teste contrafactual e proibição de inventários.
 // A escolha persistida da posição das questões na Academia acrescentou 0,17 KiB
 // medido ao módulo lazy compartilhado, sem alterar o bundle de entrada.
-const CORE_TOTAL_GZIP_LIMIT = 446 * 1024;
+// O listener da raiz + lotes e a ação administrativa confirmada acrescentam
+// cerca de 0,7 KiB ao núcleo para que a inativação global valha em toda a UI.
+// A lista compartilhada de regex para referências pós-embaralhamento acrescenta
+// cerca de 0,1 KiB medido e evita cópias divergentes entre tela e exportação.
+// A separação entre commit e atualização local, com diagnóstico por etapa,
+// acrescenta outros 0,2 KiB medidos ao handler administrativo.
+const CORE_TOTAL_GZIP_LIMIT = 447 * 1024;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 // A política pedagógica de flashcards/clozes é compartilhada pelos prompts lazy
 // gerais e pela Dúvida Rápida, sem duplicar regras nem entrar no bundle inicial.
@@ -103,7 +115,8 @@ const REVIEW_DASHBOARD_GZIP_LIMIT = 6 * 1024;
 const COURSE_STUDENTS_GZIP_LIMIT = 5 * 1024;
 // O registro global de questões inativas e o detector textual conservador só são
 // carregados após autenticação de usuário do curso e permanecem fora da Home inicial.
-const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 3 * 1024;
+// Inclui o índice para milhares de IDs e a persistência lazy em lotes atômicos.
+const DISABLED_COURSE_QUESTIONS_GZIP_LIMIT = 4.25 * 1024;
 // A reparação de questões incompletas é administrativa e só deve ser baixada
 // quando o botão correspondente for acionado na Fábrica.
 const SHARED_LIBRARY_REPAIR_GZIP_LIMIT = 3 * 1024;
@@ -117,7 +130,15 @@ const COURSE_REVIEW_RESET_GZIP_LIMIT = 1 * 1024;
 // cloze compartilhada, o exportador JSON de auditoria e o menu simplificado que
 // restaura a separação por tópicos preservando o progresso local legado. O último
 // ajuste acrescentou 0,23 KiB medido e permanece sem entrar na Home inicial.
-const FAMED_GZIP_LIMIT = 23.5 * 1024;
+// A grade oficial 2026.2 acrescenta 17 itens de ABS, datas/horários, vínculos
+// interdisciplinares curados e o acesso compatível aos materiais da turma anterior.
+// O crescimento medido é de 2,6 KiB gzip e continua integralmente no chunk lazy.
+const FAMED_GZIP_LIMIT = 27 * 1024;
+// O dimensionamento de dezenas de milhares de questões é administrativo, manual
+// e roda em Worker. Tela e algoritmo ficam fora do núcleo para não bloquear a UI.
+// O Worker também recebe o índice global para retirar do próximo retrato tudo
+// que já foi inativado em execuções parciais anteriores.
+const QUESTION_BANK_SIZING_GZIP_LIMIT = 11 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT
@@ -131,7 +152,8 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + DISABLED_COURSE_QUESTIONS_GZIP_LIMIT
   + SHARED_LIBRARY_REPAIR_GZIP_LIMIT
   + COURSE_REVIEW_RESET_GZIP_LIMIT
-  + FAMED_GZIP_LIMIT;
+  + FAMED_GZIP_LIMIT
+  + QUESTION_BANK_SIZING_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
 const famedGzip = (famedPortal?.gzip || 0)
@@ -139,6 +161,8 @@ const famedGzip = (famedPortal?.gzip || 0)
   + (famedQuestionPackage?.gzip || 0)
   + (fflateVendor?.gzip || 0)
   + (famedStudyMaterials?.gzip || 0);
+const questionBankSizingGzip = (questionBankSizing?.gzip || 0) + (questionBankSizingWorker?.gzip || 0);
+const disabledCourseQuestionsGzip = (disabledCourseQuestions?.gzip || 0) + (disabledCourseQuestionStore?.gzip || 0);
 const coreGzip = totalGzip
   - (quickContent?.gzip || 0)
   - (memoryCardPolicy?.gzip || 0)
@@ -149,10 +173,11 @@ const coreGzip = totalGzip
   - ecgQuestionMatcherGzip
   - (spacedReview?.gzip || 0)
   - (courseStudents?.gzip || 0)
-  - (disabledCourseQuestions?.gzip || 0)
+  - disabledCourseQuestionsGzip
   - (sharedLibraryRepair?.gzip || 0)
   - (courseReviewReset?.gzip || 0)
-  - famedGzip;
+  - famedGzip
+  - questionBankSizingGzip;
 
 assert.ok(
   entry.raw <= ENTRY_RAW_LIMIT,
@@ -198,9 +223,10 @@ assert.ok(
   `Migracao da fila individual passou do budget: ${fmt(reviewMigration.gzip)} > ${fmt(REVIEW_MIGRATION_GZIP_LIMIT)}`
 );
 assert.ok(disabledCourseQuestions, 'O registro de questoes inativas deve permanecer em modulo lazy proprio.');
+assert.ok(disabledCourseQuestionStore, 'A persistência em lote das inativações deve permanecer lazy.');
 assert.ok(
-  disabledCourseQuestions.gzip <= DISABLED_COURSE_QUESTIONS_GZIP_LIMIT,
-  `Registro de questoes inativas passou do budget: ${fmt(disabledCourseQuestions.gzip)} > ${fmt(DISABLED_COURSE_QUESTIONS_GZIP_LIMIT)}`
+  disabledCourseQuestionsGzip <= DISABLED_COURSE_QUESTIONS_GZIP_LIMIT,
+  `Registro de questoes inativas passou do budget: ${fmt(disabledCourseQuestionsGzip)} > ${fmt(DISABLED_COURSE_QUESTIONS_GZIP_LIMIT)}`
 );
 assert.ok(ecgQuestionMatcher, 'O matcher de ECG deve permanecer em modulo lazy proprio.');
 assert.ok(questionVisual, 'A deteccao visual de ECG deve permanecer fora do bundle inicial.');
@@ -236,6 +262,12 @@ assert.ok(famedStudyMaterials, 'Os derivados de estudo FAMED devem permanecer fo
 assert.ok(
   famedGzip <= FAMED_GZIP_LIMIT,
   `Modulos FAMED passaram do budget: ${fmt(famedGzip)} > ${fmt(FAMED_GZIP_LIMIT)}`
+);
+assert.ok(questionBankSizing, 'Dimensionamento do banco deve permanecer em módulo lazy próprio.');
+assert.ok(questionBankSizingWorker, 'Dimensionamento pesado deve permanecer fora da thread principal.');
+assert.ok(
+  questionBankSizingGzip <= QUESTION_BANK_SIZING_GZIP_LIMIT,
+  `Dimensionamento do banco passou do budget: ${fmt(questionBankSizingGzip)} > ${fmt(QUESTION_BANK_SIZING_GZIP_LIMIT)}`
 );
 assert.ok(totalGzip <= TOTAL_GZIP_LIMIT, `JS total passou do budget: ${fmt(totalGzip)} > ${fmt(TOTAL_GZIP_LIMIT)}`);
 

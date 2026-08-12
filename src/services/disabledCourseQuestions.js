@@ -1,6 +1,12 @@
 export const DISABLED_COURSE_QUESTIONS_CONFIG_DOC = 'disabled_course_questions';
 export const DISABLED_COURSE_QUESTIONS_VERSION = 'agora-disabled-course-questions-v1';
 export const NON_CONTENT_COURSE_QUESTION_POLICY = 'agora-non-content-course-question-v1';
+export const QUESTION_BANK_SIZING_BROAD_REASON = 'question-bank-sizing-broad-v1';
+export const DISABLED_COURSE_QUESTION_BATCH_SIZE = 250;
+
+const disabledIndexCache = new WeakMap();
+const normalizedDisabledArrays = new WeakSet();
+const normalizedDisabledSourceCache = new WeakMap();
 
 const cleanId = value => String(value ?? '').trim();
 
@@ -115,9 +121,13 @@ const questionAliases = ({
 ]);
 
 export const normalizeDisabledCourseQuestions = value => {
+  if (Array.isArray(value) && normalizedDisabledArrays.has(value)) return value;
+  if (Array.isArray(value) && normalizedDisabledSourceCache.has(value)) {
+    return normalizedDisabledSourceCache.get(value);
+  }
   const source = Array.isArray(value) ? value : value?.entries;
   if (!Array.isArray(source)) return [];
-  return source.map(entry => {
+  const normalized = source.map(entry => {
     if (entry?.entryType === 'policy' && entry?.policy === NON_CONTENT_COURSE_QUESTION_POLICY) {
       return {
         ...entry,
@@ -139,7 +149,31 @@ export const normalizeDisabledCourseQuestions = value => {
       lessonAliases,
     };
   }).filter(Boolean);
+  const byId = new Map();
+  normalized.forEach(entry => {
+    const current = byId.get(entry.id);
+    if (!current) {
+      byId.set(entry.id, entry);
+      return;
+    }
+    byId.set(entry.id, entry.entryType === 'policy'
+      ? { ...current, ...entry, id:current.id }
+      : {
+          ...current,
+          ...entry,
+          id:current.id,
+          lessonAliases:uniqueIds([...(current.lessonAliases || []), ...(entry.lessonAliases || [])]),
+        });
+  });
+  const result = [...byId.values()];
+  normalizedDisabledArrays.add(result);
+  if (Array.isArray(value)) normalizedDisabledSourceCache.set(value, result);
+  return result;
 };
+
+export const mergeDisabledCourseQuestions = (...values) => normalizeDisabledCourseQuestions(
+  values.flatMap(value => normalizeDisabledCourseQuestions(value))
+);
 
 export const createDisabledCourseQuestionEntry = ({
   aulaId,
@@ -166,32 +200,70 @@ export const createDisabledCourseQuestionEntry = ({
   };
 };
 
+export const createQuestionBankSizingDisabledEntries = ({
+  candidates = [],
+  disabledAt = Date.now(),
+  disabledBy = null,
+} = {}) => normalizeDisabledCourseQuestions((candidates || []).map(candidate =>
+  createDisabledCourseQuestionEntry({
+    aulaId:candidate?.aulaId,
+    lessonId:candidate?.lessonId,
+    sharedLibraryItemId:candidate?.sharedLibraryItemId,
+    lessonAliases:candidate?.lessonAliases,
+    questionId:candidate?.questionId,
+    disabledAt,
+    disabledBy,
+    reason:QUESTION_BANK_SIZING_BROAD_REASON,
+  })
+));
+
+export const chunkDisabledCourseQuestionEntries = (
+  entries = [],
+  size = DISABLED_COURSE_QUESTION_BATCH_SIZE,
+) => {
+  const normalized = normalizeDisabledCourseQuestions(entries);
+  const safeSize = Math.max(1, Number(size) || DISABLED_COURSE_QUESTION_BATCH_SIZE);
+  const chunks = [];
+  for (let index = 0; index < normalized.length; index += safeSize) {
+    chunks.push(normalized.slice(index, index + safeSize));
+  }
+  return chunks;
+};
+
 const aliasesOverlap = (left = [], right = []) => {
   const rightSet = new Set(uniqueIds(right));
   return uniqueIds(left).some(alias => rightSet.has(alias));
 };
 
+const disabledCourseQuestionIndex = entries => {
+  const cached = disabledIndexCache.get(entries);
+  if (cached) return cached;
+  const explicit = new Set();
+  const policies = new Set();
+  entries.forEach(entry => {
+    if (entry?.entryType === 'policy') {
+      if (entry.enabled !== false && entry.policy) policies.add(entry.policy);
+      return;
+    }
+    (entry.lessonAliases || []).forEach(alias => {
+      explicit.add(`${cleanId(alias)}\u0000${cleanId(entry.questionId)}`);
+    });
+  });
+  const index = { explicit, policies };
+  disabledIndexCache.set(entries, index);
+  return index;
+};
+
 export const isCourseQuestionDisabled = (entries, context = {}) => {
-  const normalizedEntries = Array.isArray(entries)
-    && entries.every(entry => entry?.entryType === 'policy'
-      || (entry?.questionId && Array.isArray(entry?.lessonAliases)))
-    ? entries
-    : normalizeDisabledCourseQuestions(entries);
-  const policyEnabled = normalizedEntries.some(entry =>
-    entry?.entryType === 'policy'
-    && entry?.policy === NON_CONTENT_COURSE_QUESTION_POLICY
-    && entry?.enabled !== false
-  );
+  const normalizedEntries = normalizeDisabledCourseQuestions(entries);
+  const index = disabledCourseQuestionIndex(normalizedEntries);
+  const policyEnabled = index.policies.has(NON_CONTENT_COURSE_QUESTION_POLICY);
   if (policyEnabled && detectNonContentCourseQuestion(context.question)) return true;
   const questionId = cleanId(context.questionId || context.qId || context.question?.id);
   if (!questionId) return false;
   const aliases = questionAliases(context);
   if (!aliases.length) return false;
-  return normalizedEntries.some(entry =>
-    entry?.entryType !== 'policy'
-    && entry.questionId === questionId
-    && aliasesOverlap(entry.lessonAliases, aliases)
-  );
+  return aliases.some(alias => index.explicit.has(`${cleanId(alias)}\u0000${questionId}`));
 };
 
 export const upsertDisabledCourseQuestion = (entries, nextEntry) => {

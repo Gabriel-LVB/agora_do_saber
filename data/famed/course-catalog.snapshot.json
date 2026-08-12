@@ -2,6 +2,7 @@
   "schema": "agora-famed-course-catalog-v1",
   "exportedAt": "2026-08-01T20:53:55.857Z",
   "instructions": "Use os IDs estáveis para vincular manualmente cada item FAMED às aulas corretas. A ordem deste arquivo é a ordem efetiva do Portal do Curso. Transcrições e URLs não são exportadas.",
+  "famedScheduleStatus": "historical-export-2026-08-01; a grade vigente está em src/features/famed/famedSchedule.js",
   "famedSchedule": [
     {
       "scheduleItemId": "cardio-valvopatias",
