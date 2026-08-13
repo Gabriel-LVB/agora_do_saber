@@ -5,23 +5,24 @@ import {
 } from './reviewScheduler.js';
 import { questionHasUnresolvedRequiredVisual } from './questionVisual.js';
 
-export const INDIVIDUAL_REVIEW_PLAN_VERSION = 'curated-progressive-essential-fsrs-v10';
+export const INDIVIDUAL_REVIEW_PLAN_VERSION = 'curated-progressive-essential-fsrs-v11';
 const LEGACY_PROGRESSIVE_PLAN_VERSION = 'curated-progressive-essential-fsrs-v5';
 const BROKEN_SIBLING_REPLAN_VERSION = 'curated-progressive-essential-fsrs-v6';
 const BROKEN_CALENDAR_RECOVERY_STRATEGY = 'v6-calendar-recovery';
 const PROGRESSIVE_REVIEW_ROLLOUT_AT = Date.parse('2026-08-02T07:00:00-03:00');
-const LEGACY_BACKLOG_ROLLOUT_DAYS = 29;
-const FIRST_EXPOSURE_MAX_DAYS = 30;
-const DAILY_FIRST_EXPOSURE_STRATEGY = 'daily-decreasing-v1';
+export const REVIEW_FIRST_EXPOSURE_BATCH_SIZE = 10;
+const EXPONENTIAL_FIRST_EXPOSURE_STRATEGY = 'exponential-batches-v1';
 export const FSRS_PENDING_SCHEDULER_VERSION = 'fsrs-pending-first-review-v1';
-const firstExposureWeightTotal = FIRST_EXPOSURE_MAX_DAYS * (FIRST_EXPOSURE_MAX_DAYS + 1) / 2;
-export const REVIEW_FIRST_EXPOSURE_WAVES = Object.freeze(Array.from(
-  { length:FIRST_EXPOSURE_MAX_DAYS },
-  (_, dayOffset) => Object.freeze({
-    percentage:(FIRST_EXPOSURE_MAX_DAYS - dayOffset) / firstExposureWeightTotal * 100,
-    dayOffset,
-  }),
-));
+const exponentialDayOffset = index => {
+  if (index === 0) return 0;
+  // 2^27 dias ultrapassa o intervalo seguro de Date. O fallback continua
+  // criando dias distintos sem descartar cartões, embora uma aula real nunca
+  // deva chegar perto de 270 questões ativas.
+  return index <= 26 ? 2 ** index : 2 ** 26 + index - 26;
+};
+export const REVIEW_FIRST_EXPOSURE_WAVES = Object.freeze(
+  Array.from({ length:7 }, (_, index) => Object.freeze({ dayOffset:exponentialDayOffset(index) }))
+);
 
 const answerIsCorrect = (question, answer) => {
   if (!answer) return false;
@@ -38,142 +39,42 @@ const blockEntries = blocks => Array.isArray(blocks)
 
 export const allocateReviewFirstExposureWaves = total => {
   const cleanTotal = Math.max(0, Math.floor(Number(total) || 0));
-  const activeDays = Math.min(cleanTotal, FIRST_EXPOSURE_MAX_DAYS);
-  const activeWeightTotal = activeDays * (activeDays + 1) / 2;
-  const remainingAfterDailyBase = cleanTotal - activeDays;
-  const rows = REVIEW_FIRST_EXPOSURE_WAVES.map((wave, index) => {
-    const exact = index < activeDays && remainingAfterDailyBase
-      ? remainingAfterDailyBase * (activeDays - index) / activeWeightTotal
-      : 0;
-    const extraCount = Math.floor(exact);
-    const count = (index < activeDays ? 1 : 0) + extraCount;
-    return { ...wave, count, fraction:exact - extraCount, index };
+  const batchCount = Math.ceil(cleanTotal / REVIEW_FIRST_EXPOSURE_BATCH_SIZE);
+  return Array.from({ length:batchCount }, (_, index) => {
+    const count = Math.min(
+      REVIEW_FIRST_EXPOSURE_BATCH_SIZE,
+      cleanTotal - index * REVIEW_FIRST_EXPOSURE_BATCH_SIZE,
+    );
+    return {
+      count,
+      dayOffset:exponentialDayOffset(index),
+      percentage:cleanTotal ? count / cleanTotal * 100 : 0,
+    };
   });
-  let remaining = cleanTotal - rows.reduce((sum, row) => sum + row.count, 0);
-  [...rows]
-    .sort((left, right) => right.fraction - left.fraction || left.index - right.index)
-    .forEach(row => {
-      if (remaining <= 0) return;
-      rows[row.index].count += 1;
-      remaining -= 1;
-    });
-  const descendingCounts = rows.slice(0, activeDays).map(row => row.count).sort((left, right) => right - left);
-  return rows.map(({ fraction:_fraction, index, ...row }) => ({
-    ...row,
-    count:index < activeDays ? descendingCounts[index] : 0,
-    percentage:cleanTotal ? (index < activeDays ? descendingCounts[index] : 0) / cleanTotal * 100 : 0,
-  }));
 };
 
-const outcomeScore = outcome => outcome === 'wrong' ? 3000000 : outcome === 'unseen' ? 2000000 : 1000000;
-const tierScore = tier => tier === 'essential' ? 300000 : tier === 'complementary' ? 150000 : 0;
-const learningRoleScore = role => role === 'core' ? 16000 : role === 'reinforcement' ? 9000 : role === 'variation' ? 2000 : 0;
-const cognitiveScore = level => level === 'reasoning' ? 5000 : level === 'application' ? 3000 : level === 'understanding' ? 1500 : 0;
-const conceptKey = row => String(row.policy?.primaryConceptId || row.policy?.conceptIds?.[0] || '').trim();
-const policyKey = value => String(value || '').trim();
-const conceptKeys = row => new Set((row.policy?.conceptIds || []).map(policyKey).filter(Boolean));
-
-const siblingCollisionPenalty = (row, bucketRows = []) => {
-  const cluster = policyKey(row.policy?.redundancyClusterId);
-  const primaryConcept = conceptKey(row);
-  const canonicalRefs = new Set([
-    policyKey(row.qId),
-    policyKey(row.policy?.canonicalQuestionId),
-  ].filter(Boolean));
-  const concepts = conceptKeys(row);
-  return bucketRows.reduce((penalty, sibling) => {
-    const siblingCluster = policyKey(sibling.policy?.redundancyClusterId);
-    const siblingCanonicalRefs = new Set([
-      policyKey(sibling.qId),
-      policyKey(sibling.policy?.canonicalQuestionId),
-    ].filter(Boolean));
-    const sameCanonicalFamily = row.policy?.canonicalQuestionId || sibling.policy?.canonicalQuestionId
-      ? [...canonicalRefs].some(key => siblingCanonicalRefs.has(key))
-      : false;
-    const sameCluster = cluster && siblingCluster && cluster === siblingCluster;
-    const samePrimaryConcept = primaryConcept && primaryConcept === conceptKey(sibling);
-    const sharedConcepts = [...concepts].filter(key => conceptKeys(sibling).has(key)).length;
-    return penalty
-      + Number(sameCluster || sameCanonicalFamily) * 1000000
-      + Number(samePrimaryConcept) * 10000
-      + sharedConcepts * 100;
-  }, 0);
-};
-
-// A prioridade decide qual representante de cada família chega primeiro. A
-// distribuição decide o dia: clusters redundantes, conceito primário e
-// conceitos compartilhados são espalhados entre os dias enquanto houver vaga.
+// Cada onda recebe a próxima fatia da ordem canônica, sem reclassificar por
+// nota, resultado anterior, conceito ou similaridade.
 export const distributeReviewFirstExposureRows = (orderedRows = [], waves = []) => {
   const buckets = waves.map(wave => ({ ...wave, rows:[] }));
-  orderedRows.forEach(row => {
-    const available = buckets
-      .map((bucket, bucketIndex) => ({
-        bucket,
-        bucketIndex,
-        penalty:siblingCollisionPenalty(row, bucket.rows),
-      }))
-      .filter(candidate => candidate.bucket.rows.length < candidate.bucket.count)
-      .sort((left, right) => left.penalty - right.penalty || left.bucketIndex - right.bucketIndex);
-    const target = available[0];
-    if (target?.penalty > 0) {
-      const swap = buckets
-        .map((bucket, bucketIndex) => ({ bucket, bucketIndex }))
-        .filter(candidate => candidate.bucket.rows.length >= candidate.bucket.count
-          && siblingCollisionPenalty(row, candidate.bucket.rows) === 0)
-        .flatMap(candidate => candidate.bucket.rows.map((occupant, occupantIndex) => ({
-          ...candidate,
-          occupant,
-          occupantIndex,
-          movePenalty:siblingCollisionPenalty(occupant, target.bucket.rows),
-        })))
-        .sort((left, right) => left.movePenalty - right.movePenalty || left.bucketIndex - right.bucketIndex)[0];
-      if (swap && swap.movePenalty < target.penalty) {
-        const [moved] = swap.bucket.rows.splice(swap.occupantIndex, 1);
-        target.bucket.rows.push(moved);
-        swap.bucket.rows.push(row);
-        return;
-      }
-    }
-    if (target) target.bucket.rows.push(row);
+  let cursor = 0;
+  buckets.forEach(bucket => {
+    bucket.rows = orderedRows.slice(cursor, cursor + bucket.count);
+    cursor += bucket.count;
   });
   return buckets;
 };
 
-// Importancia e qualidade dominam a ordem; dentro de questoes pedagogicamente
-// proximas, conceitos ainda nao apresentados recebem preferencia para ampliar
-// a cobertura da aula desde os primeiros dias.
-export const orderReviewFirstExposureRows = (rows = []) => {
-  const remaining = [...rows];
-  const ordered = [];
-  const conceptCounts = new Map();
-  while (remaining.length) {
-    remaining.sort((left, right) => {
-      const score = row => {
-        const policy = row.policy || {};
-        const concept = conceptKey(row);
-        const diversityBonus = concept && !conceptCounts.has(concept) ? 10000 : 0;
-        const repetitionPenalty = concept ? Math.min(5, conceptCounts.get(concept) || 0) * 1000 : 0;
-        return outcomeScore(row.outcome)
-          + tierScore(policy.tier)
-          + (Number(policy.importance) || 0) * 20000
-          + (Number(policy.qualityScore) || 0) * 150
-          + learningRoleScore(policy.learningRole)
-          + cognitiveScore(policy.cognitiveLevel)
-          + diversityBonus
-          - repetitionPenalty
-          - (Number(policy.redundancyScore) || 0) * 12000;
-      };
-      return score(right) - score(left)
-        || Number(left.sourceIndex || 0) - Number(right.sourceIndex || 0)
-        || String(left.qId).localeCompare(String(right.qId));
-    });
-    const selected = remaining.shift();
-    ordered.push(selected);
-    const concept = conceptKey(selected);
-    if (concept) conceptCounts.set(concept, (conceptCounts.get(concept) || 0) + 1);
-  }
-  return ordered;
-};
+// A cronologia publicada domina: diretas primeiro e clínicas depois.
+const questionKindRank = row => String(
+  row?.question?.libraryQuestionKind || row?.libraryQuestionKind || ''
+).toLowerCase() === 'clinical' ? 1 : 0;
+
+export const orderReviewFirstExposureRows = (rows = []) => [...rows].sort((left, right) =>
+  questionKindRank(left) - questionKindRank(right)
+  || Number(left.sourceIndex || 0) - Number(right.sourceIndex || 0)
+  || String(left.qId).localeCompare(String(right.qId))
+);
 
 const firstExposureDueDate = ({ dayOffset, now, slot }) => {
   if (dayOffset === 0) return now - 60000 + slot;
@@ -186,7 +87,6 @@ const firstExposureDueDate = ({ dayOffset, now, slot }) => {
 const buildFirstExposurePlan = ({
   rows = [],
   now = Date.now(),
-  siblingAware = true,
   useOriginalAnchor = false,
 }) => {
   const byLesson = new Map();
@@ -195,18 +95,11 @@ const buildFirstExposurePlan = ({
     byLesson.set(key, [...(byLesson.get(key) || []), row]);
   });
   const plannedByCardKey = new Map();
-  const buckets = REVIEW_FIRST_EXPOSURE_WAVES.map(wave => ({ ...wave, count:0 }));
+  const buckets = [];
   byLesson.forEach(lessonRows => {
     const ordered = orderReviewFirstExposureRows(lessonRows);
     const lessonWaves = allocateReviewFirstExposureWaves(ordered.length);
-    let sequentialCursor = 0;
-    const distributedWaves = siblingAware
-      ? distributeReviewFirstExposureRows(ordered, lessonWaves)
-      : lessonWaves.map(wave => {
-          const nextWave = { ...wave, rows:ordered.slice(sequentialCursor, sequentialCursor + wave.count) };
-          sequentialCursor += wave.count;
-          return nextWave;
-        });
+    const distributedWaves = distributeReviewFirstExposureRows(ordered, lessonWaves);
     const originalAnchors = lessonRows
       .map(row => Number(row.firstExposureAnchor))
       .filter(Number.isFinite);
@@ -215,6 +108,7 @@ const buildFirstExposurePlan = ({
       : now;
     let cursor = 0;
     distributedWaves.forEach((wave, bucketIndex) => {
+      if (!buckets[bucketIndex]) buckets[bucketIndex] = { ...wave, count:0 };
       buckets[bucketIndex].count += wave.rows.length;
       wave.rows.forEach((row, slot) => {
         const rowAnchor = useOriginalAnchor && Number.isFinite(Number(row.firstExposureAnchor))
@@ -227,7 +121,7 @@ const buildFirstExposurePlan = ({
           dueDate:firstExposureDueDate({ dayOffset:wave.dayOffset, now:rowAnchor, slot }),
           percentage:wave.percentage,
           sequenceIndex:cursor - 1,
-          siblingStrategy:DAILY_FIRST_EXPOSURE_STRATEGY,
+          siblingStrategy:EXPONENTIAL_FIRST_EXPOSURE_STRATEGY,
           plannedAt:rowAnchor,
         });
       });
@@ -360,88 +254,10 @@ const legacyDuePlan = ({ row, index }) => {
   };
 };
 
-const localDaySerial = value => {
-  const date = new Date(value);
-  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / REVIEW_DAY_MS;
-};
-
-const isScheduledQueueItem = item => item?.dueDate != null
-  && Number.isFinite(Number(item.dueDate))
-  && !['completed-once', 'dormant', 'disabled', 'disabled-global', 'awaiting-curation', 'awaiting-visual', 'paused']
-    .includes(item?.adaptiveState)
-  && !item?.globallyDisabled
-  && item?.learningPolicy?.tier !== 'disabled';
-
-const allocateBalancedBacklogDays = ({ total, baseLoads = [] }) => {
-  const counts = Array.from({ length:LEGACY_BACKLOG_ROLLOUT_DAYS }, () => 0);
-  for (let index = 0; index < total; index += 1) {
-    const target = counts
-      .map((count, dayIndex) => ({ dayIndex, load:(Number(baseLoads[dayIndex]) || 0) + count }))
-      .sort((left, right) => left.load - right.load || left.dayIndex - right.dayIndex)[0];
-    counts[target.dayIndex] += 1;
-  }
-  return counts;
-};
-
-const buildLegacyBacklogPlan = ({
-  rows = [],
-  existingQueue = {},
-  dueOverrides = new Map(),
-  now = Date.now(),
-}) => {
-  const cardKeys = new Set(rows.map(row => row.cardKey));
-  const todaySerial = localDaySerial(now);
-  const baseLoads = Array.from({ length:LEGACY_BACKLOG_ROLLOUT_DAYS }, () => 0);
-  Object.values(existingQueue || {}).forEach(blocks => {
-    Object.values(blocks || {}).forEach(qMap => {
-      Object.values(qMap || {}).forEach(item => {
-        if (cardKeys.has(item?.cardKey)) return;
-        const scheduledItem = dueOverrides.has(item?.cardKey)
-          ? { ...item, dueDate:dueOverrides.get(item.cardKey) }
-          : item;
-        if (!isScheduledQueueItem(scheduledItem)) return;
-        const dayOffset = localDaySerial(Number(scheduledItem.dueDate)) - todaySerial;
-        if (dayOffset >= 1 && dayOffset <= LEGACY_BACKLOG_ROLLOUT_DAYS) {
-          baseLoads[dayOffset - 1] += 1;
-        }
-      });
-    });
-  });
-  const dayCounts = allocateBalancedBacklogDays({ total:rows.length, baseLoads });
-  const dayBuckets = dayCounts.map((count, index) => ({
-    count,
-    dayOffset:index + 1,
-    percentage:rows.length ? count / rows.length * 100 : 0,
-  }));
-  const ordered = orderReviewFirstExposureRows(rows);
-  const distributed = distributeReviewFirstExposureRows(ordered, dayBuckets);
-  const plannedByCardKey = new Map();
-  let sequenceIndex = 0;
-  distributed.forEach(day => {
-    day.rows.forEach((row, slot) => {
-      const due = new Date(now);
-      due.setHours(0, 0, 0, 0);
-      due.setDate(due.getDate() + day.dayOffset);
-      plannedByCardKey.set(row.cardKey, {
-        bucketIndex:day.dayOffset - 1,
-        dayOffset:day.dayOffset,
-        dueDate:due.getTime() + slot,
-        percentage:day.percentage,
-        sequenceIndex,
-        siblingStrategy:'legacy-backlog-balanced-v1',
-        plannedAt:now,
-      });
-      sequenceIndex += 1;
-    });
-  });
-  return { plannedByCardKey, dayCounts, total:rows.length };
-};
-
 // Constroi uma unica agenda por questao para as aulas ativadas pelo aluno.
-// Aulas adicionadas no fluxo progressivo recebem uma primeira exposição nas
-// parcelas diárias decrescentes por até 30 dias. A migração não transforma
-// retroativamente todo o estoque complementar legado em dívida: preserva o
-// núcleo antigo e distribui o backlog.
+// Aulas adicionadas recebem lotes de até dez questões nos deslocamentos
+// 0, 2, 4, 8, 16, 32... dias. A migração replaneja somente cartões que nunca
+// tiveram revisão observada e preserva integralmente os já respondidos.
 // Depois da primeira exposição, somente as essenciais seguem para o FSRS.
 export const buildWatchedLessonsIndividualPlan = ({
   lessons = [],
@@ -535,16 +351,11 @@ export const buildWatchedLessonsIndividualPlan = ({
       && createdAt < lessonProgressiveAnchor;
     row.repairBrokenCalendar = shouldRepairBrokenCalendar(existingItem);
     row.redistributeUnseenFirstExposure = !!existingItem
-      && !row.legacyCohort
-      && !row.repairBrokenCalendar
       && !hasObservedReview(existingItem)
       && existingItem?.adaptiveState !== 'manual'
       && firstExposure?.version !== INDIVIDUAL_REVIEW_PLAN_VERSION;
   });
 
-  const isLegacyBacklogRow = row => ['complementary', 'reserve'].includes(row.policy?.tier)
-    && row.outcome !== 'wrong'
-    && !['remediation', 'manual'].includes(row.existing?.adaptiveState);
   const legacyAdaptiveState = row => {
     const existingAdaptiveState = row.existing?.adaptiveState;
     if (row.outcome === 'wrong') return 'remediation';
@@ -584,7 +395,6 @@ export const buildWatchedLessonsIndividualPlan = ({
   candidates.forEach(row => Object.assign(row, classify(row)));
 
   const firstExposureRows = candidates.filter(row => row.policy
-      && !row.legacyCohort
       && !policyBlocksReview(row.policy)
       && !questionHasUnresolvedRequiredVisual(row.question)
       && !hasObservedReview(row.existing)
@@ -603,7 +413,6 @@ export const buildWatchedLessonsIndividualPlan = ({
   ) ? buildFirstExposurePlan({
       rows:recoveryRows,
       now,
-      siblingAware:false,
       useOriginalAnchor:true,
     }) : null;
   const legacyPlannedByCardKey = new Map();
@@ -613,32 +422,6 @@ export const buildWatchedLessonsIndividualPlan = ({
       && ['core', 'remediation', 'manual'].includes(legacyAdaptiveState(row))))
       .forEach((row, index) => legacyPlannedByCardKey.set(row.cardKey, legacyDuePlan({ row, index })));
   });
-  const legacyBacklogRows = candidates.filter(row => row.legacyCohort
-    && isLegacyBacklogRow(row)
-    && !hasObservedReview(row.existing)
-    && row.policy
-    && !policyBlocksReview(row.policy)
-    && !questionHasUnresolvedRequiredVisual(row.question)
-    && (
-      row.existing?.migration?.firstExposure?.version !== INDIVIDUAL_REVIEW_PLAN_VERSION
-      || row.existing?.migration?.firstExposure?.siblingStrategy !== 'legacy-backlog-balanced-v1'
-    ));
-  const repairedDueOverrides = new Map();
-  candidates.filter(row => row.repairBrokenCalendar && row.active).forEach(row => {
-    const repairedPlan = row.legacyCohort
-      ? legacyPlannedByCardKey.get(row.cardKey)
-      : recoveryFirstExposure?.plannedByCardKey.get(row.cardKey);
-    if (Number.isFinite(Number(repairedPlan?.dueDate))) {
-      repairedDueOverrides.set(row.cardKey, Number(repairedPlan.dueDate));
-    }
-  });
-  const legacyBacklog = buildLegacyBacklogPlan({
-    rows:legacyBacklogRows,
-    existingQueue,
-    dueOverrides:repairedDueOverrides,
-    now,
-  });
-
   const counts = { wrong:0, unseen:0, correct:0 };
   const adaptive = {
     essential:0,
@@ -674,20 +457,17 @@ export const buildWatchedLessonsIndividualPlan = ({
     const savedFirstExposure = existing?.migration?.firstExposure;
     const repairBrokenPlan = row.repairBrokenCalendar;
     const legacyPlan = legacyPlannedByCardKey.get(row.cardKey) || siblingPlan;
-    const backlogPlan = legacyBacklog.plannedByCardKey.get(row.cardKey) || null;
-    const legacyBacklogQuestion = row.legacyCohort
-      && isLegacyBacklogRow(row)
-      && !hasObservedReview(existing);
-    const plan = row.legacyCohort
-      ? backlogPlan || legacyPlan
-      : repairBrokenPlan
+    const plan = row.redistributeUnseenFirstExposure
+      ? siblingPlan
+      : row.legacyCohort
+        ? legacyPlan
+        : repairBrokenPlan
         ? recoveryFirstExposure?.plannedByCardKey.get(row.cardKey) || siblingPlan
         : siblingPlan;
     const repairLegacyEnrollment = row.legacyCohort && !hasObservedReview(existing)
       && existing?.adaptiveState !== 'manual';
-    const replaceLegacyBacklogDue = legacyBacklogQuestion && !!backlogPlan;
     const redistributeUnseenFirstExposure = row.redistributeUnseenFirstExposure && plan.dayOffset != null;
-    const repairDue = repairBrokenPlan || replaceLegacyBacklogDue || redistributeUnseenFirstExposure;
+    const repairDue = repairBrokenPlan || redistributeUnseenFirstExposure;
     const firstExposurePlan = savedFirstExposure && hasObservedReview(existing)
       ? savedFirstExposure
       : savedFirstExposure?.version === INDIVIDUAL_REVIEW_PLAN_VERSION
@@ -699,7 +479,7 @@ export const buildWatchedLessonsIndividualPlan = ({
             dayOffset:plan.dayOffset,
             percentage:plan.percentage,
             sequenceIndex:plan.sequenceIndex,
-            siblingStrategy:DAILY_FIRST_EXPOSURE_STRATEGY,
+            siblingStrategy:EXPONENTIAL_FIRST_EXPOSURE_STRATEGY,
             plannedAt:now,
             redistributedAt:now,
             previousVersion:savedFirstExposure?.version || null,
@@ -711,7 +491,7 @@ export const buildWatchedLessonsIndividualPlan = ({
             dayOffset:plan.dayOffset,
             percentage:plan.percentage,
             sequenceIndex:plan.sequenceIndex,
-            siblingStrategy:legacyBacklogQuestion ? 'legacy-backlog-balanced-v1' : 'legacy-schedule-restored',
+            siblingStrategy:'legacy-schedule-restored',
             plannedAt:Number.isFinite(plan.plannedAt) ? plan.plannedAt : now,
             repairedAt:now,
           }

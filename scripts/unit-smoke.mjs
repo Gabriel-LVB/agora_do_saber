@@ -82,6 +82,7 @@ import {
   FSRS_PENDING_SCHEDULER_VERSION,
   INDIVIDUAL_REVIEW_PLAN_VERSION,
   orderReviewFirstExposureRows,
+  REVIEW_FIRST_EXPOSURE_BATCH_SIZE,
   REVIEW_FIRST_EXPOSURE_WAVES,
 } from '../src/services/reviewMigration.js';
 import {
@@ -1420,20 +1421,19 @@ const migrationQuestion = id => ({
     { letter:'B', text:'Errada', isCorrect:false },
   ],
 });
-assert.equal(REVIEW_FIRST_EXPOSURE_WAVES.length, 30);
-assert.deepEqual(REVIEW_FIRST_EXPOSURE_WAVES.map(wave => wave.dayOffset), Array.from({ length:30 }, (_, index) => index));
-assert.ok(REVIEW_FIRST_EXPOSURE_WAVES.every((wave, index, waves) => !index || wave.percentage < waves[index - 1].percentage));
-assert.ok(Math.abs(REVIEW_FIRST_EXPOSURE_WAVES.reduce((sum, wave) => sum + wave.percentage, 0) - 100) < 0.000001);
-assert.equal(INDIVIDUAL_REVIEW_PLAN_VERSION, 'curated-progressive-essential-fsrs-v10');
-assert.deepEqual(allocateReviewFirstExposureWaves(70).map(wave => wave.count), [4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1]);
+assert.equal(REVIEW_FIRST_EXPOSURE_BATCH_SIZE, 10);
+assert.deepEqual(REVIEW_FIRST_EXPOSURE_WAVES.map(wave => wave.dayOffset), [0,2,4,8,16,32,64]);
+assert.equal(INDIVIDUAL_REVIEW_PLAN_VERSION, 'curated-progressive-essential-fsrs-v11');
+assert.deepEqual(allocateReviewFirstExposureWaves(70).map(wave => wave.count), [10,10,10,10,10,10,10]);
+assert.deepEqual(allocateReviewFirstExposureWaves(70).map(wave => wave.dayOffset), [0,2,4,8,16,32,64]);
 assert.equal(allocateReviewFirstExposureWaves(70).reduce((sum, wave) => sum + wave.count, 0), 70);
-assert.deepEqual(allocateReviewFirstExposureWaves(4).map(wave => wave.count).slice(0, 6), [1,1,1,1,0,0]);
-assert.ok(allocateReviewFirstExposureWaves(300).every((wave, index, waves) => !index || wave.count <= waves[index - 1].count));
+assert.deepEqual(allocateReviewFirstExposureWaves(4).map(wave => wave.count), [4]);
+assert.ok(allocateReviewFirstExposureWaves(305).every(wave => wave.count <= 10));
 assert.deepEqual(orderReviewFirstExposureRows([
-  { qId:'concept-a-1', outcome:'unseen', sourceIndex:0, policy:{ tier:'complementary', primaryConceptId:'a', importance:4, qualityScore:80 } },
-  { qId:'concept-a-2', outcome:'unseen', sourceIndex:1, policy:{ tier:'complementary', primaryConceptId:'a', importance:4, qualityScore:80 } },
-  { qId:'concept-b', outcome:'unseen', sourceIndex:2, policy:{ tier:'complementary', primaryConceptId:'b', importance:4, qualityScore:80 } },
-]).map(row => row.qId), ['concept-a-1','concept-b','concept-a-2']);
+  { qId:'clinical-first-in-source', sourceIndex:0, question:{ libraryQuestionKind:'clinical' }, policy:{ importance:5, qualityScore:100 } },
+  { qId:'direct-second-in-source', sourceIndex:1, question:{ libraryQuestionKind:'direct' }, policy:{ importance:2, qualityScore:60 } },
+  { qId:'direct-third-in-source', sourceIndex:2, question:{ libraryQuestionKind:'direct' }, policy:{ importance:4, qualityScore:95 } },
+]).map(row => row.qId), ['direct-second-in-source','direct-third-in-source','clinical-first-in-source']);
 const siblingDistribution = distributeReviewFirstExposureRows([
   { qId:'sister-1', policy:{ redundancyClusterId:'cluster-a', primaryConceptId:'a', conceptIds:['a'] } },
   { qId:'sister-2', policy:{ redundancyClusterId:'cluster-a', primaryConceptId:'a', conceptIds:['a'] } },
@@ -1444,19 +1444,19 @@ const siblingDistribution = distributeReviewFirstExposureRows([
   { qId:'other-4', policy:{ primaryConceptId:'e', conceptIds:['e'] } },
   { qId:'other-5', policy:{ primaryConceptId:'f', conceptIds:['f'] } },
 ], allocateReviewFirstExposureWaves(8));
-assert.deepEqual(siblingDistribution.map(bucket => bucket.rows.length), [1,1,1,1,1,1,1,1,...Array(22).fill(0)]);
+assert.deepEqual(siblingDistribution.map(bucket => bucket.rows.length), [8]);
 assert.deepEqual(siblingDistribution
   .map((bucket, bucketIndex) => bucket.rows.some(row => row.qId === 'sister-1') ? bucketIndex : null)
   .filter(index => index != null), [0]);
 assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
   siblingDistribution.findIndex(bucket => bucket.rows.some(row => row.qId === qId))
-), [0,1,2]);
+), [0,0,0]);
 const sharedConceptDistribution = distributeReviewFirstExposureRows([
   { qId:'shared-1', policy:{ primaryConceptId:'a', conceptIds:['shared', 'a'] } },
   { qId:'shared-2', policy:{ primaryConceptId:'b', conceptIds:['shared', 'b'] } },
   { qId:'different', policy:{ primaryConceptId:'c', conceptIds:['c'] } },
 ], allocateReviewFirstExposureWaves(3));
-assert.notEqual(
+assert.equal(
   sharedConceptDistribution.findIndex(bucket => bucket.rows.some(row => row.qId === 'shared-1')),
   sharedConceptDistribution.findIndex(bucket => bucket.rows.some(row => row.qId === 'shared-2')),
 );
@@ -1561,15 +1561,41 @@ const progressiveLessonPlan = buildWatchedLessonsIndividualPlan({
   }],
 });
 assert.equal(progressiveLessonPlan.added, 70);
-assert.deepEqual(progressiveLessonPlan.introduction.buckets.map(bucket => bucket.count), [4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1]);
+assert.deepEqual(progressiveLessonPlan.introduction.buckets.map(bucket => bucket.count), [10,10,10,10,10,10,10]);
+assert.deepEqual(progressiveLessonPlan.introduction.buckets.map(bucket => bucket.dayOffset), [0,2,4,8,16,32,64]);
 assert.equal(summarizeReviewQueue(progressiveLessonPlan.queue, reviewNow).total, 70);
 const progressiveForecast = buildReviewForecast(progressiveLessonPlan.queue, { now:reviewNow, days:30 });
-assert.deepEqual(progressiveForecast.days.map(day => day.total), [4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1]);
+assert.deepEqual(progressiveForecast.days.map(day => day.total), [10,0,10,0,10,0,0,0,10,0,0,0,0,0,0,0,10,...Array(13).fill(0)]);
+assert.equal(progressiveForecast.beyondRange, 20);
 const progressiveItems = Object.values(progressiveLessonPlan.queue['progressive-70'].main);
 assert.equal(progressiveItems.filter(item => item.adaptiveState === 'dormant').length, 0);
-assert.ok(progressiveItems
-  .filter(item => item.learningPolicy.tier === 'essential')
-  .every(item => item.migration.firstExposure.bucketIndex <= 2));
+assert.deepEqual(progressiveItems.map(item => item.migration.firstExposure.sequenceIndex), Array.from({ length:70 }, (_, index) => index));
+const canonicalOrderQuestions = [
+  ...Array.from({ length:6 }, (_, index) => ({
+    ...migrationQuestion(`clinical-${index}`),
+    libraryQuestionKind:'clinical',
+    learningPolicy:{ tier:'essential', importance:5 - index % 2, qualityScore:99 - index, reviewEligible:true, status:'active' },
+  })),
+  ...Array.from({ length:10 }, (_, index) => ({
+    ...migrationQuestion(`direct-${index}`),
+    libraryQuestionKind:'direct',
+    learningPolicy:{ tier:'essential', importance:index % 2 ? 5 : 4, qualityScore:80 + index, reviewEligible:true, status:'active' },
+  })),
+];
+const canonicalOrderPlan = buildWatchedLessonsIndividualPlan({
+  now:reviewNow,
+  lessons:[{ aulaId:'canonical-order', aulaData:{ blocks:{ main:{ questions:canonicalOrderQuestions } } } }],
+});
+const canonicalSequence = Object.values(canonicalOrderPlan.queue['canonical-order'].main)
+  .sort((left, right) => left.migration.firstExposure.sequenceIndex - right.migration.firstExposure.sequenceIndex);
+assert.deepEqual(canonicalSequence.map(item => item.question.id), [
+  ...Array.from({ length:10 }, (_, index) => `direct-${index}`),
+  ...Array.from({ length:6 }, (_, index) => `clinical-${index}`),
+]);
+assert.deepEqual(canonicalSequence.map(item => item.migration.firstExposure.dayOffset), [
+  ...Array(10).fill(0),
+  ...Array(6).fill(2),
+]);
 const dailyMigrationQuestions = Array.from({ length:45 }, (_, index) => ({
   ...migrationQuestion(`daily-${String(index).padStart(2, '0')}`),
   learningPolicy:{
@@ -1617,19 +1643,14 @@ const unseenDailyItems = Object.entries(dailyMigratedPlan.queue['daily-migration
   .map(([, item]) => item);
 assert.ok(unseenDailyItems.every(item =>
   item.migration.firstExposure.version === INDIVIDUAL_REVIEW_PLAN_VERSION
-  && item.migration.firstExposure.siblingStrategy === 'daily-decreasing-v1'
+  && item.migration.firstExposure.siblingStrategy === 'exponential-batches-v1'
   && item.migration.firstExposure.redistributedAt === dailyMigrationAt
 ));
-const dailyMigrationCounts = Array.from({ length:30 }, (_, dayOffset) => unseenDailyItems
+const dailyMigrationOffsets = [0,2,4,8,16];
+const dailyMigrationCounts = dailyMigrationOffsets.map(dayOffset => unseenDailyItems
   .filter(item => item.migration.firstExposure.dayOffset === dayOffset).length);
 assert.equal(dailyMigrationCounts.reduce((sum, count) => sum + count, 0), unseenDailyItems.length);
-assert.ok(dailyMigrationCounts.every(count => count > 0));
-assert.ok(dailyMigrationCounts.every((count, index, counts) => !index || count <= counts[index - 1]));
-const dailyPriorityRanges = Array.from({ length:30 }, (_, dayOffset) => unseenDailyItems
-  .filter(item => item.migration.firstExposure.dayOffset === dayOffset)
-  .map(item => Number(item.learningPolicy.importance) * 1000 + Number(item.learningPolicy.qualityScore)));
-assert.ok(dailyPriorityRanges.every((scores, index, ranges) => !index
-  || Math.max(...scores) <= Math.min(...ranges[index - 1])));
+assert.deepEqual(dailyMigrationCounts, [10,10,10,10,2]);
 const siblingAwareLesson = {
   aulaId:'sibling-aware',
   aulaTitle:'Aula com questões irmãs',
@@ -1675,9 +1696,9 @@ const siblingAwarePlan = buildWatchedLessonsIndividualPlan({
 const siblingAwareItems = siblingAwarePlan.queue['sibling-aware'].main;
 assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
   siblingAwareItems[qId].migration.firstExposure.bucketIndex
-), [0,1,2]);
+), [0,0,0]);
 assert.ok(['sister-1', 'sister-2', 'sister-3'].every(qId =>
-  siblingAwareItems[qId].migration.firstExposure.siblingStrategy === 'daily-decreasing-v1'
+  siblingAwareItems[qId].migration.firstExposure.siblingStrategy === 'exponential-batches-v1'
 ));
 const legacyV5Queue = JSON.parse(JSON.stringify(siblingAwarePlan.queue));
 const legacyV5DueDates = {};
@@ -1702,17 +1723,16 @@ assert.notDeepEqual(
   legacyV5DueDates,
 );
 assert.deepEqual(Object.values(redistributedLegacyV5Plan.queue['sibling-aware'].main)
-  .map(item => item.migration.firstExposure.dayOffset).sort((left, right) => left - right), [0,1,2,3,4,5,6,7]);
+  .map(item => item.migration.firstExposure.dayOffset).sort((left, right) => left - right), Array(8).fill(0));
 assert.ok(Object.values(redistributedLegacyV5Plan.queue['sibling-aware'].main).every(item =>
   item.migration.firstExposure.version === INDIVIDUAL_REVIEW_PLAN_VERSION
-  && item.migration.firstExposure.siblingStrategy === 'daily-decreasing-v1'
+  && item.migration.firstExposure.siblingStrategy === 'exponential-batches-v1'
   && item.migration.firstExposure.previousVersion === 'curated-progressive-essential-fsrs-v5'
 ));
 
 // A v6 chegou a matricular novamente todo o estoque legado e a v7 ainda o
 // ancorou em uma data antiga, transformando centenas de cartões em atrasados.
-// A recuperação preservada pela v10 devolve o núcleo antigo à agenda gradual e distribui o complemento
-// legado pelos próximos 29 dias, visíveis na previsão de 30 dias.
+// A v11 reancora os cartões antigos ainda inéditos no novo plano exponencial.
 const brokenReplanAt = reviewNow + 10 * REVIEW_DAY_MS;
 const brokenV6Queue = JSON.parse(JSON.stringify(legacyV5Queue));
 Object.entries(brokenV6Queue['sibling-aware'].main).forEach(([qId, item], index) => {
@@ -1733,16 +1753,16 @@ const recoveredV6Plan = buildWatchedLessonsIndividualPlan({
 const recoveredV6Items = recoveredV6Plan.queue['sibling-aware'].main;
 assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
   recoveredV6Items[qId].migration.firstExposure.bucketIndex
-), [null,null,null]);
+), [0,0,0]);
 assert.ok(['sister-1', 'sister-2', 'sister-3'].every(qId =>
-  recoveredV6Items[qId].migration.firstExposure.siblingStrategy === 'legacy-schedule-restored'
-  && recoveredV6Items[qId].migration.firstExposure.plannedAt === reviewNow
-  && recoveredV6Items[qId].dueDate < reviewNow
+  recoveredV6Items[qId].migration.firstExposure.siblingStrategy === 'exponential-batches-v1'
+  && recoveredV6Items[qId].migration.firstExposure.plannedAt === brokenReplanAt + 2000
+  && recoveredV6Items[qId].dueDate <= brokenReplanAt + 2000
 ));
 assert.ok(['different-0', 'different-1', 'different-2', 'different-3', 'different-4'].every(qId =>
   recoveredV6Items[qId].adaptiveState === 'introduction'
-  && recoveredV6Items[qId].dueDate > brokenReplanAt
-  && recoveredV6Items[qId].migration.firstExposure.siblingStrategy === 'legacy-backlog-balanced-v1'
+  && recoveredV6Items[qId].dueDate <= brokenReplanAt + 2000
+  && recoveredV6Items[qId].migration.firstExposure.siblingStrategy === 'exponential-batches-v1'
 ));
 
 const brokenV7Queue = JSON.parse(JSON.stringify(brokenV6Queue));
@@ -1767,12 +1787,11 @@ assert.equal(Object.values(repairedV7Plan.queue['sibling-aware'].main)
 assert.equal(Object.values(repairedV7Plan.queue['sibling-aware'].main)
   .filter(item => item.adaptiveState === 'dormant').length, 0);
 
-// Regressão do caso real: centenas de complementares retroativas não podem
-// substituir a carga gradual de 30 cartões do núcleo que já estava em curso,
-// mas todas precisam ganhar uma data dentro da previsão de 30 dias.
+// Uma fila antiga maior continua integral, com no máximo dez primeiras
+// exposições da mesma aula em cada data e itens além do gráfico de 30 dias.
 const avalancheNow = reviewNow + 2 * REVIEW_DAY_MS;
 const avalancheQuestions = [
-  ...Array.from({ length:100 }, (_, index) => ({
+  ...Array.from({ length:20 }, (_, index) => ({
     ...migrationQuestion(`legacy-core-${index}`),
     learningPolicy:{
       tier:'essential',
@@ -1783,7 +1802,7 @@ const avalancheQuestions = [
       status:'active',
     },
   })),
-  ...Array.from({ length:700 }, (_, index) => ({
+  ...Array.from({ length:60 }, (_, index) => ({
     ...migrationQuestion(`legacy-extra-${index}`),
     learningPolicy:{
       tier:'complementary',
@@ -1831,22 +1850,22 @@ const repairedAvalanchePlan = buildWatchedLessonsIndividualPlan({
   }],
 });
 const repairedAvalancheSummary = summarizeReviewQueue(repairedAvalanchePlan.queue, avalancheNow);
-assert.equal(repairedAvalancheSummary.total, 800);
-assert.equal(repairedAvalancheSummary.due, 30);
+assert.equal(repairedAvalancheSummary.total, 80);
+assert.equal(repairedAvalancheSummary.due, 10);
 assert.equal(Object.values(repairedAvalanchePlan.queue.avalanche.main)
-  .filter(item => item.adaptiveState === 'introduction').length, 700);
+  .filter(item => item.adaptiveState === 'introduction').length, 60);
 const repairedAvalancheForecast = buildReviewForecast(repairedAvalanchePlan.queue, { now:avalancheNow, days:30 });
-assert.equal(repairedAvalancheForecast.beyondRange, 0);
+assert.equal(repairedAvalancheForecast.beyondRange, 30);
 assert.equal(
-  repairedAvalancheForecast.days.reduce((sum, day) => sum + day.total, 0) + repairedAvalancheForecast.overdue,
-  800,
+  repairedAvalancheForecast.days.reduce((sum, day) => sum + day.total, 0)
+    + repairedAvalancheForecast.overdue + repairedAvalancheForecast.beyondRange,
+  80,
 );
 assert.ok(Object.values(repairedAvalanchePlan.queue.avalanche.main)
-  .filter(item => item.migration.firstExposure.siblingStrategy === 'legacy-backlog-balanced-v1')
-  .every(item => item.dueDate > avalancheNow && item.dueDate < avalancheNow + 30 * REVIEW_DAY_MS));
+  .every(item => item.migration.firstExposure.siblingStrategy === 'exponential-batches-v1'));
 assert.equal(new Set(['legacy-extra-0', 'legacy-extra-1', 'legacy-extra-2'].map(qId =>
   new Date(repairedAvalanchePlan.queue.avalanche.main[qId].dueDate).toISOString().slice(0, 10)
-)).size, 3);
+)).size, 1);
 const repeatedAvalanchePlan = buildWatchedLessonsIndividualPlan({
   now:avalancheNow + 1000,
   existingQueue:repairedAvalanchePlan.queue,
@@ -1890,13 +1909,13 @@ const recoveredPartialV6Plan = buildWatchedLessonsIndividualPlan({
 });
 assert.deepEqual(['different-2', 'different-3', 'different-4'].map(qId =>
   recoveredPartialV6Plan.queue['sibling-aware'].main[qId].migration.firstExposure.bucketIndex
-), [5,6,7]);
+), [0,0,0]);
 assert.ok(['different-2', 'different-3', 'different-4'].every(qId =>
-  recoveredPartialV6Plan.queue['sibling-aware'].main[qId].dueDate > partialBrokenAt
+  recoveredPartialV6Plan.queue['sibling-aware'].main[qId].dueDate <= partialBrokenAt + 2000
 ));
 
-// Cartões que nasceram corretamente na v6 têm criação e planejamento no mesmo
-// instante e não devem perder a distribuição de irmãs ao receber o marcador atual.
+// Mesmo cartões que nasceram corretamente na v6, se ainda inéditos, migram para
+// a regra atual sem tocar em qualquer cartão já respondido.
 const nativeV6Queue = JSON.parse(JSON.stringify(siblingAwarePlan.queue));
 Object.values(nativeV6Queue['sibling-aware'].main).forEach(item => {
   item.migration.version = 'curated-progressive-essential-fsrs-v6';
@@ -1909,7 +1928,7 @@ const preservedNativeV6Plan = buildWatchedLessonsIndividualPlan({
 });
 assert.deepEqual(['sister-1', 'sister-2', 'sister-3'].map(qId =>
   preservedNativeV6Plan.queue['sibling-aware'].main[qId].migration.firstExposure.bucketIndex
-), [0,1,2]);
+), [0,0,0]);
 
 const reviewedSiblingQueue = JSON.parse(JSON.stringify(brokenV6Queue));
 reviewedSiblingQueue['sibling-aware'].main['sister-2'].reps = 1;
@@ -2071,7 +2090,7 @@ const restoredCuratedPlan = buildWatchedLessonsIndividualPlan({
 });
 assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.dueDate, reviewNow - 60000);
 assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.parkedDueDate, null);
-assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.migration.firstExposure.siblingStrategy, 'daily-decreasing-v1');
+assert.equal(restoredCuratedPlan.queue['curated-restore'].main.essential.migration.firstExposure.siblingStrategy, 'exponential-batches-v1');
 assert.equal(curatedPlan.queue['curated-1'].main.disabled.adaptiveState, 'disabled');
 const retiredAdaptiveSupport = buildWatchedLessonsIndividualPlan({
   now:reviewNow + 500,
