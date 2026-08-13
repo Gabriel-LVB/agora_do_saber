@@ -102,6 +102,7 @@ function AcademiaTopicView({
   onOpenAcademiaQuestions,
   findErrorNotebookReviewsForSource,
   openErrorNotebookReviewResult,
+  compactLesson=false,
 }) {
   const liveSubject = (library||[]).find(s => s.id === subject.id) || subject;
   const liveTopic = liveSubject?.topics?.find(t => t.id === topic.id) || topic;
@@ -155,7 +156,7 @@ function AcademiaTopicView({
         const body = rows.slice(1);
         const parseCells = (row) => row.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').split(/\s*\|\s*/);
         elements.push(
-          <div key={`tbl-${i}`} className="overflow-x-auto my-4">
+          <div key={`tbl-${i}`} className={`overflow-x-auto ${compactLesson?'my-2':'my-4'}`}>
             <table className={`w-full text-sm border-collapse ${darkMode?'text-gray-200':'text-gray-800'}`}>
               <thead>
                 <tr className={`border-b-2 ${darkMode?'border-gray-600':'border-gray-300'}`}>
@@ -216,7 +217,7 @@ function AcademiaTopicView({
           i = j;
         }
         elements.push(
-          <div key={`ul-${i}`} className={`space-y-1.5 my-2 text-base ${darkMode?'text-gray-200':'text-gray-800'}`}>
+          <div key={`ul-${i}`} className={`${compactLesson?'space-y-1 my-1 text-[15px]':'space-y-1.5 my-2 text-base'} ${darkMode?'text-gray-200':'text-gray-800'}`}>
             {items.map((item, ii) => (
               <div key={ii} className="flex items-start gap-3" style={{marginLeft:`${item.level * 1.35}rem`}}>
                 <span className="flex flex-shrink-0 items-center justify-center" style={{width:'0.875rem', height:'1.625rem'}}>
@@ -232,9 +233,13 @@ function AcademiaTopicView({
         );
         continue;
       }
-      if (!line.trim()) { elements.push(<div key={`sp-${i}`} className="h-2"/>); i++; continue; }
+      if (!line.trim()) {
+        if (!compactLesson) elements.push(<div key={`sp-${i}`} className="h-2"/>);
+        i++;
+        continue;
+      }
       elements.push(
-        <p key={`p-${i}`} className={`text-base leading-relaxed ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseLessonText(line)}</p>
+        <p key={`p-${i}`} className={`${compactLesson?'text-[15px] leading-7':'text-base leading-relaxed'} ${darkMode?'text-gray-200':'text-gray-800'}`}>{parseLessonText(line)}</p>
       );
       i++;
     }
@@ -336,12 +341,12 @@ function AcademiaTopicView({
   return (
     <div className="w-full">
       {/* Header */}
-      <button onClick={onBack} className={`flex items-center gap-2 mb-8 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
+      <button onClick={onBack} className={`flex items-center gap-2 ${compactLesson?'mb-5':'mb-8'} font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
         <ArrowLeft className="w-4 h-4"/>Voltar
       </button>
-      <div className="mb-10">
+      <div className={compactLesson?'mb-6':'mb-10'}>
         {liveTopic.id!=='__all__'&&<div className={`text-xs font-bold uppercase tracking-widest mb-2 ${darkMode?'text-yellow-600/70':'text-yellow-600/80'}`}>{liveSubject.title}</div>}
-        <h1 className={`text-3xl mobile-title-lg mobile-wrap font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{liveTopic.title}</h1>
+        <h1 className={`${compactLesson?'text-2xl':'text-3xl mobile-title-lg'} mobile-wrap font-serif font-bold leading-tight mb-1 ${darkMode?'text-white':'text-gray-900'}`}>{liveTopic.title}</h1>
         {hasLesson && (isAdmin || canUseAcademia) && (
           <div className="flex items-center gap-3 mt-4 flex-wrap">
 	            <button onClick={()=>setAcademiaExportModal({topic:liveTopic, subject:liveSubject})}
@@ -433,7 +438,7 @@ function AcademiaTopicView({
       {hasLesson && !academiaGenerating && (
         <div>
           {ordinaryFixqs.length > 0 && (
-            <div className={`mb-8 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+            <div className={`${compactLesson?'mb-6':'mb-8'} flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
               <div>
                 <p className={`text-sm font-bold ${darkMode?'text-gray-200':'text-gray-800'}`}>Quando mostrar as questões?</p>
                 <p className={`mt-1 text-xs ${darkMode?'text-gray-500':'text-gray-500'}`}>Você pode responder durante a leitura ou deixar tudo para o final.</p>
@@ -444,7 +449,7 @@ function AcademiaTopicView({
             </div>
           )}
           {subtopics.length > 1 && (
-            <nav aria-label="Sumário da aula" className={`mb-10 rounded-2xl border p-5 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+            <nav aria-label="Sumário da aula" className={`${compactLesson?'mb-6 p-4':'mb-10 p-5'} rounded-2xl border ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
               <p className={`mb-3 text-xs font-bold uppercase tracking-widest ${darkMode?'text-yellow-400':'text-yellow-700'}`}>Nesta aula</p>
               <ol className="grid gap-2 md:grid-cols-2">
                 {subtopics.map((subtopic, idx) => {
@@ -460,15 +465,15 @@ function AcademiaTopicView({
             const chapterQuestions = liveTopic.fixationQuestions?.[idx] || [];
             const chapterPracticeQuestions = chapterQuestions.filter(question => !isMemoryCard(question));
             return (
-              <section id={`academia-chapter-${liveTopic.id}-${idx}`} key={idx} className="scroll-mt-6 py-8 first:pt-0">
-                <h2 className={`mb-6 font-serif text-2xl font-bold leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}><span className="mr-3 text-base font-bold tabular-nums text-yellow-600">{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
+              <section id={`academia-chapter-${liveTopic.id}-${idx}`} key={idx} className={`scroll-mt-6 ${compactLesson?'py-5':'py-8'} first:pt-0`}>
+                <h2 className={`${compactLesson?'mb-3 text-xl':'mb-6 text-2xl'} font-serif font-bold leading-tight ${darkMode?'text-gray-100':'text-gray-900'}`}><span className={`${compactLesson?'text-sm':'text-base'} mr-3 font-bold tabular-nums text-yellow-600`}>{String(idx+1).padStart(2,'0')}.</span>{section?.title || subtopic}</h2>
                 {section?.content ? (
-                  <div className="reading-content mb-8 space-y-3">{renderLesson(section.content)}</div>
+                  <div className={`reading-content ${compactLesson?'mb-5 space-y-1.5':'mb-8 space-y-3'}`}>{renderLesson(section.content)}</div>
                 ) : (
                   <p className={`mb-8 text-sm italic ${darkMode?'text-gray-600':'text-gray-400'}`}>Explicação não disponível para este capítulo.</p>
                 )}
                 {questionPlacement === 'inline' && chapterPracticeQuestions.length > 0 && (
-                  <div className={`mt-8 rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
+                  <div className={`${compactLesson?'mt-5':'mt-8'} rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>
                     <div className="mb-5 flex items-center justify-between gap-3">
                       <div><p className="text-xs font-bold uppercase tracking-widest text-yellow-600">Fixação do capítulo</p><p className="mt-1 text-xs opacity-50">{chapterPracticeQuestions.length} questão{chapterPracticeQuestions.length!==1?'ões':'ão'}</p></div>
                     </div>
@@ -482,7 +487,7 @@ function AcademiaTopicView({
           {questionPlacement === 'end' && ordinaryFixqs.length > 0 && (
             <section className="mt-10 pt-4">
               <div className="mb-6">
-                <h2 className={`font-serif text-2xl font-bold ${darkMode?'text-gray-100':'text-gray-900'}`}>Questões de fixação</h2>
+                <h2 className={`font-serif ${compactLesson?'text-xl':'text-2xl'} font-bold ${darkMode?'text-gray-100':'text-gray-900'}`}>Questões de fixação</h2>
                 <p className={`mt-1 text-sm ${darkMode?'text-gray-500':'text-gray-500'}`}>{ordinaryFixqs.length} questão{ordinaryFixqs.length!==1?'ões':'ão'} sobre este tópico.</p>
               </div>
               <div className={`rounded-2xl border p-4 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50/70'}`}>

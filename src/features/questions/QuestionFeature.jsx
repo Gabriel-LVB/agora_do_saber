@@ -528,7 +528,8 @@ const QuestionView = ({
 	  const [flashcardCursor, setFlashcardCursor] = useState(0);
 	  const [flashcardMastered, setFlashcardMastered] = useState({});
 	  const [flashcardEntryAnswers, setFlashcardEntryAnswers] = useState({});
-	  const [flashcardAttempts, setFlashcardAttempts] = useState({});
+	  const [flashcardMisses, setFlashcardMisses] = useState({});
+	  const [flashcardReplayPending, setFlashcardReplayPending] = useState({});
 
 	  useEffect(() => {
 	    setStudyKind(resolveInitialStudyKind());
@@ -584,20 +585,30 @@ const QuestionView = ({
 	    setFlashcardCursor(firstPending >= 0 ? firstPending : (firstUnmastered >= 0 ? firstUnmastered : 0));
 	    setFlashcardMastered(initialMastered);
 	    setFlashcardEntryAnswers(initialEntryAnswers);
-	    setFlashcardAttempts(initialAttempts);
+	    setFlashcardMisses(initialAttempts);
+	    setFlashcardReplayPending({});
 	    setShowCompletion(allInitiallyMastered);
 	  // Respostas mudam durante a sessão. Reiniciar a fila a cada acerto fazia o
 	  // cursor voltar ao primeiro cartão errado em vez de seguir em frente.
 	  }, [allFlashcards, questionIdsKey]); // eslint-disable-line
 
-	  const wrongIds = questions.filter(q => {
-	    if (q.isOpen) return isOpenAnswered(q) && !isOpenCorrect(q);
-	    if (isMemoryCard(q)) return validAnswers[q.id] === FLASHCARD_WRONG;
-	    return validAnswers[q.id] && !isAnswerCorrect(q, validAnswers[q.id]);
-	  }).map(q=>q.id);
-
 	  const isFlashcardMastered = (q) =>
-	    !!flashcardMastered[q.id] || validAnswers[q.id] === FLASHCARD_CORRECT;
+	    !!flashcardMastered[q.id] || (!flashcardReplayPending[q.id] && validAnswers[q.id] === FLASHCARD_CORRECT);
+	  const flashcardMissedQuestions = allFlashcards
+	    ? questions.filter(q => (flashcardMisses[q.id] || 0) > 0 || validAnswers[q.id] === FLASHCARD_WRONG)
+	    : [];
+	  const flashcardWrongMarks = allFlashcards
+	    ? questions.reduce((total, q) => total + Math.max(0, Number(flashcardMisses[q.id]) || 0), 0)
+	    : 0;
+	  const flashcardTotalAnswers = allFlashcards
+	    ? Object.values(flashcardEntryAnswers).filter(answer => answer === FLASHCARD_CORRECT || answer === FLASHCARD_WRONG).length
+	    : 0;
+	  const flashcardFirstPassCorrectCount = allFlashcards
+	    ? questions.length - flashcardMissedQuestions.length
+	    : 0;
+	  const flashcardFirstPassPct = allFlashcards && questions.length
+	    ? Math.round(flashcardFirstPassCorrectCount / questions.length * 100)
+	    : null;
 
 	  const flashcardMasteredCount = allFlashcards
 	    ? questions.filter(q => isFlashcardMastered(q)).length
@@ -748,11 +759,11 @@ const QuestionView = ({
 	    if (letter === FLASHCARD_CORRECT) masteredAfter[q.id] = true;
 	    else delete masteredAfter[q.id];
 
-	    const nextAttempt = (flashcardAttempts[q.id] || 0) + 1;
+	    const nextAttempt = (entry?.attempt || 0) + 1;
 	    let nextQueue = flashcardQueue.filter((item, idx) => idx <= queueIndex || item.qid !== q.id);
 	    if (letter === FLASHCARD_WRONG) {
 	      nextQueue = [...nextQueue, { qid:q.id, attempt:nextAttempt, origin:entry?.origin ?? queueIndex }];
-	      setFlashcardAttempts(prev => ({ ...prev, [q.id]:nextAttempt }));
+	      setFlashcardMisses(prev => ({ ...prev, [q.id]:(prev[q.id] || 0) + 1 }));
 	    }
 
 	    setFlashcardEntryAnswers(prev => ({ ...prev, [key]:letter }));
@@ -769,6 +780,34 @@ const QuestionView = ({
 	    }
 	    if (nextIdx >= 0) scrollToFlashcardEntry(nextQueue[nextIdx]);
 	    else if (completedAfter) scrollToCompletion();
+	  };
+	  const restartFlashcardStudy = (onlyMissed=false) => {
+	    const targets = onlyMissed ? flashcardMissedQuestions : questions;
+	    if (!targets.length) return;
+	    const nextQueue = targets.map(q => {
+	      const previousAttempt = flashcardQueue.reduce(
+	        (highest, entry) => String(entry.qid) === String(q.id) ? Math.max(highest, entry.attempt || 0) : highest,
+	        0
+	      );
+	      return {
+	        qid:q.id,
+	        attempt:previousAttempt + 1,
+	        origin:Math.max(0, questions.findIndex(item => String(item.id) === String(q.id))),
+	      };
+	    });
+	    setFlashcardQueue(nextQueue);
+	    setFlashcardCursor(0);
+	    setFlashcardMastered(previous => {
+	      const next = {...previous};
+	      targets.forEach(q => delete next[q.id]);
+	      return next;
+	    });
+	    setFlashcardReplayPending(Object.fromEntries(targets.map(q => [q.id, true])));
+	    if (!onlyMissed) {
+	      setFlashcardMisses({});
+	      setFlashcardEntryAnswers({});
+	    }
+	    setShowCompletion(false);
 	  };
 	  const renderQuestion = (q, i, opts={}) => {
 	    const entry = opts.flashcardEntry || null;
@@ -805,19 +844,34 @@ const QuestionView = ({
 	  );};
   const renderCompletion = () => {
     const wrongCount = questions.length - correctCount;
-    const tone = pct>=80 ? 'Excelente retenção.' : pct>=60 ? 'Boa sessão, com alguns erros para revisar.' : 'Sessão útil para revelar lacunas importantes.';
+    const completionPct = allFlashcards ? flashcardFirstPassPct : pct;
+    const tone = completionPct>=80 ? 'Excelente retenção.' : completionPct>=60 ? 'Boa sessão, com alguns erros para revisar.' : 'Sessão útil para revelar lacunas importantes.';
     const nextUnitAction = onNextUnit ? {
       label:nextUnitLabel,
       helper:nextUnitHelper,
       icon:<ChevronRight className="w-5 h-5"/>,
       fn:onNextUnit,
+	  primary:true,
     } : null;
     const spacedReviewAction = onAddToReview ? {
-      label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Adicionar à revisão',
+	  label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:(allFlashcards?'Adicionar todos à revisão':'Adicionar à revisão'),
       helper:inReviewCount>0?'Ajustar as questões que já estão no ciclo.':'Colocar este bloco no ciclo de retenção.',
       icon:<RepeatIcon className="w-5 h-5"/>,
       fn:()=>onAddToReview(questions, answers),
     } : null;
+	const flashcardErrorReviewAction = allFlashcards && onAddToReview && flashcardMissedQuestions.length ? {
+	  label:`Adicionar erros à revisão (${flashcardMissedQuestions.length})`,
+	  helper:'Selecionar somente os cartões marcados como Errei nesta sessão.',
+	  icon:<RepeatIcon className="w-5 h-5"/>,
+	  fn:()=>onAddToReview(
+	    flashcardMissedQuestions,
+	    {
+	      ...answers,
+	      ...Object.fromEntries(flashcardMissedQuestions.map(q => [q.id, FLASHCARD_WRONG])),
+	    },
+	    { initialSelectedIds:flashcardMissedQuestions.map(q => q.id) }
+	  ),
+	} : null;
     const notebookActions = [
       onReviewErrorNotebook && errorNotebook.length > 0 ? {
         label:'Gerar caderno de erros',
@@ -831,24 +885,30 @@ const QuestionView = ({
       } : null,
     ].filter(Boolean);
     const navigationActions = [
+	  nextUnitAction,
       hasMixedStudyKinds && studyKind === 'flashcards' ? {
         label:`Ir para questões (${ordinaryQuestions.length})`,
         icon:<BlockIcon className="w-4 h-4"/>,
         fn:()=>switchStudyKind('questions'),
       } : null,
+	  allFlashcards && flashcardMissedQuestions.length ? {
+	    label:`Rever difíceis (${flashcardMissedQuestions.length})`,
+	    icon:<RotateCcw className="w-4 h-4"/>,
+	    fn:()=>restartFlashcardStudy(true),
+	  } : null,
       singleMode ? {
-        label:allFlashcards ? 'Rever flashcards' : 'Ver questões',
+	    label:allFlashcards ? 'Recomeçar sessão' : 'Ver questões',
         icon:<ArrowLeft className="w-4 h-4"/>,
-        fn:()=>setShowCompletion(false),
+	    fn:()=>allFlashcards ? restartFlashcardStudy(false) : setShowCompletion(false),
       } : null,
       onGoToAula ? {
         label:goToAulaLabel,
         icon:goToAulaIcon,
         fn:onGoToAula,
       } : null,
-      nextUnitAction,
     ].filter(Boolean);
     const reviewActions = [
+	  flashcardErrorReviewAction,
       spacedReviewAction,
       ...notebookActions,
     ].filter(Boolean);
@@ -877,23 +937,45 @@ const QuestionView = ({
       : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800';
     const primaryBtnClass = 'border-yellow-600 bg-yellow-600 text-white hover:bg-yellow-700';
     return (
-      <div className={`max-w-2xl mx-auto rounded-2xl border p-8 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
+      <div className={`max-w-3xl mx-auto rounded-2xl border p-6 md:p-10 text-center ${dm?'bg-gray-900 border-gray-800':'bg-white border-gray-200'} shadow-sm`}>
         <RepeatIcon className="w-16 h-16 mx-auto mb-4 text-yellow-500"/>
-        <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>Bloco encerrado</p>
-        <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">Bloco concluído</h3>
-        <p className={`text-4xl font-serif font-bold mb-2 ${pct>=70?'text-green-500':pct>=50?'text-yellow-600':'text-red-500'}`}>{pct}%</p>
-        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>{correctCount}/{questions.length} corretas · {wrongCount} erros</p>
-        <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>{tone} Adicione as questões à revisão para transformar esse resultado em ciclo de retenção.</p>
-        <div className="grid grid-cols-2 gap-3 mb-8 text-left">
-          <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
-            <p className="text-2xl font-serif font-bold text-green-500">{correctCount}</p>
-            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>dominadas</p>
+        <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${dm?'text-gray-500':'text-gray-400'}`}>{allFlashcards?'Sessão encerrada':'Bloco encerrado'}</p>
+        <h3 className="text-3xl font-serif font-bold text-yellow-600 mb-3">{allFlashcards?'Flashcards concluídos':'Bloco concluído'}</h3>
+        <p className={`text-4xl font-serif font-bold mb-2 ${completionPct>=70?'text-green-500':completionPct>=50?'text-yellow-600':'text-red-500'}`}>{completionPct}%</p>
+        <p className={`text-sm font-bold mb-4 ${dm?'text-gray-300':'text-gray-700'}`}>
+          {allFlashcards
+            ? 'lembrados sem erro na primeira passagem'
+            : `${correctCount}/${questions.length} corretas · ${wrongCount} erros`}
+        </p>
+        <p className={`text-sm leading-relaxed mb-6 ${dm?'text-gray-400':'text-gray-500'}`}>
+          {allFlashcards
+            ? `${tone} Todos os ${questions.length} cartões foram recuperados ao final${flashcardMissedQuestions.length ? ', depois das repetições necessárias' : ''}.`
+            : `${tone} Adicione as questões à revisão para transformar esse resultado em ciclo de retenção.`}
+        </p>
+        {allFlashcards ? (
+          <div className="grid grid-cols-2 gap-3 mb-8 text-left md:grid-cols-4">
+            {[
+              [flashcardFirstPassCorrectCount, 'sem erro', 'text-green-500'],
+              [flashcardMissedQuestions.length, 'precisaram voltar', 'text-red-500'],
+              [flashcardWrongMarks, 'marcações Errei', 'text-orange-500'],
+              [flashcardTotalAnswers, 'respostas ao todo', 'text-yellow-600'],
+            ].map(([value,label,color]) => <div key={label} className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+              <p className={`text-2xl font-serif font-bold ${color}`}>{value}</p>
+              <p className={`text-[11px] font-bold uppercase leading-tight ${dm?'text-gray-500':'text-gray-400'}`}>{label}</p>
+            </div>)}
           </div>
-          <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
-            <p className="text-2xl font-serif font-bold text-red-500">{wrongCount}</p>
-            <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>erros</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 mb-8 text-left">
+            <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+              <p className="text-2xl font-serif font-bold text-green-500">{correctCount}</p>
+              <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>dominadas</p>
+            </div>
+            <div className={`rounded-xl border p-4 ${dm?'border-gray-800 bg-gray-950/60':'border-gray-100 bg-gray-50'}`}>
+              <p className="text-2xl font-serif font-bold text-red-500">{wrongCount}</p>
+              <p className={`text-xs font-bold uppercase ${dm?'text-gray-500':'text-gray-400'}`}>erros</p>
+            </div>
           </div>
-        </div>
+        )}
         <div className="space-y-5 text-left">
           {navigationActions.length > 0 && (
             <div className="flex flex-col sm:flex-row sm:justify-center gap-2">

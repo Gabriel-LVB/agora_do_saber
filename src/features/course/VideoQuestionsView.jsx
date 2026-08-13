@@ -259,7 +259,7 @@ export default function VideoQuestionsView() {
 		                      deckTitle:'Curso',
 		                      source:'curso',
 		                    })) : null}
-		                    onAddToReview={(qs, ans)=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
+		                    onAddToReview={(qs, ans, reviewOptions={})=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, ...reviewOptions, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
                     onReviewErrorNotebook={blockNotebook.length ? (()=>openErrorReviewModal({
                       subject:{id:aulaIdNew, title:vqAula.title, source:'curso'},
                       topic:{id:blockId, title:blockTitle},

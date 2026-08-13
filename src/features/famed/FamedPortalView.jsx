@@ -190,6 +190,10 @@ export default function FamedPortalView() {
   }, [activeSubject, answersByBlock, favoritesByBlock]);
   const activeTopicSource = isAdmin ? activeSubject : activeSubjectWithProgress;
   const activeTopic = activeTopicSource?.topics?.find(topic => String(topic.id) === String(activeTopicId)) || null;
+  const activeTopicIndex = activeTopic
+    ? (activeTopicSource?.topics || []).findIndex(topic => String(topic.id) === String(activeTopic.id))
+    : -1;
+  const nextAcademiaTopic = activeTopicIndex >= 0 ? activeTopicSource?.topics?.[activeTopicIndex + 1] || null : null;
 
   const returnToSchedule = () => {
     setActivePanel('schedule');
@@ -251,7 +255,7 @@ export default function FamedPortalView() {
     saveAnswers({...answersByBlock,[blockKey]:topic.answers || {}});
     saveFavorites({...favoritesByBlock,[blockKey]:topic.favorites || []});
   };
-  const openQuestions = (subject, topic, kind='fixation', block=null) => {
+  const openQuestions = (subject, topic, kind='fixation', block=null, options={}) => {
     const questions = kind === 'extra' ? (block?.questions || block || []) : topicFixationQuestions(topic);
     if (!questions.length) return;
     setActiveContentId(subject.famedMeta.contentId);
@@ -260,8 +264,16 @@ export default function FamedPortalView() {
       id:`${subject.famedMeta.contentId}:${topic.id}:${kind}:${block?.id || 'main'}`,
       title:kind === 'extra' ? (block?.title || 'Bateria extra') : 'Questões de fixação',
       questions:normalizeQuestions(questions),
+      initialStudyKind:options.studyKind || 'auto',
     });
     setActivePanel('questions');
+    window.scrollTo?.({ top:0, behavior:'smooth' });
+  };
+  const openNextAcademiaTopic = () => {
+    if (!nextAcademiaTopic) return;
+    setActiveQuestionSet(null);
+    setActiveTopicId(nextAcademiaTopic.id);
+    setActivePanel('topic');
     window.scrollTo?.({ top:0, behavior:'smooth' });
   };
   const openPastQuestions = content => {
@@ -590,14 +602,38 @@ export default function FamedPortalView() {
       questions={activeQuestionSet.questions}
       answers={blockAnswers}
       favorites={blockFavorites}
-      onAnswer={(questionId,answer)=>saveAnswers({...answersByBlock,[activeQuestionSet.id]:{...blockAnswers,[questionId]:answer}})}
+      onAnswer={(questionId,answer)=>{
+        trackQuestionAnswered?.(`famed:${activeQuestionSet.id}:${questionId}`);
+        saveAnswers({...answersByBlock,[activeQuestionSet.id]:{...blockAnswers,[questionId]:answer}});
+      }}
       onToggleFavorite={questionId=>saveFavorites({...favoritesByBlock,[activeQuestionSet.id]:blockFavorites.includes(questionId)?blockFavorites.filter(id=>id!==questionId):[...blockFavorites,questionId]})}
       onReset={()=>saveAnswers({...answersByBlock,[activeQuestionSet.id]:{}})}
       darkMode={darkMode}
       displayMode={settings.questionDisplayMode || 'list'}
       onDisplayModeChange={mode=>{const next={...settings,questionDisplayMode:mode};setSettings(next);saveSettings(next);}}
+      initialStudyKind={activeQuestionSet.initialStudyKind || 'auto'}
+      onAddToReview={(questions, answers, reviewOptions={})=>setSrModal?.({
+        aulaId:`lib_${activeSubject.id}`,
+        blockId:activeQuestionSet.id,
+        blockTitle:activeQuestionSet.title,
+        questions,
+        answers,
+        notebookIds:[],
+        ...reviewOptions,
+        meta:{
+          source:'famed',
+          subjectId:activeSubject.id,
+          topicId:activeTopic?.id || null,
+          subjectTitle:activeSubject.title,
+          blockTitle:activeQuestionSet.title,
+        },
+      })}
+      inReviewCount={Object.keys(reviewQueue?.[`lib_${activeSubject.id}`]?.[activeQuestionSet.id] || {}).length}
       onGoToAula={()=>setActivePanel(activeTopic?'topic':isAdmin?'subject':'student-topics')}
       goToAulaLabel="Abrir aula da Academia"
+      onNextUnit={nextAcademiaTopic ? openNextAcademiaTopic : null}
+      nextUnitLabel="Próximo tópico"
+      nextUnitHelper={nextAcademiaTopic?.title || 'Continuar a aula'}
     /></div>;
   }
 
@@ -678,6 +714,7 @@ export default function FamedPortalView() {
     onOpenAcademiaQuestions={openQuestions}
     findErrorNotebookReviewsForSource={findErrorNotebookReviewsForSource}
     openErrorNotebookReviewResult={openErrorNotebookReviewResult}
+    compactLesson={true}
   /></React.Suspense></div>;
 
   if (activePanel === 'subject' && activeContent && activeSubject) {

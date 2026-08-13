@@ -54,7 +54,7 @@ const QuestionStyleSelector = ({ value='mixed', onChange, darkMode=false }) => (
     ))}
   </div>
 );
-const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose, currentReview, notebookIds=[], isAdmin=false, source='personal' }) => {
+const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, onConfirm, onClose, currentReview, notebookIds=[], initialSelectedIds=[], isAdmin=false, source='personal' }) => {
   const dm = darkMode;
   const metadataBlocksReview = question => {
     const policy = question?.learningPolicy;
@@ -73,7 +73,13 @@ const SRModal = ({ questions, answers, aulaId, blockId, blockTitle, darkMode, on
   const inReviewIds = Object.keys(inReview);
 
   // Ao gerenciar uma fila existente, não pré-seleciona questões novas.
-  const [selected, setSelected] = useState(() => inReviewIds.length ? [] : selectableQuestions.map(q=>q.id).filter(id => !inReviewIds.includes(id)));
+  const [selected, setSelected] = useState(() => {
+    const selectableIds = new Set(selectableQuestions.map(q => String(q.id)));
+    const requestedIds = (initialSelectedIds || [])
+      .filter(id => selectableIds.has(String(id)) && !inReviewIds.some(reviewId => String(reviewId) === String(id)));
+    if (requestedIds.length) return requestedIds;
+    return inReviewIds.length ? [] : selectableQuestions.map(q=>q.id).filter(id => !inReviewIds.includes(id));
+  });
   const [toRemove, setToRemove] = useState([]);
 
   const toggle = (id) => {

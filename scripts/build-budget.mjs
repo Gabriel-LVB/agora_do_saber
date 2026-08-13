@@ -91,6 +91,10 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A separação entre commit e atualização local, com diagnóstico por etapa,
 // acrescenta outros 0,2 KiB medidos ao handler administrativo.
 const CORE_TOTAL_GZIP_LIMIT = 447 * 1024;
+// A Fábrica concluída está arquivada no código-fonte, mas não possui ponto de
+// entrada no app. Seus chunks administrativos não devem ser emitidos enquanto
+// QUESTION_FACTORY_VISIBLE permanecer falso.
+const QUESTION_FACTORY_ARCHIVED = true;
 const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 // A política pedagógica de flashcards/clozes é compartilhada pelos prompts lazy
 // gerais e pela Dúvida Rápida, sem duplicar regras nem entrar no bundle inicial.
@@ -146,18 +150,18 @@ const QUESTION_BANK_SIZING_GZIP_LIMIT = 11.75 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT
-  + QUESTION_CURATION_GZIP_LIMIT
-  + ECG_CASE_BANK_GZIP_LIMIT
+  + (QUESTION_FACTORY_ARCHIVED ? 0 : QUESTION_CURATION_GZIP_LIMIT)
+  + (QUESTION_FACTORY_ARCHIVED ? 0 : ECG_CASE_BANK_GZIP_LIMIT)
   + FSRS_SCHEDULER_GZIP_LIMIT
   + REVIEW_MIGRATION_GZIP_LIMIT
   + ECG_QUESTION_MATCHER_GZIP_LIMIT
   + REVIEW_DASHBOARD_GZIP_LIMIT
-  + COURSE_STUDENTS_GZIP_LIMIT
+  + (QUESTION_FACTORY_ARCHIVED ? 0 : COURSE_STUDENTS_GZIP_LIMIT)
   + DISABLED_COURSE_QUESTIONS_GZIP_LIMIT
   + SHARED_LIBRARY_REPAIR_GZIP_LIMIT
   + COURSE_REVIEW_RESET_GZIP_LIMIT
   + FAMED_GZIP_LIMIT
-  + QUESTION_BANK_SIZING_GZIP_LIMIT;
+  + (QUESTION_FACTORY_ARCHIVED ? 0 : QUESTION_BANK_SIZING_GZIP_LIMIT);
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
 const famedGzip = (famedPortal?.gzip || 0)
@@ -205,16 +209,21 @@ assert.ok(
   memoryCardPolicy.gzip <= MEMORY_CARD_POLICY_GZIP_LIMIT,
   `Política global de cartões passou do budget: ${fmt(memoryCardPolicy.gzip)} > ${fmt(MEMORY_CARD_POLICY_GZIP_LIMIT)}`
 );
-assert.ok(ecgCaseBank, 'Banco de ECG deve permanecer em módulo lazy próprio.');
-assert.ok(
-  ecgCaseBank.gzip <= ECG_CASE_BANK_GZIP_LIMIT,
-  `Módulo Banco de ECG passou do budget: ${fmt(ecgCaseBank.gzip)} > ${fmt(ECG_CASE_BANK_GZIP_LIMIT)}`
-);
-assert.ok(questionCuration, 'A Curadoria deve permanecer em modulo lazy proprio.');
-assert.ok(
-  questionCuration.gzip <= QUESTION_CURATION_GZIP_LIMIT,
-  `Modulo Curadoria passou do budget: ${fmt(questionCuration.gzip)} > ${fmt(QUESTION_CURATION_GZIP_LIMIT)}`
-);
+if (QUESTION_FACTORY_ARCHIVED) {
+  assert.equal(ecgCaseBank, null, 'Banco de ECG arquivado não deve ser emitido no build público.');
+  assert.equal(questionCuration, null, 'Curadoria arquivada não deve ser emitida no build público.');
+} else {
+  assert.ok(ecgCaseBank, 'Banco de ECG deve permanecer em módulo lazy próprio.');
+  assert.ok(
+    ecgCaseBank.gzip <= ECG_CASE_BANK_GZIP_LIMIT,
+    `Módulo Banco de ECG passou do budget: ${fmt(ecgCaseBank.gzip)} > ${fmt(ECG_CASE_BANK_GZIP_LIMIT)}`
+  );
+  assert.ok(questionCuration, 'A Curadoria deve permanecer em modulo lazy proprio.');
+  assert.ok(
+    questionCuration.gzip <= QUESTION_CURATION_GZIP_LIMIT,
+    `Modulo Curadoria passou do budget: ${fmt(questionCuration.gzip)} > ${fmt(QUESTION_CURATION_GZIP_LIMIT)}`
+  );
+}
 assert.ok(fsrsScheduler, 'A ponte do FSRS deve permanecer em modulo lazy proprio.');
 assert.ok(fsrsVendor, 'A biblioteca FSRS deve permanecer fora do bundle inicial.');
 assert.ok(
@@ -243,11 +252,15 @@ assert.ok(
   spacedReview.gzip <= REVIEW_DASHBOARD_GZIP_LIMIT,
   `Dashboard de revisoes passou do budget: ${fmt(spacedReview.gzip)} > ${fmt(REVIEW_DASHBOARD_GZIP_LIMIT)}`
 );
-assert.ok(courseStudents, 'Painel de alunos deve permanecer em modulo lazy proprio.');
-assert.ok(
-  courseStudents.gzip <= COURSE_STUDENTS_GZIP_LIMIT,
-  `Painel de alunos passou do budget: ${fmt(courseStudents.gzip)} > ${fmt(COURSE_STUDENTS_GZIP_LIMIT)}`
-);
+if (QUESTION_FACTORY_ARCHIVED) {
+  assert.equal(courseStudents, null, 'Painel de alunos arquivado não deve ser emitido no build público.');
+} else {
+  assert.ok(courseStudents, 'Painel de alunos deve permanecer em modulo lazy proprio.');
+  assert.ok(
+    courseStudents.gzip <= COURSE_STUDENTS_GZIP_LIMIT,
+    `Painel de alunos passou do budget: ${fmt(courseStudents.gzip)} > ${fmt(COURSE_STUDENTS_GZIP_LIMIT)}`
+  );
+}
 assert.ok(sharedLibraryRepair, 'O reparo da Biblioteca deve permanecer em modulo lazy proprio.');
 assert.ok(
   sharedLibraryRepair.gzip <= SHARED_LIBRARY_REPAIR_GZIP_LIMIT,
@@ -267,12 +280,20 @@ assert.ok(
   famedGzip <= FAMED_GZIP_LIMIT,
   `Modulos FAMED passaram do budget: ${fmt(famedGzip)} > ${fmt(FAMED_GZIP_LIMIT)}`
 );
-assert.ok(questionBankSizing, 'Dimensionamento do banco deve permanecer em módulo lazy próprio.');
-assert.ok(questionBankSizingWorker, 'Dimensionamento pesado deve permanecer fora da thread principal.');
-assert.ok(
-  questionBankSizingGzip <= QUESTION_BANK_SIZING_GZIP_LIMIT,
-  `Dimensionamento do banco passou do budget: ${fmt(questionBankSizingGzip)} > ${fmt(QUESTION_BANK_SIZING_GZIP_LIMIT)}`
-);
+if (QUESTION_FACTORY_ARCHIVED) {
+  assert.equal(questionBankSizing, null, 'Dimensionamento arquivado não deve ser emitido no build público.');
+  assert.equal(questionBankSizingWorker, null, 'Worker arquivado não deve ser emitido no build público.');
+} else {
+  assert.ok(questionBankSizing, 'Dimensionamento do banco deve permanecer em módulo lazy próprio.');
+  assert.ok(questionBankSizingWorker, 'Dimensionamento pesado deve permanecer fora da thread principal.');
+  assert.ok(
+    questionBankSizingGzip <= QUESTION_BANK_SIZING_GZIP_LIMIT,
+    `Dimensionamento do banco passou do budget: ${fmt(questionBankSizingGzip)} > ${fmt(QUESTION_BANK_SIZING_GZIP_LIMIT)}`
+  );
+}
 assert.ok(totalGzip <= TOTAL_GZIP_LIMIT, `JS total passou do budget: ${fmt(totalGzip)} > ${fmt(TOTAL_GZIP_LIMIT)}`);
 
-console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; alunos ${fmt(courseStudents.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
+const factoryBudgetLabel = QUESTION_FACTORY_ARCHIVED
+  ? 'Fábrica arquivada (0 chunks)'
+  : `${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip`;
+console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);

@@ -505,7 +505,7 @@ Questões grandes são removidas do documento principal e gravadas em chunks de 
 - mantém `onSnapshot` do conteúdo;
 - hidrata os chunks após a consulta.
 
-Na interface atual, a Fábrica de Questões é exclusiva do administrador (`homeCanSeeSharedLibrary`) e não possui modo ou prévia de aluno. Os dados publicados alimentam questões prontas do curso por outros fluxos, mas a tela da Fábrica nunca deve ser aberta a alunos apenas porque as regras permitem ler documentos publicados.
+Depois da conclusão da criação e da curadoria do banco, a Fábrica de Questões ficou arquivada e oculta da navegação por `QUESTION_FACTORY_VISIBLE = false`. A rota, os componentes e os dados continuam preservados para manutenção futura, mas `homeCanSeeSharedLibrary` permanece falso e um estado antigo em `shared-library` volta para a Home. O banco publicado continua alimentando Questões do Curso e Revisões normalmente; não condicione essas leituras à visibilidade da tela administrativa.
 
 Na subaba **Criar**, a entrada sem filtro mostra primeiro as matérias, não centenas de aulas simultâneas. Depois de escolher uma matéria ou pesquisar, as aulas são montadas progressivamente. O seletor de aula específica só enumera aulas quando uma matéria foi escolhida, e os cálculos pesados de reparo/fila da automação só rodam quando o painel é aberto. Preserve esse carregamento progressivo; um `<details>` fechado ainda monta seus filhos e não serve sozinho como lazy loading.
 
@@ -755,6 +755,8 @@ famedStudy: {
 ```
 
 Cada card de aula publicado expõe exatamente três ações de estudo: **Academia**, **Questões antigas** e **Flashcards**. Para o aluno, Academia abre um menu simplificado de tópicos com numeração, título e progresso, sem controles administrativos nem objetivos expansíveis. Cada tópico leva à sua aula, com sumário quando necessário; a preferência persistida `settings.academiaQuestionPlacement` decide se as questões de fixação aparecem logo após cada capítulo (`inline`, padrão) ou reunidas depois do conteúdo (`end`).
+
+Ao concluir questões ou flashcards de um tópico da Academia, `QuestionView` oferece **Próximo tópico** quando houver outro na mesma aula. O encerramento de flashcards mede retenção na primeira passagem, cartões que precisaram voltar e quantidade de marcações **Errei**; domínio final não deve ser apresentado como 100% de acerto. A tela também permite repetir somente os difíceis, recomeçar a sessão e selecionar os erros da sessão para Revisões.
 
 Questões antigas são importadas por um ZIP versionado (`agora-famed-question-package-v1`) com `questions.json` na raiz e figuras em `images/`. A interface fornece um prompt completo para gerar esse pacote no GPT. Os dados estruturais ficam no conjunto de `famedStudy`; cada descritor de imagem guarda um `assetId`, enquanto o `dataUrl` correspondente fica em `famed_assets/{assetId}` para não inflar o documento principal. O site valida caminhos, formatos, tamanho, gabaritos e vínculos antes de salvar, hidrata as imagens ao abrir o bloco e continua usando o `QuestionView`.
 

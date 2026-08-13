@@ -2322,7 +2322,7 @@ assert.match(appSource, /const lazyWithRetry = \(factory\) => factory\(\)\.catch
 assert.match(appSource, /promptModulePromise = lazyWithRetry\(\(\) => import\(['"]\.\/agora_prompts\.js['"]\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/bizuario\/BizuarioModal\.jsx['"]\)\)\)/);
 assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/study-map\/StudyMapPreview\.jsx['"]\)\)\)/);
-assert.match(appSource, /React\.lazy\(\(\) => lazyWithRetry\(\(\) => import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)\)\)/);
+assert.doesNotMatch(appSource, /import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)/);
 assert.match(appSource, /const inactivateQuestionBankSizingCandidates = async/);
 assert.match(appSource, /saveQuestionBankSizingDisabledBatch/);
 assert.match(appSource, /where\('configType', '==', 'disabled-course-question-batch'\)/);
@@ -2337,7 +2337,6 @@ assert.match(appSource, /import\(['"]\.\/features\/modals\/WorkflowModals\.jsx['
 assert.match(appSource, /import\(['"]\.\/features\/video-questions\/VqGenModal\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/academia\/AcademiaTopicView\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/bulk\/BulkGenerateModal\.jsx['"]\)/);
-assert.match(appSource, /import\(['"]\.\/features\/shared-library\/SharedLibraryView\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/course\/VideoaulasView\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/course\/CoursePortalView\.jsx['"]\)/);
 assert.match(appSource, /import\(['"]\.\/features\/course\/VideoQuestionsView\.jsx['"]\)/);
@@ -2372,8 +2371,9 @@ assert.doesNotMatch(appSource, /view==='spaced-review'&&canUseAdvancedFeatures&&
 assert.doesNotMatch(appSource, /view==='quick'&&canUseAdvancedFeatures&&\(\(\)=>/);
 assert.doesNotMatch(appSource, /view==='quick-topic'&&canUseAdvancedFeatures&&activeSubject\?\.source===QUICK_SOURCE&&activeTopic&&\(\(\)=>/);
 assert.doesNotMatch(appSource, /view==='sub-library'&&\(\s*\(\(\)=>/);
-assert.match(appSource, /const homeCanSeeSharedLibrary = isAdmin && adminHomeMode !== 'site';/);
-assert.match(appSource, /view==='shared-library'&&homeCanSeeSharedLibrary/);
+assert.match(appSource, /const QUESTION_FACTORY_VISIBLE = false;/);
+assert.match(appSource, /const homeCanSeeSharedLibrary = QUESTION_FACTORY_VISIBLE && isAdmin && adminHomeMode !== 'site';/);
+assert.doesNotMatch(appSource, /view==='shared-library'&&homeCanSeeSharedLibrary&&<SharedLibraryView/);
 assert.match(appSource, /const needsCourseSharedLibraryData = canSeeVideoaulas;/);
 assert.match(appSource, /const needsSharedLibraryData = \(homeCanSeeSharedLibrary && view === 'shared-library'\) \|\| needsCourseSharedLibraryData;/);
 assert.match(appSource, /const needsSharedLibraryUiData = homeCanSeeSharedLibrary && view === 'shared-library';/);
@@ -2503,6 +2503,10 @@ assert.match(questionFeatureSource, /studyKind === 'flashcards' \? memoryCardQue
 assert.match(questionFeatureSource, /aria-label="Modo de estudo"/);
 assert.match(questionFeatureSource, /`Questões \(\$\{ordinaryQuestions\.length\}\)`/);
 assert.match(questionFeatureSource, /`Flashcards \(\$\{memoryCardQuestions\.length\}\)`/);
+assert.match(questionFeatureSource, /const flashcardFirstPassPct =/);
+assert.match(questionFeatureSource, /lembrados sem erro na primeira passagem/);
+assert.match(questionFeatureSource, /Adicionar erros à revisão/);
+assert.match(questionFeatureSource, /Rever difíceis/);
 
 const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
 assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
@@ -2510,6 +2514,7 @@ assert.match(exportModalsSource, /normalizeDeclaredCorrectAlternativeReferences\
 
 const workflowModalsSource = await readFile(new URL('../src/features/modals/WorkflowModals.jsx', import.meta.url), 'utf8');
 assert.match(workflowModalsSource, /export \{ SRModal, ExternalPromptModal \}/);
+assert.match(workflowModalsSource, /initialSelectedIds=\[\]/);
 
 const vqGenModalSource = await readFile(new URL('../src/features/video-questions/VqGenModal.jsx', import.meta.url), 'utf8');
 assert.match(vqGenModalSource, /export default VqGenModal/);
@@ -2531,6 +2536,7 @@ assert.match(academiaTopicViewSource, /questionPlacement === 'inline'/);
 assert.match(academiaTopicViewSource, /questionPlacement === 'end'/);
 assert.doesNotMatch(academiaTopicViewSource, /Depois da aula/);
 assert.doesNotMatch(academiaTopicViewSource, /idx>0\?\(darkMode\?'border-t/);
+assert.match(academiaTopicViewSource, /compactLesson=false/);
 assert.match(appSource, /const \[topicStudyPreference, setTopicStudyPreference\] = useState\(null\)/);
 assert.match(appSource, /initialStudyKind=\{topicStudyPreference\?\.subjectId === activeSubject\?\.id/);
 assert.match(appSource, /const mixedQuestionMode = shouldGenerateHybridClinicalPass\(topicStyle, promptTopicTypes\)/);
@@ -2712,6 +2718,8 @@ assert.match(famedPortalViewSource, /Tópicos da aula/);
 assert.match(famedPortalViewSource, /Escolha um tópico\. Dentro dele, leia a aula e responda às questões logo abaixo\./);
 assert.match(famedPortalViewSource, /'student-topics'\)/);
 assert.match(famedPortalViewSource, /activeTopic\?'topic':isAdmin\?'subject':'student-topics'/);
+assert.match(famedPortalViewSource, /nextUnitLabel="Próximo tópico"/);
+assert.match(famedPortalViewSource, /compactLesson=\{true\}/);
 assert.doesNotMatch(famedPortalViewSource, /id:'__all__'/);
 assert.doesNotMatch(famedPortalViewSource, /maxCards|maxTokens|slice\(0,\s*20\)/);
 assert.doesNotMatch(famedPortalViewSource, /matchFamedScheduleCourseLessons/);

@@ -38,6 +38,7 @@ import { resetSharedLibraryAnswersPatch, saveSharedLibraryAnswerPatch } from './
 import { saveUserVqBlockPatch } from './services/vqBlocks.js';
 
 const CHUNK_RELOAD_KEY = 'agora_lazy_chunk_reload_v1';
+const QUESTION_FACTORY_VISIBLE = false;
 const DISABLED_COURSE_QUESTIONS_CONFIG_DOC = 'disabled_course_questions';
 const DISABLED_COURSE_QUESTIONS_VERSION = 'agora-disabled-course-questions-v1';
 const isChunkLoadError = (error) =>
@@ -71,7 +72,6 @@ const LazyExternalPromptModal = React.lazy(() => lazyWithRetry(() => import('./f
 const LazyVqGenModal = React.lazy(() => lazyWithRetry(() => import('./features/video-questions/VqGenModal.jsx')));
 const LazyAcademiaTopicView = React.lazy(() => lazyWithRetry(() => import('./features/academia/AcademiaTopicView.jsx')));
 const LazyBulkGenerateModal = React.lazy(() => lazyWithRetry(() => import('./features/bulk/BulkGenerateModal.jsx')));
-const LazySharedLibraryView = React.lazy(() => lazyWithRetry(() => import('./features/shared-library/SharedLibraryView.jsx')));
 const LazyFamedPortalView = React.lazy(() => lazyWithRetry(() => import('./features/famed/FamedPortalView.jsx')));
 const LazyVideoaulasView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoaulasView.jsx')));
 const LazyCoursePortalView = React.lazy(() => lazyWithRetry(() => import('./features/course/CoursePortalView.jsx')));
@@ -96,11 +96,6 @@ const AcademiaTopicView = (props) => (
 const BulkGenerateModal = () => (
   <React.Suspense fallback={null}>
     <LazyBulkGenerateModal/>
-  </React.Suspense>
-);
-const SharedLibraryView = () => (
-  <React.Suspense fallback={<LoadingState message="Abrindo a Fábrica de Questões..."/>}>
-    <LazySharedLibraryView/>
   </React.Suspense>
 );
 const FamedPortalView = () => (
@@ -3701,7 +3696,7 @@ export default function QuestionBankApp() {
   const adminHomeMode = isAdmin ? (settings.adminHomeMode || 'admin') : 'actual';
   const homeShowsAdminTools = isAdmin && adminHomeMode === 'admin';
   const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
-  const homeCanSeeSharedLibrary = isAdmin && adminHomeMode !== 'site';
+  const homeCanSeeSharedLibrary = QUESTION_FACTORY_VISIBLE && isAdmin && adminHomeMode !== 'site';
   const homeCanSeeFamed = homeCanSeeVideoaulas;
   const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
   const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
@@ -6445,7 +6440,6 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!username) return;
     const preloadPrimaryViews = () => Promise.allSettled([
-      import('./features/shared-library/SharedLibraryView.jsx'),
       import('./features/famed/FamedPortalView.jsx'),
       import('./features/library/SubLibraryView.jsx'),
       import('./features/course/CoursePortalView.jsx'),
@@ -14524,9 +14518,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
 	      <main ref={mobileMainRef} className={`desktop-shell-content ${flashcardFullscreen?'max-w-none mx-0 px-0 py-0 pb-0':view==='videoaulas'?'course-workspace-shell pb-24 lg:pb-0':view==='curso'?'pb-24 lg:pb-0':'max-w-6xl mx-auto px-4 py-4 pb-24 md:py-7 lg:py-10 lg:pb-10'}`}>
 
-          {/* ── BIBLIOTECA COMPARTILHADA ── */}
-          {view==='shared-library'&&homeCanSeeSharedLibrary&&<SharedLibraryView/>}
-
           {/* ── FAMED ── */}
           {view==='famed'&&homeCanSeeFamed&&<FamedPortalView/>}
 
@@ -14913,13 +14904,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 )};
                 updateSubject(updated);
 	              }:null}
-              onAddToReview={canSeeVideoaulas && !isShuffledSubjectTopic ? ((qs, ans)=>setSrModal({
+              onAddToReview={canSeeVideoaulas && !isShuffledSubjectTopic ? ((qs, ans, reviewOptions={})=>setSrModal({
                 aulaId:`lib_${activeSubject.id}`,
                 blockId:`topic_${activeTopic.id}`,
                 blockTitle:activeTopic.title,
                 questions:qs,
                 answers:ans,
                 notebookIds:activeTopic.errorNotebook||[],
+				...reviewOptions,
                 meta:{source:activeSubject.source||'oraculo',subjectId:activeSubject.id,topicId:activeTopic.id,subjectTitle:activeSubject.title,blockTitle:activeTopic.title}
               })) : null}
               onReviewErrorNotebook={!isShuffledSubjectTopic&&(activeTopic.errorNotebook||[]).length ? (()=>openErrorReviewModal({
@@ -14937,7 +14929,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 setAcademiaExtraModal({topic:activeAcademiaOrigin.topic, subject:activeAcademiaOrigin.subject});
               } : null}
               onNextUnit={activeAcademiaOrigin?.nextTopic ? ()=>openAcademiaTopicView(activeAcademiaOrigin.subject, activeAcademiaOrigin.nextTopic) : null}
-              nextUnitLabel="Próxima aula"
+              nextUnitLabel="Próximo tópico"
               nextUnitHelper={activeAcademiaOrigin?.nextTopic?.title || 'Continuar no assunto'}
               inReviewCount={canSeeVideoaulas ? Object.keys(reviewQueue[`lib_${activeSubject.id}`]?.[`topic_${activeTopic.id}`]||{}).length : 0}
             />
@@ -15761,6 +15753,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        currentReview={Object.fromEntries(Object.entries(reviewQueue[srModal.aulaId]?.[srModal.blockId] || {})
 	          .filter(([, item])=>isReviewQueueItemScheduled(item)))}
 	        notebookIds={srModal.notebookIds || []}
+	        initialSelectedIds={srModal.initialSelectedIds || []}
 	        isAdmin={canUseAdvancedFeatures}
 	        source={srModal.meta?.source || 'personal'}
 	        onClose={()=>setSrModal(null)}
