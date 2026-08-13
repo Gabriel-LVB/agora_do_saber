@@ -74,7 +74,7 @@ O material original também contém as radiografias citadas nos casos. Elas são
 - gerar uma projeção pública compacta para associação automática com as questões do curso;
 - anexar somente o ECG principal da fase de pergunta, sem copiar diagnóstico ou gabarito para a questão.
 
-A associação automática com questões está implementada em `agora-ecg-question-matching-v1`. O progresso do curso prático de ECG e sua futura integração ao FSRS continuam etapas separadas.
+A associação automática com questões está implementada em `agora-ecg-question-matching-v2`. O progresso do curso prático de ECG e sua futura integração ao FSRS continuam etapas separadas.
 
 ## Contrato recomendado de importação
 

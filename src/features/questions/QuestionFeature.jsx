@@ -8,6 +8,7 @@ import {
   normalizeDisplayedAlternativeReferences,
 } from '../../lib/questionExplanation.js';
 import { toggleQuestionTypeSelection } from '../../lib/questionTypes.js';
+import { questionHasUnresolvedRequiredVisual } from '../../services/questionVisual.js';
 
 
 
@@ -1790,8 +1791,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         : question.libraryQuestionKind === 'direct'
           ? 'Fixação'
           : 'Questão';
-  const unresolvedRequiredEcg = question.visualRequirement?.type === 'ecg'
-    && question.visualRequirement?.status === 'unresolved'
+  const unresolvedRequiredEcg = questionHasUnresolvedRequiredVisual(question)
     && !(question.images || []).some(image => image?.type === 'ecg');
   const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
   const iconBtnBase = 'question-icon-button h-8 w-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/40';

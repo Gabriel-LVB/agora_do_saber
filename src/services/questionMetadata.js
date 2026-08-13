@@ -1,3 +1,5 @@
+import { questionTextRequestsEcgImage } from './questionVisual.js';
+
 export const QUESTION_METADATA_VERSION = 2;
 export const QUESTION_METADATA_ANALYSIS_VERSION = 'agora-question-metadata-v2';
 export const QUESTION_METADATA_BATCH_SIZE = 30;
@@ -44,7 +46,7 @@ const optionAnswer = question => (question?.options || [])
 
 const visualHintForQuestion = question => {
   const text = `${question?.statement || ''} ${question?.caseContext || ''}`;
-  if (/(?:analise|avalie|interprete|observe|examine|identifique|com base|de acordo)[\s\S]{0,80}\b(?:eletrocardiograma|ecg|tra[cç]ado)\b|\b(?:eletrocardiograma|ecg|tra[cç]ado)\b[\s\S]{0,50}(?:abaixo|acima|a seguir|mostrado|apresentado|exibido|anexo|fornecido|ilustrado)/i.test(text)) {
+  if (questionTextRequestsEcgImage(question)) {
     return { needsVisual:true, visualType:'ecg' };
   }
   if (/\b(?:imagem|radiografia|tomografia|resson[aâ]ncia|fotografia|l[aâ]mina)\b/i.test(text)) {

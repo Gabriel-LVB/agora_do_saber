@@ -43,6 +43,7 @@ import {
 } from '../src/services/questionAudit.js';
 import {
   applyQuestionMetadataOverrides,
+  buildHeuristicQuestionMetadata,
   buildConceptAnalysisPrompt,
   buildLearningSelectionSnapshot,
   buildQuestionMetadataBatches,
@@ -58,6 +59,7 @@ import {
 } from '../src/services/questionMetadata.js';
 import {
   buildQuestionBankSizingReport,
+  isCuratedHighYieldKeeper,
   QUESTION_BANK_SIZING_VERSION,
 } from '../src/services/questionBankSizing.js';
 import {
@@ -876,6 +878,28 @@ assert.equal(questionRequestsEcgImage({
   statement:'Qual exame deve ser solicitado neste caso?',
   options:[{ letter:'A', text:'Eletrocardiograma', isCorrect:true }],
 }), false);
+const theoreticalEcgAnalysisQuestion = {
+  id:'ecg-analysis-method',
+  statement:'Quais são os quatro pontos principais para a análise sistemática de um eletrocardiograma (ECG)?',
+};
+assert.equal(questionRequestsEcgImage(theoreticalEcgAnalysisQuestion), false);
+assert.equal(buildHeuristicQuestionMetadata(theoreticalEcgAnalysisQuestion).needsVisual, false);
+const clearedLegacyFalsePositive = enrichQuestionWithEcgImage({
+  ...theoreticalEcgAnalysisQuestion,
+  visualRequirement:{ type:'ecg', status:'unresolved' },
+  ecgMatch:{
+    version:'agora-ecg-question-matching-v1',
+    status:'unresolved',
+    source:'automatic-structured',
+  },
+}, ecgQuestionIndex);
+assert.equal(clearedLegacyFalsePositive.status, 'not-required');
+assert.equal('visualRequirement' in clearedLegacyFalsePositive.question, false);
+assert.equal('ecgMatch' in clearedLegacyFalsePositive.question, false);
+assert.equal(questionRequestsEcgImage({
+  id:'ecg-direct-command',
+  statement:'Analise o ECG e informe o ritmo predominante.',
+}), true);
 const unresolvedVisual = enrichQuestionWithEcgImage({
   id:'ecg-unresolved',
   statement:'Observe o ECG abaixo e escolha a alternativa correta.',
@@ -1062,9 +1086,11 @@ assert.equal(siblingSelectionSnapshot.questionPolicies['metadata-q-1'].canonical
 const sizingDirectQuestions = [
   { id:'sizing-core', statement:'Qual é a conduta inicial recomendada neste cenário clínico?', options:[{ letter:'A', text:'Conduta A', isCorrect:true }] },
   { id:'sizing-duplicate', statement:'Qual é a conduta inicial recomendada neste cenário clínico?', options:[{ letter:'A', text:'Conduta A', isCorrect:true }] },
+  { id:'sizing-indispensable', statement:'Qual mecanismo indispensável explica este achado?', options:[{ letter:'A', text:'Mecanismo A', isCorrect:true }] },
 ];
 const sizingClinicalQuestions = [
   { id:'sizing-low-quality', statement:'Caso clínico distinto com uma pergunta mal construída.', caseContext:'Paciente em avaliação.', options:[{ letter:'A', text:'Resposta', isCorrect:true }] },
+  { id:'sizing-important-exceptional', statement:'Qual decisão importante é sustentada por este caso?', caseContext:'Paciente com sinais discriminativos.', options:[{ letter:'A', text:'Decisão A', isCorrect:true }] },
 ];
 const sizingQuestions = [
   ...sizingDirectQuestions.map(question => ({ ...question, libraryQuestionKind:'direct' })),
@@ -1083,7 +1109,9 @@ const sizingReport = buildQuestionBankSizingReport({
         questionPolicies:{
           'sizing-core':{ tier:'essential', importance:5, qualityScore:95, learningRole:'core', cognitiveLevel:'reasoning', status:'active', reviewEligible:true },
           'sizing-duplicate':{ tier:'reserve', importance:2, qualityScore:70, learningRole:'variation', cognitiveLevel:'recognition', status:'reserve', reviewEligible:true },
+          'sizing-indispensable':{ tier:'complementary', importance:5, qualityScore:82, learningRole:'reinforcement', cognitiveLevel:'understanding', status:'active', reviewEligible:true },
           'sizing-low-quality':{ tier:'complementary', importance:4, qualityScore:50, learningRole:'reinforcement', cognitiveLevel:'application', status:'active', reviewEligible:true },
+          'sizing-important-exceptional':{ tier:'complementary', importance:4, qualityScore:94, learningRole:'reinforcement', cognitiveLevel:'reasoning', status:'active', reviewEligible:true },
         },
       },
     },
@@ -1097,18 +1125,33 @@ const sizingReport = buildQuestionBankSizingReport({
 });
 assert.equal(sizingReport.schema, QUESTION_BANK_SIZING_VERSION);
 assert.deepEqual(sizingReport.inventory, {
-  total:4,
-  stored:4,
+  total:6,
+  stored:6,
   alreadyInactive:0,
   alreadyInactiveDirect:0,
   alreadyInactiveClinical:0,
-  direct:3,
-  clinical:1,
-  curated:3,
+  direct:4,
+  clinical:2,
+  curated:5,
   pending:1,
   lessons:{ total:2, curated:1, pending:1 },
 });
 assert.equal(sizingReport.review.essential.total, 1);
+assert.equal(sizingReport.highYield.essential.total, 1);
+assert.equal(sizingReport.highYield.indispensable.total, 2);
+assert.equal(sizingReport.highYield.importantExceptional.total, 1);
+assert.deepEqual(sizingReport.highYield.keep, { total:3, direct:2, clinical:1 });
+assert.deepEqual(sizingReport.highYield.remove, { total:2, direct:1, clinical:1 });
+assert.equal(sizingReport.actions.highYieldRemovalCandidates.length, 2);
+assert.deepEqual(
+  sizingReport.actions.highYieldRemovalCandidates.map(row => row.questionId).sort(),
+  ['sizing-duplicate', 'sizing-low-quality'],
+);
+assert.equal(sizingReport.actions.highYieldRemovalReason, 'question-bank-sizing-curated-high-yield-v1');
+assert.equal(isCuratedHighYieldKeeper({ tier:'complementary', importance:5, qualityScore:70, reviewEligible:true, status:'active' }), true);
+assert.equal(isCuratedHighYieldKeeper({ tier:'complementary', importance:4, qualityScore:90, reviewEligible:true, status:'active' }), true);
+assert.equal(isCuratedHighYieldKeeper({ tier:'complementary', importance:4, qualityScore:89, reviewEligible:true, status:'active' }), false);
+assert.equal(isCuratedHighYieldKeeper({ tier:'essential', importance:3, qualityScore:70, reviewEligible:false, status:'active' }), false);
 assert.equal(sizingReport.removal.conservativeMetadata.total, 2);
 assert.equal(sizingReport.removal.probableDuplicates.total, 1);
 assert.equal(sizingReport.removal.conservativeCombined.total, 2);
@@ -1132,10 +1175,11 @@ const storePreparedSizingEntries = prepareQuestionBankSizingDisabledEntries({
   }],
   disabledAt:123,
   disabledBy:'admin@example.com',
+  reason:'question-bank-sizing-curated-high-yield-v1',
 });
 assert.equal(storePreparedSizingEntries.length, 1);
 assert.equal(storePreparedSizingEntries[0].questionId, 'question-store');
-assert.equal(storePreparedSizingEntries[0].reason, 'question-bank-sizing-broad-v1');
+assert.equal(storePreparedSizingEntries[0].reason, 'question-bank-sizing-curated-high-yield-v1');
 const sizingScaleEntries = createQuestionBankSizingDisabledEntries({
   candidates:Array.from({ length:3057 }, (_, index) => ({
     aulaId:`lesson-${Math.floor(index / 50)}`,
@@ -1165,7 +1209,9 @@ const sizingAfterPartialInactivation = buildQuestionBankSizingReport({
         questionPolicies:{
           'sizing-core':{ tier:'essential', importance:5, qualityScore:95, learningRole:'core', cognitiveLevel:'reasoning', status:'active', reviewEligible:true },
           'sizing-duplicate':{ tier:'reserve', importance:2, qualityScore:70, learningRole:'variation', cognitiveLevel:'recognition', status:'reserve', reviewEligible:true },
+          'sizing-indispensable':{ tier:'complementary', importance:5, qualityScore:82, learningRole:'reinforcement', cognitiveLevel:'understanding', status:'active', reviewEligible:true },
           'sizing-low-quality':{ tier:'complementary', importance:4, qualityScore:50, learningRole:'reinforcement', cognitiveLevel:'application', status:'active', reviewEligible:true },
+          'sizing-important-exceptional':{ tier:'complementary', importance:4, qualityScore:94, learningRole:'reinforcement', cognitiveLevel:'reasoning', status:'active', reviewEligible:true },
         },
       },
     },
@@ -1178,11 +1224,13 @@ const sizingAfterPartialInactivation = buildQuestionBankSizingReport({
   ],
   disabledCourseQuestions:sizingDisabledEntries,
 });
-assert.equal(sizingAfterPartialInactivation.inventory.total, 3);
-assert.equal(sizingAfterPartialInactivation.inventory.stored, 4);
+assert.equal(sizingAfterPartialInactivation.inventory.total, 5);
+assert.equal(sizingAfterPartialInactivation.inventory.stored, 6);
 assert.equal(sizingAfterPartialInactivation.inventory.alreadyInactive, 1);
 assert.equal(sizingAfterPartialInactivation.removal.broadCombined.total, 1);
 assert.deepEqual(sizingAfterPartialInactivation.actions.broadCandidates.map(row => row.questionId), ['sizing-low-quality']);
+assert.deepEqual(sizingAfterPartialInactivation.highYield.keep, { total:3, direct:2, clinical:1 });
+assert.deepEqual(sizingAfterPartialInactivation.highYield.remove, { total:1, direct:0, clinical:1 });
 
 const rotatedKeyCalls = [];
 let rotateCount = 0;
@@ -2531,7 +2579,10 @@ assert.match(questionBankSizingViewSource, /new Worker\(new URL\('\.\.\/\.\.\/wo
 assert.match(questionBankSizingViewSource, /Calcular retrato/);
 assert.match(questionBankSizingViewSource, /Nenhum enunciado é exibido; somente quantidades/);
 assert.match(questionBankSizingViewSource, /corte conservador combinado/);
-assert.match(questionBankSizingViewSource, /Inativar cenário amplo/);
+assert.match(questionBankSizingViewSource, /Essenciais, indispensáveis e importantes excepcionais/);
+assert.match(questionBankSizingViewSource, /Importância 4 · qualidade ≥ 90/);
+assert.match(questionBankSizingViewSource, /Inativar tudo fora do novo núcleo/);
+assert.match(questionBankSizingViewSource, /highYieldRemovalCandidates/);
 assert.match(questionBankSizingViewSource, /inactivateQuestionBankSizingCandidates/);
 assert.match(questionBankSizingViewSource, /disabledCourseQuestions/);
 assert.doesNotMatch(questionBankSizingViewSource, /loadQuestionMetadata|callWithRotation|deleteDoc|setDoc/);
@@ -2544,12 +2595,15 @@ assert.match(disabledCourseQuestionStoreSource, /prepareQuestionBankSizingDisabl
 assert.match(disabledCourseQuestionStoreSource, /createDisabledCourseQuestionEntry/);
 assert.match(disabledCourseQuestionStoreSource, /writeBatch\(db\)/);
 assert.match(disabledCourseQuestionStoreSource, /question-bank-sizing-broad-v1|QUESTION_BANK_SIZING_BROAD_REASON/);
+assert.match(disabledCourseQuestionStoreSource, /lastBulkReason:reason/);
 assert.match(disabledCourseQuestionStoreSource, /DISABLED_COURSE_QUESTIONS_CONFIG_DOC\}__batch__/);
 assert.match(disabledCourseQuestionStoreSource, /configType:DISABLED_COURSE_QUESTION_BATCH_CONFIG_TYPE/);
 assert.doesNotMatch(disabledCourseQuestionStoreSource, /collection\(db,\s*'config',\s*DISABLED_COURSE_QUESTIONS_CONFIG_DOC/);
 assert.match(appSource, /where\('configType', '==', 'disabled-course-question-batch'\)/);
 assert.doesNotMatch(appSource, /runtime\.createQuestionBankSizingDisabledEntries/);
 assert.doesNotMatch(appSource, /runtime\.mergeDisabledCourseQuestions/);
+assert.match(appSource, /scenarioLabel,/);
+assert.match(appSource, /reason,\s*reportSchema/);
 assert.match(appSource, /findNonContentCourseQuestions\(sharedLibraryItems\)/);
 assert.match(appSource, /createNonContentCourseQuestionPolicyEntry/);
 

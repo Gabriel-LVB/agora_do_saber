@@ -201,7 +201,7 @@ const [questionMatchIndex, conceptOntology, caseConceptMatrix] = await Promise.a
 ]);
 check(questionMatchIndex.schemaVersion === 1, 'schema do indice de matching divergente');
 check(
-  questionMatchIndex.matchingVersion === 'agora-ecg-question-matching-v1',
+  questionMatchIndex.matchingVersion === 'agora-ecg-question-matching-v2',
   'versao do matching ECG divergente',
 );
 check(questionMatchIndex.datasetId === runtimeDataset.datasetId, 'dataset do indice de matching divergente');

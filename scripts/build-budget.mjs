@@ -138,7 +138,9 @@ const FAMED_GZIP_LIMIT = 27 * 1024;
 // e roda em Worker. Tela e algoritmo ficam fora do núcleo para não bloquear a UI.
 // O Worker também recebe o índice global para retirar do próximo retrato tudo
 // que já foi inativado em execuções parciais anteriores.
-const QUESTION_BANK_SIZING_GZIP_LIMIT = 11 * 1024;
+// A união high-yield e sua ação global auditável acrescentam 0,55 KiB medido,
+// ainda integralmente restrito ao painel administrativo lazy e ao Worker.
+const QUESTION_BANK_SIZING_GZIP_LIMIT = 11.75 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT

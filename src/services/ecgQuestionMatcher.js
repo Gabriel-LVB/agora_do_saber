@@ -1,9 +1,10 @@
 import {
+  questionHasAutomaticUnresolvedEcgProjection,
   questionHasEcgImage,
   questionRequestsEcgImage,
 } from './questionVisual.js';
 
-export const ECG_QUESTION_MATCH_VERSION = 'agora-ecg-question-matching-v1';
+export const ECG_QUESTION_MATCH_VERSION = 'agora-ecg-question-matching-v2';
 export const ECG_QUESTION_INDEX_URL = '/ecg/v3/question-match-index.json';
 
 const normalizeText = value => String(value || '')
@@ -269,8 +270,24 @@ const resolvedImage = match => ({
   altText:'Eletrocardiograma para interpretação da questão.',
 });
 
+const clearAutomaticUnresolvedEcgProjection = question => {
+  if (!questionHasAutomaticUnresolvedEcgProjection(question)) return question;
+  const { ecgMatch, visualRequirement, ...base } = question;
+  const next = { ...base };
+  const preservedRequirement = Object.fromEntries(Object.entries(visualRequirement || {})
+    .filter(([key]) => !['type', 'status', 'source'].includes(key)));
+  if (Object.keys(preservedRequirement).length) next.visualRequirement = preservedRequirement;
+  if (ecgMatch?.source !== 'automatic-structured' || ecgMatch?.status !== 'unresolved') {
+    next.ecgMatch = ecgMatch;
+  }
+  return next;
+};
+
 export const enrichQuestionWithEcgImage = (question, index, { usageByConcept } = {}) => {
-  if (!questionRequestsEcgImage(question)) return { question, status:'not-required' };
+  if (!questionRequestsEcgImage(question)) return {
+    question:clearAutomaticUnresolvedEcgProjection(question),
+    status:'not-required',
+  };
   if (questionHasEcgImage(question)) return { question, status:'already-resolved' };
   const match = matchEcgCaseForQuestion(question, index, { usageByConcept });
   if (!match) {
@@ -284,6 +301,9 @@ export const enrichQuestionWithEcgImage = (question, index, { usageByConcept } =
           ...(question.visualRequirement || {}),
           type:'ecg',
           status:'unresolved',
+          source:question.visualRequirement?.type === 'ecg'
+            ? question.visualRequirement?.source || 'question-data'
+            : 'automatic-structured',
         },
         ecgMatch:{
           version:ECG_QUESTION_MATCH_VERSION,

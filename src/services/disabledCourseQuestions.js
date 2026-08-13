@@ -204,6 +204,7 @@ export const createQuestionBankSizingDisabledEntries = ({
   candidates = [],
   disabledAt = Date.now(),
   disabledBy = null,
+  reason = QUESTION_BANK_SIZING_BROAD_REASON,
 } = {}) => normalizeDisabledCourseQuestions((candidates || []).map(candidate =>
   createDisabledCourseQuestionEntry({
     aulaId:candidate?.aulaId,
@@ -213,7 +214,7 @@ export const createQuestionBankSizingDisabledEntries = ({
     questionId:candidate?.questionId,
     disabledAt,
     disabledBy,
-    reason:QUESTION_BANK_SIZING_BROAD_REASON,
+    reason,
   })
 ));
 

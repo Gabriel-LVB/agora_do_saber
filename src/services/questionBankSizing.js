@@ -6,7 +6,8 @@ import {
   questionSetSignature,
 } from './questionMetadata.js';
 
-export const QUESTION_BANK_SIZING_VERSION = 'agora-question-bank-sizing-v1';
+export const QUESTION_BANK_SIZING_VERSION = 'agora-question-bank-sizing-v2';
+export const QUESTION_BANK_CURATED_HIGH_YIELD_REASON = 'question-bank-sizing-curated-high-yield-v1';
 
 const emptyCountMap = keys => Object.fromEntries(keys.map(key => [key, 0]));
 const increment = (counts, key) => {
@@ -49,6 +50,14 @@ const isStrongMetadataCandidate = policy => !!policy && (
 const isReviewCore = policy => policy?.tier === 'essential'
   && policy.reviewEligible !== false
   && !['deprecated', 'review_required'].includes(policy.status);
+
+export const isCuratedHighYieldKeeper = policy => !!policy
+  && !isHardMetadataExclusion(policy)
+  && (
+    policy.tier === 'essential'
+    || Number(policy.importance) === 5
+    || (Number(policy.importance) === 4 && Number(policy.qualityScore) >= 90)
+  );
 
 const keeperScore = row => {
   const policy = row?.policy;
@@ -131,6 +140,11 @@ export const buildQuestionBankSizingReport = ({
   const kind = { direct:0, clinical:0 };
   const inactive = { total:0, direct:0, clinical:0 };
   const reviewCore = new Set();
+  const highYieldEssential = new Set();
+  const highYieldIndispensable = new Set();
+  const highYieldImportantExceptional = new Set();
+  const highYieldKeep = new Set();
+  const highYieldRemoval = new Set();
   const hardMetadata = new Set();
   const strongMetadata = new Set();
   const broadMetadata = new Set();
@@ -199,6 +213,14 @@ export const buildQuestionBankSizingReport = ({
       increment(cognitiveLevel, policy.cognitiveLevel || 'uncurated');
       increment(status, policy.status || 'uncurated');
       if (isReviewCore(policy)) reviewCore.add(key);
+      const policyEligible = !isHardMetadataExclusion(policy);
+      if (policyEligible && policy.tier === 'essential') highYieldEssential.add(key);
+      if (policyEligible && Number(policy.importance) === 5) highYieldIndispensable.add(key);
+      if (policyEligible && Number(policy.importance) === 4 && Number(policy.qualityScore) >= 90) {
+        highYieldImportantExceptional.add(key);
+      }
+      if (isCuratedHighYieldKeeper(policy)) highYieldKeep.add(key);
+      else highYieldRemoval.add(key);
       if (isHardMetadataExclusion(policy)) hardMetadata.add(key);
       if (isStrongMetadataCandidate(policy)) strongMetadata.add(key);
       if (isStrongMetadataCandidate(policy) || ['reserve', 'disabled'].includes(policy.tier)) broadMetadata.add(key);
@@ -250,6 +272,8 @@ export const buildQuestionBankSizingReport = ({
       duplicateExcess:0,
       conservativeCombined:0,
       broadCombined:0,
+      highYieldKeep:0,
+      highYieldRemoval:0,
     };
     current.total += 1;
     current[row.kind] += 1;
@@ -260,11 +284,21 @@ export const buildQuestionBankSizingReport = ({
     if (duplicates.excess.has(row.key)) current.duplicateExcess += 1;
     if (conservativeCombined.has(row.key)) current.conservativeCombined += 1;
     if (broadCombined.has(row.key)) current.broadCombined += 1;
+    if (highYieldKeep.has(row.key)) current.highYieldKeep += 1;
+    if (highYieldRemoval.has(row.key)) current.highYieldRemoval += 1;
     bySubject.set(row.subject, current);
   });
 
   const curatedQuestions = rows.filter(row => row.policy).length;
   const broadCandidates = [...broadCombined].map(key => rowByKey.get(key)).filter(Boolean).map(row => ({
+    aulaId:row.aulaId,
+    lessonId:row.lessonId,
+    sharedLibraryItemId:row.sharedLibraryItemId,
+    lessonAliases:row.lessonAliases,
+    questionId:row.questionId,
+    kind:row.kind,
+  }));
+  const highYieldRemovalCandidates = [...highYieldRemoval].map(key => rowByKey.get(key)).filter(Boolean).map(row => ({
     aulaId:row.aulaId,
     lessonId:row.lessonId,
     sharedLibraryItemId:row.sharedLibraryItemId,
@@ -291,6 +325,13 @@ export const buildQuestionBankSizingReport = ({
     review:{
       essential:countSetByKind(reviewCore, rowByKey),
     },
+    highYield:{
+      essential:countSetByKind(highYieldEssential, rowByKey),
+      indispensable:countSetByKind(highYieldIndispensable, rowByKey),
+      importantExceptional:countSetByKind(highYieldImportantExceptional, rowByKey),
+      keep:countSetByKind(highYieldKeep, rowByKey),
+      remove:countSetByKind(highYieldRemoval, rowByKey),
+    },
     removal:{
       hardMetadata:countSetByKind(hardMetadata, rowByKey),
       conservativeMetadata:countSetByKind(strongMetadata, rowByKey),
@@ -308,6 +349,10 @@ export const buildQuestionBankSizingReport = ({
     subjects:[...bySubject.values()].sort((left, right) =>
       right.total - left.total || left.subject.localeCompare(right.subject, 'pt-BR')
     ),
-    actions:{ broadCandidates },
+    actions:{
+      broadCandidates,
+      highYieldRemovalCandidates,
+      highYieldRemovalReason:QUESTION_BANK_CURATED_HIGH_YIELD_REASON,
+    },
   };
 };

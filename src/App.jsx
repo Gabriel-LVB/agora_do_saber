@@ -4138,6 +4138,8 @@ export default function QuestionBankApp() {
 
   const inactivateQuestionBankSizingCandidates = async ({
     candidates = [],
+    reason,
+    scenarioLabel,
     reportSchema = null,
     reportGeneratedAt = null,
   } = {}) => {
@@ -4166,7 +4168,7 @@ export default function QuestionBankApp() {
       return { ok:true, added:0, skipped };
     }
     const confirmed = window.confirm(
-      `Inativar ${uniqueCandidates.length.toLocaleString('pt-BR')} questão(ões) do cenário amplo deste retrato? `
+      `Inativar ${uniqueCandidates.length.toLocaleString('pt-BR')} questão(ões) do ${scenarioLabel}? `
       + 'Elas sumirão do banco ativo, favoritos e revisões. O conteúdo original e o lote desta decisão serão preservados para auditoria.'
     );
     if (!confirmed) return { ok:false, added:0, skipped };
@@ -4182,6 +4184,7 @@ export default function QuestionBankApp() {
         candidates:uniqueCandidates,
         disabledAt,
         disabledBy,
+        reason,
       });
       const mergedEntries = runtime.normalizeDisabledCourseQuestions([
         ...disabledCourseQuestionsRef.current,
@@ -4191,6 +4194,7 @@ export default function QuestionBankApp() {
       const saved = await store.saveQuestionBankSizingDisabledBatch({
         entries,
         disabledBy,
+        reason,
         reportSchema,
         reportGeneratedAt,
       });

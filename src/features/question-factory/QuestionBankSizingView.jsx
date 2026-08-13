@@ -86,12 +86,14 @@ export default function QuestionBankSizingView({ items = [] }) {
     });
   };
 
-  const inactivateBroadScenario = async () => {
-    if (inactivating || !report?.actions?.broadCandidates?.length) return;
+  const inactivateOutsideHighYield = async () => {
+    if (inactivating || !report?.actions?.highYieldRemovalCandidates?.length) return;
     setInactivating(true);
     try {
       const result = await inactivateQuestionBankSizingCandidates({
-        candidates:report.actions.broadCandidates,
+        candidates:report.actions.highYieldRemovalCandidates,
+        reason:report.actions.highYieldRemovalReason,
+        scenarioLabel:'corte global do banco curado',
         reportSchema:report.schema,
         reportGeneratedAt:report.generatedAt,
       });
@@ -133,8 +135,8 @@ export default function QuestionBankSizingView({ items = [] }) {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Metric value={total} label="questões ativas" detail={`${number(report.inventory.direct)} diretas · ${number(report.inventory.clinical)} clínicas`} darkMode={darkMode}/>
           <Metric value={curated} label="com curadoria válida" detail={`${percent(curated,total)} do banco atual`} darkMode={darkMode}/>
-          <Metric value={report.review.essential.total} label="núcleo forte para revisão" detail={`${number(report.review.essential.direct)} diretas · ${number(report.review.essential.clinical)} clínicas · tier essential`} tone="success" darkMode={darkMode}/>
-          <Metric value={report.removal.conservativeCombined.total} label="redução conservadora" detail="Metadados fortes + duplicatas, sem contar duas vezes" tone="warning" darkMode={darkMode}/>
+          <Metric value={report.highYield.keep.total} label="ficariam no banco curado" detail={`${number(report.highYield.keep.direct)} diretas · ${number(report.highYield.keep.clinical)} clínicas`} tone="success" darkMode={darkMode}/>
+          <Metric value={report.highYield.remove.total} label="seriam inativadas" detail={`${number(report.highYield.remove.direct)} diretas · ${number(report.highYield.remove.clinical)} clínicas`} tone="danger" darkMode={darkMode}/>
         </div>
 
         {report.inventory.pending>0&&<div className={`rounded-xl border px-4 py-3 text-sm ${darkMode?'border-yellow-900/60 bg-yellow-950/20 text-yellow-100':'border-yellow-200 bg-yellow-50 text-yellow-900'}`}>
@@ -143,6 +145,33 @@ export default function QuestionBankSizingView({ items = [] }) {
         {report.inventory.alreadyInactive>0&&<div className={`rounded-xl border px-4 py-3 text-sm ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
           Além do banco ativo, existem <strong>{number(report.inventory.alreadyInactive)} questões já inativas</strong> ({number(report.inventory.alreadyInactiveDirect)} diretas e {number(report.inventory.alreadyInactiveClinical)} clínicas). Elas não entram novamente nos cenários nem no botão abaixo.
         </div>}
+
+        <section className={`rounded-2xl border p-5 md:p-6 ${darkMode?'border-emerald-900/70 bg-emerald-950/10':'border-emerald-200 bg-emerald-50/40'}`}>
+          <p className="text-xs font-bold uppercase tracking-[.16em] text-emerald-600">Novo núcleo global</p>
+          <h3 className="mt-1 font-serif text-2xl font-bold">Essenciais, indispensáveis e importantes excepcionais</h3>
+          <p className="mt-2 max-w-4xl text-sm leading-relaxed opacity-70">
+            Entre as questões com curadoria válida, ficam as do tier essencial, as de importância 5 e as de importância 4 quando a qualidade é excepcional (90–100). A união abaixo elimina as sobreposições. Questões ainda sem curadoria não entram no corte.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <Metric value={report.highYield.essential.total} label="tier essencial" detail="Elegíveis e não bloqueadas" tone="success" darkMode={darkMode}/>
+            <Metric value={report.highYield.indispensable.total} label="indispensáveis" detail="Importância 5" tone="success" darkMode={darkMode}/>
+            <Metric value={report.highYield.importantExceptional.total} label="importantes excepcionais" detail="Importância 4 · qualidade ≥ 90" tone="success" darkMode={darkMode}/>
+            <Metric value={report.highYield.keep.total} label="união que fica" detail={`${percent(report.highYield.keep.total,curated)} das curadas ativas`} tone="success" darkMode={darkMode}/>
+            <Metric value={report.highYield.remove.total} label="fora do núcleo" detail="Serão inativadas globalmente" tone="danger" darkMode={darkMode}/>
+          </div>
+          <button
+            type="button"
+            onClick={inactivateOutsideHighYield}
+            disabled={inactivating||!report.actions?.highYieldRemovalCandidates?.length}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3.5 font-bold text-white hover:bg-red-700 disabled:opacity-40"
+          >
+            {inactivating&&<Spinner className="h-4 w-4"/>}
+            {inactivating
+              ? 'Aplicando corte global…'
+              : `Inativar tudo fora do novo núcleo (${number(report.highYield.remove.total)})`}
+          </button>
+          <p className="mt-2 text-center text-xs opacity-60">A ação vale para todos os alunos, usa somente este retrato parcial e preserva o conteúdo original para auditoria.</p>
+        </section>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Breakdown title="Seleção pedagógica" darkMode={darkMode} rows={[
@@ -211,31 +240,19 @@ export default function QuestionBankSizingView({ items = [] }) {
             <Metric value={report.removal.broadCombined.total} label="cenário amplo" detail={`${number(report.removal.broadCombined.direct)} diretas · ${number(report.removal.broadCombined.clinical)} clínicas`} tone="danger" darkMode={darkMode}/>
           </div>
           <div className={`mt-4 rounded-xl border p-4 text-xs leading-relaxed ${darkMode?'border-gray-700 bg-gray-900/50':'border-gray-200 bg-gray-50'}`}>
-            <strong>Como ler:</strong> o núcleo para revisão é somente o tier <em>essential</em>. O corte conservador inclui bloqueios objetivos, qualidade abaixo de 60 e reservas que também sejam pouco importantes, variações, detalhes exclusivos de prova ou redundantes. O cenário amplo inclui toda reserva e toda desativada. A auditoria chama de quase repetida apenas similaridade provável; ela agrupa os pares e conta somente o excedente depois de preservar a melhor representante.
+            <strong>Como ler:</strong> os cenários abaixo continuam servindo como comparação histórica. O corte global acionável está no quadro acima e mantém a união de essenciais, indispensáveis e importantes excepcionais. O corte conservador inclui bloqueios objetivos, qualidade abaixo de 60 e reservas que também sejam pouco importantes, variações, detalhes exclusivos de prova ou redundantes. O cenário amplo inclui toda reserva e toda desativada. A auditoria chama de quase repetida apenas similaridade provável; ela agrupa os pares e conta somente o excedente depois de preservar a melhor representante.
           </div>
           <p className="mt-3 text-xs opacity-50">Os sinais individuais acima se sobrepõem. Somente os cartões de cenário e a coluna “Combinado” eliminam a dupla contagem.</p>
-          <button
-            type="button"
-            onClick={inactivateBroadScenario}
-            disabled={inactivating||!report.actions?.broadCandidates?.length}
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3.5 font-bold text-white hover:bg-red-700 disabled:opacity-40"
-          >
-            {inactivating&&<Spinner className="h-4 w-4"/>}
-            {inactivating
-              ? 'Inativando cenário amplo…'
-              : `Inativar cenário amplo (${number(report.removal.broadCombined.total)})`}
-          </button>
-          <p className="mt-2 text-center text-xs opacity-55">Aplica somente este retrato parcial. O conteúdo original é preservado e questões já inativas são ignoradas.</p>
         </section>
 
         <section className={`overflow-hidden rounded-2xl border ${darkMode?'border-gray-700 bg-gray-800':'border-gray-200 bg-white'}`}>
           <div className="p-5"><h3 className="font-serif text-2xl font-bold">Por matéria</h3><p className="mt-1 text-sm opacity-55">Nenhum enunciado é exibido; somente quantidades.</p></div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-xs">
-              <thead className={darkMode?'bg-gray-900/60':'bg-gray-50'}><tr>{['Matéria','Total','Diretas','Clínicas','Curadas','Núcleo','Corte conservador','Repetidas','Combinado'].map(label=><th key={label} className="whitespace-nowrap px-4 py-3 font-bold">{label}</th>)}</tr></thead>
+              <thead className={darkMode?'bg-gray-900/60':'bg-gray-50'}><tr>{['Matéria','Total','Diretas','Clínicas','Curadas','Novo núcleo','Fora do núcleo','Corte conservador','Repetidas','Combinado'].map(label=><th key={label} className="whitespace-nowrap px-4 py-3 font-bold">{label}</th>)}</tr></thead>
               <tbody>{report.subjects.map(row=><tr key={row.subject} className={`border-t ${darkMode?'border-gray-700':'border-gray-200'}`}>
                 <td className="whitespace-nowrap px-4 py-3 font-bold">{row.subject}</td>
-                {[row.total,row.direct,row.clinical,row.curated,row.essential,row.conservative,row.duplicateExcess,row.conservativeCombined].map((value,index)=><td key={index} className="px-4 py-3 tabular-nums">{number(value)}</td>)}
+                {[row.total,row.direct,row.clinical,row.curated,row.highYieldKeep,row.highYieldRemoval,row.conservative,row.duplicateExcess,row.conservativeCombined].map((value,index)=><td key={index} className="px-4 py-3 tabular-nums">{number(value)}</td>)}
               </tr>)}</tbody>
             </table>
           </div>

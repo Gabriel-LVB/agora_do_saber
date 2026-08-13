@@ -1,6 +1,6 @@
 # Associação automática de ECGs às questões
 
-> Implementação vigente: `agora-ecg-question-matching-v1`.
+> Implementação vigente: `agora-ecg-question-matching-v2`.
 
 O vínculo não exige curadoria manual. Ele usa os 150 casos próprios já importados, a ontologia técnica em `data/ecg/staging/v3/globals/concepts.json` e a matriz caso–conceito em `case-concept-matrix.json`.
 
@@ -8,7 +8,7 @@ O vínculo não exige curadoria manual. Ele usa os 150 casos próprios já impor
 
 1. `npm run build:ecg-question-index` gera `public/ecg/v3/question-match-index.json`.
 2. O índice contém somente IDs, ontologia, relações conceituais e o ECG principal da fase de pergunta. Respostas, diagnóstico do caso, achados e conduta não entram no objeto anexado à questão.
-3. Ao carregar `vq_blocks`, `services/ecgQuestionMatcher.js` identifica questões que realmente pedem leitura de um ECG.
+3. Ao carregar `vq_blocks`, `services/ecgQuestionMatcher.js` identifica questões que realmente pedem leitura de um ECG. Perguntas teóricas sobre como analisar um ECG não são tratadas como dependentes de imagem; é necessário haver um comando direto de interpretação ou uma referência concreta ao traçado apresentado.
 4. A resposta correta ou resposta esperada é a evidência principal. Explicação e enunciado servem apenas como evidência secundária. Distratores nunca escolhem o traçado.
 5. Termos normalizados são comparados à ontologia; o caso é escolhido entre relações estruturadas do conceito. A distribuição entre casos equivalentes é determinística e evita repetição enquanto houver alternativas.
 6. O resultado é acrescentado a `question.images`, que já é consumido por Questões do Curso e Revisões.

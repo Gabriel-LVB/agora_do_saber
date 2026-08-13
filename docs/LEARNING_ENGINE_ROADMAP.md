@@ -109,14 +109,14 @@ A Fábrica possui um diagnóstico manual, local e somente de leitura para estima
 
 - inventário total, diretas, clínicas, aulas e cobertura válida da curadoria;
 - tiers, importância, qualidade, papel de aprendizagem, nível cognitivo e status;
-- núcleo forte atual para revisão longitudinal, definido pelo tier `essential` elegível;
+- núcleo global do banco curado: união de tier `essential`, importância 5 e importância 4 com qualidade excepcional (`qualityScore>=90`), sempre elegíveis e sem dupla contagem;
 - corte conservador por metadados, cenário amplo de reserva/desativadas e as uniões sem dupla contagem;
 - duplicatas textuais prováveis por matéria, agrupadas para contar somente as questões excedentes depois de preservar a melhor representante;
 - totais equivalentes por matéria, sem expor enunciados.
 
 O diagnóstico não lê a subcoleção privada de metadados: usa apenas o snapshot publicado quando sua versão e assinatura ainda correspondem às questões. O conteúdo sem curadoria válida permanece visível como pendente e participa da similaridade, mas não recebe uma classificação artificial. A varredura começa apenas por ação do administrador e roda fora da thread da interface.
 
-Depois de conferir o retrato, o administrador pode confirmar a inativação do cenário amplo parcial. A ação não cria uma regra futura: ela materializa somente os IDs atualmente candidatos, ignora os já inativos e preserva as fontes. Cada execução é atômica e auditável em documentos irmãos de até 250 entradas sob `config/disabled_course_questions__batch__*`, marcados com `configType: 'disabled-course-question-batch'`, evitando o limite de tamanho do documento pai e reutilizando a autorização já publicada para `config`. O runtime combina as entradas manuais/políticas da raiz com os lotes, deduplica e indexa a consulta. O próximo retrato retira essas questões do banco ativo e as informa como já inativas. Não há exclusão física.
+Depois de conferir o retrato, o administrador pode confirmar a inativação de todas as questões curadas fora do núcleo global. A ação não cria uma regra futura: ela materializa somente os IDs atualmente candidatos, não julga questões ainda sem curadoria, ignora os já inativos e preserva as fontes. Cada execução é atômica e auditável em documentos irmãos de até 250 entradas sob `config/disabled_course_questions__batch__*`, marcados com `configType: 'disabled-course-question-batch'` e motivo `question-bank-sizing-curated-high-yield-v1`, evitando o limite de tamanho do documento pai e reutilizando a autorização já publicada para `config`. O runtime combina as entradas manuais/políticas da raiz com os lotes, deduplica e indexa a consulta. O próximo retrato retira essas questões do banco ativo e as informa como já inativas. Não há exclusão física nem seletor pessoal paralelo em Revisões.
 
 ### Uso adaptativo da seleção, implementado
 

@@ -29,6 +29,7 @@ export const prepareQuestionBankSizingDisabledEntries = ({
   candidates = [],
   disabledAt = Date.now(),
   disabledBy = null,
+  reason = QUESTION_BANK_SIZING_BROAD_REASON,
 } = {}) => normalizeDisabledCourseQuestions(
   entries.length
     ? entries
@@ -40,7 +41,7 @@ export const prepareQuestionBankSizingDisabledEntries = ({
         questionId:candidate?.questionId,
         disabledAt,
         disabledBy,
-        reason:QUESTION_BANK_SIZING_BROAD_REASON,
+        reason,
       }))
 );
 
@@ -49,6 +50,7 @@ export const saveQuestionBankSizingDisabledBatch = async ({
   candidates = [],
   disabledAt = Date.now(),
   disabledBy = null,
+  reason = QUESTION_BANK_SIZING_BROAD_REASON,
   reportSchema = null,
   reportGeneratedAt = null,
 } = {}) => {
@@ -57,6 +59,7 @@ export const saveQuestionBankSizingDisabledBatch = async ({
     candidates,
     disabledAt,
     disabledBy,
+    reason,
   });
   if (!normalized.length) return { runId:null, batchCount:0, entryCount:0, entries:[] };
   const chunks = chunkDisabledCourseQuestionEntries(normalized);
@@ -71,7 +74,7 @@ export const saveQuestionBankSizingDisabledBatch = async ({
       runId,
       batchIndex:index,
       batchCount:chunks.length,
-      reason:QUESTION_BANK_SIZING_BROAD_REASON,
+      reason,
       entries:chunk,
       entryCount:chunk.length,
       createdAt,
@@ -87,6 +90,7 @@ export const saveQuestionBankSizingDisabledBatch = async ({
     bulkUpdatedAt:createdAt,
     bulkUpdatedBy:disabledBy || null,
     lastBulkRunId:runId,
+    lastBulkReason:reason,
     lastBulkAddedCount:normalized.length,
     lastBulkBatchCount:chunks.length,
   }), { merge:true });

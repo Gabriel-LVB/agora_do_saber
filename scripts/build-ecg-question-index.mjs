@@ -46,7 +46,7 @@ const cases = (dataset.cases || []).map(item => {
 
 const index = {
   schemaVersion:1,
-  matchingVersion:'agora-ecg-question-matching-v1',
+  matchingVersion:'agora-ecg-question-matching-v2',
   datasetId:dataset.datasetId,
   caseCount:cases.length,
   conceptCount:concepts.length,
