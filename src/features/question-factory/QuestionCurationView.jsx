@@ -30,6 +30,18 @@ import {
 
 const EMPTY_ANALYSIS = { manifest:null, batches:{}, metadataByQuestion:{} };
 const EMPTY_ANALYSES_BY_ITEM = {};
+const STRUCTURAL_RESPONSE_ERRORS = new Set([
+  'METADATA_JSON_INVALID',
+  'METADATA_CONCEPTS_EMPTY',
+  'METADATA_BATCH_INCOMPLETE',
+]);
+const MAX_STRUCTURAL_RESPONSE_ATTEMPTS = 3;
+const questionMetadataBatchAlias = index => `q${index + 1}`;
+const normalizeQuestionMetadataBatchAlias = value => {
+  const raw = String(value ?? '').trim().toLowerCase();
+  const match = raw.match(/^(?:q(?:uestion)?[\s:_-]*)?0*(\d+)$/i);
+  return match ? `q${Number(match[1])}` : raw;
+};
 const CURATION_ERROR_LABELS = {
   API_KEY_INVALID:'chave inválida',
   API_KEY_MISSING:'chave ausente',
@@ -42,9 +54,10 @@ const CURATION_ERROR_LABELS = {
   REQUEST_TIMEOUT:'tempo limite excedido',
   SERVER_OVERLOADED:'Gemini sobrecarregado',
 };
-const curationErrorLabel = error => CURATION_ERROR_LABELS[error?.message]
-  || error?.message
-  || 'erro desconhecido';
+const curationErrorLabel = error => {
+  const label = CURATION_ERROR_LABELS[error?.message] || error?.message || 'erro desconhecido';
+  return error?.validationSummary ? `${label} (${error.validationSummary})` : label;
+};
 const fieldClass = darkMode =>
   `w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${darkMode
     ? 'border-gray-700 bg-gray-900 text-gray-100'
@@ -58,6 +71,23 @@ const compact = (value, max = 180) => {
 const itemQuestionCount = item => flattenSharedLibraryQuestions(item).length;
 const analysisMatchesItem = (item, manifest) => manifest?.analysisVersion === QUESTION_METADATA_ANALYSIS_VERSION
   && manifest?.questionSignature === questionSetSignature(flattenSharedLibraryQuestions(item));
+const analysisIsCompleteForItem = (item, analysis) => {
+  const questions = flattenSharedLibraryQuestions(item);
+  const manifest = analysis?.manifest;
+  return questions.length > 0
+    && analysisMatchesItem(item, manifest)
+    && manifest?.status === 'complete'
+    && Number(manifest?.completedCount) === questions.length
+    && Array.isArray(manifest?.concepts)
+    && manifest.concepts.length > 0;
+};
+const learningSelectionMatchesAnalysis = (item, manifest) => {
+  const completedAt = Number(manifest?.completedAt || 0);
+  return completedAt > 0
+    && item?.learningSelection?.version === LEARNING_SELECTION_VERSION
+    && item.learningSelection.questionSignature === questionSetSignature(flattenSharedLibraryQuestions(item))
+    && Number(item.learningSelection.metadataCompletedAt || 0) === completedAt;
+};
 const itemLessonKeys = item => [...new Set([
   item?.id,
   item?.lessonId,
@@ -206,12 +236,8 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
       );
       const rows = demandedItems.map((item, index) => {
         const manifest = manifests[index];
-        const signature = questionSetSignature(flattenSharedLibraryQuestions(item));
         const curated = manifest?.status === 'complete' && analysisMatchesItem(item, manifest);
-        const selectionPublished = curated
-          && item.learningSelection?.version === LEARNING_SELECTION_VERSION
-          && item.learningSelection?.questionSignature === signature
-          && Number(item.learningSelection?.metadataCompletedAt || 0) === Number(manifest?.completedAt || 0);
+        const selectionPublished = curated && learningSelectionMatchesAnalysis(item, manifest);
         return {
           item,
           viewers:viewersByItem.get(String(item.id))?.size || 0,
@@ -318,8 +344,8 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
     return { questions, selection, signature };
   }, []);
 
-  const publishCompletedAnalysis = React.useCallback(async item => {
-    const analysis = await loadQuestionMetadataAnalysis(item.id);
+  const publishCompletedAnalysis = React.useCallback(async (item, knownAnalysis = null) => {
+    const analysis = knownAnalysis || await loadQuestionMetadataAnalysis(item.id);
     const result = buildSelectionForAnalysis(item, analysis);
     if (!result) throw new Error('METADATA_ANALYSIS_NOT_COMPLETE');
     const learningSelection = buildLearningSelectionSnapshot({
@@ -400,37 +426,39 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
     prompt,
     system,
     validateResult,
-  }) => callWithRotation(prompt, system, {
-    keyCursorRef,
-    keyPool:keyPoolRef.current,
-    maxTokens,
-    minimumAttempts:2,
-    retryableErrors:[
-      'SERVER_OVERLOADED',
-      'CONNECTION_ERROR',
-      'NETWORK_ERROR',
-      'REQUEST_TIMEOUT',
-      'QUOTA_EXCEEDED',
-      'API_KEY_INVALID',
-      'METADATA_JSON_INVALID',
-      'METADATA_CONCEPTS_EMPTY',
-      'METADATA_BATCH_INCOMPLETE',
-    ],
-    responseMimeType:'application/json',
-    temperature:0.2,
-    thinkingBudget:0,
-    timeoutMs:180000,
-    validateResult,
-    onAttempt:({ attempt, total, keyLabel }) => {
-      addRunLog('info', `${label}: tentativa ${attempt}/${total} com ${keyLabel}.`);
-    },
-    onSuccess:({ keyLabel }) => {
-      addRunLog('success', `${label}: ${keyLabel} concluiu e validou a resposta.`);
-    },
-    onError:(error, { keyLabel }) => {
-      addRunLog('warning', `${label}: ${keyLabel} falhou (${curationErrorLabel(error)}).`);
-    },
-  }), [addRunLog, callWithRotation]);
+  }) => {
+    let displayedAttempt = 0;
+    for (let shapeAttempt = 0; shapeAttempt < MAX_STRUCTURAL_RESPONSE_ATTEMPTS; shapeAttempt += 1) {
+      try {
+        return await callWithRotation(prompt, system, {
+          keyCursorRef,
+          keyPool:keyPoolRef.current,
+          maxTokens,
+          minimumAttempts:2,
+          responseMimeType:'application/json',
+          temperature:0.2,
+          thinkingBudget:0,
+          timeoutMs:180000,
+          validateResult,
+          onAttempt:({ keyLabel }) => {
+            displayedAttempt += 1;
+            addRunLog('info', `${label}: tentativa ${displayedAttempt} com ${keyLabel}.`);
+          },
+          onSuccess:({ keyLabel }) => {
+            addRunLog('success', `${label}: ${keyLabel} concluiu e validou a resposta.`);
+          },
+          onError:(error, { keyLabel }) => {
+            addRunLog('warning', `${label}: ${keyLabel} falhou (${curationErrorLabel(error)}).`);
+          },
+        });
+      } catch(error) {
+        const canRetryShape = STRUCTURAL_RESPONSE_ERRORS.has(error?.message)
+          && shapeAttempt + 1 < MAX_STRUCTURAL_RESPONSE_ATTEMPTS;
+        if (!canRetryShape || !await waitForRunControl()) throw error;
+      }
+    }
+    throw new Error('METADATA_JSON_INVALID');
+  }, [addRunLog, callWithRotation, waitForRunControl]);
 
   const analyzeItem = async ({ item, itemIndex, itemTotal, previousBatchCount, totalBatchCount }) => {
     const questions = flattenSharedLibraryQuestions(item);
@@ -511,6 +539,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
       const batchDocId = questionMetadataBatchDocId(batchIndex);
       const storedBatch = currentAnalysis.batches?.[batchDocId];
       const expectedIds = batchQuestions.map(question => String(question.id));
+      const expectedResponseIds = batchQuestions.map((question, index) => questionMetadataBatchAlias(index));
       const storedIds = (storedBatch?.questionIds || []).map(String);
       const batchAlreadyComplete = storedBatch?.status === 'complete'
         && storedBatch?.analysisVersion === QUESTION_METADATA_ANALYSIS_VERSION
@@ -538,20 +567,32 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
         prompt:buildQuestionMetadataPrompt({
           item,
           concepts,
-          questions:batchQuestions,
+          questions:batchQuestions.map((question, index) => ({
+            ...question,
+            id:questionMetadataBatchAlias(index),
+          })),
           batchIndex,
           batchCount:batches.length,
         }),
-        system:'Você é um curador de questões médicas. Classifique sem reescrever as questões. Responda somente JSON válido.',
+        system:'Você é um curador de questões médicas. Classifique sem reescrever. Copie exatamente os IDs curtos q1, q2... e responda somente JSON válido.',
         validateResult:text => {
           const parsedItems = parseGeminiJson(text)?.items || [];
-          const rawById = new Map(parsedItems.map(metadata => [String(metadata?.questionId || ''), metadata]));
-          const hasExactIds = parsedItems.length === expectedIds.length
-            && rawById.size === expectedIds.length
-            && expectedIds.every(id => rawById.has(id));
-          if (!hasExactIds) throw new Error('METADATA_BATCH_INCOMPLETE');
-          return batchQuestions.map(question => normalizeQuestionMetadata({
-            raw:rawById.get(String(question.id)),
+          const rawById = new Map(parsedItems.map(metadata => [
+            normalizeQuestionMetadataBatchAlias(metadata?.questionId),
+            metadata,
+          ]));
+          const hasExactIds = parsedItems.length === expectedResponseIds.length
+            && rawById.size === expectedResponseIds.length
+            && expectedResponseIds.every(id => rawById.has(id));
+          if (!hasExactIds) {
+            const missingIds = expectedResponseIds.filter(id => !rawById.has(id));
+            const extraIds = [...rawById.keys()].filter(id => !expectedResponseIds.includes(id));
+            const error = new Error('METADATA_BATCH_INCOMPLETE');
+            error.validationSummary = `${rawById.size}/${expectedResponseIds.length}${missingIds.length ? `; faltaram ${missingIds.slice(0, 5).join(', ')}` : ''}${extraIds.length ? `; inesperados ${extraIds.slice(0, 3).join(', ')}` : ''}`;
+            throw error;
+          }
+          return batchQuestions.map((question, index) => normalizeQuestionMetadata({
+            raw:rawById.get(questionMetadataBatchAlias(index)),
             question,
             concepts,
             existing:currentAnalysis.metadataByQuestion?.[String(question.id)] || null,
@@ -614,21 +655,32 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
     item,
     itemIndex,
     itemTotal,
+    knownAnalysis,
     previousBatchCount,
     totalBatchCount,
   }) => {
     const questions = flattenSharedLibraryQuestions(item);
     const signature = questionSetSignature(questions);
     const batchCount = buildQuestionMetadataBatches(questions, QUESTION_METADATA_BATCH_SIZE).length;
+    const canReuseKnownAnalysis = analysisIsCompleteForItem(item, knownAnalysis);
     try {
-      const result = await analyzeItem({
-        item,
-        itemIndex,
-        itemTotal,
-        previousBatchCount,
-        totalBatchCount,
-      });
-      if (result.stopped) return { ...result, failed:false, published:false };
+      if (canReuseKnownAnalysis) {
+        addRunLog('info', `${item.title}: metadados carregados reutilizados; sem releitura e sem Gemini.`);
+        setProgress({
+          current:previousBatchCount + batchCount,
+          total:totalBatchCount,
+          label:`${itemIndex + 1}/${itemTotal} · ${item.title} · pronta para publicar`,
+        });
+      } else {
+        const result = await analyzeItem({
+          item,
+          itemIndex,
+          itemTotal,
+          previousBatchCount,
+          totalBatchCount,
+        });
+        if (result.stopped) return { ...result, failed:false, published:false };
+      }
     } catch(error) {
       console.error('question metadata lesson failed:', item?.title, error);
       const manifest = await loadQuestionMetadataManifest(item.id).catch(() => null);
@@ -660,7 +712,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
     }
 
     try {
-      await publishCompletedAnalysis(item);
+      await publishCompletedAnalysis(item, canReuseKnownAnalysis ? knownAnalysis : null);
       addRunLog('success', `${item.title}: seleção pedagógica publicada.`);
       return { stopped:false, batchCount, failed:false, published:true };
     } catch(error) {
@@ -670,9 +722,17 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
   };
 
   const runAnalysis = async (requestedItems = null) => {
-    const analysisItems = Array.isArray(requestedItems) ? requestedItems : targetItems;
-    const analysisScopeLabel = analysisItems.length === 1 ? 'aula' : selectedScopeLabel;
-    if (running || !analysisItems.length) return;
+    const requestedAnalysisItems = Array.isArray(requestedItems) ? requestedItems : targetItems;
+    const knownAnalysisByItem = analysesLoaded ? displayedAnalysesByItem : EMPTY_ANALYSES_BY_ITEM;
+    const alreadyPublishedItems = requestedAnalysisItems.filter(item => {
+      const analysis = knownAnalysisByItem[String(item.id)];
+      return analysisIsCompleteForItem(item, analysis)
+        && learningSelectionMatchesAnalysis(item, analysis.manifest);
+    });
+    const alreadyPublishedIds = new Set(alreadyPublishedItems.map(item => String(item.id)));
+    const analysisItems = requestedAnalysisItems.filter(item => !alreadyPublishedIds.has(String(item.id)));
+    const analysisScopeLabel = requestedAnalysisItems.length === 1 ? 'aula' : selectedScopeLabel;
+    if (running || !requestedAnalysisItems.length) return;
     setRunning(true);
     setPaused(false);
     setStopping(false);
@@ -693,14 +753,40 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
     let failedCount = 0;
     let processedCount = 0;
     try {
-      const siteKeys = await collectLikelySiteGeminiKeys({
-        onError:message => addRunLog('warning', message),
-      });
-      if (!siteKeys.length) throw new Error('API_KEY_MISSING');
+      if (alreadyPublishedItems.length) {
+        addRunLog('success', `${alreadyPublishedItems.length} aula(s) já publicada(s) ficaram fora da fila com base nos metadados carregados.`);
+      }
+      if (!analysisItems.length) {
+        setRunSummary({
+          total:requestedAnalysisItems.length,
+          queued:0,
+          published:0,
+          alreadyPublished:alreadyPublishedItems.length,
+          failed:0,
+          skipped:0,
+          stopped:false,
+        });
+        setProgress({ current:0, total:0, label:'Nenhuma aula pendente.' });
+        addRunLog('success', 'Nenhuma aula entrou na fila: todo o recorte já estava completo e publicado.');
+        addToast(requestedAnalysisItems.length === 1
+          ? 'Esta aula já está completa e publicada.'
+          : 'Todas as aulas selecionadas já estão completas e publicadas.', 'success', 4000);
+        return;
+      }
+
+      const requiresGemini = analysisItems.some(item =>
+        !analysisIsCompleteForItem(item, knownAnalysisByItem[String(item.id)]));
+      let siteKeys = [];
+      if (requiresGemini) {
+        siteKeys = await collectLikelySiteGeminiKeys({
+          onError:message => addRunLog('warning', message),
+        });
+        if (!siteKeys.length) throw new Error('API_KEY_MISSING');
+      }
       keyPoolRef.current = siteKeys;
       keyCursorRef.current = 0;
-      addRunLog('info', `${analysisItems.length} aula(s) na fila · lotes de até ${QUESTION_METADATA_BATCH_SIZE} · ${siteKeys.length} chave(s) do pool administrativo.`);
-      addRunLog('info', 'Respostas em JSON estruturado, sem thinking, com rotação e validação automáticas.');
+      addRunLog('info', `${analysisItems.length} aula(s) pendente(s) na fila · lotes de até ${QUESTION_METADATA_BATCH_SIZE}${requiresGemini ? ` · ${siteKeys.length} chave(s) do pool administrativo` : ' · somente publicação, sem Gemini'}.`);
+      if (requiresGemini) addRunLog('info', 'Respostas em JSON estruturado, sem thinking, com rotação e validação automáticas.');
       for (let itemIndex = 0; itemIndex < analysisItems.length; itemIndex += 1) {
         if (!await waitForRunControl()) break;
         currentItem = analysisItems[itemIndex];
@@ -708,6 +794,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
           item:currentItem,
           itemIndex,
           itemTotal:analysisItems.length,
+          knownAnalysis:knownAnalysisByItem[String(currentItem.id)] || null,
           previousBatchCount,
           totalBatchCount,
         });
@@ -735,8 +822,10 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
       const stopped = controlRef.current.stop;
       const skippedCount = Math.max(0, analysisItems.length - processedCount);
       setRunSummary({
-        total:analysisItems.length,
+        total:requestedAnalysisItems.length,
+        queued:analysisItems.length,
         published:publishedCount,
+        alreadyPublished:alreadyPublishedItems.length,
         failed:failedCount,
         skipped:skippedCount,
         stopped,
@@ -744,15 +833,17 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
       addRunLog(
         stopped ? 'warning' : failedCount ? 'warning' : 'success',
         stopped
-          ? `Fila interrompida: ${publishedCount} publicada(s), ${failedCount} pendente(s) e ${skippedCount} não iniciada(s).`
-          : `Fila concluída: ${publishedCount} publicada(s) e ${failedCount} pendente(s).`,
+          ? `Fila interrompida: ${publishedCount} publicada(s), ${alreadyPublishedItems.length} já pronta(s), ${failedCount} pendente(s) e ${skippedCount} não iniciada(s).`
+          : `Fila concluída: ${publishedCount} publicada(s), ${alreadyPublishedItems.length} já estava(m) pronta(s) e ${failedCount} pendente(s).`,
       );
       addToast(
         stopped
           ? 'Fila interrompida com o progresso preservado.'
           : failedCount
             ? `Curadoria concluída: ${publishedCount} publicada(s) e ${failedCount} pendente(s) para retomar.`
-            : `${analysisScopeLabel === 'aula' ? 'Aula analisada' : 'Aulas analisadas'} e seleção automática publicada${publishedCount === 1 ? '' : 's'}.`,
+            : publishedCount
+              ? `${analysisScopeLabel === 'aula' ? 'Aula analisada' : 'Aulas analisadas'} e seleção automática publicada${publishedCount === 1 ? '' : 's'}.`
+              : 'As aulas selecionadas já estavam completas e publicadas.',
         stopped || failedCount ? 'info' : 'success',
         4500,
       );
@@ -802,6 +893,14 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
       : 0);
   }, 0);
   const completion = totalQuestions ? Math.round(completedCount / totalQuestions * 100) : 0;
+  const alreadyPublishedCount = analysesLoaded ? targetItems.filter(item => {
+    const analysis = displayedAnalysesByItem[String(item.id)];
+    return analysisIsCompleteForItem(item, analysis)
+      && learningSelectionMatchesAnalysis(item, analysis.manifest);
+  }).length : 0;
+  const pendingTargetCount = analysesLoaded
+    ? Math.max(0, targetItems.length - alreadyPublishedCount)
+    : targetItems.length;
   const pausedManifest = targetItems
     .map(item => ({ item, manifest:displayedAnalysesByItem[String(item.id)]?.manifest }))
     .find(entry => entry.manifest?.status === 'paused' && analysisMatchesItem(entry.item, entry.manifest));
@@ -829,7 +928,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
                   <button type="button" onClick={paused?resumeRun:pauseRun} disabled={stopping} className={`rounded-xl border px-4 py-2.5 text-sm font-bold disabled:opacity-40 ${darkMode?'border-gray-600 text-gray-200':'border-gray-300 text-gray-700'}`}>{paused?'Continuar':'Pausar'}</button>
                   <button type="button" onClick={stopRun} disabled={stopping} className="rounded-xl border border-red-400 px-4 py-2.5 text-sm font-bold text-red-500 disabled:opacity-40">{stopping?'Parando…':'Parar'}</button>
                 </div>
-              : <button onClick={()=>runAnalysis()} disabled={analysesLoading||!targetItems.length||!totalQuestions} className="rounded-xl bg-yellow-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">Curar e publicar {selectedScopeLabel}</button>}
+              : <button onClick={()=>runAnalysis()} disabled={analysesLoading||!pendingTargetCount||!totalQuestions} className="rounded-xl bg-yellow-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">Curar e publicar {selectedScopeLabel}{analysesLoaded?` · ${pendingTargetCount} pendente${pendingTargetCount===1?'':'s'}`:''}</button>}
           </div>
         </div>
 
@@ -869,6 +968,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
             <p className="text-2xl font-serif font-bold text-yellow-600">{analysesLoading ? '…' : analysesLoaded ? `${completion}%` : '—'}</p>
             <p className="text-[10px] font-bold uppercase opacity-50">{analysesLoaded ? `${completedCount}/${totalQuestions} analisadas` : 'Atualização manual'}</p>
             {analysesLoaded&&!!analysisRead.updatedAt&&<p className="mt-1 text-[10px] opacity-40">Atualizado às {new Date(analysisRead.updatedAt).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}</p>}
+            {analysesLoaded&&!!alreadyPublishedCount&&<p className="mt-1 text-[10px] font-bold text-green-500">{alreadyPublishedCount} já publicada{alreadyPublishedCount===1?'':'s'} · fora da fila</p>}
           </div>
         </div>
 
@@ -883,10 +983,12 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
               const done = analysisMatchesItem(item, manifest)
                 ? Math.min(Number(manifest?.completedCount) || 0, total)
                 : 0;
+              const alreadyPublished = analysisIsCompleteForItem(item, displayedAnalysesByItem[String(item.id)])
+                && learningSelectionMatchesAnalysis(item, manifest);
               return <div key={item.id} className={`rounded-xl border px-3 py-2.5 ${darkMode?'border-gray-700 bg-gray-900/60':'border-gray-200 bg-gray-50'}`}>
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <strong className="min-w-0 truncate">{item.title}</strong>
-                  <span className="flex-shrink-0 text-yellow-600">{done}/{total}</span>
+                  <span className={`flex-shrink-0 ${alreadyPublished?'text-green-500':'text-yellow-600'}`}>{alreadyPublished?'Publicada':`${done}/${total}`}</span>
                 </div>
                 <div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode?'bg-gray-700':'bg-gray-200'}`}>
                   <div className="h-full rounded-full bg-yellow-500" style={{width:`${total ? done / total * 100 : 0}%`}}/>
@@ -906,11 +1008,12 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
         )}
 
         {runSummary&&!running&&(
-          <div className={`mt-4 grid grid-cols-2 gap-2 rounded-xl border p-3 text-center sm:grid-cols-4 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
+          <div className={`mt-4 grid grid-cols-2 gap-2 rounded-xl border p-3 text-center sm:grid-cols-5 ${darkMode?'border-gray-700 bg-gray-900':'border-gray-200 bg-gray-50'}`}>
             <div><strong className="block text-lg text-green-500">{runSummary.published}</strong><span className="text-[10px] font-bold uppercase opacity-50">publicadas</span></div>
+            <div><strong className="block text-lg text-blue-500">{runSummary.alreadyPublished || 0}</strong><span className="text-[10px] font-bold uppercase opacity-50">já prontas</span></div>
             <div><strong className="block text-lg text-orange-500">{runSummary.failed}</strong><span className="text-[10px] font-bold uppercase opacity-50">pendentes</span></div>
             <div><strong className="block text-lg">{runSummary.skipped}</strong><span className="text-[10px] font-bold uppercase opacity-50">não iniciadas</span></div>
-            <div><strong className="block text-lg">{runSummary.total}</strong><span className="text-[10px] font-bold uppercase opacity-50">na fila</span></div>
+            <div><strong className="block text-lg">{runSummary.total}</strong><span className="text-[10px] font-bold uppercase opacity-50">selecionadas</span></div>
           </div>
         )}
 

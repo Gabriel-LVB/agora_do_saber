@@ -97,7 +97,9 @@ const QUICK_CONTENT_GZIP_LIMIT = 6 * 1024;
 const MEMORY_CARD_POLICY_GZIP_LIMIT = 3 * 1024;
 // Curadoria, seleção automática, publicação e exportação de auditoria ficam
 // juntas em um único módulo administrativo carregado somente sob demanda.
-const QUESTION_CURATION_GZIP_LIMIT = 15 * 1024;
+// Aliases curtos de lote, diagnóstico de cobertura e retentativas estruturais
+// acrescentam cerca de 0,3 KiB e evitam rodar o pool inteiro por erro de ID.
+const QUESTION_CURATION_GZIP_LIMIT = 15.5 * 1024;
 // O banco de 150 ECGs é uma ferramenta administrativa sob demanda. Mantê-lo
 // em chunk próprio impede que a interface da Fábrica pague esse custo antes do clique.
 const ECG_CASE_BANK_GZIP_LIMIT = 6 * 1024;

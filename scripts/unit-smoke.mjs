@@ -1010,7 +1010,20 @@ const calibratedSelection = selectLearningQuestions({
 assert.equal(calibratedSelection.essential.length, 5);
 assert.ok(calibratedSelection.reserve.some(row => row.question.id === 'calibration-20'));
 assert.match(buildConceptAnalysisPrompt({ title:'Aula' }), /no máximo 25% dos conceitos/);
-assert.match(buildQuestionMetadataPrompt({ item:{}, concepts:[], questions:[], batchIndex:0, batchCount:1 }), /Não use core como padrão/);
+const aliasedMetadataPrompt = buildQuestionMetadataPrompt({
+  item:{},
+  concepts:[],
+  questions:metadataQuestions.slice(0, 2).map((question, index) => ({
+    ...question,
+    id:`q${index + 1}`,
+  })),
+  batchIndex:0,
+  batchCount:1,
+});
+assert.match(aliasedMetadataPrompt, /Não use core como padrão/);
+assert.match(aliasedMetadataPrompt, /"id":"q1"/);
+assert.match(aliasedMetadataPrompt, /"id":"q2"/);
+assert.doesNotMatch(aliasedMetadataPrompt, /"id":"metadata-q-1"/);
 const protectedReserveSelection = selectLearningQuestions({
   questions:metadataQuestions.slice(4, 6),
   metadataByQuestion:{
@@ -2608,6 +2621,11 @@ assert.match(questionCurationViewSource, /Clique em Atualizar metadados/);
 assert.match(questionCurationViewSource, /analysisRead/);
 assert.doesNotMatch(questionCurationViewSource, /refreshAnalyses\(\);/);
 assert.doesNotMatch(questionCurationViewSource, /await refreshAnalyses\(\)\.catch/);
+assert.match(questionCurationViewSource, /analysisIsCompleteForItem/);
+assert.match(questionCurationViewSource, /learningSelectionMatchesAnalysis/);
+assert.match(questionCurationViewSource, /alreadyPublishedItems/);
+assert.match(questionCurationViewSource, /ficaram fora da fila com base nos metadados carregados/);
+assert.match(questionCurationViewSource, /somente publicação, sem Gemini/);
 assert.match(questionCurationViewSource, /lotes retomáveis de até 30 questões/);
 assert.match(questionCurationViewSource, /selectedSubjects/);
 assert.match(questionCurationViewSource, /Selecione uma ou mais matérias/);
@@ -2622,6 +2640,13 @@ assert.match(questionCurationViewSource, /thinkingBudget:0/);
 assert.match(questionCurationViewSource, /timeoutMs:180000/);
 assert.match(questionCurationViewSource, /pool administrativo/);
 assert.match(questionCurationViewSource, /METADATA_BATCH_INCOMPLETE/);
+assert.match(questionCurationViewSource, /normalizeQuestionMetadataBatchAlias/);
+assert.match(questionCurationViewSource, /const questionMetadataBatchAlias = index => `q\$\{index \+ 1\}`/);
+assert.match(questionCurationViewSource, /questions:batchQuestions\.map/);
+assert.match(questionCurationViewSource, /expectedResponseIds/);
+assert.match(questionCurationViewSource, /MAX_STRUCTURAL_RESPONSE_ATTEMPTS = 3/);
+assert.match(questionCurationViewSource, /STRUCTURAL_RESPONSE_ERRORS\.has/);
+assert.doesNotMatch(questionCurationViewSource, /tentativa \$\{attempt\}\/\$\{total\}/);
 assert.match(questionCurationViewSource, /processAnalysisItem/);
 assert.match(questionCurationViewSource, /nenhuma chamada ao Gemini foi necessária/);
 assert.match(questionCurationViewSource, /A fila seguirá para a próxima aula/);
@@ -2631,7 +2656,7 @@ assert.match(questionCurationViewSource, /stopRun/);
 assert.doesNotMatch(questionCurationViewSource, /stopRef/);
 assert.match(questionCurationViewSource, /Todas as aulas da matéria/);
 assert.match(questionCurationViewSource, /Curar e publicar \{selectedScopeLabel\}/);
-assert.match(questionCurationViewSource, /publishCompletedAnalysis\(item\)/);
+assert.match(questionCurationViewSource, /publishCompletedAnalysis\(item, canReuseKnownAnalysis \? knownAnalysis : null\)/);
 assert.match(questionCurationViewSource, /buildLearningSelectionSnapshot/);
 assert.match(questionCurationViewSource, /Exportar auditoria/);
 assert.match(questionCurationViewSource, /agora-question-curation-audit-v1/);
