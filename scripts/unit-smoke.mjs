@@ -164,7 +164,6 @@ import {
   questionHasEcgImage,
   questionRequestsEcgImage,
 } from '../src/services/questionVisual.js';
-import { getReviewCurationAudit } from '../src/features/review/reviewCurationAudit.js';
 
 const traverse = traverseModule.default;
 const assertNoFreeIdentifiers = (source, label) => {
@@ -216,40 +215,6 @@ assert.deepEqual(cleanFirestoreData(input), {
     null,
   ],
 });
-
-assert.deepEqual(getReviewCurationAudit({
-  source:'curso',
-  item:{ learningPolicy:{ qualityScore:72, importance:2, tier:'reserve', status:'active' } },
-}), {
-  status:'curated',
-  qualityScore:72,
-  importance:2,
-  tier:'reserve',
-  tierLabel:'Reserva',
-});
-assert.deepEqual(getReviewCurationAudit({
-  source:'curso',
-  item:{ learningPolicy:{ qualityScore:0, status:'awaiting_curation', selectionSource:'awaiting-curation' } },
-}), { status:'unavailable' });
-assert.deepEqual(getReviewCurationAudit({
-  source:'curso',
-  question:{ learningPolicy:{ qualityScore:'91', importance:'5', tier:'essential' } },
-}), {
-  status:'curated',
-  qualityScore:91,
-  importance:5,
-  tier:'essential',
-  tierLabel:'Essencial',
-});
-assert.deepEqual(getReviewCurationAudit({
-  source:'curso',
-  question:{ learningPolicy:null },
-  item:{ learningPolicy:{ qualityScore:88, importance:4, tier:'complementary' } },
-}), { status:'unavailable' });
-assert.equal(getReviewCurationAudit({
-  source:'oraculo',
-  item:{ learningPolicy:{ qualityScore:50 } },
-}), null);
 
 const bigQuestionText = 'x'.repeat(350000);
 const chunkPrepared = prepareSharedLibraryContentForWrite({
@@ -3019,10 +2984,7 @@ assert.match(questionFeatureSource, />\s*Não sei\s*<\/button>/);
 assert.match(questionFeatureSource, /hover:-translate-y-0\.5 hover:shadow-md/);
 assert.doesNotMatch(spacedReviewViewSource, /appendAdaptiveSupportToReviewSession|adaptiveSupportAdded/);
 assert.match(spacedReviewViewSource, /onAdminDisableQuestion/);
-assert.match(spacedReviewViewSource, /getReviewCurationAudit\(current\)/);
-assert.match(spacedReviewViewSource, /Auditoria da Curadoria/);
-assert.match(spacedReviewViewSource, /Qualidade \{curationAudit\.qualityScore\}\/100/);
-assert.match(spacedReviewViewSource, /Sem nota de curadoria válida/);
+assert.doesNotMatch(spacedReviewViewSource, /Auditoria da Curadoria|getReviewCurationAudit/);
 assert.match(spacedReviewViewSource, /Revisar flashcards/);
 assert.match(spacedReviewViewSource, /Carga prevista/);
 assert.match(spacedReviewViewSource, /max-w-5xl/);

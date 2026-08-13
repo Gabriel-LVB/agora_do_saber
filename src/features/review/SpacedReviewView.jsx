@@ -1,6 +1,5 @@
 import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
-import { getReviewCurationAudit } from './reviewCurationAudit.js';
 import { reconcileReviewSessionWithQueue } from './reviewSessionSync.js';
 
 export default function SpacedReviewView() {
@@ -80,7 +79,6 @@ export default function SpacedReviewView() {
       completed = false,
     } = reviewSession;
     const current = sessionItems[index];
-    const curationAudit = getReviewCurationAudit(current);
     const sessionItemKey = current?.item?.cardKey || `${current?.aulaId}/${current?.blockId}/${current?.qId}`;
     const total = sessionItems.length;
     const done = Object.keys(sessionAnswers).length;
@@ -149,17 +147,6 @@ export default function SpacedReviewView() {
         <div className={`mb-5 h-2 overflow-hidden rounded-full ${dm?'bg-gray-800':'bg-gray-100'}`}>
           <div className="h-full rounded-full bg-yellow-500 transition-all" style={{width:`${done / total * 100}%`}}/>
         </div>
-        {isAdmin&&curationAudit&&<section aria-label="Auditoria da Curadoria" className={`mb-3 rounded-xl border px-4 py-3 ${dm?'border-blue-900/70 bg-blue-950/20':'border-blue-200 bg-blue-50/70'}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-[10px] font-bold uppercase tracking-[.16em] ${dm?'text-blue-300':'text-blue-700'}`}>Curadoria</span>
-            {curationAudit.status==='curated' ? <>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${dm?'bg-blue-900/60 text-blue-200':'bg-white text-blue-800'}`}>Qualidade {curationAudit.qualityScore}/100</span>
-              {curationAudit.importance!==null&&<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-700'}`}>Importância {curationAudit.importance}/5</span>}
-              {curationAudit.tierLabel&&<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${dm?'bg-gray-800 text-gray-300':'bg-white text-gray-700'}`}>{curationAudit.tierLabel}</span>}
-            </> : <span className={`text-xs font-bold ${dm?'text-gray-300':'text-gray-700'}`}>Sem nota de curadoria válida</span>}
-          </div>
-          <p className="mt-1.5 text-[11px] text-gray-500">Valores do snapshot publicado; a Revisão não recalcula nem altera essas notas.</p>
-        </section>}
         <QuestionCard
           question={reviewQuestion}
           index={index}
