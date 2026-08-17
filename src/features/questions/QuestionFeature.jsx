@@ -885,7 +885,11 @@ const QuestionView = ({
       } : null,
     ].filter(Boolean);
     const navigationActions = [
-	  nextUnitAction,
+	  onGoToAula ? {
+	    label:goToAulaLabel,
+	    icon:goToAulaIcon,
+	    fn:onGoToAula,
+	  } : null,
       hasMixedStudyKinds && studyKind === 'flashcards' ? {
         label:`Ir para questões (${ordinaryQuestions.length})`,
         icon:<BlockIcon className="w-4 h-4"/>,
@@ -901,11 +905,7 @@ const QuestionView = ({
         icon:<ArrowLeft className="w-4 h-4"/>,
 	    fn:()=>allFlashcards ? restartFlashcardStudy(false) : setShowCompletion(false),
       } : null,
-      onGoToAula ? {
-        label:goToAulaLabel,
-        icon:goToAulaIcon,
-        fn:onGoToAula,
-      } : null,
+	  nextUnitAction,
     ].filter(Boolean);
     const reviewActions = [
 	  flashcardErrorReviewAction,
@@ -1060,16 +1060,17 @@ const QuestionView = ({
         <div className="min-w-0 flex-1">
           {allFlashcards && singleMode ? (
             <div className="w-full space-y-1.5">
-              <div className={`flashcard-study-topbar flex min-w-0 items-center gap-2 ${flashcardFullscreen ? '' : ''}`}>
+              <div className="flashcard-study-topbar flex min-w-0 items-center gap-2">
                 {!flashcardFullscreen&&(
                   <button onClick={onBack} className={`h-8 flex flex-shrink-0 items-center gap-1.5 rounded-lg pr-1 text-sm font-bold ${dm?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>
-                    <ArrowLeft className="w-4 h-4"/><span className="max-w-[5.5rem] truncate">{backLabel}</span>
+                    <ArrowLeft className="w-4 h-4"/><span className="flashcard-back-label max-w-[5.5rem] truncate">{backLabel}</span>
                   </button>
                 )}
-                <h2 className="min-w-0 flex-1 truncate text-sm font-serif font-bold text-yellow-600">{title}</h2>
-                <span className={`flex-shrink-0 text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
-              {actionMenuItems.length>0&&(
-                <div className="relative flex-shrink-0">
+                <h2 className="flashcard-study-title mobile-safe-text min-w-0 flex-1 text-center text-sm font-serif font-bold leading-tight text-yellow-600">{title}</h2>
+                <div className="flex flex-shrink-0 items-center gap-1.5">
+                  <span className={`text-xs font-bold tabular-nums ${dm?'text-gray-500':'text-gray-400'}`}>{answeredCount}/{questions.length}</span>
+                {actionMenuItems.length>0&&(
+                  <div className="relative flex-shrink-0">
                   <button
                     onClick={()=>setHeaderActionsOpen(v=>!v)}
                     title="Ações do bloco"
@@ -1090,8 +1091,9 @@ const QuestionView = ({
                       ))}
                     </div>
                   )}
+                  </div>
+                )}
                 </div>
-              )}
               </div>
             </div>
           ) : (

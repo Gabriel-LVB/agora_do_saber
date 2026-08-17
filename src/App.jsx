@@ -10467,18 +10467,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       setShuffledSubjectTopic(topic => {
         if (!topic) return topic;
         const previousAnswers = topic.answers || {};
-        const wasAnswered = !!previousAnswers[qId] && previousAnswers[qId] !== 'SKIPPED';
-        let questionRefs = topic.questionRefs || [];
-        if (!wasAnswered) {
-          const currentRef = questionRefs.find(ref => sameId(ref.id, qId));
-          const otherRefs = questionRefs.filter(ref => !sameId(ref.id, qId));
-          const answeredRefs = otherRefs.filter(ref => previousAnswers[ref.id] && previousAnswers[ref.id] !== 'SKIPPED');
-          const pendingRefs = otherRefs.filter(ref => !previousAnswers[ref.id] || previousAnswers[ref.id] === 'SKIPPED');
-          questionRefs = currentRef ? [...answeredRefs, currentRef, ...pendingRefs] : questionRefs;
-        }
         return {
           ...topic,
-          questionRefs,
           answers:{...previousAnswers, [qId]:letter},
           errorNotebook:canUseAdvancedFeatures && !isRight
             ? addToList(topic.errorNotebook || [], qId)
@@ -11661,24 +11651,37 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setTimeout(()=>generateBatch(focusTopic.id, weakData),500);
   };
 
-  const openShuffledSubjectQuestions = (subject, forceNew = false) => {
-    if (!forceNew && shuffledSubjectTopic?.subjectId === subject.id) {
+  const openSubjectQuestionStudy = (subject, { order='ordered', studyKind='questions', forceNew=false } = {}) => {
+    const normalizedOrder = order === 'shuffled' ? 'shuffled' : 'ordered';
+    const normalizedStudyKind = studyKind === 'flashcards' ? 'flashcards' : 'questions';
+    if (
+      !forceNew
+      && shuffledSubjectTopic?.subjectId === subject.id
+      && shuffledSubjectTopic?.studyOrder === normalizedOrder
+      && shuffledSubjectTopic?.studyKind === normalizedStudyKind
+    ) {
       setActiveTopicId(shuffledSubjectTopic.id);
+      setTopicStudyPreference({
+        subjectId:subject.id,
+        topicId:shuffledSubjectTopic.id,
+        kind:normalizedStudyKind,
+      });
       setShowOnlyWrong(false);
       setView('topic');
       return;
     }
-    const refs = shuffleList((subject.topics || []).flatMap(topic =>
+    const sourceRefs = (subject.topics || []).flatMap(topic =>
       (topic.questions || [])
-        .filter(question => !question.isFlashcard)
+        .filter(question => normalizedStudyKind === 'flashcards' ? isMemoryCard(question) : !isMemoryCard(question))
         .map((question, index) => ({
-          id:`shuffled_${topic.id}_${question.id}_${index}`,
+          id:`subject_study_${topic.id}_${question.id}_${index}`,
           subjectId:subject.id,
           topicId:topic.id,
           questionId:question.id,
           optionOrder:(question.options || []).map((_, optionIndex) => optionIndex),
         }))
-    ));
+    );
+    const refs = normalizedOrder === 'shuffled' ? shuffleList(sourceRefs) : sourceRefs;
     if (!refs.length) return;
     const topicById = new Map((subject.topics || []).map(topic => [String(topic.id), topic]));
     const answers = {};
@@ -11691,23 +11694,30 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       if (listHasId(sourceTopic?.favorites || [], ref.questionId)) favorites.push(ref.id);
       if (listHasId(sourceTopic?.errorNotebook || [], ref.questionId)) errorNotebook.push(ref.id);
     });
-    const orderedRefs = [
-      ...refs.filter(ref => answers[ref.id] && answers[ref.id] !== 'SKIPPED'),
-      ...refs.filter(ref => !answers[ref.id] || answers[ref.id] === 'SKIPPED'),
-    ];
-    const shuffledTopic = {
-      id:`shuffled-subject-${subject.id}`,
+    const studyLabel = normalizedStudyKind === 'flashcards' ? 'Flashcards' : 'Questões';
+    const orderLabel = normalizedOrder === 'shuffled'
+      ? (normalizedStudyKind === 'flashcards' ? 'embaralhados' : 'embaralhadas')
+      : 'em ordem';
+    const subjectStudyTopic = {
+      id:`subject-study-${subject.id}-${normalizedStudyKind}-${normalizedOrder}`,
       subjectId:subject.id,
-      title:'Questões embaralhadas',
-      questionRefs:orderedRefs,
+      title:`${studyLabel} ${orderLabel}`,
+      questionRefs:refs,
       answers,
       favorites,
       errorNotebook,
       spacedReview:{},
+      studyOrder:normalizedOrder,
+      studyKind:normalizedStudyKind,
       origin:{source:'shuffledSubject', subjectId:subject.id},
     };
-    setShuffledSubjectTopic(shuffledTopic);
-    setActiveTopicId(shuffledTopic.id);
+    setShuffledSubjectTopic(subjectStudyTopic);
+    setActiveTopicId(subjectStudyTopic.id);
+    setTopicStudyPreference({
+      subjectId:subject.id,
+      topicId:subjectStudyTopic.id,
+      kind:normalizedStudyKind,
+    });
     setShowOnlyWrong(false);
     setView('topic');
   };
@@ -14091,10 +14101,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           }
           .agora-shell .flashcard-mobile-stage {
             position: fixed;
-            inset: 5.05rem 0 calc(4.85rem + env(safe-area-inset-bottom)) 0;
+            inset: 5.05rem 0 0 0;
             z-index: 35;
             height: auto !important;
-            padding: .5rem .85rem .65rem .85rem;
+            padding: .5rem .85rem calc(.65rem + env(safe-area-inset-bottom)) .85rem;
             background: var(--bg);
           }
           .agora-shell .flashcard-fullscreen-stage {
@@ -14113,6 +14123,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           .agora-shell .flashcard-study-topbar {
             min-height: 2rem;
           }
+          .agora-shell .flashcard-study-title {
+            display: -webkit-box;
+            overflow: hidden;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+          }
           .agora-shell .flashcard-study-pager {
             min-height: 2.15rem;
             width: 7.5rem;
@@ -14121,33 +14137,39 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             border-radius: 12px !important;
           }
           .agora-shell .flashcard-study-card {
-            background: ${darkMode ? '#121826' : '#f8f5ed'};
+            background: var(--surface-strong);
             color: ${darkMode ? '#f3f4f6' : '#1f2933'};
             box-shadow: none !important;
             border-radius: 16px !important;
             padding: 1.35rem 1.25rem !important;
           }
           .agora-shell .flashcard-study-card-inner {
-            min-height: 0 !important;
-            justify-content: flex-start !important;
+            min-height: 42vh !important;
+            justify-content: center !important;
           }
           .agora-shell .flashcard-study-scroll {
             padding: .65rem 0 .75rem 0 !important;
             overscroll-behavior: contain;
           }
           .agora-shell .flashcard-study-actions {
-            position: relative;
+            position: sticky;
+            bottom: 0;
             flex-shrink: 0;
-            padding: 0;
+            padding: .65rem 0 0;
             border: 0;
-            background: transparent;
+            background: var(--bg);
             box-shadow: none !important;
             backdrop-filter: none;
+          }
+          @media (max-width: 390px) {
+            .agora-shell .flashcard-back-label {
+              display: none;
+            }
           }
           .agora-shell .flashcard-reveal-btn,
           .agora-shell .flashcard-answer-btn {
             border-radius: 14px !important;
-            background: ${darkMode ? '#111827' : '#ffffff'} !important;
+            background: var(--surface-strong) !important;
           }
           .agora-shell .flashcard-reveal-btn {
             color: ${darkMode ? '#f6e7bf' : '#8a520f'} !important;
@@ -14796,23 +14818,56 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	              })}
 	            </div>}
             {isAdmin&&(()=>{
-              const questions = (activeSubject.topics || []).flatMap(topic => (topic.questions || []).filter(question => !question.isFlashcard));
+              const allQuestions = (activeSubject.topics || []).flatMap(topic => topic.questions || []);
+              const questions = allQuestions.filter(question => !isMemoryCard(question));
+              const flashcards = allQuestions.filter(isMemoryCard);
               const allBlocksGenerated = (activeSubject.topics || []).length > 0
-                && (activeSubject.topics || []).every(topic => (topic.questions || []).some(question => !question.isFlashcard));
-              if (!allBlocksGenerated || !questions.length) return null;
+                && (activeSubject.topics || []).every(topic => (topic.questions || []).length > 0);
+              if (!allBlocksGenerated || (!questions.length && !flashcards.length)) return null;
+              const studyActions = [
+                questions.length ? {
+                  label:'Questões em ordem',
+                  description:`${questions.length} questões seguindo a ordem dos blocos`,
+                  icon:<LayersIcon className="w-5 h-5"/>,
+                  onClick:()=>openSubjectQuestionStudy(activeSubject, {order:'ordered',studyKind:'questions'}),
+                } : null,
+                questions.length ? {
+                  label:'Questões embaralhadas',
+                  description:`${questions.length} questões de todos os blocos em ordem aleatória`,
+                  icon:<Shuffle className="w-5 h-5"/>,
+                  onClick:()=>openSubjectQuestionStudy(activeSubject, {order:'shuffled',studyKind:'questions'}),
+                } : null,
+                flashcards.length ? {
+                  label:'Flashcards em ordem',
+                  description:`${flashcards.length} cartões seguindo a ordem dos blocos`,
+                  icon:<LayersIcon className="w-5 h-5"/>,
+                  onClick:()=>openSubjectQuestionStudy(activeSubject, {order:'ordered',studyKind:'flashcards'}),
+                } : null,
+                flashcards.length ? {
+                  label:'Flashcards embaralhados',
+                  description:`${flashcards.length} cartões de todos os blocos em ordem aleatória`,
+                  icon:<Shuffle className="w-5 h-5"/>,
+                  onClick:()=>openSubjectQuestionStudy(activeSubject, {order:'shuffled',studyKind:'flashcards'}),
+                } : null,
+              ].filter(Boolean);
               return (
-                <button type="button"
-                  onClick={()=>openShuffledSubjectQuestions(activeSubject)}
-                  className={`mt-4 w-full rounded-xl border p-4 flex items-center gap-4 text-left transition-all group ${darkMode?'border-yellow-800/70 bg-yellow-950/10 hover:bg-yellow-900/20 hover:border-yellow-600':'border-yellow-300 bg-yellow-50/60 hover:bg-yellow-50 hover:border-yellow-500'}`}>
-                  <span className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>
-                    <Shuffle className="w-5 h-5"/>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-bold">Questões embaralhadas</span>
-                    <span className="block text-xs opacity-50 mt-0.5">{questions.length} questões de todos os blocos em ordem aleatória</span>
-                  </span>
-                  <ChevronRight className="w-4 h-4 opacity-35 group-hover:translate-x-0.5 transition-transform"/>
-                </button>
+                <section className="mt-4">
+                  <h3 className={`mb-2 text-xs font-bold uppercase tracking-widest ${darkMode?'text-gray-500':'text-gray-400'}`}>Estudar todos os blocos</h3>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {studyActions.map(action=><button key={action.label} type="button"
+                      onClick={action.onClick}
+                      className={`w-full rounded-xl border p-4 flex items-center gap-4 text-left transition-all group ${darkMode?'border-yellow-800/70 bg-yellow-950/10 hover:bg-yellow-900/20 hover:border-yellow-600':'border-yellow-300 bg-yellow-50/60 hover:bg-yellow-50 hover:border-yellow-500'}`}>
+                      <span className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${darkMode?'bg-yellow-900/40 text-yellow-400':'bg-yellow-100 text-yellow-700'}`}>
+                        {action.icon}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-bold">{action.label}</span>
+                        <span className="block text-xs opacity-50 mt-0.5">{action.description}</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 flex-shrink-0 opacity-35 group-hover:translate-x-0.5 transition-transform"/>
+                    </button>)}
+                  </div>
+                </section>
               );
             })()}
 	          </div>
@@ -14838,7 +14893,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               showErrorNotebook={canUseAdvancedFeatures}
               onToggleErrorNotebook={(qId)=>handleErrorNotebook(qId)}
               onReset={!isShuffledSubjectTopic&&activeTopic.questions?.length>0?()=>setDeleteId({type:'reset',id:activeTopic.id}):null}
-              onReshuffle={isShuffledSubjectTopic?()=>setDeleteId({type:'reshuffle'}):null}
+              onReshuffle={isShuffledSubjectTopic&&activeTopic.studyOrder==='shuffled'?()=>setDeleteId({type:'reshuffle'}):null}
               onRegenerate={!isShuffledSubjectTopic&&activeTopic.questions?.length>0&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'?()=>openOracleRegenModal(activeTopic):null}
               onExport={!isShuffledSubjectTopic&&activeTopic.questions?.length>0?()=>setExportModal({topic:activeTopic,subject:activeSubject}):null}
               isGenerating={isBusy&&(activeTopic.questions?.length||0)===0}
@@ -16537,7 +16592,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         setDeleteId(null);
       }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='quick-topic'&&<GModal title="Excluir dúvida?" message="A aula, as questões, os flashcards e as respostas existentes nesta dúvida serão apagados." confirmText="Excluir" onConfirm={async()=>{await deleteQuickSession(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
-      {deleteId?.type==='reshuffle'&&<GModal title="Reiniciar embaralhamento?" message="Uma nova ordem será criada. Suas respostas, favoritos e caderno de erros continuarão salvos nos blocos originais." confirmText="Reiniciar" onConfirm={()=>{openShuffledSubjectQuestions(activeSubject,true);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='reshuffle'&&<GModal title="Reiniciar embaralhamento?" message="Uma nova ordem será criada. Suas respostas, favoritos e caderno de erros continuarão salvos nos blocos originais." confirmText="Reiniciar" onConfirm={()=>{openSubjectQuestionStudy(activeSubject,{order:'shuffled',studyKind:activeTopic?.studyKind||'questions',forceNew:true});setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='reset'&&<GModal title="Limpar Progresso?" message="Apagar todas as respostas deste bloco?" confirmText="Limpar" onConfirm={()=>{resetAnswers();setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {editingSub&&(()=>{
         const editableItem = library.find(x=>x.id===editingSub);
