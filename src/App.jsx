@@ -14101,10 +14101,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           }
           .agora-shell .flashcard-mobile-stage {
             position: fixed;
-            inset: 5.05rem 0 0 0;
+            inset: 0;
             z-index: 35;
             height: auto !important;
-            padding: .5rem .85rem calc(.65rem + env(safe-area-inset-bottom)) .85rem;
+            padding: calc(.5rem + env(safe-area-inset-top)) .85rem calc(.65rem + env(safe-area-inset-bottom)) .85rem;
             background: var(--bg);
           }
           .agora-shell .flashcard-fullscreen-stage {
