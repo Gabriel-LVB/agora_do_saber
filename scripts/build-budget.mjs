@@ -36,6 +36,8 @@ let fflateVendor = null;
 let famedStudyMaterials = null;
 let questionBankSizing = null;
 let questionBankSizingWorker = null;
+let ankiPackage = null;
+let sqlVendor = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -65,6 +67,8 @@ for (const file of jsFiles) {
   if (file.startsWith('famedStudyMaterials-')) famedStudyMaterials = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('QuestionBankSizingView-')) questionBankSizing = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('questionBankSizing.worker-')) questionBankSizingWorker = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('ankiPackage-')) ankiPackage = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('sql-vendor-')) sqlVendor = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -139,7 +143,9 @@ const COURSE_REVIEW_RESET_GZIP_LIMIT = 1 * 1024;
 // A grade oficial 2026.2 acrescenta 17 itens de ABS, datas/horários, vínculos
 // interdisciplinares curados e o acesso compatível aos materiais da turma anterior.
 // O crescimento medido é de 2,6 KiB gzip e continua integralmente no chunk lazy.
-const FAMED_GZIP_LIMIT = 27 * 1024;
+// O total medido inclui o descompactador fflate compartilhado também pelo APKG;
+// ambos continuam lazy e nenhum deles entra na Home ou no bundle principal.
+const FAMED_GZIP_LIMIT = 31 * 1024;
 // O dimensionamento de dezenas de milhares de questões é administrativo, manual
 // e roda em Worker. Tela e algoritmo ficam fora do núcleo para não bloquear a UI.
 // O Worker também recebe o índice global para retirar do próximo retrato tudo
@@ -147,6 +153,9 @@ const FAMED_GZIP_LIMIT = 27 * 1024;
 // A união high-yield e sua ação global auditável acrescentam 0,55 KiB medido,
 // ainda integralmente restrito ao painel administrativo lazy e ao Worker.
 const QUESTION_BANK_SIZING_GZIP_LIMIT = 11.75 * 1024;
+// A exportação .apkg monta um SQLite compatível no navegador. O gerador e o
+// runtime SQL só entram depois do clique; o WASM permanece em asset próprio.
+const ANKI_PACKAGE_GZIP_LIMIT = 18.5 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT
@@ -161,7 +170,8 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + SHARED_LIBRARY_REPAIR_GZIP_LIMIT
   + COURSE_REVIEW_RESET_GZIP_LIMIT
   + FAMED_GZIP_LIMIT
-  + (QUESTION_FACTORY_ARCHIVED ? 0 : QUESTION_BANK_SIZING_GZIP_LIMIT);
+  + (QUESTION_FACTORY_ARCHIVED ? 0 : QUESTION_BANK_SIZING_GZIP_LIMIT)
+  + ANKI_PACKAGE_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
 const famedGzip = (famedPortal?.gzip || 0)
@@ -185,7 +195,9 @@ const coreGzip = totalGzip
   - (sharedLibraryRepair?.gzip || 0)
   - (courseReviewReset?.gzip || 0)
   - famedGzip
-  - questionBankSizingGzip;
+  - questionBankSizingGzip
+  - (ankiPackage?.gzip || 0)
+  - (sqlVendor?.gzip || 0);
 
 assert.ok(
   entry.raw <= ENTRY_RAW_LIMIT,
@@ -292,8 +304,14 @@ if (QUESTION_FACTORY_ARCHIVED) {
   );
 }
 assert.ok(totalGzip <= TOTAL_GZIP_LIMIT, `JS total passou do budget: ${fmt(totalGzip)} > ${fmt(TOTAL_GZIP_LIMIT)}`);
+assert.ok(ankiPackage, 'O gerador .apkg deve permanecer em módulo lazy próprio.');
+assert.ok(sqlVendor, 'O runtime SQLite do .apkg deve permanecer fora do bundle inicial.');
+assert.ok(
+  ankiPackage.gzip + sqlVendor.gzip <= ANKI_PACKAGE_GZIP_LIMIT,
+  `Exportador .apkg passou do budget: ${fmt(ankiPackage.gzip + sqlVendor.gzip)} > ${fmt(ANKI_PACKAGE_GZIP_LIMIT)}`
+);
 
 const factoryBudgetLabel = QUESTION_FACTORY_ARCHIVED
   ? 'Fábrica arquivada (0 chunks)'
   : `${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip`;
-console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
+console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; APKG ${fmt(ankiPackage.gzip + sqlVendor.gzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);

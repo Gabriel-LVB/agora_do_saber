@@ -92,6 +92,7 @@ export default function SharedLibraryView() {
     setOpenAnswerModal,
     SHARED_LIBRARY_STAGE_LABELS,
     darkMode,
+    downloadFlashcardsAsApkg,
     BookOpen,
     RotateCcw,
     Trash2,
@@ -313,6 +314,14 @@ export default function SharedLibraryView() {
                 onOpenAnswer={question=>setOpenAnswerModal({question,isEssay:question.isEssay})}
                 displayMode={settings.questionDisplayMode || 'list'}
                 onDisplayModeChange={mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})}
+                onDownloadAnkiDeck={cards=>downloadFlashcardsAsApkg({
+                  questions:cards,
+                  title:activeItem.title,
+                  subjectTitle:activeItem.subject || activeItem.title,
+                  topicTitle:activeItem.topic || activeItem.title,
+                  source:'curso',
+                  hierarchy:[activeItem.subject, activeItem.topic, activeItem.title].filter(Boolean),
+                })}
                 adminQuestionExplanations={showSharedLibraryAdminTools}
                 onAdminDisableQuestion={question=>inactivateCourseQuestion({
                   aulaId:activeItem.lessonId || activeItem.id,

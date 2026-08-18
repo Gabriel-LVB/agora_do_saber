@@ -1636,8 +1636,6 @@ const htmlishToText = (s = '') => String(s)
   .trim();
 const sanitizeFileName = (name = 'export') =>
   (name || 'export').substring(0, 70).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() || 'export';
-const sanitizeAnkiDeckSegment = (name = 'Flashcards') =>
-  sanitizeFileName(name).replace(/::/g, '-').replace(/\s+/g, ' ').trim() || 'Flashcards';
 const ankiTagSlug = (value = 'agora') =>
   String(value || 'agora')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1656,7 +1654,6 @@ const ankiSourceLabel = (source = '') => ({
   quick:'plantao_rapido',
   rapidinha:'rapidinha',
 }[String(source || '').toLowerCase()] || ankiTagSlug(source || 'agora'));
-const ankiHierTag = (group, value) => `${ankiTagSlug(group)}::${ankiTagSlug(value)}`;
 const ankiFieldHtml = (value = '') => escapeXml(String(value || ''))
   .replace(/\r?\n/g, '<br>')
   .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
@@ -1664,6 +1661,7 @@ const ankiFieldHtml = (value = '') => escapeXml(String(value || ''))
   .replace(/&lt;(\/?)(i|em)&gt;/gi, '<$1i>');
 const ANKI_AGORA_MODEL = 'Ágora Flashcard v4';
 const ANKI_AGORA_CLOZE_MODEL = 'Ágora Cloze v1';
+const ANKI_AGORA_DECK = 'Ágora do Saber';
 const ANKI_AGORA_CSS = `
 .card {
   margin: 0;
@@ -1756,6 +1754,60 @@ const ANKI_AGORA_CSS = `
   }
 }
 `;
+const buildAgoraAnkiCards = ({
+  questions = [],
+  title = 'Flashcards',
+  subjectTitle = '',
+  topicTitle = '',
+  source = 'agora',
+  hierarchy = [],
+}) => (questions || []).filter(isMemoryCard).map((question, index) => {
+  const sourceTag = ankiSourceLabel(source);
+  const levels = (Array.isArray(hierarchy) ? hierarchy : [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+  const questionSubject = String(question._subjectTitle || subjectTitle || '').trim();
+  const questionTopic = String(question._topicTitle || topicTitle || '').trim();
+  const appendLevel = value => {
+    if (!value) return;
+    const slug = ankiTagSlug(value);
+    if (!levels.some(level => ankiTagSlug(level) === slug)) levels.push(value);
+  };
+  appendLevel(questionSubject);
+  appendLevel(questionTopic || (title !== questionSubject ? title : ''));
+  const tagLevels = ['agora', sourceTag, ...levels.map(ankiTagSlug)].filter(Boolean);
+  const hierarchyTags = tagLevels.map((_, levelIndex) => tagLevels.slice(0, levelIndex + 1).join('::'));
+  const tags = [...new Set([
+    ...hierarchyTags,
+    'flashcards',
+    question.isCloze ? 'cloze' : null,
+  ].filter(Boolean))];
+  const sourceLabel = levels.length ? levels.join(' › ') : (subjectTitle || source || 'Ágora');
+  const fields = question.isCloze
+    ? [
+      ankiFieldHtml(question.clozeText || question.statement || ''),
+      ankiFieldHtml(question.explanation || ''),
+      ankiFieldHtml(sourceLabel),
+    ]
+    : [
+      ankiFieldHtml(question.statement || ''),
+      ankiFieldHtml(question.expectedAnswer || ''),
+      ankiFieldHtml(question.explanation || ''),
+      ankiFieldHtml(sourceLabel),
+    ];
+  return {
+    type:question.isCloze ? 'cloze' : 'basic',
+    fields,
+    tags,
+    stableKey:[
+      sourceTag,
+      question._originSubjectId || questionSubject,
+      question._originTopicId || questionTopic || title,
+      question._originQId || question.id || index,
+      fields[0],
+    ].join('|'),
+  };
+});
 const parseData = (text, namespace = '') => {
   const norm = text.replace(/\r\n/g,'\n');
   const explicitQuestionStart = /(?:^|\n)[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?\d/im;
@@ -8239,59 +8291,50 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	    });
 	  };
 
-	  const exportFlashcardsToAnki = async ({ questions = [], title = 'Flashcards', subjectTitle = '', source = 'agora', deckTitle = '' }) => {
+	  const exportFlashcardsToAnki = async ({ questions = [], title = 'Flashcards', subjectTitle = '', topicTitle = '', source = 'agora', hierarchy = [] }) => {
 	    if (!isAdmin) {
 	      addToast('Exportar para Anki é exclusivo do admin.', 'info', 3500);
 	      return;
 	    }
-	    const flashcards = (questions || []).filter(q => isMemoryCard(q));
-	    if (!flashcards.length) {
+	    const cards = buildAgoraAnkiCards({questions, title, subjectTitle, topicTitle, source, hierarchy});
+	    if (!cards.length) {
 	      addToast('Este bloco não tem flashcards para enviar ao Anki.', 'info', 3500);
 	      return;
 	    }
-	    const sourceTag = ankiSourceLabel(source);
-	    const deckSegment = sanitizeAnkiDeckSegment(deckTitle || subjectTitle || (sourceTag === 'curso' ? 'Curso' : sourceTag === 'rapidinha' ? 'Rapidinhas' : 'Geral'));
-	    const deckName = `Ágora::Flashcards::${deckSegment}`;
-	    const tags = [
-	      'agora',
-	      'flashcards',
-	      ankiHierTag('fonte', sourceTag),
-	      subjectTitle ? ankiHierTag('materia', subjectTitle) : null,
-	    ].filter(Boolean);
-	    const notes = flashcards.map(q => q.isCloze ? ({
-	      deckName,
+	    const notes = cards.map(card => card.type === 'cloze' ? ({
+	      deckName:ANKI_AGORA_DECK,
 	      modelName:ANKI_AGORA_CLOZE_MODEL,
 	      fields:{
-	        Text:ankiFieldHtml(q.clozeText || q.statement || ''),
-	        Extra:ankiFieldHtml(q.explanation || ''),
-	        Source:ankiFieldHtml(subjectTitle || source || 'Ágora'),
+	        Text:card.fields[0],
+	        Extra:card.fields[1],
+	        Source:card.fields[2],
 	      },
 	      options:{
 	        allowDuplicate:false,
 	        duplicateScope:'collection',
 	      },
-	      tags:[...tags, 'cloze'],
+	      tags:card.tags,
 	    }) : ({
-	      deckName,
+	      deckName:ANKI_AGORA_DECK,
 	      modelName:ANKI_AGORA_MODEL,
 	      fields:{
-	        Front:ankiFieldHtml(q.statement || ''),
-	        Answer:ankiFieldHtml(q.expectedAnswer || ''),
-	        Explanation:ankiFieldHtml(q.explanation || ''),
-	        Source:ankiFieldHtml(subjectTitle || source || 'Ágora'),
+	        Front:card.fields[0],
+	        Answer:card.fields[1],
+	        Explanation:card.fields[2],
+	        Source:card.fields[3],
 	      },
 	      options:{
 	        allowDuplicate:false,
 	        duplicateScope:'collection',
 	      },
-	      tags,
+	      tags:card.tags,
 	    }));
 
 	    const toastId = addToast('Enviando flashcards para o Anki...', 'loading', 0);
 	    try {
-	      await ankiConnect('createDeck', { deck:deckName });
+	      await ankiConnect('createDeck', { deck:ANKI_AGORA_DECK });
 	      await ensureAgoraAnkiModel();
-	      if (flashcards.some(q => q.isCloze)) await ensureAgoraAnkiClozeModel();
+	      if (cards.some(card => card.type === 'cloze')) await ensureAgoraAnkiClozeModel();
 	      let addable = notes.map((note, index) => ({ note, index, canAdd:true, error:null }));
 	      try {
 	        const details = await ankiConnect('canAddNotesWithErrorDetail', { notes });
@@ -8312,13 +8355,13 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      const notesToAdd = addable.filter(item => item.canAdd).map(item => item.note);
 	      const duplicateCount = addable.filter(item => !item.canAdd).length;
 	      if (!notesToAdd.length) {
-	        updateToast(toastId, `Nenhum flashcard novo: ${duplicateCount || flashcards.length} já ${duplicateCount===1?'está':'estão'} no Anki.`, 'info');
+	        updateToast(toastId, `Nenhum flashcard novo: ${duplicateCount || cards.length} já ${duplicateCount===1?'está':'estão'} no Anki.`, 'info');
 	        setTimeout(()=>removeToast(toastId), 7000);
 	        return;
 	      }
 	      const result = await ankiConnect('addNotes', { notes:notesToAdd });
 	      const added = Array.isArray(result) ? result.filter(Boolean).length : 0;
-	      const skipped = flashcards.length - added;
+	      const skipped = cards.length - added;
 	      updateToast(toastId, `${added} flashcard${added!==1?'s':''} enviado${added!==1?'s':''} ao Anki${skipped>0?` · ${skipped} duplicado${skipped!==1?'s':''} ignorado${skipped!==1?'s':''}`:''}.`, 'success');
 	      setTimeout(()=>removeToast(toastId), 7000);
 	    } catch(e) {
@@ -8330,6 +8373,29 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        message:`Abra o Anki Desktop e confira se o AnkiConnect está ativo. Se ele já estiver ativo, adicione esta origem ao webCorsOriginList do AnkiConnect e reinicie o Anki:\n\n"${origin}"\n\nNo localhost, a porta precisa entrar também:\n"http://localhost:3000"\n"http://127.0.0.1:3000"\n\nNão use barra no final.`,
 	        isAlert:true,
 	      });
+	    }
+	  };
+
+	  const downloadFlashcardsAsApkg = async ({ questions = [], title = 'Flashcards', subjectTitle = '', topicTitle = '', source = 'agora', hierarchy = [] }) => {
+	    const cards = buildAgoraAnkiCards({questions, title, subjectTitle, topicTitle, source, hierarchy});
+	    if (!cards.length) {
+	      addToast('Este bloco não tem flashcards para baixar.', 'info', 3500);
+	      return;
+	    }
+	    const toastId = addToast('Preparando deck do Anki...', 'loading', 0);
+	    try {
+	      const { createAnkiPackage, downloadAnkiPackage } = await import('./features/exporting/ankiPackage.js');
+	      const bytes = await createAnkiPackage({cards, deckName:ANKI_AGORA_DECK, css:ANKI_AGORA_CSS});
+	      downloadAnkiPackage({
+	        bytes,
+	        filename:`Ágora do Saber - ${sanitizeFileName(title || subjectTitle || 'Flashcards')}.apkg`,
+	      });
+	      updateToast(toastId, `${cards.length} flashcard${cards.length!==1?'s':''} baixado${cards.length!==1?'s':''} em ${ANKI_AGORA_DECK}.`, 'success');
+	      setTimeout(()=>removeToast(toastId), 7000);
+	    } catch(error) {
+	      console.error('Falha ao gerar pacote Anki:', error);
+	      updateToast(toastId, 'Não foi possível gerar o arquivo .apkg.', 'error');
+	      setTimeout(()=>removeToast(toastId), 7000);
 	    }
 	  };
 
@@ -13453,6 +13519,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     deferInteractionWork,
     displayCourseOrgProposal,
     DownloadIcon,
+    downloadFlashcardsAsApkg,
     dueCount,
     duplicateSubjectBlock,
     EditIcon,
@@ -14091,6 +14158,55 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             transition-duration: .01ms !important;
           }
         }
+        @media (min-width: 641px) {
+          .agora-shell .flashcard-mobile-stage {
+            inset: 0;
+            z-index: 35;
+            width: auto !important;
+            max-width: none !important;
+            margin: 0 !important;
+            height: auto !important;
+            padding: 1.25rem clamp(1.5rem, 4vw, 4rem);
+            background: var(--bg);
+          }
+          .agora-shell .flashcard-fullscreen-stage {
+            inset: 0;
+            z-index: 80;
+            width: auto !important;
+            max-width: none !important;
+            margin: 0 !important;
+            height: auto !important;
+            padding: 1.25rem clamp(1.5rem, 4vw, 4rem);
+            background: var(--bg);
+          }
+          .agora-shell .flashcard-study-scroll {
+            overscroll-behavior: contain;
+          }
+          .agora-shell .flashcard-study-card {
+            background: var(--surface-strong);
+            color: ${darkMode ? '#f3f4f6' : '#1f2933'};
+          }
+          .agora-shell .flashcard-study-actions {
+            position: sticky;
+            bottom: 0;
+            flex-shrink: 0;
+            padding: .75rem 0 0;
+            background: var(--bg);
+          }
+          .agora-shell .flashcard-actions-popover,
+          .agora-shell .question-actions-popover {
+            max-height: calc(100dvh - 5.5rem);
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            overscroll-behavior: contain;
+            scrollbar-gutter: stable;
+          }
+        }
+        @media (min-width: 1024px) {
+          .agora-shell .flashcard-mobile-stage {
+            left: var(--desktop-sidebar-width);
+          }
+        }
         @media (max-width: 640px) {
           html,
           body,
@@ -14566,7 +14682,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 		              </div>
 		              <div className="flex gap-2 flex-wrap">
 		                {(()=>{
-		                  const subjectFlashcards = (activeSubject.topics || []).flatMap(t => (t.questions || []).filter(q => q.isFlashcard));
+		                  const subjectFlashcards = (activeSubject.topics || []).flatMap(topic => (topic.questions || [])
+		                    .filter(isMemoryCard)
+		                    .map(question => ({
+		                      ...question,
+		                      _subjectTitle:activeSubject.title,
+		                      _topicTitle:topic.title,
+		                      _originSubjectId:activeSubject.id,
+		                      _originTopicId:topic.id,
+		                      _originQId:question.id,
+		                    })));
 			                  const subjectActionItems = [
 			                    activeSubject.source==='academia' && (activeSubject.topics || []).some(t => Object.values(t.fixationQuestions || {}).flat().length > 0) ? {
 		                      label:'Limpar respostas da fixação',
@@ -14591,8 +14716,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 		                        questions:subjectFlashcards,
 		                        title:activeSubject.title,
 		                        subjectTitle:activeSubject.title,
-		                        deckTitle:activeSubject.title,
 		                        source:activeSubject.source || 'oraculo',
+		                        hierarchy:[activeSubject.title],
 		                      }),
 		                    } : null,
 		                    canUseAdvancedFeatures && getSubjectErrorNotebookQuestions(activeSubject).length > 0 ? {
@@ -14818,7 +14943,14 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	              })}
 	            </div>}
             {isAdmin&&(()=>{
-              const allQuestions = (activeSubject.topics || []).flatMap(topic => topic.questions || []);
+              const allQuestions = (activeSubject.topics || []).flatMap(topic => (topic.questions || []).map(question => ({
+                ...question,
+                _subjectTitle:activeSubject.title,
+                _topicTitle:topic.title,
+                _originSubjectId:activeSubject.id,
+                _originTopicId:topic.id,
+                _originQId:question.id,
+              })));
               const questions = allQuestions.filter(question => !isMemoryCard(question));
               const flashcards = allQuestions.filter(isMemoryCard);
               const allBlocksGenerated = (activeSubject.topics || []).length > 0
@@ -14848,6 +14980,18 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   description:`${flashcards.length} cartões de todos os blocos em ordem aleatória`,
                   icon:<Shuffle className="w-5 h-5"/>,
                   onClick:()=>openSubjectQuestionStudy(activeSubject, {order:'shuffled',studyKind:'flashcards'}),
+                } : null,
+                flashcards.length ? {
+                  label:'Baixar deck (.apkg)',
+                  description:`${flashcards.length} cartões no deck único ${ANKI_AGORA_DECK}, organizados por tags`,
+                  icon:<DownloadIcon className="w-5 h-5"/>,
+                  onClick:()=>downloadFlashcardsAsApkg({
+                    questions:flashcards,
+                    title:activeSubject.title,
+                    subjectTitle:activeSubject.title,
+                    source:activeSubject.source || 'oraculo',
+                    hierarchy:[activeSubject.title],
+                  }),
                 } : null,
               ].filter(Boolean);
               return (
@@ -14910,12 +15054,21 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	              displayMode={isShuffledSubjectTopic ? 'single' : (canUseAdvancedFeatures ? (settings.questionDisplayMode || 'list') : 'list')}
 	              onDisplayModeChange={!isShuffledSubjectTopic&&canUseAdvancedFeatures ? (mode=>saveSettings({...settingsRef.current, questionDisplayMode:mode})) : null}
 	              resumeAtFirstUnanswered={isShuffledSubjectTopic}
-	              onExportAnki={isAdmin && !isShuffledSubjectTopic ? (qs=>exportFlashcardsToAnki({
+	              onDownloadAnkiDeck={qs=>downloadFlashcardsAsApkg({
+	                questions:qs,
+	                title:isShuffledSubjectTopic ? activeSubject?.title || activeTopic.title : activeTopic.title,
+	                subjectTitle:activeSubject?.title || '',
+	                topicTitle:isShuffledSubjectTopic ? '' : activeTopic.title,
+	                source:activeSubject?.source || 'oraculo',
+	                hierarchy:[activeSubject?.title || ''].filter(Boolean),
+	              })}
+	              onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 	                questions:qs,
 	                title:activeTopic.title,
 	                subjectTitle:activeSubject?.title || '',
-	                deckTitle:activeSubject?.title || '',
+	                topicTitle:isShuffledSubjectTopic ? '' : activeTopic.title,
 	                source:activeSubject?.source || 'oraculo',
+	                hierarchy:[activeSubject?.title || ''].filter(Boolean),
 	              })) : null}
 	              generateIcon={isBusy?<Spinner className="w-4 h-4 text-white"/>:<Flame className="w-5 h-5"/>}
               onGenerate={!isShuffledSubjectTopic&&activeSubject?.source==='gemini'&&activeTopic.origin?.source!=='customStudy'?()=>generateBatch(activeTopic.id):null}

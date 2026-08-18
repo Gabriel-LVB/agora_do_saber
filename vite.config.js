@@ -13,6 +13,7 @@ export default defineConfig({
           if (id.includes('/react') || id.includes('/scheduler/')) return 'react-vendor';
           if (id.includes('/ts-fsrs/')) return 'fsrs-vendor';
           if (id.includes('/fflate/')) return 'fflate-vendor';
+          if (id.includes('/sql.js/')) return 'sql-vendor';
           return 'vendor';
         }
       }

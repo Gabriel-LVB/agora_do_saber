@@ -411,6 +411,7 @@ const QuestionView = ({
 	  displayMode='list',
 	  onDisplayModeChange=null,
 	  resumeAtFirstUnanswered=false,
+	  onDownloadAnkiDeck=null,
 	  onExportAnki=null,
 	  initialStudyKind='auto',
 }) => {
@@ -694,6 +695,11 @@ const QuestionView = ({
       fn:()=>setFlashcardFullscreen(v=>!v),
       active:flashcardFullscreen,
     } : null,
+    allFlashcards && onDownloadAnkiDeck ? {
+      label:'Baixar deck (.apkg)',
+      icon:<DownloadIcon className="w-4 h-4"/>,
+      fn:()=>onDownloadAnkiDeck(questions),
+    } : null,
     onExport ? { label:'Exportar', icon:<Printer className="w-4 h-4"/>, fn:onExport } : null,
     showBizuario&&onBizuario ? { label:'Criar aula sobre isso', icon:<GraduationCap className="w-4 h-4"/>, fn:onBizuario } : null,
     onAddToReview ? { label:inReviewCount>0?`Gerenciar revisão (${inReviewCount})`:'Adicionar à revisão', icon:<RepeatIcon className="w-4 h-4"/>, fn:()=>onAddToReview(questions, answers) } : null,
@@ -913,6 +919,11 @@ const QuestionView = ({
       ...notebookActions,
     ].filter(Boolean);
 	    const extraActions = [
+	      allFlashcards && onDownloadAnkiDeck ? {
+	        label:'Baixar deck (.apkg)',
+	        icon:<DownloadIcon className="w-4 h-4"/>,
+	        fn:()=>onDownloadAnkiDeck(questions),
+	      } : null,
 	      allFlashcards && onExportAnki ? {
 	        label:'Enviar para Anki',
 	        icon:<Send className="w-4 h-4"/>,
@@ -1053,7 +1064,7 @@ const QuestionView = ({
   }
 
   return (
-    <div className={`w-full ${allFlashcards && singleMode ? `${flashcardFullscreen ? 'flashcard-fullscreen-stage' : 'flashcard-mobile-stage h-[calc(100dvh-84px)] md:h-[calc(100dvh-94px)] md:-my-6'} flex flex-col overflow-hidden` : ''}`}>
+    <div className={`w-full ${allFlashcards && singleMode ? `${flashcardFullscreen ? 'flashcard-fullscreen-stage' : 'flashcard-mobile-stage'} fixed flex flex-col overflow-hidden` : ''}`}>
       {!flashcardFullscreen && studyKind === 'questions' && renderStudyKindSwitch()}
       {/* ── Header ── */}
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center ${allFlashcards ? 'mb-2 pb-0 gap-1' : 'mb-6 pb-6 gap-4 border-b'} ${!allFlashcards ? (dm?'border-gray-700':'border-gray-200') : ''}`}>
@@ -1079,7 +1090,7 @@ const QuestionView = ({
                     <MoreIcon className="w-4 h-4"/>
                   </button>
                   {headerActionsOpen&&(
-                    <div className={`mobile-safe-action-menu absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                    <div className={`mobile-safe-action-menu flashcard-actions-popover absolute right-0 top-10 z-40 w-56 rounded-xl border shadow-xl overflow-x-hidden overflow-y-auto ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                       {actionMenuItems.map(item=>(
                         <button
                           key={item.label}
@@ -1113,7 +1124,7 @@ const QuestionView = ({
                   <MoreIcon className="w-5 h-5"/>
                 </button>
                 {headerActionsOpen&&(
-                  <div className={`mobile-safe-action-menu absolute right-0 top-11 z-40 w-56 rounded-xl border shadow-xl overflow-hidden ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
+                  <div className={`mobile-safe-action-menu question-actions-popover absolute right-0 top-11 z-40 w-56 rounded-xl border shadow-xl overflow-x-hidden overflow-y-auto ${dm?'bg-gray-900 border-gray-700':'bg-white border-gray-200'}`}>
                     {actionMenuItems.map(item=>(
                       <button
                         key={item.label}
@@ -1531,6 +1542,27 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
   const answered = savedAnswer === FLASHCARD_CORRECT || savedAnswer === FLASHCARD_WRONG;
   const isCloze = !!(question?.isCloze && question?.clozeText);
   const revealLabel = isCloze ? 'Revelar informação' : 'Mostrar resposta';
+  useEffect(() => {
+    if (!large) return undefined;
+    const onKeyDown = (event) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (document.querySelector('.modal-scroll, .mobile-safe-action-menu')) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, textarea, select, button, a, [contenteditable="true"]')) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (!revealed) setRevealed(true);
+        else if (!answered) onSave(FLASHCARD_CORRECT);
+        return;
+      }
+      if ((event.key === '0' || event.code === 'Numpad0') && revealed && !answered) {
+        event.preventDefault();
+        onSave(FLASHCARD_WRONG);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [large, revealed, answered, onSave, question?.id]);
   if (large) {
     return (
       <div className="flex-1 min-h-0 flex flex-col">
@@ -1560,6 +1592,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
           {!revealed ? (
             <button
               type="button"
+              aria-keyshortcuts="Enter"
               onClick={()=>setRevealed(true)}
               className={`flashcard-reveal-btn mx-auto w-full max-w-md min-h-[54px] px-7 py-3.5 rounded-2xl border font-black transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] ${dm?'border-yellow-700 bg-yellow-900/40 text-yellow-100 hover:bg-yellow-900/60':'border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100'}`}
             >
@@ -1569,6 +1602,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
             <div className="flashcard-answer-grid mx-auto grid w-full max-w-xl grid-cols-2 gap-3">
               <button
                 type="button"
+                aria-keyshortcuts="0"
                 disabled={answered}
                 onClick={()=>onSave(FLASHCARD_WRONG)}
                 className={`flashcard-answer-btn flashcard-wrong-btn min-h-[58px] px-5 py-3.5 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_WRONG ? (dm?'border-red-300 text-red-100 bg-red-950/60':'border-red-500 text-red-700 bg-red-50') : (dm?'border-red-800 bg-red-950/30 text-red-200 hover:border-red-500 hover:bg-red-950/50':'border-red-200 bg-white text-red-700 hover:border-red-400 hover:bg-red-50')} ${answered&&savedAnswer!==FLASHCARD_WRONG?'opacity-45':''}`}
@@ -1577,6 +1611,7 @@ const FlashcardInline = ({ question, darkMode, savedAnswer, onSave, large=false,
               </button>
               <button
                 type="button"
+                aria-keyshortcuts="Enter"
                 disabled={answered}
                 onClick={()=>onSave(FLASHCARD_CORRECT)}
                 className={`flashcard-answer-btn flashcard-correct-btn min-h-[58px] px-5 py-3.5 rounded-2xl text-base font-black border transition-all shadow-sm active:scale-[0.99] disabled:cursor-default ${savedAnswer===FLASHCARD_CORRECT ? (dm?'border-green-300 text-green-100 bg-green-950/60':'border-green-500 text-green-700 bg-green-50') : (dm?'border-green-800 bg-green-950/30 text-green-200 hover:border-green-500 hover:bg-green-950/50':'border-green-200 bg-white text-green-700 hover:border-green-400 hover:bg-green-50')} ${answered&&savedAnswer!==FLASHCARD_CORRECT?'opacity-45':''}`}

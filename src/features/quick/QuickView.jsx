@@ -165,7 +165,7 @@ export default function QuickView() {
                               </button>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 {isAdmin&&fcs.length>0&&(
-                                  <button onClick={()=>exportFlashcardsToAnki({questions:fcs,title:topic.title,subjectTitle:topic.title,deckTitle:QUICK_SUBJECT_TITLE,source:QUICK_SOURCE})} title="Enviar flashcards para Anki" aria-label="Enviar flashcards para Anki" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-yellow-400 hover:bg-gray-800':'border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}>
+                                  <button onClick={()=>exportFlashcardsToAnki({questions:fcs,title:topic.title,subjectTitle:QUICK_SUBJECT_TITLE,topicTitle:topic.title,source:QUICK_SOURCE,hierarchy:[QUICK_SUBJECT_TITLE,topic.title]})} title="Enviar flashcards para Anki" aria-label="Enviar flashcards para Anki" className={`h-9 w-9 rounded-xl border flex items-center justify-center ${dm?'border-gray-700 text-yellow-400 hover:bg-gray-800':'border-gray-200 text-yellow-700 hover:bg-yellow-50'}`}>
                                     <Send className="w-4 h-4"/>
                                   </button>
                                 )}

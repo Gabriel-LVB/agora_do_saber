@@ -70,6 +70,7 @@ export default function FamedPortalView() {
     callWithRotation,
     ChevronDown,
     darkMode,
+    downloadFlashcardsAsApkg,
     findErrorNotebookReviewsForSource,
     flattenCourseLessons,
     generateAcademiaLesson,
@@ -612,6 +613,14 @@ export default function FamedPortalView() {
       displayMode={settings.questionDisplayMode || 'list'}
       onDisplayModeChange={mode=>{const next={...settings,questionDisplayMode:mode};setSettings(next);saveSettings(next);}}
       initialStudyKind={activeQuestionSet.initialStudyKind || 'auto'}
+      onDownloadAnkiDeck={questions=>downloadFlashcardsAsApkg({
+        questions,
+        title:activeQuestionSet.title,
+        subjectTitle:activeSubject.title,
+        topicTitle:activeTopic?.title || activeQuestionSet.title,
+        source:'famed',
+        hierarchy:['FAMED', activeSubject.title, activeTopic?.title, activeQuestionSet.title].filter(Boolean),
+      })}
       onAddToReview={(questions, answers, reviewOptions={})=>setSrModal?.({
         aulaId:`lib_${activeSubject.id}`,
         blockId:activeQuestionSet.id,

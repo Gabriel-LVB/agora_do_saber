@@ -23,6 +23,7 @@ export default function VideoQuestionsView() {
     ChevronRight,
     courseLessonDisplayTitle,
     darkMode,
+    downloadFlashcardsAsApkg,
     EmptyState,
     Eraser,
     exportFlashcardsToAnki,
@@ -252,12 +253,21 @@ export default function VideoQuestionsView() {
 	                      blockId,
 	                      question,
 	                    })) : null}
+		                    onDownloadAnkiDeck={qs=>downloadFlashcardsAsApkg({
+		                      questions:qs,
+		                      title:vqAula.title,
+		                      subjectTitle:vqAula.title,
+		                      topicTitle:visibleTitle,
+		                      source:'curso',
+		                      hierarchy:[vqSubject, vqTopic, vqAula.title, visibleTitle],
+		                    })}
 		                    onExportAnki={isAdmin ? (qs=>exportFlashcardsToAnki({
 		                      questions:qs,
 		                      title:visibleTitle,
 		                      subjectTitle:vqAula.title,
-		                      deckTitle:'Curso',
+		                      topicTitle:visibleTitle,
 		                      source:'curso',
+		                      hierarchy:[vqSubject, vqTopic, vqAula.title, visibleTitle],
 		                    })) : null}
 		                    onAddToReview={(qs, ans, reviewOptions={})=>setSrModal({aulaId:aulaIdNew, blockId, blockTitle:visibleTitle, questions:qs, answers:ans, notebookIds:blockNotebook, ...reviewOptions, meta:{source:'curso',aulaTitle:vqAula.title,blockTitle:visibleTitle}})}
                     onReviewErrorNotebook={blockNotebook.length ? (()=>openErrorReviewModal({
