@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "matchingVersion": "agora-ecg-question-matching-v1",
+  "matchingVersion": "agora-ecg-question-matching-v2",
   "datasetId": "agora_ecg_cases_owner_provided_v1",
   "caseCount": 150,
   "conceptCount": 89,

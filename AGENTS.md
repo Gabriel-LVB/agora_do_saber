@@ -106,6 +106,7 @@ Consulte `.env.example`. As variáveis relevantes são:
 
 - `vercel.json` impede cache de `/` e `index.html`;
 - assets com hash recebem cache imutável de um ano;
+- ícones versionados em `public/brand/` também recebem cache imutável e usam variantes compactas 32/180/192 px;
 - `firebase.json` aponta para `firestore.rules` e configura o emulador na porta 8080;
 - a CI em `.github/workflows/main.yml` instala com `npm ci` e executa auditoria/verificações.
 
@@ -265,14 +266,22 @@ Na experiência de estudo, `QuestionView` separa apenas visualmente flashcards/c
 ```text
 Firebase Auth
     ↓
-config/access_whitelist ──→ decide admin / curso / somente site / bloqueado
+config/access_whitelist (leitura forçada do servidor) ──→ decide admin / curso / somente site / bloqueado
+    ├─ perfil do usuário é buscado em paralelo
+    └─ site_ui usa cache e atualiza sem bloquear a entrada
     ↓
 Home renderiza primeiro com dados leves
     ↓
-prefetch em estágios (0,9 s → 2,2 s → 4,5 s)
+prefetch ocioso em conexão adequada (1,5 s → 6 s)
     ├─ biblioteca pessoal + progresso
-    ├─ curso + cronograma + revisão
-    └─ blocos de questões do curso
+    └─ catálogo do curso + revisão
+
+2G/3G, economia de dados ou aba oculta
+    → sem prefetch pesado; dados entram somente quando a tela precisar
+
+Aula aberta
+    ├─ lê somente seu vq_block pessoal quando possível
+    └─ lê documento + chunks da aula publicada, com concorrência limitada
 
 Interação do aluno
     → estado React muda imediatamente
@@ -281,7 +290,7 @@ Interação do aluno
     → erro pode causar rollback visual/toast
 ```
 
-Não faça a Home esperar todas as coleções. O app usa cache e `backgroundPrefetchStage` para aquecer dados gradualmente.
+Não faça a Home esperar todas as coleções. O app usa cache e `backgroundPrefetchStage` para aquecer dados gradualmente somente quando a conexão e a visibilidade permitem. Nunca restaure prefetch global de `vq_blocks` ou de todos os chunks do banco compartilhado.
 
 ## Modelo da biblioteca pessoal
 
@@ -502,8 +511,9 @@ Questões grandes são removidas do documento principal e gravadas em chunks de 
 - admin consulta tudo;
 - não-admin só pode consultar `published == true`;
 - progresso só é carregado quando a UI da Fábrica precisa dele;
-- mantém `onSnapshot` do conteúdo;
-- hidrata os chunks após a consulta.
+- mantém `onSnapshot` do catálogo completo apenas na UI administrativa;
+- no curso, lê diretamente o documento da aula ativa em vez de consultar todo o catálogo;
+- hidrata chunks sob demanda, deduplica requisições e limita a três hidratações simultâneas.
 
 Depois da conclusão da criação e da curadoria do banco, a Fábrica de Questões ficou arquivada e oculta da navegação por `QUESTION_FACTORY_VISIBLE = false`. A rota, os componentes e os dados continuam preservados para manutenção futura, mas `homeCanSeeSharedLibrary` permanece falso e um estado antigo em `shared-library` volta para a Home. O banco publicado continua alimentando Questões do Curso e Revisões normalmente; não condicione essas leituras à visibilidade da tela administrativa.
 

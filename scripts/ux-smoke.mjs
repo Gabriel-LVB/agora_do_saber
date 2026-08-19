@@ -29,7 +29,8 @@ async function main() {
   if (!playwright) return;
 
   await fs.mkdir(outDir, { recursive:true });
-  const browser = await playwright.chromium.launch();
+  const executablePath = process.env.UX_BROWSER_PATH || undefined;
+  const browser = await playwright.chromium.launch(executablePath ? { executablePath } : undefined);
 
   try {
     for (const cfg of viewports) {

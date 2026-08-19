@@ -92,6 +92,8 @@ export default function CoursePortalView() {
     totalLessonSeconds,
     trackQuestionAnswered,
     updateReviewItem,
+    retryVideoaulas,
+    videoaulasLoadError,
     videoaulasLoading,
     VideoIcon,
     vqExpandedSubj,
@@ -195,8 +197,13 @@ export default function CoursePortalView() {
                     <EmptyState
                       darkMode={dm}
                       icon={<VideoIcon className="w-7 h-7"/>}
-                      title="Nenhuma videoaula carregada"
-                      message="Quando o conteúdo estiver disponível, ele aparece aqui organizado por assunto e tópico."
+                      title={videoaulasLoadError ? 'Não consegui carregar as videoaulas' : 'Nenhuma videoaula carregada'}
+                      message={videoaulasLoadError || 'Quando o conteúdo estiver disponível, ele aparece aqui organizado por assunto e tópico.'}
+                      action={videoaulasLoadError ? (
+                        <button type="button" onClick={retryVideoaulas} className="rounded-xl bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700">
+                          Tentar novamente
+                        </button>
+                      ) : null}
                     />
                   );
                   const parsedData = parseVideoaulasData(appliedVideoaulasData);

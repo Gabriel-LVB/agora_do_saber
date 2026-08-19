@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocFromServer, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import BrandIdentity from './components/BrandIdentity.jsx';
 import './brand.css';
@@ -397,16 +397,23 @@ const readTimedCache = (key, maxAgeMs, fallback = null) => {
   };
 };
 const writeTimedCache = (key, value) => writeStorageJson(key, { value, savedAt:Date.now() });
-const withFirestoreTimeout = (promise, ms = 15000) => Promise.race([
-  promise,
-  new Promise((_, reject) => {
-    setTimeout(() => {
-      const error = new Error('timeout');
-      error.code = 'timeout';
-      reject(error);
-    }, ms);
-  }),
-]);
+const withFirestoreTimeout = (promise, ms = 15000) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => {
+    const error = new Error('timeout');
+    error.code = 'timeout';
+    reject(error);
+  }, ms);
+  Promise.resolve(promise).then(
+    value => { clearTimeout(timer); resolve(value); },
+    error => { clearTimeout(timer); reject(error); },
+  );
+});
+const isConstrainedConnection = () => {
+  if (typeof navigator === 'undefined') return false;
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const effectiveType = String(connection?.effectiveType || '').toLowerCase();
+  return !!connection?.saveData || ['slow-2g', '2g', '3g'].includes(effectiveType);
+};
 const isCacheFresh = (key, maxAgeMs) => {
   const savedAt = Number(readStorageText(key, '0')) || 0;
   return !!savedAt && Date.now() - savedAt < maxAgeMs;
@@ -3569,6 +3576,9 @@ export default function QuestionBankApp() {
   const [user, setUser]           = useState(null);
   const [username, setUsername]   = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authSlow, setAuthSlow] = useState(false);
+  const [authLoadError, setAuthLoadError] = useState('');
+  const [authRetryKey, setAuthRetryKey] = useState(0);
   const [loginView, setLoginView] = useState('login');
   const [sigName, setSigName]     = useState('');
   const [sigKey, setSigKey]       = useState('');
@@ -3601,6 +3611,7 @@ export default function QuestionBankApp() {
   const [activeTopicId, setActiveTopicId]     = useState(null);
   const [shuffledSubjectTopic, setShuffledSubjectTopic] = useState(null);
   const [backgroundPrefetchStage, setBackgroundPrefetchStage] = useState(0);
+  const [backgroundPrefetchAllowed, setBackgroundPrefetchAllowed] = useState(() => !isConstrainedConnection());
 
   // ── Creator ───────────────────────────────────────────────────────────────
   const [creatorStep, setCreatorStep]   = useState(1);
@@ -3781,6 +3792,7 @@ export default function QuestionBankApp() {
   // Videoaulas
   const [videoaulasData, setVideoaulasData] = useState(null);  // JSON do Firestore
   const [videoaulasLoading, setVideoaulasLoading] = useState(false);
+  const [videoaulasLoadError, setVideoaulasLoadError] = useState('');
   const [activeSubjectVid, setActiveSubjectVid] = useState(null);
   const [activeSubtopicVid, setActiveSubtopicVid] = useState(null);
   const [activeAula, setActiveAula] = useState(null);
@@ -3800,6 +3812,7 @@ export default function QuestionBankApp() {
   const [vqAula, setVqAula]         = useState(null);
   const [vqBlocks, setVqBlocks]     = useState({});
   const vqBlocksRef = useRef({});
+  const targetedVqLoadsRef = useRef(new Set());
   const ecgQuestionMatchRunRef = useRef('');
   const vqSaveQueueRef = useRef(Promise.resolve());
   const [vqLoading, setVqLoading]   = useState(false);   // carregamento do Firestore
@@ -3822,12 +3835,21 @@ export default function QuestionBankApp() {
   const [vqActiveBlockView, setVqActiveBlockView] = useState(null); // { aulaId, blockId } — view página completa do bloco
   const [vqQuestionParity, setVqQuestionParity] = useState('all'); // all | odd | even
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
-  const needsCourseSharedLibraryData = canSeeVideoaulas;
+  const courseSharedLibraryAula = view === 'videoaulas' ? activeAula : vqAula;
+  const courseSharedLibraryDocId = courseSharedLibraryAula && (
+    courseSharedLibraryAula.doc_id
+    || courseSharedLibraryAula.id
+    || courseSharedLibraryAula.bunny_id
+    || getAulaId(courseSharedLibraryAula)
+  );
+  const courseSharedLibraryDocIds = courseSharedLibraryDocId ? [String(courseSharedLibraryDocId)] : [];
+  const needsCourseSharedLibraryData = canSeeVideoaulas && courseSharedLibraryDocIds.length > 0;
   const needsSharedLibraryData = (homeCanSeeSharedLibrary && view === 'shared-library') || needsCourseSharedLibraryData;
   const needsSharedLibraryUiData = homeCanSeeSharedLibrary && view === 'shared-library';
 
   // Biblioteca compartilhada — conteúdo global, progresso individual.
   const {
+    hydrateSharedLibraryItemIds,
     refreshSharedLibrary,
     setSharedLibraryActiveItemId,
     setSharedLibraryConfig,
@@ -3863,6 +3885,7 @@ export default function QuestionBankApp() {
     canReadSharedLibrary:needsSharedLibraryData,
     configDocId:SHARED_LIBRARY_CONFIG_DOC,
     contentCollection:SHARED_LIBRARY_COLLECTION,
+    contentDocIds:needsSharedLibraryUiData ? [] : courseSharedLibraryDocIds,
     isAdmin,
     loadProgress:needsSharedLibraryUiData,
     progressCollection:SHARED_LIBRARY_PROGRESS_COLLECTION,
@@ -4363,18 +4386,65 @@ export default function QuestionBankApp() {
   }, [canSeeVideoaulas]);
 
   useEffect(() => {
+    if (typeof navigator === 'undefined') return undefined;
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!connection?.addEventListener) return undefined;
+    const handleConnectionChange = () => setBackgroundPrefetchAllowed(!isConstrainedConnection());
+    connection.addEventListener('change', handleConnectionChange);
+    return () => connection.removeEventListener('change', handleConnectionChange);
+  }, []);
+
+  useEffect(() => {
     if (!user || user.isAnonymous) {
       setBackgroundPrefetchStage(0);
       return undefined;
     }
     setBackgroundPrefetchStage(0);
-    const timers = [
-      setTimeout(() => setBackgroundPrefetchStage(stage => Math.max(stage, 1)), 900),
-      setTimeout(() => setBackgroundPrefetchStage(stage => Math.max(stage, 2)), 2200),
-      setTimeout(() => setBackgroundPrefetchStage(stage => Math.max(stage, 3)), 4500),
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, [user?.uid, user?.isAnonymous]);
+    if (!backgroundPrefetchAllowed) return undefined;
+
+    let cancelled = false;
+    let timers = [];
+    let idleCallbacks = [];
+    const cancelScheduled = () => {
+      timers.forEach(clearTimeout);
+      timers = [];
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        idleCallbacks.forEach(id => window.cancelIdleCallback(id));
+      }
+      idleCallbacks = [];
+    };
+    const scheduleStage = (stage, delay) => {
+      const timer = setTimeout(() => {
+        if (cancelled || document.visibilityState === 'hidden') return;
+        const applyStage = () => {
+          if (!cancelled) setBackgroundPrefetchStage(current => Math.max(current, stage));
+        };
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          idleCallbacks.push(window.requestIdleCallback(applyStage, { timeout:2000 }));
+        } else {
+          applyStage();
+        }
+      }, delay);
+      timers.push(timer);
+    };
+    const startScheduled = () => {
+      cancelScheduled();
+      if (document.visibilityState === 'hidden') return;
+      scheduleStage(1, 1500);
+      scheduleStage(2, 6000);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') cancelScheduled();
+      else startScheduled();
+    };
+    startScheduled();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      cancelScheduled();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [backgroundPrefetchAllowed, user?.uid, user?.isAnonymous]);
 
   const courseDataViews = ['curso', 'videoaulas', 'videoquestions', 'shared-library', 'famed'];
   const foregroundVideoaulasData = canSeeVideoaulas && courseDataViews.includes(view);
@@ -4385,13 +4455,12 @@ export default function QuestionBankApp() {
     || backgroundPrefetchStage >= 2
   );
   const foregroundVqBlocksData = canSeeVideoaulas && (
-    ['curso', 'videoquestions', 'favorites'].includes(view)
+    ['videoquestions', 'favorites'].includes(view)
     || (isAdmin && view === 'shared-library')
-    || !!vqAula
     || !!vqActiveBlockView
     || view === 'spaced-review'
   );
-  const needsVqBlocksData = foregroundVqBlocksData || (canSeeVideoaulas && backgroundPrefetchStage >= 3);
+  const needsVqBlocksData = foregroundVqBlocksData;
   const foregroundReviewQueueData = canSeeVideoaulas && (
     ['curso', 'videoaulas', 'videoquestions', 'spaced-review'].includes(view)
     || !!srModal
@@ -4422,7 +4491,8 @@ export default function QuestionBankApp() {
     try {
       const cached = readStorageJson(cacheKey, null);
       const cachedWatched = readStorageJson(watchedKey, null);
-      if (cached) {
+      const hasCachedCatalog = cached && typeof cached === 'object' && Object.keys(cached).length > 0;
+      if (hasCachedCatalog) {
         setVideoaulasData(cached);
         if (cachedWatched) {
           watchedAulasRef.current = cachedWatched;
@@ -4434,11 +4504,13 @@ export default function QuestionBankApp() {
         if (!lessonsFresh || !watchedFresh) refreshVideoaulasInBackground(user, cacheKey, watchedKey);
         return;
       }
+      if (cached) removeStorageItem(cacheKey);
     } catch(e) {}
 
     // Sem cache — carrega normalmente com loading
     videoaulasLoadedRef.current = true;
-    setVideoaulasLoading(foregroundVideoaulasData);
+    setVideoaulasLoadError('');
+    setVideoaulasLoading(true);
     refreshVideoaulasInBackground(user, cacheKey, watchedKey, foregroundVideoaulasData);
   }, [user, needsVideoaulasData, foregroundVideoaulasData]); // eslint-disable-line
 
@@ -4505,37 +4577,87 @@ export default function QuestionBankApp() {
 
   const loadPublishedVideoaulasCatalog = async () => {
     try {
-      const snap = await getDoc(doc(db, 'config', VIDEOAULAS_CATALOG_DOC));
+      const snap = await withFirestoreTimeout(getDoc(doc(db, 'config', VIDEOAULAS_CATALOG_DOC)), 8000);
       if (!snap.exists()) return null;
       const data = snap.data() || {};
-      if (data.version !== VIDEOAULAS_CATALOG_VERSION || !data.catalog || typeof data.catalog !== 'object') return null;
+      if (
+        data.version !== VIDEOAULAS_CATALOG_VERSION
+        || !data.catalog
+        || typeof data.catalog !== 'object'
+        || !Object.keys(data.catalog).length
+      ) return null;
       return data.catalog;
-    } catch(e) {
+    } catch(error) {
+      // O catálogo agregado é uma otimização. Regras ainda não publicadas,
+      // documento ausente ou timeout não podem impedir o fallback autoritativo.
+      console.warn('Published video catalog unavailable; falling back to lessons.', error?.code || error?.message || error);
       return null;
     }
   };
 
   const refreshVideoaulasInBackground = async (u, cacheKey, watchedKey, showLoading=false, forceLessons=false) => {
     try {
-      const publishedCatalog = forceLessons ? null : await loadPublishedVideoaulasCatalog();
-      if (publishedCatalog) {
-        applyVideoaulasCatalog(publishedCatalog, cacheKey);
-      } else {
-        const snap = await getDocs(collection(db, 'lessons'));
-        const built = !snap.empty ? buildVideoaulasCatalogFromDocs(snap.docs) : {};
+      setVideoaulasLoadError('');
+      const catalogPromise = (async () => {
+        const publishedCatalog = forceLessons ? null : await loadPublishedVideoaulasCatalog();
+        if (publishedCatalog) {
+          applyVideoaulasCatalog(publishedCatalog, cacheKey);
+          return;
+        }
+        const snap = await withFirestoreTimeout(getDocs(collection(db, 'lessons')), 15000);
+        if (snap.empty) {
+          const error = new Error('empty-course-catalog');
+          error.code = 'empty-course-catalog';
+          throw error;
+        }
+        const built = buildVideoaulasCatalogFromDocs(snap.docs);
+        if (!Object.keys(built).length) {
+          const error = new Error('invalid-course-catalog');
+          error.code = 'invalid-course-catalog';
+          throw error;
+        }
         applyVideoaulasCatalog(built, cacheKey);
         publishVideoaulasCatalog(built);
-      }
-      const ps = await getDoc(doc(db, 'users', u.uid, 'videoaulas_progress', 'watched'));
-      if (ps.exists()) {
+      })();
+      const watchedPromise = withFirestoreTimeout(
+        getDoc(doc(db, 'users', u.uid, 'videoaulas_progress', 'watched')),
+        12000,
+      ).then(ps => {
+        if (!ps.exists()) return;
         const w = ps.data() || {};
         watchedAulasRef.current = w;
         setWatchedAulas(w);
         writeStorageJson(watchedKey, w);
         touchCache(userWatchedTouchedKey(u.uid));
-      }
-    } catch(e) { console.error(e); if (showLoading) setVideoaulasData({}); }
-    finally { if (showLoading) setVideoaulasLoading(false); }
+      }).catch(error => {
+        console.warn('Watched lessons refresh skipped:', error?.code || error?.message || error);
+      });
+      await Promise.all([catalogPromise, watchedPromise]);
+      videoaulasLoadedRef.current = true;
+      return true;
+    } catch(e) {
+      console.error('Video lessons catalog load failed:', e);
+      videoaulasLoadedRef.current = false;
+      setVideoaulasLoadError(e?.code === 'timeout'
+        ? 'A conexão demorou demais para carregar as videoaulas.'
+        : 'Não foi possível carregar as videoaulas agora.');
+      return false;
+    } finally {
+      setVideoaulasLoading(false);
+    }
+  };
+
+  const retryVideoaulas = () => {
+    if (!user || user.isAnonymous) return;
+    videoaulasLoadedRef.current = true;
+    setVideoaulasLoadError('');
+    setVideoaulasLoading(true);
+    refreshVideoaulasInBackground(
+      user,
+      FIRESTORE_CACHE_KEYS.videoaulas,
+      `agora_watched_${user.uid}`,
+      true,
+    );
   };
 
   useEffect(() => {
@@ -5818,6 +5940,7 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!user) {
       vqBlocksLoadedRef.current = false;
+      targetedVqLoadsRef.current.clear();
       ecgQuestionMatchRunRef.current = '';
       setVqBlocksLoaded(false);
       setVqBlocks({});
@@ -6018,6 +6141,38 @@ export default function QuestionBankApp() {
     return (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100) || 'unknown';
   };
 
+  useEffect(() => {
+    const aula = activeAula || vqAula;
+    if (!user || user.isAnonymous || !canSeeVideoaulas || !aula || needsVqBlocksData) return;
+    const compactTitle = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').trim().substring(0, 100);
+    const legacyTitle = (aula.title || '').replace(/\//g, '-').replace(/[^a-zA-Z0-9\-_ ]/g, '').trim().substring(0, 100);
+    const candidates = [...new Set([aula.bunny_id, getAulaId(aula), compactTitle, legacyTitle].filter(Boolean).map(String))];
+    if (!candidates.length) return;
+    const loadKey = `${user.uid}:${candidates.join('|')}`;
+    if (targetedVqLoadsRef.current.has(loadKey)) return;
+    targetedVqLoadsRef.current.add(loadKey);
+    (async () => {
+      const readCandidate = async id => {
+        const snapshot = await withFirestoreTimeout(getDoc(doc(db, 'users', user.uid, 'vq_blocks', id)), 10000);
+        return snapshot.exists() ? [id, snapshot.data() || {}] : null;
+      };
+      const primary = await readCandidate(candidates[0]);
+      return primary ? [primary] : Promise.all(candidates.slice(1).map(readCandidate));
+    })().then(entries => {
+        const found = entries.filter(Boolean);
+        if (!found.length) return;
+        setVqBlocks(previous => {
+          const next = { ...previous, ...Object.fromEntries(found) };
+          vqBlocksRef.current = next;
+          persistVqBlocksCache(next);
+          return next;
+        });
+      }).catch(error => {
+        targetedVqLoadsRef.current.delete(loadKey);
+        console.warn('Targeted lesson questions load failed:', error?.code || error?.message || error);
+      });
+  }, [activeAula, canSeeVideoaulas, needsVqBlocksData, user, vqAula]);
+
   // Dado um aula, retorna a chave que de fato existe em vqBlocks (bunny_id ou título legacy)
   // Sempre retorna UMA chave determinística — nunca null para aulas válidas
   const aulaVqKey = (aula) => {
@@ -6053,6 +6208,28 @@ export default function QuestionBankApp() {
     if (!blocks) return 0;
     return blockValues(blocks).reduce((total, block) => total + (Array.isArray(block?.questions) ? block.questions.length : 0), 0);
   };
+
+  // No curso, os documentos principais fornecem apenas metadados. Os chunks de
+  // questões são baixados para a aula aberta, evitando centenas de requisições
+  // simultâneas na Home ou no catálogo.
+  useEffect(() => {
+    const selectedAulas = [activeAula, vqAula].filter(Boolean);
+    if (!canSeeVideoaulas || !selectedAulas.length || !sharedLibraryItems.length) return;
+    const lessonIds = new Set();
+    selectedAulas.forEach(aula => {
+      [aula?.doc_id, aula?.id, aula?.bunny_id, getAulaId(aula), aulaDocId(aula)]
+        .filter(Boolean)
+        .forEach(id => lessonIds.add(String(id)));
+    });
+    const itemIds = sharedLibraryItems
+      .filter(item => [item.id, item.lessonId, item.sourceLessonId].some(id => id && lessonIds.has(String(id))))
+      .filter(item => SHARED_LIBRARY_CHUNKED_FIELDS.some(field => item.questionChunks?.[field]?.chunked && !Array.isArray(item[field])))
+      .map(item => item.id);
+    if (!itemIds.length) return;
+    hydrateSharedLibraryItemIds(itemIds).catch(error => {
+      console.warn('Active course lesson hydration failed:', error?.code || error?.message || error);
+    });
+  }, [activeAula, canSeeVideoaulas, hydrateSharedLibraryItemIds, sharedLibraryItems, vqAula]);
 
   // Usuários do curso recebem as baterias publicadas pelo admin sem precisar gerar cópias.
   // Respostas continuam no documento pessoal de vq_blocks quando o aluno interage.
@@ -6620,7 +6797,10 @@ export default function QuestionBankApp() {
   // Auth
   useEffect(()=>{
     let mounted = true;
-    const applyAuthUser = async (u) => {
+    const slowTimer = setTimeout(() => {
+      if (mounted) setAuthSlow(true);
+    }, 4000);
+    const applyAuthUser = async (u, prefetchedProfile = null) => {
       if (!mounted) return;
       if (u) {
         setUser(u);
@@ -6634,7 +6814,8 @@ export default function QuestionBankApp() {
           else setLoginView('signup');
         } else {
           try {
-            const ud=await getDoc(doc(db,'users',u.uid));
+            if (prefetchedProfile?.error) throw prefetchedProfile.error;
+            const ud=prefetchedProfile?.snapshot || await withFirestoreTimeout(getDoc(doc(db,'users',u.uid)), 12000);
             if(ud.exists()){const d=ud.data();const uname=d.username||u.email||'';setUsername(uname.toUpperCase());setSettings(buildSettingsWithGeminiRecovery(d.settings||{}, d.apiKey||'', uname));}
             else setLoginView('signup');
           } catch(e){
@@ -6652,6 +6833,41 @@ export default function QuestionBankApp() {
         }
       } else { setUser(null);setUsername(null);setLoginView('login'); }
     };
+    const loadRemoteAccessConfig = async (cachedAccessConfig) => {
+      try {
+        // O cache persistente acelera o app, mas esta decisão sempre tenta o
+        // servidor para não esconder uma revogação de acesso.
+        const accessSnap = await withFirestoreTimeout(
+          getDocFromServer(doc(db, 'config', 'access_whitelist')),
+          12000,
+        );
+        let courseEmails = [ADMIN_EMAIL];
+        let siteOnlyEmails = [];
+        if (accessSnap.exists()) {
+          const data = accessSnap.data() || {};
+          courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
+          siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
+        } else {
+          const legacySnap = await withFirestoreTimeout(
+            getDocFromServer(doc(db, 'config', 'videoaulas_whitelist')),
+            12000,
+          );
+          courseEmails = legacySnap.exists() ? (legacySnap.data().emails || []) : [ADMIN_EMAIL];
+        }
+        writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails, siteOnlyEmails });
+        return { courseEmails, siteOnlyEmails, remoteConfirmed:true };
+      } catch(error) {
+        if (cachedAccessConfig.value && typeof cachedAccessConfig.value === 'object') {
+          return {
+            courseEmails:cachedAccessConfig.value.courseEmails || [ADMIN_EMAIL],
+            siteOnlyEmails:cachedAccessConfig.value.siteOnlyEmails || [],
+            remoteConfirmed:false,
+            error,
+          };
+        }
+        throw error;
+      }
+    };
     setPersistence(auth, browserLocalPersistence).catch(e => console.error('Failed to set auth persistence:', e));
     getRedirectResult(auth)
       .then(async result => {
@@ -6662,9 +6878,17 @@ export default function QuestionBankApp() {
         if (mounted) setErrorModal({ title:'Erro no login Google', message:authErrorMessage(e), isAlert:true });
       });
     const unsub = onAuthStateChanged(auth, async(u)=>{
-      // Carregar whitelist global do Firestore (público, qualquer usuário autenticado pode ler)
-      let courseEmails = [ADMIN_EMAIL];
-      let siteOnlyEmails = [];
+      if (!mounted) return;
+      setAuthLoadError('');
+      if (!u) {
+        await applyAuthUser(null);
+        if (!mounted) return;
+        clearTimeout(slowTimer);
+        setAuthSlow(false);
+        setAuthReady(true);
+        return;
+      }
+
       let globalSiteConfig = { homeMotto:DEFAULT_HOME_MOTTO };
       const cachedSiteConfig = readTimedCache(FIRESTORE_CACHE_KEYS.siteConfig, FIRESTORE_CACHE_TTL.config, null);
       if (cachedSiteConfig.value && typeof cachedSiteConfig.value === 'object') {
@@ -6674,45 +6898,49 @@ export default function QuestionBankApp() {
           homeMotto:String(cachedSiteConfig.value.homeMotto || DEFAULT_HOME_MOTTO).trim() || DEFAULT_HOME_MOTTO,
         };
       }
-      try {
-        if (!cachedSiteConfig.fresh) {
-          const siteConfigSnap = await getDoc(doc(db, 'config', 'site_ui'));
-          if (siteConfigSnap.exists()) {
-            const data = siteConfigSnap.data() || {};
-            globalSiteConfig = {
-              ...globalSiteConfig,
-              ...data,
-              homeMotto:String(data.homeMotto || DEFAULT_HOME_MOTTO).trim() || DEFAULT_HOME_MOTTO,
-            };
-            writeTimedCache(FIRESTORE_CACHE_KEYS.siteConfig, globalSiteConfig);
-          }
-        }
-      } catch(e) {}
-      const cachedAccessConfig = readTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, FIRESTORE_CACHE_TTL.config, null);
-      if (cachedAccessConfig.value && typeof cachedAccessConfig.value === 'object') {
-        courseEmails = cachedAccessConfig.value.courseEmails || [ADMIN_EMAIL];
-        siteOnlyEmails = cachedAccessConfig.value.siteOnlyEmails || [];
+      setSiteConfig(globalSiteConfig);
+      if (!cachedSiteConfig.fresh) {
+        withFirestoreTimeout(getDoc(doc(db, 'config', 'site_ui')), 10000).then(siteConfigSnap => {
+          if (!mounted || !siteConfigSnap.exists()) return;
+          const data = siteConfigSnap.data() || {};
+          const nextSiteConfig = {
+            ...globalSiteConfig,
+            ...data,
+            homeMotto:String(data.homeMotto || DEFAULT_HOME_MOTTO).trim() || DEFAULT_HOME_MOTTO,
+          };
+          setSiteConfig(nextSiteConfig);
+          writeTimedCache(FIRESTORE_CACHE_KEYS.siteConfig, nextSiteConfig);
+        }).catch(() => {});
       }
+
+      const cachedAccessConfig = readTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, FIRESTORE_CACHE_TTL.config, null);
+      const accessPromise = loadRemoteAccessConfig(cachedAccessConfig);
+      const profilePromise = u.isAnonymous
+        ? Promise.resolve(null)
+        : withFirestoreTimeout(getDoc(doc(db, 'users', u.uid)), 12000)
+          .then(snapshot => ({ snapshot }))
+          .catch(error => ({ error }));
+
+      let accessResult;
       try {
-        // Permissão nunca deve depender de um cache ainda "fresco": valide a
-        // fonte remota em todo carregamento para que revogações sejam imediatas.
-        const accessSnap = await getDoc(doc(db, 'config', 'access_whitelist'));
-        if (accessSnap.exists()) {
-          const data = accessSnap.data() || {};
-          courseEmails = data.courseEmails || data.course || data.emails || [ADMIN_EMAIL];
-          siteOnlyEmails = data.siteOnlyEmails || data.appEmails || data.noCourseEmails || [];
-        } else {
-          const wSnap = await getDoc(doc(db, 'config', 'videoaulas_whitelist'));
-          courseEmails = wSnap.exists() ? (wSnap.data().emails || []) : [ADMIN_EMAIL];
-          siteOnlyEmails = [];
-        }
-        writeTimedCache(FIRESTORE_CACHE_KEYS.accessConfig, { courseEmails, siteOnlyEmails });
-      } catch(e) {
-        // Em indisponibilidade real, o cache serve apenas como fallback offline.
-        if (!cachedAccessConfig.value) {
-          courseEmails = [ADMIN_EMAIL];
-          siteOnlyEmails = [];
-        }
+        accessResult = await accessPromise;
+      } catch(error) {
+        if (!mounted) return;
+        console.warn('Remote access validation failed:', error?.code || error?.message || error);
+        setUser(u);
+        setUsername(null);
+        clearTimeout(slowTimer);
+        setAuthSlow(false);
+        setAuthLoadError('Não foi possível confirmar seu acesso. Verifique a conexão e tente novamente.');
+        return;
+      }
+      const profileResult = await profilePromise;
+      if (!mounted) return;
+
+      const courseEmails = accessResult.courseEmails || [ADMIN_EMAIL];
+      const siteOnlyEmails = accessResult.siteOnlyEmails || [];
+      if (!accessResult.remoteConfirmed) {
+        console.warn('Using cached access configuration after a remote connectivity failure.');
       }
       const normalizedCourse = normalizeEmailList([ADMIN_EMAIL, ...courseEmails]);
       const normalizedSiteOnly = normalizeEmailList(siteOnlyEmails).filter(email => !normalizedCourse.includes(email));
@@ -6727,12 +6955,15 @@ export default function QuestionBankApp() {
         setUsername(null);
         setLoginView('login');
       } else {
-        await applyAuthUser(u);
+        await applyAuthUser(u, profileResult);
       }
+      if (!mounted) return;
+      clearTimeout(slowTimer);
+      setAuthSlow(false);
       setAuthReady(true);
     });
-    return ()=>{ mounted = false; unsub(); };
-  },[]);
+    return ()=>{ mounted = false; clearTimeout(slowTimer); unsub(); };
+  },[authRetryKey]);
 
   useEffect(() => {
     if (!user || user.isAnonymous) return undefined;
@@ -13294,7 +13525,29 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     <div className="agora-auth" data-theme={darkMode?'dark':'light'}>
       <div className="agora-splash">
         <BrandIdentity variant="hero" showMark={false}/>
-        <div className="agora-splash__loading" aria-label="Carregando"><span/></div>
+        {!authLoadError&&<div className="agora-splash__loading" aria-label="Carregando"><span/></div>}
+        {authSlow&&!authLoadError&&(
+          <p className="mt-4 max-w-xs text-center text-sm opacity-70" role="status">
+            A conexão está lenta. Ainda estamos confirmando seu acesso com segurança…
+          </p>
+        )}
+        {authLoadError&&(
+          <div className="mt-5 max-w-sm text-center" role="alert">
+            <p className="text-sm opacity-80">{authLoadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthLoadError('');
+                setAuthSlow(false);
+                setAuthReady(false);
+                setAuthRetryKey(value => value + 1);
+              }}
+              className="mt-4 rounded-xl bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -13826,7 +14079,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     userDevices,
     UserIcon,
     username,
+    retryVideoaulas,
     videoaulasData,
+    videoaulasLoadError,
     videoaulasLoading,
     videoFrameRef,
     videoMainScrollRef,

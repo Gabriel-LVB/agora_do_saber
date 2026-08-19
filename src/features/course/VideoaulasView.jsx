@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
 
 export default function VideoaulasView() {
@@ -52,8 +52,12 @@ export default function VideoaulasView() {
     fetchTranscript,
     addToast,
     courseLessonDisplayTitle,
+    EmptyState,
+    LoadingState,
     shortTopicName,
     capitalizeDisplayLabel,
+    retryVideoaulas,
+    videoaulasLoadError,
     videoaulasLoading,
     videoMainScrollRef,
     Spinner,
@@ -78,6 +82,84 @@ export default function VideoaulasView() {
 
   const [reviewRemovalModal, setReviewRemovalModal] = useState(null);
   const [reviewActionBusy, setReviewActionBusy] = useState(false);
+  const [playerAttempt, setPlayerAttempt] = useState(0);
+  const [playerStatus, setPlayerStatus] = useState('loading');
+  const [useAlternatePlayer, setUseAlternatePlayer] = useState(false);
+
+  useEffect(() => {
+    setUseAlternatePlayer(false);
+    setPlayerAttempt(0);
+    setPlayerStatus('loading');
+  }, [activeAula?.embed_url]);
+
+  useEffect(() => {
+    if (!activeAula?.embed_url) return undefined;
+    const browserWindow = document.defaultView;
+    if (!browserWindow) return undefined;
+    setPlayerStatus('loading');
+    const onMessage = event => {
+      if (videoFrameRef.current?.contentWindow && event.source !== videoFrameRef.current.contentWindow) return;
+      let data = event.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch(error) { return; }
+      }
+      if (!data || typeof data !== 'object') return;
+      const payload = data.data && typeof data.data === 'object' ? data.data : data;
+      const eventName = String(payload.event || payload.type || payload.name || data.event || data.type || data.name || '').toLowerCase();
+      if (/error|failed|failure/.test(eventName)) {
+        setPlayerStatus('error');
+      } else if (/ready|loaded|playing|play|progress|timeupdate/.test(eventName)) {
+        setPlayerStatus('ready');
+      }
+    };
+    const subscribe = () => {
+      const target = videoFrameRef.current?.contentWindow;
+      if (!target) return;
+      ['ready', 'error', 'play', 'timeupdate'].forEach(eventName => {
+        const message = { event:'command', func:'addEventListener', args:[eventName] };
+        try { target.postMessage(JSON.stringify(message), '*'); } catch(error) {}
+        try { target.postMessage(message, '*'); } catch(error) {}
+      });
+    };
+    browserWindow.addEventListener('message', onMessage);
+    const subscribeTimer = browserWindow.setTimeout(subscribe, 700);
+    const slowTimer = browserWindow.setTimeout(() => {
+      setPlayerStatus(current => ['ready', 'loaded'].includes(current) ? current : 'slow');
+    }, 12000);
+    return () => {
+      browserWindow.clearTimeout(subscribeTimer);
+      browserWindow.clearTimeout(slowTimer);
+      browserWindow.removeEventListener('message', onMessage);
+    };
+  }, [activeAula?.embed_url, playerAttempt, useAlternatePlayer, videoFrameRef, videoSeek]);
+
+  if (videoaulasLoading && (!appliedVideoaulasData || Object.keys(appliedVideoaulasData).length === 0)) {
+    return (
+      <div className={`min-h-[70vh] px-4 py-10 ${darkMode?'bg-gray-950':'bg-gray-100'}`}>
+        <div className="mx-auto max-w-xl"><LoadingState darkMode={darkMode} label="Carregando videoaulas…"/></div>
+      </div>
+    );
+  }
+
+  if (videoaulasLoadError && (!appliedVideoaulasData || Object.keys(appliedVideoaulasData).length === 0)) {
+    return (
+      <div className={`min-h-[70vh] px-4 py-10 ${darkMode?'bg-gray-950':'bg-gray-100'}`}>
+        <div className="mx-auto max-w-xl">
+          <EmptyState
+            darkMode={darkMode}
+            icon={<VideoIcon className="h-7 w-7"/>}
+            title="Não consegui abrir as videoaulas"
+            message={videoaulasLoadError}
+            action={(
+              <button type="button" onClick={retryVideoaulas} className="rounded-xl bg-yellow-600 px-5 py-3 text-sm font-bold text-white hover:bg-yellow-700">
+                Tentar novamente
+              </button>
+            )}
+          />
+        </div>
+      </div>
+    );
+  }
 
           const dm = darkMode;
           // DEMO_DATA usa o novo formato: Assunto → Tópico → { "Aulas Principais": [], "Bônus": [] }
@@ -133,6 +215,21 @@ export default function VideoaulasView() {
           const effAulas    = (effSubject && effTopic) ? (data[effSubject]?.[effTopic]?.[effCat] || []) : [];
           const activeAulaId = getAulaId(activeAula);
           const effAula     = (activeAulaId ? effAulas.find(aula => getAulaId(aula) === activeAulaId) : null) || effAulas[0] || null;
+	          const originalPlayerUrl = String(effAula?.embed_url || '');
+	          const selectedPlayerUrl = useAlternatePlayer
+	            ? originalPlayerUrl.replace('iframe.mediadelivery.net', 'player.mediadelivery.net')
+	            : originalPlayerUrl;
+	          const browserNavigator = document.defaultView?.navigator;
+	          const connection = browserNavigator
+	            ? (browserNavigator.connection || browserNavigator.mozConnection || browserNavigator.webkitConnection)
+	            : null;
+	          const constrainedPlayerConnection = !!connection?.saveData
+	            || ['slow-2g', '2g', '3g'].includes(String(connection?.effectiveType || '').toLowerCase());
+	          const playerQuery = [`t=${videoSeek ?? 45}`];
+	          if (constrainedPlayerConnection) playerQuery.push('preload=false', 'autoplay=false');
+	          const playerSrc = selectedPlayerUrl
+	            ? `${selectedPlayerUrl}${selectedPlayerUrl.includes('?')?'&':'?'}${playerQuery.join('&')}`
+	            : '';
 	          const effDescription = effAula?.description || effAula?.ai_catalog?.description || '';
 	          const courseNavEntries = subjects.flatMap(subject => Object.entries(data[subject] || {}).flatMap(([topic, groups]) => [
 	            ...(groups.main || []).map(aula => ({ subject, topic, cat:'main', aula })),
@@ -440,16 +537,48 @@ export default function VideoaulasView() {
                           </div>
                         </div>
                       ) : effAula?.embed_url ? (
-                        <iframe
-                          ref={videoFrameRef}
-                          key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??45}`}
-                          src={`${effAula.embed_url}${effAula.embed_url.includes('?')?'&':'?'}t=${videoSeek??45}`}
-                          className="absolute inset-0 w-full h-full"
-                          id="bunny-player"
-                          style={{border:'none'}}
-                          allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
-                          allowFullScreen
-                        />
+                        <React.Fragment>
+                          <iframe
+                            ref={videoFrameRef}
+                            key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??45}-${playerAttempt}-${useAlternatePlayer?'alternate':'primary'}`}
+                            src={playerSrc}
+                            title={`Videoaula: ${courseLessonDisplayTitle(effAula)}`}
+                            className="absolute inset-0 w-full h-full"
+                            id="bunny-player"
+                            style={{border:'none'}}
+                            allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
+                            referrerPolicy="strict-origin-when-cross-origin"
+                            onLoad={() => setPlayerStatus(current => current === 'error' ? current : 'loaded')}
+                            onError={() => setPlayerStatus('error')}
+                            allowFullScreen
+                          />
+                          {['slow', 'error'].includes(playerStatus)&&(
+                            <div className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-white/15 bg-black/90 p-3 text-white shadow-xl" role="alert">
+                              <p className="text-sm font-bold">
+                                {playerStatus === 'error' ? 'O player não conseguiu carregar.' : 'O vídeo está demorando mais que o normal.'}
+                              </p>
+                              <p className="mt-1 text-xs text-gray-300">Isso pode acontecer em redes institucionais ou conexões instáveis.</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setPlayerStatus('loading'); setPlayerAttempt(value => value + 1); }}
+                                  className="rounded-lg bg-yellow-600 px-3 py-2 text-xs font-bold text-white hover:bg-yellow-700"
+                                >
+                                  Recarregar vídeo
+                                </button>
+                                {!useAlternatePlayer&&originalPlayerUrl.includes('iframe.mediadelivery.net')&&(
+                                  <button
+                                    type="button"
+                                    onClick={() => { setPlayerStatus('loading'); setUseAlternatePlayer(true); }}
+                                    className="rounded-lg border border-white/25 px-3 py-2 text-xs font-bold text-white hover:bg-white/10"
+                                  >
+                                    Tentar player alternativo
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </React.Fragment>
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <p className="text-white opacity-40 text-sm">Vídeo não disponível</p>
