@@ -6409,6 +6409,7 @@ export default function QuestionBankApp() {
     menuOpen ? 'menu' : '',
     libraryActionMenu ? 'library-menu' : '',
     blockActionMenu ? 'block-menu' : '',
+    editingTopic ? 'edit-topic' : '',
     bulkActionMenu ? 'bulk-menu' : '',
     mobileNavOpen ? 'mobile-nav' : '',
     errorModal ? 'error-modal' : '',
@@ -6438,6 +6439,7 @@ export default function QuestionBankApp() {
       if (menuOpen) { setMenuOpen(false); return true; }
       if (libraryActionMenu) { setLibraryActionMenu(null); return true; }
       if (blockActionMenu) { setBlockActionMenu(null); return true; }
+      if (editingTopic) { setEditingTopic(null); return true; }
       if (bulkActionMenu) { setBulkActionMenu(null); return true; }
       if (mobileNavOpen) { setMobileNavOpen(false); return true; }
       if (errorModal) { setErrorModal(null); return true; }
@@ -6527,7 +6529,7 @@ export default function QuestionBankApp() {
 
     const hasBackTarget = view !== 'library'
       || reviewSession
-      || menuOpen || libraryActionMenu || blockActionMenu || bulkActionMenu || mobileNavOpen
+      || menuOpen || libraryActionMenu || blockActionMenu || editingTopic || bulkActionMenu || mobileNavOpen
       || errorModal || deleteId || openAnswerModal || externalPromptModal || regenModal
       || newFolderModal || moveSubjectModal || folderReviewModal || bulkGenerateModal
       || academiaExtraModal || academiaRegenModal || academiaExportModal || errorReviewModal
@@ -10245,6 +10247,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       if (menuOpen) return close(setMenuOpen, false);
       if (libraryActionMenu) return close(setLibraryActionMenu);
       if (blockActionMenu) return close(setBlockActionMenu);
+      if (editingTopic) return close(setEditingTopic);
       if (bulkActionMenu) return close(setBulkActionMenu);
       if (mobileNavOpen) return close(setMobileNavOpen, false);
       if (errorModal) return close(setErrorModal);
@@ -10270,7 +10273,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    menuOpen, libraryActionMenu, blockActionMenu, mobileNavOpen, errorModal, deleteId,
+    menuOpen, libraryActionMenu, blockActionMenu, editingTopic, mobileNavOpen, errorModal, deleteId,
     openAnswerModal, externalPromptModal, regenModal, newFolderModal, moveSubjectModal,
     folderReviewModal, bulkGenerateModal, bulkGenerateRun.running, academiaExtraModal, bulkActionMenu,
     academiaRegenModal, academiaExportModal, errorReviewModal, examSetup, exportModal,
@@ -15133,8 +15136,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                   onOpenTopic={topic=>{setActiveTopicId(topic.id);setTopicStudyPreference(null);setShowOnlyWrong(false);setView(activeSubject.source==='academia'?'academia-topic':'topic');}}
                 />
               : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[...activeSubject.topics].map(topic=>{
-                const isAcademiaTopic = activeSubject.source==='academia';
+	              {[...activeSubject.topics].map(topic=>{
+	                const isAcademiaTopic = activeSubject.source==='academia';
+	                const isImportedTopic = activeSubject.source==='external';
                 const fixAll = isAcademiaTopic ? Object.values(topic.fixationQuestions||{}).flat() : [];
                 const fixTotal = fixAll.length;
                 const fixAnswered = fixAll.filter(q=>isCompleteAnswerValue(getAcademiaQuestionAnswer(activeSubject, topic, q.id))).length;
@@ -15163,10 +15167,24 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <div className="h-2 w-20 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div className="bg-yellow-500 h-full" style={{width:`${pct}%`}}/>
-                      </div>
+	                    <div className="flex items-center gap-2 flex-shrink-0">
+	                      <div className="h-2 w-20 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+	                        <div className="bg-yellow-500 h-full" style={{width:`${pct}%`}}/>
+	                      </div>
+	                      {isImportedTopic && (
+	                        <button
+	                          type="button"
+	                          onClick={e=>{
+	                            e.stopPropagation();
+	                            setEditingTopic(topic.id);
+	                            setEditingTopicName(topic.title || '');
+	                          }}
+	                          title="Renomear bloco"
+	                          aria-label={`Renomear bloco ${topic.title || ''}`.trim()}
+	                          className="p-2 rounded-full text-gray-400 hover:text-yellow-500 transition-colors">
+	                          <EditIcon className="w-4 h-4"/>
+	                        </button>
+	                      )}
 	                      {hasTopicActions && (
                         <div className="relative">
                           <button
@@ -17009,7 +17027,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         }
         return <GModal title="Renomear" message="" confirmText="Renomear" onConfirm={async()=>{if(editableItem)await updateSubject({...editableItem,title:editingSubName.trim()});setEditingSub(null);}} onCancel={()=>setEditingSub(null)} darkMode={darkMode}><input value={editingSubName} onChange={e=>setEditingSubName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>;
       })()}
-      {editingTopic&&<GModal title="Renomear Bloco" message="" confirmText="Renomear" onConfirm={async()=>{if(!activeSubject)return;await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>t.id===editingTopic?{...t,title:editingTopicName.trim()}:t)});setEditingTopic(null);}} onCancel={()=>setEditingTopic(null)} darkMode={darkMode}><input value={editingTopicName} onChange={e=>setEditingTopicName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}
+      {editingTopic&&<GModal title="Renomear Bloco" message="" confirmText="Renomear" onConfirm={async()=>{
+        const nextTitle = editingTopicName.trim();
+        if(!activeSubject || !nextTitle)return;
+        await updateSubject({...activeSubject,topics:activeSubject.topics.map(t=>String(t.id)===String(editingTopic)?{...t,title:nextTitle}:t)});
+        setEditingTopic(null);
+      }} onCancel={()=>setEditingTopic(null)} darkMode={darkMode}><input value={editingTopicName} onChange={e=>setEditingTopicName(e.target.value)} className={`w-full p-4 mb-6 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 font-bold ${darkMode?'bg-gray-700 border-gray-600 text-white':'bg-gray-50 border-gray-200'}`} autoFocus/></GModal>}
     </div>
     </FeatureProvider>
   );
