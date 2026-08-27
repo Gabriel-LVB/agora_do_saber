@@ -47,6 +47,7 @@ export const useSharedLibrarySync = ({
   const addToastRef = useRef(addToast);
   const [sharedLibraryItems, setSharedLibraryItems] = useState([]);
   const [sharedLibraryLoading, setSharedLibraryLoading] = useState(false);
+  const [sharedLibraryHydrationCount, setSharedLibraryHydrationCount] = useState(0);
   const [sharedLibraryError, setSharedLibraryError] = useState('');
   const [sharedLibraryTab, setSharedLibraryTab] = useState('apostila');
   const [sharedLibrarySubject, setSharedLibrarySubject] = useState('all');
@@ -81,6 +82,7 @@ export const useSharedLibrarySync = ({
     setSharedLibraryProgress({});
     setSharedLibraryError('');
     setSharedLibraryLoading(false);
+    setSharedLibraryHydrationCount(0);
     sharedLibraryItemsRef.current = [];
     hydratedItemsRef.current.clear();
     hydrationPromisesRef.current.clear();
@@ -135,6 +137,7 @@ export const useSharedLibrarySync = ({
     const current = sharedLibraryItemsRef.current;
     const targets = current.filter(item => wanted.has(String(item.id)));
     if (!targets.length) return [];
+    setSharedLibraryHydrationCount(count => count + 1);
     try {
       const hydrated = await hydrateSharedLibraryItems(targets, 3);
       const byId = new Map(hydrated.map(item => [String(item.id), item]));
@@ -143,6 +146,8 @@ export const useSharedLibrarySync = ({
     } catch(error) {
       console.warn('Shared library targeted hydration failed:', error?.code || error?.message || error);
       throw error;
+    } finally {
+      setSharedLibraryHydrationCount(count => Math.max(0, count - 1));
     }
   }, [hydrateSharedLibraryItems]);
 
@@ -307,7 +312,7 @@ export const useSharedLibrarySync = ({
     sharedLibraryGenerationStages,
     sharedLibraryGenerationSubject,
     sharedLibraryItems,
-    sharedLibraryLoading,
+    sharedLibraryLoading:sharedLibraryLoading || sharedLibraryHydrationCount > 0,
     sharedLibraryProgress,
     sharedLibraryPurging,
     sharedLibraryRepairing,

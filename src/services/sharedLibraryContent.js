@@ -3,6 +3,11 @@ export const SHARED_LIBRARY_CHUNKED_FIELDS = ['directQuestions', 'clinicalQuesti
 
 const SHARED_LIBRARY_CHUNK_BYTE_LIMIT = 650000;
 
+export const normalizeSharedLibraryDocumentId = value => String(value || '')
+  .replace(/\//g, '-')
+  .replace(/[^a-zA-Z0-9À-ÿ_.-]+/g, '_')
+  .slice(0, 180);
+
 const byteSize = (value) => {
   const text = JSON.stringify(value ?? null);
   if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(text).length;

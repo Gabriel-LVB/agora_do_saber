@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
+import {
+  buildCoursePlayerSrc,
+  coursePlayerSeekMessages,
+  coursePlayerSubscriptionMessages,
+  readCoursePlayerEvent,
+} from '../../services/coursePlayer.js';
 
 export default function VideoaulasView() {
   const {
@@ -50,6 +56,7 @@ export default function VideoaulasView() {
     setView,
     gerarQuestoesDireto,
     fetchTranscript,
+    getActiveVideoPosition,
     addToast,
     courseLessonDisplayTitle,
     EmptyState,
@@ -57,6 +64,8 @@ export default function VideoaulasView() {
     shortTopicName,
     capitalizeDisplayLabel,
     retryVideoaulas,
+    sharedLibraryError,
+    sharedLibraryLoading,
     videoaulasLoadError,
     videoaulasLoading,
     videoMainScrollRef,
@@ -78,6 +87,7 @@ export default function VideoaulasView() {
     Clock,
     videoFrameRef,
     videoSeek,
+    vqLoading,
   } = useFeatureContext();
 
   const [reviewRemovalModal, setReviewRemovalModal] = useState(null);
@@ -85,11 +95,40 @@ export default function VideoaulasView() {
   const [playerAttempt, setPlayerAttempt] = useState(0);
   const [playerStatus, setPlayerStatus] = useState('loading');
   const [useAlternatePlayer, setUseAlternatePlayer] = useState(false);
+  const [playerResumeAt, setPlayerResumeAt] = useState(null);
+
+  // A aula efetiva não pode existir apenas como fallback visual. O estado
+  // autoritativo alimenta o carregamento sob demanda do banco publicado e o
+  // acompanhamento do player.
+  const syncedData = parseVideoaulasData(appliedVideoaulasData || {});
+  const syncedSubjects = sortCourseSubjectsForDisplay(Object.keys(syncedData));
+  const syncedSubject = activeSubjectVid && syncedData[activeSubjectVid] ? activeSubjectVid : syncedSubjects[0] || null;
+  const syncedRequestedTopic = activeSubtopicVid?.split('::')[0] || null;
+  const syncedFirstTopic = syncedSubject ? Object.keys(syncedData[syncedSubject] || {})[0] : null;
+  const syncedTopic = syncedRequestedTopic && syncedData[syncedSubject]?.[syncedRequestedTopic]
+    ? syncedRequestedTopic
+    : syncedFirstTopic;
+  const syncedRequestedCat = activeSubtopicVid?.split('::')[1] || 'main';
+  const syncedTopicGroups = syncedData[syncedSubject]?.[syncedTopic] || {};
+  const syncedCat = syncedTopicGroups[syncedRequestedCat]?.length
+    ? syncedRequestedCat
+    : syncedTopicGroups.main?.length ? 'main' : 'bonus';
+  const syncedAulas = syncedTopicGroups[syncedCat] || [];
+  const activeAulaIdForSync = getAulaId(activeAula);
+  const syncedAula = (activeAulaIdForSync
+    ? syncedAulas.find(aula => getAulaId(aula) === activeAulaIdForSync)
+    : null) || syncedAulas[0] || null;
+  const syncedAulaId = getAulaId(syncedAula);
+
+  useEffect(() => {
+    if (syncedAula && syncedAulaId !== activeAulaIdForSync) setActiveAula(syncedAula);
+  }, [activeAulaIdForSync, setActiveAula, syncedAulaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setUseAlternatePlayer(false);
     setPlayerAttempt(0);
     setPlayerStatus('loading');
+    setPlayerResumeAt(null);
   }, [activeAula?.embed_url]);
 
   useEffect(() => {
@@ -99,13 +138,8 @@ export default function VideoaulasView() {
     setPlayerStatus('loading');
     const onMessage = event => {
       if (videoFrameRef.current?.contentWindow && event.source !== videoFrameRef.current.contentWindow) return;
-      let data = event.data;
-      if (typeof data === 'string') {
-        try { data = JSON.parse(data); } catch(error) { return; }
-      }
-      if (!data || typeof data !== 'object') return;
-      const payload = data.data && typeof data.data === 'object' ? data.data : data;
-      const eventName = String(payload.event || payload.type || payload.name || data.event || data.type || data.name || '').toLowerCase();
+      const playerEvent = readCoursePlayerEvent(event.data);
+      const eventName = playerEvent?.eventName || '';
       if (/error|failed|failure/.test(eventName)) {
         setPlayerStatus('error');
       } else if (/ready|loaded|playing|play|progress|timeupdate/.test(eventName)) {
@@ -115,8 +149,7 @@ export default function VideoaulasView() {
     const subscribe = () => {
       const target = videoFrameRef.current?.contentWindow;
       if (!target) return;
-      ['ready', 'error', 'play', 'timeupdate'].forEach(eventName => {
-        const message = { event:'command', func:'addEventListener', args:[eventName] };
+      ['ready', 'error', 'play', 'timeupdate'].flatMap(coursePlayerSubscriptionMessages).forEach(message => {
         try { target.postMessage(JSON.stringify(message), '*'); } catch(error) {}
         try { target.postMessage(message, '*'); } catch(error) {}
       });
@@ -131,7 +164,7 @@ export default function VideoaulasView() {
       browserWindow.clearTimeout(slowTimer);
       browserWindow.removeEventListener('message', onMessage);
     };
-  }, [activeAula?.embed_url, playerAttempt, useAlternatePlayer, videoFrameRef, videoSeek]);
+  }, [activeAula?.embed_url, playerAttempt, useAlternatePlayer, videoFrameRef]);
 
   if (videoaulasLoading && (!appliedVideoaulasData || Object.keys(appliedVideoaulasData).length === 0)) {
     return (
@@ -211,25 +244,22 @@ export default function VideoaulasView() {
           const firstTopic = effSubject ? Object.keys(data[effSubject]||{})[0] : null;
           const effTopic = requestedTopic && data[effSubject]?.[requestedTopic] ? requestedTopic : firstTopic;
           const requestedCat = activeSubtopicVid?.split('::')[1] || 'main';
-          const effCat = data[effSubject]?.[effTopic]?.[requestedCat] ? requestedCat : 'main';
+          const effTopicGroups = data[effSubject]?.[effTopic] || {};
+          const effCat = effTopicGroups[requestedCat]?.length
+            ? requestedCat
+            : effTopicGroups.main?.length ? 'main' : 'bonus';
           const effAulas    = (effSubject && effTopic) ? (data[effSubject]?.[effTopic]?.[effCat] || []) : [];
-          const activeAulaId = getAulaId(activeAula);
-          const effAula     = (activeAulaId ? effAulas.find(aula => getAulaId(aula) === activeAulaId) : null) || effAulas[0] || null;
+	          const activeAulaId = getAulaId(activeAula);
+	          const effAula     = (activeAulaId ? effAulas.find(aula => getAulaId(aula) === activeAulaId) : null) || effAulas[0] || null;
 	          const originalPlayerUrl = String(effAula?.embed_url || '');
-	          const selectedPlayerUrl = useAlternatePlayer
-	            ? originalPlayerUrl.replace('iframe.mediadelivery.net', 'player.mediadelivery.net')
-	            : originalPlayerUrl;
-	          const browserNavigator = document.defaultView?.navigator;
-	          const connection = browserNavigator
-	            ? (browserNavigator.connection || browserNavigator.mozConnection || browserNavigator.webkitConnection)
-	            : null;
-	          const constrainedPlayerConnection = !!connection?.saveData
-	            || ['slow-2g', '2g', '3g'].includes(String(connection?.effectiveType || '').toLowerCase());
-	          const playerQuery = [`t=${videoSeek ?? 45}`];
-	          if (constrainedPlayerConnection) playerQuery.push('preload=false', 'autoplay=false');
-	          const playerSrc = selectedPlayerUrl
-	            ? `${selectedPlayerUrl}${selectedPlayerUrl.includes('?')?'&':'?'}${playerQuery.join('&')}`
-	            : '';
+	          const initialSeek = playerResumeAt != null && Number.isFinite(Number(playerResumeAt))
+	            ? Number(playerResumeAt)
+	            : videoSeek != null && Number.isFinite(Number(videoSeek)) ? Number(videoSeek) : null;
+	          const playerSrc = buildCoursePlayerSrc({
+	            embedUrl:originalPlayerUrl,
+	            alternate:useAlternatePlayer,
+	            startAt:initialSeek,
+	          });
 	          const effDescription = effAula?.description || effAula?.ai_catalog?.description || '';
 	          const courseNavEntries = subjects.flatMap(subject => Object.entries(data[subject] || {}).flatMap(([topic, groups]) => [
 	            ...(groups.main || []).map(aula => ({ subject, topic, cat:'main', aula })),
@@ -274,8 +304,11 @@ export default function VideoaulasView() {
 	            || !coursePrefsLoaded
 	            || !effQuestionTotal
 	            || (!effHasPublishedCuration && !effReviewActive && !effReviewPaused);
+	          const effQuestionLoading = effQuestionTotal === 0 && (sharedLibraryLoading || vqLoading);
 	          const effQuestionActionLabel = effQuestionTotal === 0
-	            ? 'Gerar questões de fixação'
+	            ? effQuestionLoading
+	              ? 'Carregando questões da aula...'
+	              : isAdmin ? 'Gerar questões de fixação' : 'Questões ainda não disponíveis'
 	            : effQuestionAnswered === 0
 	              ? `Fazer questões da aula (${effQuestionTotal})`
 	              : effQuestionAnswered < effQuestionTotal
@@ -288,9 +321,45 @@ export default function VideoaulasView() {
 	              setVqSubject(effSubject);setVqTopic(effTopic);setVqAula(effAula);setVqActiveBlock(null);
 	              setVqActiveBlockView(availableBlocks.length===1 ? {blockId:availableBlocks[0][0],showWrong:false} : null);
 	              setView('videoquestions');
-	            } else {
+	            } else if (isAdmin) {
 	              gerarQuestoesDireto(effAula, effSubject, effTopic);
+	            } else if (effQuestionLoading) {
+	              addToast('As questões desta aula ainda estão carregando.', 'info', 3500);
+	            } else {
+	              addToast(
+	                sharedLibraryError
+	                  ? 'Não consegui carregar o banco publicado desta aula. Confira a conexão e tente novamente.'
+	                  : 'Esta aula ainda não possui um banco de questões publicado.',
+	                sharedLibraryError ? 'error' : 'info',
+	                5000,
+	              );
 	            }
+	          };
+	          const postPlayerMessages = messages => {
+	            const target = videoFrameRef.current?.contentWindow;
+	            if (!target) return;
+	            messages.forEach(message => {
+	              try { target.postMessage(JSON.stringify(message), '*'); } catch(error) {}
+	              try { target.postMessage(message, '*'); } catch(error) {}
+	            });
+	          };
+	          const capturePlayerResumePosition = () => {
+	            const seconds = Number(getActiveVideoPosition(effAula));
+	            const resumeAt = Number.isFinite(seconds) && seconds > 1 ? seconds : null;
+	            setPlayerResumeAt(resumeAt);
+	            return resumeAt;
+	          };
+	          const reloadPlayer = ({ alternate = false } = {}) => {
+	            capturePlayerResumePosition();
+	            setPlayerStatus('loading');
+	            if (alternate) setUseAlternatePlayer(true);
+	            else setPlayerAttempt(value => value + 1);
+	          };
+	          const handlePlayerLoad = () => {
+	            setPlayerStatus(current => current === 'error' ? current : 'loaded');
+	            const seconds = Number(getActiveVideoPosition(effAula));
+	            if (!Number.isFinite(seconds) || seconds <= 1) return;
+	            document.defaultView?.setTimeout(() => postPlayerMessages(coursePlayerSeekMessages(seconds)), 700);
 	          };
 	          const handleEffLessonReview = async () => {
 	            if (effReviewDisabled) return;
@@ -540,7 +609,7 @@ export default function VideoaulasView() {
                         <React.Fragment>
                           <iframe
                             ref={videoFrameRef}
-                            key={`${getAulaId(effAula)||effAula.embed_url}-${videoSeek??45}-${playerAttempt}-${useAlternatePlayer?'alternate':'primary'}`}
+                            key={`${getAulaId(effAula)||effAula.embed_url}-${playerAttempt}-${useAlternatePlayer?'alternate':'primary'}`}
                             src={playerSrc}
                             title={`Videoaula: ${courseLessonDisplayTitle(effAula)}`}
                             className="absolute inset-0 w-full h-full"
@@ -548,7 +617,7 @@ export default function VideoaulasView() {
                             style={{border:'none'}}
                             allow="accelerometer;gyroscope;encrypted-media;picture-in-picture;fullscreen"
                             referrerPolicy="strict-origin-when-cross-origin"
-                            onLoad={() => setPlayerStatus(current => current === 'error' ? current : 'loaded')}
+                            onLoad={handlePlayerLoad}
                             onError={() => setPlayerStatus('error')}
                             allowFullScreen
                           />
@@ -561,7 +630,7 @@ export default function VideoaulasView() {
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => { setPlayerStatus('loading'); setPlayerAttempt(value => value + 1); }}
+                                  onClick={() => reloadPlayer()}
                                   className="rounded-lg bg-yellow-600 px-3 py-2 text-xs font-bold text-white hover:bg-yellow-700"
                                 >
                                   Recarregar vídeo
@@ -569,7 +638,7 @@ export default function VideoaulasView() {
                                 {!useAlternatePlayer&&originalPlayerUrl.includes('iframe.mediadelivery.net')&&(
                                   <button
                                     type="button"
-                                    onClick={() => { setPlayerStatus('loading'); setUseAlternatePlayer(true); }}
+                                    onClick={() => reloadPlayer({ alternate:true })}
                                     className="rounded-lg border border-white/25 px-3 py-2 text-xs font-bold text-white hover:bg-white/10"
                                   >
                                     Tentar player alternativo
@@ -627,8 +696,8 @@ export default function VideoaulasView() {
 	                            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${effReviewPaused?(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-300':'border-yellow-300 bg-yellow-50 text-yellow-800'):effReviewActive?(dm?'border-red-900 bg-red-950/20 text-red-300':'border-red-200 bg-red-50 text-red-700'):(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-200':'border-yellow-300 bg-yellow-50 text-yellow-800')}`}>
 	                            <RepeatIcon className="h-4 w-4"/>{effReviewButtonLabel}
 	                          </button>
-	                          <button onClick={openEffAulaQuestions}
-	                            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-600 bg-gray-800 text-gray-100 active:bg-gray-700':'border-gray-300 bg-white text-gray-800 active:bg-gray-50')}`}>
+	                          <button onClick={openEffAulaQuestions} disabled={effQuestionLoading}
+	                            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-all disabled:cursor-wait disabled:opacity-50 ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300':'border-green-500 bg-green-50 text-green-700'):(dm?'border-gray-600 bg-gray-800 text-gray-100 active:bg-gray-700':'border-gray-300 bg-white text-gray-800 active:bg-gray-50')}`}>
 	                            <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
 	                          </button>
 	                        </div>
@@ -761,10 +830,10 @@ export default function VideoaulasView() {
 	                                  className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${effReviewPaused?(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-300':'border-yellow-300 bg-yellow-50 text-yellow-800'):effReviewActive?(dm?'border-red-900 bg-red-950/20 text-red-300':'border-red-200 bg-red-50 text-red-700'):(dm?'border-yellow-800 bg-yellow-900/15 text-yellow-200':'border-yellow-300 bg-yellow-50 text-yellow-800')}`}>
 	                                  <RepeatIcon className="h-4 w-4"/>{effReviewButtonLabel}
 	                                </button>
-	                              <button onClick={openEffAulaQuestions} className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm transition-all border ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300 hover:bg-green-900/35':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700':'border-gray-300 bg-white text-gray-800 hover:bg-gray-50')}`}>
+	                              <button onClick={openEffAulaQuestions} disabled={effQuestionLoading} className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-sm transition-all border disabled:cursor-wait disabled:opacity-50 ${effQuestionComplete?(dm?'border-green-700 bg-green-900/25 text-green-300 hover:bg-green-900/35':'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'):(dm?'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700':'border-gray-300 bg-white text-gray-800 hover:bg-gray-50')}`}>
 		                                <GraduationCap className="w-4 h-4"/>{effQuestionActionLabel}
 		                              </button>
-	                                {!aulaHasVqData(effAula)&&(
+	                                {isAdmin&&!aulaHasVqData(effAula)&&(
 	                                  <button onClick={()=>setVqGenModal({aula:effAula,aulaId:aulaDocId(effAula),suggestedQ:10,subject:effSubject,topic:effTopic,fromConfig:true})}
 	                                    title="Configurações das questões"
 	                                    className={`flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${dm?'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-200':'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`}>

@@ -71,7 +71,6 @@ export default function CoursePortalView() {
     saveCourseCyclePrefs,
     saveCourseSchedulePrefs,
     saveCronStartDate,
-    setActiveAula,
     setActiveAulaAndReset,
     setActiveSubjectVid,
     setActiveSubtopicVid,
@@ -213,6 +212,11 @@ export default function CoursePortalView() {
                       {subjects.map(subj=>{
                         const topics  = parsedData[subj];
                         const allAulas = Object.values(topics).flatMap(t=>[...t.main,...t.bonus]);
+                        const firstTopicEntry = Object.entries(topics).find(([, groups]) => groups.main?.length || groups.bonus?.length);
+                        const firstTopicName = firstTopicEntry?.[0] || null;
+                        const firstTopicGroups = firstTopicEntry?.[1] || {};
+                        const firstTopicCat = firstTopicGroups.main?.length ? 'main' : 'bonus';
+                        const firstSubjectAula = firstTopicGroups[firstTopicCat]?.[0] || null;
                         const watched  = allAulas.filter(a=>watchedAulas[getAulaId(a)]).length;
                         const pct = allAulas.length>0?Math.round(watched/allAulas.length*100):0;
                         const subjectDuration = formatCourseDuration(totalLessonSeconds(allAulas));
@@ -246,7 +250,7 @@ export default function CoursePortalView() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <button onClick={e=>{e.stopPropagation();setActiveSubjectVid(subj);setActiveSubtopicVid(null);setActiveAula(null);setView('videoaulas');}}
+                                <button onClick={e=>{e.stopPropagation();setActiveSubjectVid(subj);setActiveSubtopicVid(firstTopicName?`${firstTopicName}::${firstTopicCat}`:null);setActiveAulaAndReset(firstSubjectAula);setView('videoaulas');}}
                                   className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${dm?'border-gray-700 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                                   <PlayIcon className="w-3 h-3"/>Ver
                                 </button>
@@ -258,13 +262,15 @@ export default function CoursePortalView() {
                               <div className={`border-t ${dm?'border-gray-800':'border-gray-100'}`}>
                                 {Object.entries(topics).map(([topic,{main,bonus}])=>{
                                   const tAll=[...main,...bonus];
+                                  const topicStartCat = main.length ? 'main' : 'bonus';
+                                  const topicStartAula = (topicStartCat === 'main' ? main : bonus)[0] || null;
                                   const tW=tAll.filter(a=>watchedAulas[getAulaId(a)]).length;
                                   const tPct=tAll.length>0?Math.round(tW/tAll.length*100):0;
                                   const topicDuration = formatCourseDuration(totalLessonSeconds(tAll));
                                   const shortT=topic.replace(/^[A-ZÁÉÍÓÚ]{2,8}\s*\d+\s*[-–]\s*/i,'').trim();
                                   return (
                                     <button key={topic}
-                                      onClick={()=>{setActiveSubjectVid(subj);setActiveSubtopicVid(`${topic}::main`);setActiveAula(null);setView('videoaulas');}}
+                                      onClick={()=>{setActiveSubjectVid(subj);setActiveSubtopicVid(`${topic}::${topicStartCat}`);setActiveAulaAndReset(topicStartAula);setView('videoaulas');}}
                                       className={`w-full flex items-center gap-3 px-4 py-3 border-b text-left transition-colors last:border-0 ${dm?'border-gray-800 hover:bg-gray-800':'border-gray-50 hover:bg-gray-50'}`}>
                                       <div className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${tPct===100?'bg-green-500 text-white':(dm?'bg-gray-800 text-gray-400':'bg-gray-100 text-gray-500')}`}>
                                         {tPct===100?<CheckIcon className="w-3.5 h-3.5"/>:`${tPct}%`}

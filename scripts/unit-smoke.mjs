@@ -6,6 +6,12 @@ import traverseModule from '@babel/traverse';
 import { cleanFirestoreData } from '../src/lib/firestoreData.js';
 import { deferInteractionWork } from '../src/lib/interaction.js';
 import {
+  buildCoursePlayerSrc,
+  coursePlayerSeekMessages,
+  coursePlayerSubscriptionMessages,
+  readCoursePlayerEvent,
+} from '../src/services/coursePlayer.js';
+import {
   normalizeQuestionTypesForGeneration,
   shouldGenerateHybridClinicalPass,
   toggleQuestionTypeSelection,
@@ -18,6 +24,7 @@ import {
 } from '../src/lib/questionExplanation.js';
 import {
   mergeSharedLibraryQuestionChunks,
+  normalizeSharedLibraryDocumentId,
   prepareSharedLibraryContentForWrite,
   sharedLibraryChunkDocId,
 } from '../src/services/sharedLibraryContent.js';
@@ -191,6 +198,30 @@ const assertNoFreeIdentifiers = (source, label) => {
     `${label} tem identificadores livres`,
   );
 };
+
+const stablePlayerSrc = new URL(buildCoursePlayerSrc({
+  embedUrl:'https://iframe.mediadelivery.net/embed/library/video?t=45&token=abc',
+}));
+assert.equal(stablePlayerSrc.hostname, 'iframe.mediadelivery.net');
+assert.equal(stablePlayerSrc.searchParams.get('token'), 'abc');
+assert.equal(stablePlayerSrc.searchParams.get('preload'), 'false');
+assert.equal(stablePlayerSrc.searchParams.get('autoplay'), 'false');
+assert.equal(stablePlayerSrc.searchParams.has('t'), false);
+const resumedAlternatePlayerSrc = new URL(buildCoursePlayerSrc({
+  embedUrl:'https://iframe.mediadelivery.net/embed/library/video',
+  alternate:true,
+  startAt:83.9,
+}));
+assert.equal(resumedAlternatePlayerSrc.hostname, 'player.mediadelivery.net');
+assert.equal(resumedAlternatePlayerSrc.searchParams.get('t'), '83');
+assert.deepEqual(
+  readCoursePlayerEvent({ context:'player.js', event:'timeupdate', value:{ seconds:12.5, duration:40 } }),
+  { eventName:'timeupdate', seconds:12.5, duration:40, ended:false },
+);
+assert.equal(coursePlayerSubscriptionMessages('ended')[1].method, 'addEventListener');
+assert.equal(coursePlayerSubscriptionMessages('ended')[1].value, 'ended');
+assert.equal(coursePlayerSeekMessages(32)[1].value, 32);
+assert.equal(normalizeSharedLibraryDocumentId('Aula 01 / Cardio'), 'Aula_01_-_Cardio');
 
 const input = {
   keep:'value',
@@ -2375,6 +2406,8 @@ assert.match(appSource, /const QUESTION_FACTORY_VISIBLE = false;/);
 assert.match(appSource, /const homeCanSeeSharedLibrary = QUESTION_FACTORY_VISIBLE && isAdmin && adminHomeMode !== 'site';/);
 assert.doesNotMatch(appSource, /view==='shared-library'&&homeCanSeeSharedLibrary&&<SharedLibraryView/);
 assert.match(appSource, /const needsCourseSharedLibraryData = canSeeVideoaulas && courseSharedLibraryDocIds\.length > 0;/);
+assert.match(appSource, /normalizeSharedLibraryDocumentId\(raw\)/);
+assert.match(appSource, /item\.lessonId, item\.sourceLessonId, item\.id/);
 assert.match(appSource, /const needsSharedLibraryData = \(homeCanSeeSharedLibrary && view === 'shared-library'\) \|\| needsCourseSharedLibraryData;/);
 assert.match(appSource, /const needsSharedLibraryUiData = homeCanSeeSharedLibrary && view === 'shared-library';/);
 assert.match(appSource, /canReadSharedLibrary:needsSharedLibraryData/);
@@ -2392,6 +2425,8 @@ assert.match(appSource, /const needsVideoaulasData = foregroundVideoaulasData \|
 assert.match(appSource, /const needsVqBlocksData = foregroundVqBlocksData;/);
 assert.doesNotMatch(appSource, /backgroundPrefetchStage >= 3/);
 assert.match(appSource, /Targeted lesson questions load failed/);
+assert.match(appSource, /if \(!isAdmin\) \{\s*addToast\('As questões do curso são carregadas do banco publicado/);
+assert.match(appSource, /vqDirectGenerationRef\.current\.has\(aulaId\)/);
 assert.match(appSource, /const needsReviewQueueData = foregroundReviewQueueData \|\| \(canSeeVideoaulas && backgroundPrefetchStage >= 2\);/);
 assert.match(appSource, /const foregroundPersonalLibraryData = \[/);
 assert.match(appSource, /const needsPersonalLibraryData = foregroundPersonalLibraryData \|\| backgroundPrefetchStage >= 1;/);
@@ -2884,8 +2919,11 @@ assert.match(videoaulasViewSource, /resetCourseLessonReview/);
 assert.match(videoaulasViewSource, /resumeCourseLessonReview/);
 assert.match(videoaulasViewSource, /Recarregar vídeo/);
 assert.match(videoaulasViewSource, /Tentar player alternativo/);
-assert.match(videoaulasViewSource, /player\.mediadelivery\.net/);
-assert.match(videoaulasViewSource, /constrainedPlayerConnection/);
+assert.match(videoaulasViewSource, /buildCoursePlayerSrc/);
+assert.match(videoaulasViewSource, /coursePlayerSeekMessages/);
+assert.doesNotMatch(videoaulasViewSource, /videoSeek\s*\?\?\s*45|constrainedPlayerConnection/);
+assert.match(videoaulasViewSource, /key=\{`\$\{getAulaId\(effAula\)\|\|effAula\.embed_url\}-\$\{playerAttempt\}/);
+assert.match(videoaulasViewSource, /As questões do curso são carregadas do banco publicado|Esta aula ainda não possui um banco de questões publicado/);
 assert.match(videoaulasViewSource, /onError=\{\(\) => setPlayerStatus\('error'\)\}/);
 assert.match(videoaulasViewSource, /disabled:cursor-not-allowed disabled:opacity-35/);
 assert.ok(
@@ -2921,6 +2959,9 @@ assert.match(coursePortalViewSource, /Plano de estudos/);
 assert.match(coursePortalViewSource, /Configurar plano/);
 assert.match(coursePortalViewSource, /Dias de estudo/);
 assert.match(coursePortalViewSource, /courseScheduleCadence/);
+assert.match(coursePortalViewSource, /setActiveAulaAndReset\(firstSubjectAula\)/);
+assert.match(coursePortalViewSource, /setActiveAulaAndReset\(topicStartAula\)/);
+assert.doesNotMatch(coursePortalViewSource, /setActiveAula\(null\)/);
 assert.match(coursePortalViewSource, /Carga horária/);
 assert.match(coursePortalViewSource, /Data final/);
 assert.match(coursePortalViewSource, /horas por dia de estudo/);

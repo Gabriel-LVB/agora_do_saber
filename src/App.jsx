@@ -16,6 +16,7 @@ import { useSharedLibrarySync } from './hooks/useSharedLibrarySync.js';
 import { auth, db } from './services/firebase.js';
 import { saveFamedAcademiaSubject } from './services/famedContent.js';
 import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
+import { coursePlayerSubscriptionMessages, readCoursePlayerEvent } from './services/coursePlayer.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
 import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
@@ -30,6 +31,7 @@ import {
   summarizeReviewQueue,
 } from './services/reviewScheduler.js';
 import {
+  normalizeSharedLibraryDocumentId,
   prepareSharedLibraryContentForWrite,
   SHARED_LIBRARY_CHUNKED_FIELDS,
   SHARED_LIBRARY_CHUNKS_COLLECTION,
@@ -3817,6 +3819,7 @@ export default function QuestionBankApp() {
   const vqSaveQueueRef = useRef(Promise.resolve());
   const [vqLoading, setVqLoading]   = useState(false);   // carregamento do Firestore
   const [vqSyllabusLoading, setVqSyllabusLoading] = useState(false); // geração do sumário
+  const vqDirectGenerationRef = useRef(new Set());
   const [vqGenModal, setVqGenModal] = useState(null);
   const [toasts, setToasts] = useState([]); // notificações toast
   const addToast = (msg, type='info', duration=5000, onClick=null) => {
@@ -3836,13 +3839,18 @@ export default function QuestionBankApp() {
   const [vqQuestionParity, setVqQuestionParity] = useState('all'); // all | odd | even
   const [vqExpandedSubj, setVqExpandedSubj] = useState({});
   const courseSharedLibraryAula = view === 'videoaulas' ? activeAula : vqAula;
-  const courseSharedLibraryDocId = courseSharedLibraryAula && (
-    courseSharedLibraryAula.doc_id
-    || courseSharedLibraryAula.id
-    || courseSharedLibraryAula.bunny_id
-    || getAulaId(courseSharedLibraryAula)
-  );
-  const courseSharedLibraryDocIds = courseSharedLibraryDocId ? [String(courseSharedLibraryDocId)] : [];
+  const courseSharedLibraryDocIds = courseSharedLibraryAula
+    ? [...new Set([
+      courseSharedLibraryAula.doc_id,
+      courseSharedLibraryAula.id,
+      courseSharedLibraryAula.bunny_id,
+      getAulaId(courseSharedLibraryAula),
+    ].filter(Boolean).flatMap(value => {
+      const raw = String(value);
+      const normalized = normalizeSharedLibraryDocumentId(raw);
+      return raw.includes('/') ? [normalized] : [raw, normalized];
+    }).filter(Boolean))]
+    : [];
   const needsCourseSharedLibraryData = canSeeVideoaulas && courseSharedLibraryDocIds.length > 0;
   const needsSharedLibraryData = (homeCanSeeSharedLibrary && view === 'shared-library') || needsCourseSharedLibraryData;
   const needsSharedLibraryUiData = homeCanSeeSharedLibrary && view === 'shared-library';
@@ -4817,23 +4825,10 @@ export default function QuestionBankApp() {
     const aulaId = getAulaId(activeAula);
     if (!aulaId) return;
     videoWatchRef.current = { aulaId, last:null, autoCompleted:false };
-    const readPlayback = (raw) => {
-      const data = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch(e) { return null; } })() : raw;
-      if (!data) return null;
-      const payload = data.data && typeof data.data === 'object' ? data.data : data;
-      const eventName = String(payload.event || payload.type || payload.name || data.event || data.type || data.name || '').toLowerCase();
-      const seconds = payload.seconds ?? payload.currentTime ?? payload.time ?? payload.position ?? data.seconds ?? data.currentTime;
-      const duration = payload.duration ?? payload.durationSeconds ?? payload.totalTime ?? payload.totalDuration ?? data.duration ?? data.durationSeconds;
-      const ended = payload.ended === true || data.ended === true || /\b(ended|finish|finished|complete|completed)\b/.test(eventName);
-      const n = Number(seconds);
-      const d = Number(duration);
-      if (!Number.isFinite(n) && !ended) return null;
-      return { seconds:Number.isFinite(n) ? n : null, duration:Number.isFinite(d) ? d : null, ended };
-    };
     const onMessage = (event) => {
       if (videoFrameRef.current?.contentWindow && event.source !== videoFrameRef.current.contentWindow) return;
-      const playback = readPlayback(event.data);
-      if (!playback) return;
+      const playback = readCoursePlayerEvent(event.data);
+      if (!playback || (playback.seconds == null && !playback.ended)) return;
       const { seconds } = playback;
       const cur = videoWatchRef.current;
       if (cur.aulaId !== aulaId) return;
@@ -4852,12 +4847,7 @@ export default function QuestionBankApp() {
     const subscribe = () => {
       const win = videoFrameRef.current?.contentWindow;
       if (!win) return;
-      [
-        {event:'command', func:'addEventListener', args:['timeupdate']},
-        {event:'command', func:'addEventListener', args:['ended']},
-        {context:'player.js', version:'0.0.11', event:'command', func:'addEventListener', args:['timeupdate']},
-        {context:'player.js', version:'0.0.11', event:'command', func:'addEventListener', args:['ended']},
-      ].forEach(msg => {
+      ['timeupdate', 'ended'].flatMap(coursePlayerSubscriptionMessages).forEach(msg => {
         try { win.postMessage(JSON.stringify(msg), '*'); } catch(e) {}
         try { win.postMessage(msg, '*'); } catch(e) {}
       });
@@ -4870,6 +4860,13 @@ export default function QuestionBankApp() {
       window.removeEventListener('message', onMessage);
     };
   }, [canUseAdvancedFeatures, view, activeAula?.bunny_id, activeAula?.embed_url]);
+
+  const getActiveVideoPosition = aula => {
+    const aulaId = getAulaId(aula);
+    const playback = videoWatchRef.current;
+    const seconds = Number(playback?.last);
+    return aulaId && playback?.aulaId === aulaId && Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  };
 
   const applyCoursePrefsPayload = (prefs = {}, { includeSchedule = true, includeSubjects = true } = {}) => {
     if (!prefs || typeof prefs !== 'object') return false;
@@ -6236,12 +6233,20 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!canSeeVideoaulas || !sharedLibraryItems.length || !videoaulasData) return;
     const lessons = flattenCourseLessons(videoaulasData);
-    const byLessonId = new Map(lessons.map(lesson => [String(lesson.id), lesson]));
+    const byLessonId = new Map();
+    lessons.forEach(lesson => {
+      [lesson.id, lesson.docId, lesson.aula?.doc_id, lesson.aula?.id, lesson.aula?.bunny_id, getAulaId(lesson.aula)]
+        .filter(Boolean)
+        .forEach(id => byLessonId.set(String(id), lesson));
+    });
     setVqBlocks(previous => {
       let changed = false;
       const next = { ...previous };
       sharedLibraryItems.forEach(item => {
-        const lesson = byLessonId.get(String(item.lessonId));
+        const lesson = [item.lessonId, item.sourceLessonId, item.id]
+          .filter(Boolean)
+          .map(id => byLessonId.get(String(id)))
+          .find(Boolean);
         if (!lesson) return;
         const key = aulaDocId(lesson.aula);
         const current = previous[key];
@@ -8733,10 +8738,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     return blocks;
   };
 
-  const sharedLibraryDocIdForLesson = (lesson = {}) => String(lesson.docId || lesson.id || lesson.aula?.title || '')
-    .replace(/\//g, '-')
-    .replace(/[^a-zA-Z0-9À-ÿ_.-]+/g, '_')
-    .slice(0, 180);
+  const sharedLibraryDocIdForLesson = (lesson = {}) =>
+    normalizeSharedLibraryDocumentId(lesson.docId || lesson.id || lesson.aula?.title || '');
 
   const saveSharedLibraryItem = async (id, patch) => {
     if (!isAdmin) throw new Error('Apenas o administrador pode publicar na Biblioteca.');
@@ -10347,6 +10350,10 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
   // ── Gerar questões direto (sem modal) ──────────────────────────────────────
   const gerarQuestoesDireto = async (aula, subject, topic) => {
+    if (!isAdmin) {
+      addToast('As questões do curso são carregadas do banco publicado. Tente novamente em instantes.', 'info', 4500);
+      return;
+    }
     if (!checkKey()) return;
     const s = settingsRef.current;
     const durationSecs = aula.duration_seconds || 0;
@@ -10354,25 +10361,33 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const plan = getCourseVqQuestionPlan({ durationSecs, suggestedQ:10, isAdmin, maxPerBlock });
     const { totalQ, qPerBlock, numBlocks } = plan;
     const aulaId = aulaDocId(aula);
+    if (vqDirectGenerationRef.current.has(aulaId)) {
+      addToast('A geração desta aula já está em andamento.', 'info', 3500);
+      return;
+    }
+    vqDirectGenerationRef.current.add(aulaId);
 
     const toastId = addToast('📋 Gerando sumário da aula...', 'loading', 0);
-
-    await generateVqSyllabus({
-      aula, aulaId, totalQ, numBlocks, qPerBlock,
-      numAlternatives:(s.questionTypes || []).includes('vof') ? 5 : s.numAlternatives || 5,
-      vofStatementCount: s.vofStatementCount || 5,
-      questionStyle: s.questionStyle || 'mixed',
-	      questionTypes: filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
-      geminiThinkingEnabled: !!s.geminiThinkingEnabled,
-      adminChunkedQuestions: QUESTION_BATCHING_ENABLED,
-      autoMode: s.autoMode !== false,
-      syllabusMaxPerBlock: maxPerBlock,
-      adminMinuteRule: isAdmin,
-      adminFullCoverage: isAdmin,
-      extraPrompt: '',
-      subject, topic,
-      toastId,
-    });
+    try {
+      await generateVqSyllabus({
+        aula, aulaId, totalQ, numBlocks, qPerBlock,
+        numAlternatives:(s.questionTypes || []).includes('vof') ? 5 : s.numAlternatives || 5,
+        vofStatementCount: s.vofStatementCount || 5,
+        questionStyle: s.questionStyle || 'mixed',
+	        questionTypes: filterQuestionTypesForAccess(s.questionTypes || ['direct'], questionTypeAccess),
+        geminiThinkingEnabled: !!s.geminiThinkingEnabled,
+        adminChunkedQuestions: QUESTION_BATCHING_ENABLED,
+        autoMode: s.autoMode !== false,
+        syllabusMaxPerBlock: maxPerBlock,
+        adminMinuteRule: isAdmin,
+        adminFullCoverage: isAdmin,
+        extraPrompt: '',
+        subject, topic,
+        toastId,
+      });
+    } finally {
+      vqDirectGenerationRef.current.delete(aulaId);
+    }
   };
   // Busca transcrição do Firestore (coleção lessons, id = título da aula)
   const fetchTranscript = async (aula) => {
@@ -13803,6 +13818,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     gerarQuestoesDireto,
     getAcademiaFolderFixationTargets,
     getAcademiaSubjectFixationTargets,
+    getActiveVideoPosition,
     getActiveGeminiKeyId,
     getAulaId,
     getBulkGenerateTargets,
