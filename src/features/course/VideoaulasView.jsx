@@ -254,7 +254,7 @@ export default function VideoaulasView() {
 	          const originalPlayerUrl = String(effAula?.embed_url || '');
 	          const initialSeek = playerResumeAt != null && Number.isFinite(Number(playerResumeAt))
 	            ? Number(playerResumeAt)
-	            : videoSeek != null && Number.isFinite(Number(videoSeek)) ? Number(videoSeek) : null;
+	            : videoSeek != null && Number.isFinite(Number(videoSeek)) ? Number(videoSeek) : 45;
 	          const playerSrc = buildCoursePlayerSrc({
 	            embedUrl:originalPlayerUrl,
 	            alternate:useAlternatePlayer,

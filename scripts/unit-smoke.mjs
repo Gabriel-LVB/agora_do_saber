@@ -2922,6 +2922,7 @@ assert.match(videoaulasViewSource, /Tentar player alternativo/);
 assert.match(videoaulasViewSource, /buildCoursePlayerSrc/);
 assert.match(videoaulasViewSource, /coursePlayerSeekMessages/);
 assert.doesNotMatch(videoaulasViewSource, /videoSeek\s*\?\?\s*45|constrainedPlayerConnection/);
+assert.match(videoaulasViewSource, /Number\(videoSeek\) : 45;/);
 assert.match(videoaulasViewSource, /key=\{`\$\{getAulaId\(effAula\)\|\|effAula\.embed_url\}-\$\{playerAttempt\}/);
 assert.match(videoaulasViewSource, /As questões do curso são carregadas do banco publicado|Esta aula ainda não possui um banco de questões publicado/);
 assert.match(videoaulasViewSource, /onError=\{\(\) => setPlayerStatus\('error'\)\}/);
