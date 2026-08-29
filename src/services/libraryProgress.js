@@ -1,4 +1,4 @@
-import { doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 
 import { cleanFirestoreData } from '../lib/firestoreData.js';
 import { db } from './firebase.js';
@@ -29,6 +29,15 @@ export const saveLibraryTopicProgressPatch = async ({
       updatedAt,
     }),
     { merge:true }
+  );
+};
+
+export const deleteLibraryTopicProgress = async ({ userId, subjectId, topicId }) => {
+  if (!userId) throw new Error('USER_MISSING');
+  if (!subjectId) throw new Error('SUBJECT_MISSING');
+  if (!topicId) throw new Error('TOPIC_MISSING');
+  await deleteDoc(
+    doc(db, 'users', userId, LIBRARY_PROGRESS_COLLECTION, libraryProgressDocId(subjectId, topicId))
   );
 };
 

@@ -18,7 +18,7 @@ import { saveFamedAcademiaSubject } from './services/famedContent.js';
 import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
 import { coursePlayerSubscriptionMessages, readCoursePlayerEvent } from './services/coursePlayer.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
-import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
+import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, deleteLibraryTopicProgress, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
 import {
   buildReviewForecast,
@@ -11686,6 +11686,25 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setPasteText('');setPasteTopic('');setActiveTopicId(nt.id);setView('topic');
   };
 
+  const deleteImportedTopic = async ({ subjectId, topicId }) => {
+    const subject = libraryRef.current.find(item => sameId(item.id, subjectId));
+    if (!subject || subject.source !== 'external') return;
+    const topic = (subject.topics || []).find(item => sameId(item.id, topicId));
+    if (!topic) return;
+
+    await updateSubject({
+      ...subject,
+      topics:(subject.topics || []).filter(item => !sameId(item.id, topicId)),
+    });
+    if (user && !user.isAnonymous) {
+      await deleteLibraryTopicProgress({ userId:user.uid, subjectId:subject.id, topicId }).catch(error => {
+        console.warn('imported topic progress cleanup failed:', error?.code || error?.message || error);
+      });
+    }
+    if (sameId(activeTopicId, topicId)) setActiveTopicId(null);
+    addToast(`Bloco “${topic.title || 'Importado'}” excluído.`, 'success', 3500);
+  };
+
   const getQuickSubjectFromLibrary = () => {
     const items = libraryRef.current?.length ? libraryRef.current : library;
     return items.find(s => s.source === QUICK_SOURCE && s.id === QUICK_SUBJECT_ID)
@@ -15188,18 +15207,31 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	                        <div className="bg-yellow-500 h-full" style={{width:`${pct}%`}}/>
 	                      </div>
 	                      {isImportedTopic && (
-	                        <button
-	                          type="button"
-	                          onClick={e=>{
-	                            e.stopPropagation();
-	                            setEditingTopic(topic.id);
-	                            setEditingTopicName(topic.title || '');
-	                          }}
-	                          title="Renomear bloco"
-	                          aria-label={`Renomear bloco ${topic.title || ''}`.trim()}
-	                          className="p-2 rounded-full text-gray-400 hover:text-yellow-500 transition-colors">
-	                          <EditIcon className="w-4 h-4"/>
-	                        </button>
+	                        <>
+	                          <button
+	                            type="button"
+	                            onClick={e=>{
+	                              e.stopPropagation();
+	                              setEditingTopic(topic.id);
+	                              setEditingTopicName(topic.title || '');
+	                            }}
+	                            title="Renomear bloco"
+	                            aria-label={`Renomear bloco ${topic.title || ''}`.trim()}
+	                            className="p-2 rounded-full text-gray-400 hover:text-yellow-500 transition-colors">
+	                            <EditIcon className="w-4 h-4"/>
+	                          </button>
+	                          <button
+	                            type="button"
+	                            onClick={e=>{
+	                              e.stopPropagation();
+	                              setDeleteId({type:'external-topic', subjectId:activeSubject.id, topicId:topic.id, title:topic.title});
+	                            }}
+	                            title="Excluir bloco"
+	                            aria-label={`Excluir bloco ${topic.title || ''}`.trim()}
+	                            className="p-2 rounded-full text-gray-400 hover:text-red-500 transition-colors">
+	                            <Trash2 className="w-4 h-4"/>
+	                          </button>
+	                        </>
 	                      )}
 	                      {hasTopicActions && (
                         <div className="relative">
@@ -16972,6 +17004,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      {bulkGenerateModal&&<BulkGenerateModal/>}
 	      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
       {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='external-topic'&&<GModal title="Excluir bloco?" message={`As questões, respostas, favoritos e revisões de “${deleteId.title || 'Bloco importado'}” serão apagados. Esta ação é permanente.`} confirmText="Excluir" onConfirm={async()=>{await deleteImportedTopic(deleteId);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='folder'&&(()=>{
         const folder = libraryFolders.find(f=>f.id===deleteId.id);
         if (isProtectedMirrorRootFolder(folder)) {
