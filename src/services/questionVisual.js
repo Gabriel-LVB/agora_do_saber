@@ -24,8 +24,22 @@ const automaticUnresolvedEcgRequirement = question => {
   return requirementKeys.every(key => ['type', 'status'].includes(key));
 };
 
+const imageLooksLikeEcg = image => {
+  if (image?.type === 'ecg') return true;
+  const metadata = normalizeVisualText([
+    image?.url,
+    image?.file,
+    image?.fileName,
+    image?.altText,
+    image?.caption,
+    image?.title,
+    image?.description,
+  ].filter(Boolean).join(' '));
+  return /(?:^| )(?:ecg|eletrocardiograma|tracado eletrocardiografico)(?: |$)/.test(metadata);
+};
+
 export const questionHasEcgImage = question => (Array.isArray(question?.images) ? question.images : [])
-  .some(image => image?.type === 'ecg' || /(?:^|\/)ecg(?:\/|[-_])/i.test(String(image?.url || '')));
+  .some(imageLooksLikeEcg);
 
 export const questionTextRequestsEcgImage = question => {
   const statement = normalizeVisualText([

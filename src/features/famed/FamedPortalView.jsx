@@ -55,6 +55,28 @@ const normalizeQuestions = questions => (questions || []).map(question => ({
 const safeDownloadName = value => String(value || 'aula')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'aula';
+const buildFamedAssessmentContent = item => item?.kind === 'exam' ? {
+  id:item.id,
+  scheduleItemId:item.id,
+  discipline:item.discipline,
+  title:item.title,
+  contentKind:'exam',
+  published:false,
+  academiaSubject:{
+    id:`famed-${item.id}`,
+    title:item.title,
+    topics:[],
+    famedStudy:{ pastQuestionSets:[] },
+    source:'academia',
+    storageTarget:'famed',
+    famedMeta:{
+      contentId:item.id,
+      scheduleItemId:item.id,
+      discipline:item.discipline,
+      contentKind:'exam',
+    },
+  },
+} : null;
 
 export default function FamedPortalView() {
   const {
@@ -157,7 +179,13 @@ export default function FamedPortalView() {
       .map(item => [item.id, resolveFamedCourseLessons(item.id, courseLessons)]),
   ), [courseLessons]);
   const legacyContentItems = React.useMemo(() => contentItems.filter(item => item.creationMode !== 'academia'), [contentItems]);
-  const activeContent = contentItems.find(item => item.id === activeContentId) || null;
+  const storedActiveContent = contentItems.find(item => item.id === activeContentId || item.scheduleItemId === activeContentId) || null;
+  const activeScheduleItem = FAMED_S5_ALL_ITEMS.find(item => item.id === (storedActiveContent?.scheduleItemId || activeContentId)) || null;
+  const activeContent = React.useMemo(
+    () => storedActiveContent || buildFamedAssessmentContent(activeScheduleItem),
+    [storedActiveContent, activeScheduleItem],
+  );
+  const activeIsAssessment = activeContent?.contentKind === 'exam' || activeScheduleItem?.kind === 'exam';
   const activeSubject = React.useMemo(() => famedContentToAcademiaSubject(activeContent), [activeContent]);
   const activeSubjectWithProgress = React.useMemo(() => {
     if (!activeSubject) return null;
@@ -277,9 +305,10 @@ export default function FamedPortalView() {
     setActivePanel('topic');
     window.scrollTo?.({ top:0, behavior:'smooth' });
   };
-  const openPastQuestions = content => {
-    if (!content) return;
-    setActiveContentId(content.id);
+  const openPastQuestions = (content, scheduleItem=null) => {
+    const targetId = content?.id || scheduleItem?.id;
+    if (!targetId) return;
+    setActiveContentId(targetId);
     setActiveTopicId(null);
     setActiveQuestionSet(null);
     setActivePanel('past-questions');
@@ -516,7 +545,8 @@ export default function FamedPortalView() {
     setSavingContent(true);
     try {
       await setFamedContentPublished(activeContent, !activeContent.published);
-      addToast?.(activeContent.published ? 'Aula retirada dos alunos.' : 'Aula publicada para os alunos.', 'success', 4500);
+      const contentLabel = activeIsAssessment ? 'Prova' : 'Aula';
+      addToast?.(activeContent.published ? `${contentLabel} retirada dos alunos.` : `${contentLabel} publicada para os alunos.`, 'success', 4500);
     } catch(error) {
       addToast?.(error?.message || 'Não foi possível alterar a publicação.', 'error', 5500);
     } finally {
@@ -610,6 +640,8 @@ export default function FamedPortalView() {
       onToggleFavorite={questionId=>saveFavorites({...favoritesByBlock,[activeQuestionSet.id]:blockFavorites.includes(questionId)?blockFavorites.filter(id=>id!==questionId):[...blockFavorites,questionId]})}
       onReset={()=>saveAnswers({...answersByBlock,[activeQuestionSet.id]:{}})}
       darkMode={darkMode}
+      apiKey={getKey()}
+      onCall={callWithRotation}
       displayMode={settings.questionDisplayMode || 'list'}
       onDisplayModeChange={mode=>{const next={...settings,questionDisplayMode:mode};setSettings(next);saveSettings(next);}}
       initialStudyKind={activeQuestionSet.initialStudyKind || 'auto'}
@@ -638,7 +670,7 @@ export default function FamedPortalView() {
         },
       })}
       inReviewCount={Object.keys(reviewQueue?.[`lib_${activeSubject.id}`]?.[activeQuestionSet.id] || {}).length}
-      onGoToAula={()=>setActivePanel(activeTopic?'topic':isAdmin?'subject':'student-topics')}
+      onGoToAula={activeIsAssessment?null:()=>setActivePanel(activeTopic?'topic':isAdmin?'subject':'student-topics')}
       goToAulaLabel="Abrir aula da Academia"
       onNextUnit={nextAcademiaTopic ? openNextAcademiaTopic : null}
       nextUnitLabel="Próximo tópico"
@@ -652,10 +684,13 @@ export default function FamedPortalView() {
     isAdmin={isAdmin}
     saving={savingContent}
     openingSetId={openingQuestionSetId}
+    isAssessment={activeIsAssessment}
+    published={activeContent?.published === true}
     onBack={returnToSchedule}
     onDeleteSet={deletePastQuestionSet}
     onImport={importPastQuestions}
     onOpenSet={openPastQuestionSet}
+    onTogglePublished={togglePublished}
     addToast={addToast}
   /></React.Suspense>;
 

@@ -8,7 +8,6 @@ import {
   normalizeDisplayedAlternativeReferences,
 } from '../../lib/questionExplanation.js';
 import { toggleQuestionTypeSelection } from '../../lib/questionTypes.js';
-import { questionHasUnresolvedRequiredVisual } from '../../services/questionVisual.js';
 
 
 
@@ -27,7 +26,6 @@ const ChevronLeft = ic('<polyline points="15 18 9 12 15 6"/>');
 const ChevronRight= ic('<polyline points="9 18 15 12 9 6"/>');
 const ChevronUp   = ic('<polyline points="18 15 12 9 6 15"/>');
 const Shuffle     = ic('<path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h2.5a5 5 0 0 0 4-2l7-8a5 5 0 0 1 4-2H22"/><path d="M2 6h2.5a5 5 0 0 1 4 2l1.5 1.7"/><path d="M14 14.3 15.5 16a5 5 0 0 0 4 2H22"/>');
-const AlertTriangle=ic('<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>');
 const SettingsIcon= ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>');
 const Trash2      = ic('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>');
 const EditIcon    = ic('<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>');
@@ -497,7 +495,7 @@ const QuestionView = ({
     const answeredCount = questions.filter(q => {
       const v = validAns[q.id];
       if (!v || v === 'SKIPPED') return false;
-      if (q.isOpen) { try { return !!(JSON.parse(v)?.answer); } catch(e) { return false; } }
+      if (q.isOpen) { try { const parsed = JSON.parse(v); return !!parsed?.answer && parsed?.score != null; } catch(e) { return false; } }
       return true;
     }).length;
     // Don't scroll if none answered or all answered
@@ -506,7 +504,7 @@ const QuestionView = ({
     const firstUnanswered = questions.find(q => {
       const v = validAns[q.id];
       if (!v || v === 'SKIPPED') return true;
-      if (q.isOpen) { try { return !!(JSON.parse(v)?.answer); } catch(e) { return true; } }
+      if (q.isOpen) { try { const parsed = JSON.parse(v); return !parsed?.answer || parsed?.score == null; } catch(e) { return true; } }
       return false;
     });
     if (!firstUnanswered) return;
@@ -552,7 +550,7 @@ const QuestionView = ({
 	    if (!q.isOpen) return false;
 	    const val = validAnswers[q.id];
     if (!val || val === 'SKIPPED') return false;
-    try { const p = JSON.parse(val); return !!(p?.answer); } catch(e) { return false; }
+    try { const p = JSON.parse(val); return !!p?.answer && p?.score != null; } catch(e) { return false; }
   };
 	  const isOpenCorrect = (q) => {
 	    if (!q.isOpen) return false;
@@ -1304,7 +1302,7 @@ const OpenAnswerInline = ({ question, darkMode, apiKey, onCall, oracleLength, sa
   const [answer, setAnswer]   = useState(parsed?.answer || '');
   const [result, setResult]   = useState(parsed?.score != null ? parsed : null);
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState(!parsed?.answer);
+  const [editing, setEditing] = useState(!(parsed?.answer && parsed?.score != null));
 
   const callOracle = onCall || ((p,s) => callGemini(p, s, apiKey));
 
@@ -1334,10 +1332,10 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
       setEditing(false);
       onSave(JSON.stringify(saved));
     } catch(e) {
-      const saved = { answer, score: null, verdict: 'ERRO', feedback: 'Falha na correção. Verifique sua conexão e tente novamente.' };
+      const missingKey = String(e?.code || e?.message || '').includes('API_KEY_MISSING');
+      const saved = { answer, score: null, verdict: 'ERRO', feedback: missingKey ? 'Configure uma chave Gemini nas Configurações para corrigir questões abertas.' : 'Falha na correção. Verifique sua conexão e tente novamente.' };
       setResult(saved);
       setEditing(false);
-      onSave(JSON.stringify(saved));
     }
     setLoading(false);
   };
@@ -1910,9 +1908,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         : question.libraryQuestionKind === 'direct'
           ? 'Fixação'
           : 'Questão';
-  const unresolvedRequiredEcg = questionHasUnresolvedRequiredVisual(question)
-    && !(question.images || []).some(image => image?.type === 'ecg');
-  const hasStructuredExplanations = !!(question.explanationParts && (question.options || []).some(o => o.explanation));
+  const hasAlternativeExplanations = !!(question.options || []).some(option => option.explanation);
   const iconBtnBase = 'question-icon-button h-8 w-8 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/40';
   const handleNotebookClick = () => {
     if (!onToggleErrorNotebook) return;
@@ -2068,12 +2064,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         </>}
 
 	      {/* Questão aberta/essay — inline com campo de resposta, correção e chat */}
-	      {unresolvedRequiredEcg ? (
-          <div className={`mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed ${darkMode?'border-yellow-800 bg-yellow-900/15 text-yellow-200':'border-yellow-200 bg-yellow-50 text-yellow-900'}`}>
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0"/>
-            <span>O traçado desta questão ainda não pôde ser associado com segurança.</span>
-          </div>
-        ) : question.isFlashcard ? (
+	      {question.isFlashcard ? (
 	        <FlashcardInline
 	          question={question}
 	          darkMode={darkMode}
@@ -2151,7 +2142,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
 	          else if (showResults && isSkipped && opt.isCorrect) letterBadge = darkMode?'bg-green-800 text-green-300':'bg-green-100 text-green-700';
 	          else if (isSelected && revealMode==='selected') letterBadge = 'bg-blue-500 text-white';
 	          else if (isPressed) letterBadge = 'bg-yellow-500 text-white';
-          const showOptionExplanation = !!(hasStructuredExplanations && showResults && !isSkipped && (opt.isCorrect || isSelected) && opt.explanation);
+          const showOptionExplanation = !!(hasAlternativeExplanations && showResults && !isSkipped && (opt.isCorrect || isSelected) && opt.explanation);
 	          const optionExplanationLabel = opt.isCorrect ? 'Certa:' : 'Erro:';
 	          const optionExplanationClass = opt.isCorrect
 	            ? (darkMode ? 'border-green-400/20 text-green-100' : 'border-green-300/70 text-green-900')
@@ -2225,7 +2216,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
             {lessonExplanationOpen && (
               <div className={`border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700 text-gray-200':'border-gray-100 text-gray-800'}`}>
                 <div className="select-text text-[15px] leading-relaxed md:text-base" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDeclaredCorrectAlternativeReferences(
-                  hasStructuredExplanations ? (question.explanationParts?.lesson || explanation) : explanation,
+                  hasAlternativeExplanations ? (question.explanationParts?.lesson || explanation) : explanation,
                   getCorrectLetter(question),
                 ))}</div>
                 {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
@@ -2236,9 +2227,9 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           <div className="question-explanation-panel overflow-hidden rounded-xl">
             <button
               type="button"
-              onClick={()=>hasStructuredExplanations && setAlternativeExplanationsOpen(open=>!open)}
+              onClick={()=>hasAlternativeExplanations && setAlternativeExplanationsOpen(open=>!open)}
               aria-expanded={alternativeExplanationsOpen}
-              disabled={!hasStructuredExplanations}
+              disabled={!hasAlternativeExplanations}
               className={`flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors md:px-5 ${darkMode?'text-gray-100 hover:bg-gray-800/60':'text-gray-900 hover:bg-gray-50'} disabled:cursor-not-allowed disabled:opacity-45`}
             >
               <span className="flex min-w-0 items-center gap-3 font-bold">
@@ -2247,7 +2238,7 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
               </span>
               <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-50 transition-transform ${alternativeExplanationsOpen?'rotate-180':''}`}/>
             </button>
-            {alternativeExplanationsOpen && hasStructuredExplanations && (
+            {alternativeExplanationsOpen && hasAlternativeExplanations && (
               <div className={`space-y-5 border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700':'border-gray-100'}`}>
                 {(question.options || []).filter(opt => opt.explanation).map(opt => {
                   const displayExplanation = normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter);

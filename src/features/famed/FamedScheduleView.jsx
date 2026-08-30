@@ -127,7 +127,25 @@ export default function FamedScheduleView({ darkMode, isAdmin=false, disciplineI
                 const details = supplementaryTopics(item);
                 const linkedCourseLessons = courseLessonsByScheduleId[item.id] || [];
                 const courseDuration = linkedLessonsDuration(linkedCourseLessons);
-                if (item.kind !== 'lesson') return <article key={item.id} className={`famed-assessment rounded-xl border border-dashed p-4 ${darkMode?'border-red-900 bg-red-900 bg-opacity-10':'border-red-200 bg-red-50'}`}><div className="flex items-center gap-3"><span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-red-100 text-xs font-bold text-red-700">{item.sequence}</span><div className="min-w-0"><span className="text-xs font-bold uppercase tracking-wide text-red-600">Prova</span><h4 className="mt-0.5 font-serif font-bold mobile-safe-text">{item.title}</h4><p className="mt-1 text-xs font-semibold opacity-60"><time dateTime={item.date}>{scheduleWhen(item)}</time></p>{isAdmin&&item.dateNote&&<p className="mt-1 text-[11px] text-yellow-600">{item.dateNote}</p>}</div></div></article>;
+                if (item.kind !== 'lesson') return <article key={item.id} className={`famed-assessment rounded-xl border border-dashed p-4 ${darkMode?'border-red-900 bg-red-900 bg-opacity-10':'border-red-200 bg-red-50'}`}>
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-red-100 text-xs font-bold text-red-700">{item.sequence}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold uppercase tracking-wide text-red-600">Prova</span>
+                          <h4 className="mt-0.5 font-serif font-bold mobile-safe-text">{item.title}</h4>
+                        </div>
+                        {(content||isAdmin)&&<span className={`famed-status rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${content?.published?(darkMode?'bg-green-900 text-green-300':'bg-green-100 text-green-700'):(darkMode?'bg-gray-800 text-gray-500':'bg-white text-gray-400')}`}>{content?.published?'Disponível':content?'Rascunho':'Sem questões'}</span>}
+                      </div>
+                      <p className="mt-1 text-xs font-semibold opacity-60"><time dateTime={item.date}>{scheduleWhen(item)}</time></p>
+                      {isAdmin&&item.dateNote&&<p className="mt-1 text-[11px] text-yellow-600">{item.dateNote}</p>}
+                    </div>
+                  </div>
+                  {(isAdmin||pastQuestionCount>0)&&<div className="mt-3">
+                    <button type="button" disabled={!isAdmin&&!pastQuestionCount} onClick={()=>onOpenPastQuestions?.(content,item)} className={actionClass(isAdmin||pastQuestionCount>0,darkMode,true)} title={pastQuestionCount?`${pastQuestionCount} questões antigas`:'Adicionar questões antigas desta prova'}><FileText/>{pastQuestionCount?`Questões antigas (${pastQuestionCount})`:'Adicionar questões antigas'}</button>
+                  </div>}
+                </article>;
                 return <article key={item.id} className={`famed-lesson-card rounded-xl border p-4 ${disciplineTone(item.discipline,darkMode)}`}>
                   <div className="flex items-start gap-3">
                     <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold ${darkMode?'bg-gray-900 text-yellow-400':'bg-white text-yellow-700'}`}>{item.sequence}</span>

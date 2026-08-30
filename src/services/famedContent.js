@@ -56,6 +56,7 @@ export const famedContentToAcademiaSubject = content => {
       track:content.track || famedTrackForDiscipline(content.discipline),
       semester:content.semester || 'S5',
       published:content.published === true,
+      contentKind:content.contentKind || content.academiaSubject?.famedMeta?.contentKind || 'lesson',
     },
   };
 };
@@ -63,10 +64,11 @@ export const famedContentToAcademiaSubject = content => {
 export const saveFamedAcademiaSubject = async (subject, overrides={}) => {
   const meta = subject?.famedMeta || {};
   const contentId = String(overrides.contentId || meta.contentId || meta.scheduleItemId || '').trim();
-  if (!contentId) throw new Error('A aula da FAMED não possui identificador válido.');
+  if (!contentId) throw new Error('O conteúdo da FAMED não possui identificador válido.');
   const published = overrides.published ?? meta.published ?? false;
   const discipline = overrides.discipline || meta.discipline || '';
   const track = overrides.track || meta.track || famedTrackForDiscipline(discipline);
+  const contentKind = overrides.contentKind || meta.contentKind || 'lesson';
   const academiaSubject = cleanFirestoreData({
     ...subject,
     source:'academia',
@@ -77,6 +79,7 @@ export const saveFamedAcademiaSubject = async (subject, overrides={}) => {
       discipline,
       track,
       published:published === true,
+      contentKind,
     },
   });
   const payload = cleanFirestoreData({
@@ -88,6 +91,7 @@ export const saveFamedAcademiaSubject = async (subject, overrides={}) => {
     track,
     title:academiaSubject.title || overrides.title || '',
     creationMode:'academia',
+    contentKind,
     academiaSubject,
     published:published === true,
     updatedAt:serverTimestamp(),
@@ -100,13 +104,13 @@ export const saveFamedAcademiaSubject = async (subject, overrides={}) => {
 
 export const setFamedContentPublished = async (content, published) => {
   const subject = famedContentToAcademiaSubject(content);
-  if (!subject) throw new Error('Conteúdo da Academia não encontrado.');
+  if (!subject) throw new Error('Conteúdo da FAMED não encontrado.');
   await saveFamedAcademiaSubject(subject, { published:published === true });
 };
 
 export const deleteFamedContent = async contentId => {
   const id = String(contentId || '').trim();
-  if (!id) throw new Error('Aula inválida.');
+  if (!id) throw new Error('Conteúdo inválido.');
   const assetSnapshot = await getDocs(query(collection(db, ASSET_COLLECTION), where('contentId','==',id)));
   for (let index = 0; index < assetSnapshot.docs.length; index += 400) {
     const batch = writeBatch(db);

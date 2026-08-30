@@ -17,11 +17,13 @@ O conteúdo é criado dentro do site usando exatamente o mesmo fluxo da Academia
 
 ## Questões antigas e flashcards essenciais
 
-Cada card de aula pronta contém somente três ações de estudo: **Academia**, **Questões antigas** e **Flashcards**.
+Cada card de aula pronta contém somente três ações de estudo: **Academia**, **Questões antigas** e **Flashcards**. Os cards de prova do cronograma também oferecem **Adicionar questões antigas** ao administrador e, depois da publicação, **Questões antigas** aos alunos.
 
-Cada aula pode manter blocos nomeados de questões antigas dentro do próprio conteúdo FAMED. O administrador abre **Questões antigas**, copia o prompt fornecido e o envia ao GPT junto da prova, do gabarito e das imagens originais. O GPT deve devolver um ZIP sem senha, com `questions.json` na raiz e as figuras necessárias dentro de `images/`. O contrato versionado é `agora-famed-question-package-v1`; o próprio prompt contém todos os campos, regras de fidelidade, gabarito, explicações e vínculos de imagem.
+Cada aula e cada prova do cronograma podem manter blocos nomeados de questões antigas dentro do próprio conteúdo FAMED. O administrador abre **Questões antigas**, copia o prompt fornecido e o envia ao GPT junto da prova, do gabarito e das imagens originais. O GPT deve devolver um ZIP sem senha, com `questions.json` na raiz e as figuras necessárias dentro de `images/`. O contrato versionado é `agora-famed-question-package-v1`; o próprio prompt contém todos os campos, regras de fidelidade, gabarito, explicações e vínculos de imagem.
 
-O site valida o pacote antes da publicação. Questões ficam em `famedStudy.pastQuestionSets`; imagens são gravadas separadamente em `famed_assets` e referenciadas por `assetId`, acompanhando o estado publicado da aula. Não há Firebase Storage. Ao abrir um bloco, o site hidrata as figuras e as mostra no cartão da questão. Excluir o bloco remove também seus assets; excluir toda a Academia remove todos os assets ligados ao conteúdo.
+Uma prova ainda sem conteúdo abre um rascunho estrutural mínimo, identificado por `contentKind: 'exam'`, sem tópicos de Academia. O primeiro ZIP cria seu registro em `famed_content`; o administrador confere os blocos e publica ou retira a prova na própria tela de questões antigas. A publicação mantém sincronizado o campo `published` de todos os assets vinculados. Isso não cria aulas ou tópicos de Academia, não habilita flashcards para a prova e não introduz outra coleção.
+
+O site valida o pacote antes da publicação. Questões ficam em `famedStudy.pastQuestionSets`; imagens são gravadas separadamente em `famed_assets` e referenciadas por `assetId`, acompanhando o estado publicado do conteúdo pai. Não há Firebase Storage. Ao abrir um bloco, o site hidrata as figuras e as mostra no cartão da questão. Excluir o bloco remove também seus assets; excluir todo o conteúdo remove todos os assets ligados a ele.
 
 Os flashcards da FAMED são uma síntese seletiva, não uma conversão integral da aula. A ação de gerar permanece bloqueada até que:
 
@@ -52,7 +54,7 @@ Enquanto estiver em preparação, o conteúdo fica como rascunho e aparece apena
 
 O administrador também pode remover o conteúdo diretamente no card pelo ícone de lixeira ao lado do estado de publicação. Essa ação apaga somente o documento e a Academia da FAMED; preserva integralmente as videoaulas do Portal do Curso e mantém o item do cronograma disponível para uma criação futura.
 
-O ZIP existe somente para questões antigas e suas imagens. A criação da aula continua interna, sem importador paralelo, script de banco ou Firebase Storage.
+O ZIP existe somente para questões antigas e suas imagens, tanto nos cards de aula quanto nos cards de prova. A criação da aula continua interna, sem importador paralelo, script de banco ou Firebase Storage.
 
 ## Vínculo com as aulas do curso
 

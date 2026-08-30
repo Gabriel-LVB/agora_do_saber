@@ -8,18 +8,22 @@ export default function FamedPastQuestionsView({
   subject,
   darkMode,
   isAdmin,
+  isAssessment=false,
+  published=false,
   saving=false,
   openingSetId=null,
   onBack,
   onDeleteSet,
   onImport,
   onOpenSet,
+  onTogglePublished,
   addToast,
 }) {
   const [file, setFile] = React.useState(null);
   const [copying, setCopying] = React.useState(false);
   const fileInputRef = React.useRef(null);
   const study = getFamedStudyMaterials(subject);
+  const questionCount = study.pastQuestionSets.reduce((total,set)=>total + (set.questions || []).length,0);
 
   const copyOldExamPrompt = async () => {
     setCopying(true);
@@ -45,12 +49,20 @@ export default function FamedPastQuestionsView({
   };
 
   return <div className="desktop-content-limit">
-    <button type="button" onClick={onBack} className={`mb-6 flex items-center gap-2 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>← Voltar às aulas</button>
+    <button type="button" onClick={onBack} className={`mb-6 flex items-center gap-2 font-bold ${darkMode?'text-gray-400 hover:text-yellow-500':'text-gray-500 hover:text-yellow-600'}`}>← Voltar ao cronograma</button>
     <div className="mb-7">
-      <p className="mb-2 text-xs font-bold uppercase tracking-widest opacity-45">FAMED · Questões antigas</p>
+      <p className="mb-2 text-xs font-bold uppercase tracking-widest opacity-45">FAMED · {isAssessment?'Questões da prova':'Questões antigas'}</p>
       <h2 className="font-serif text-3xl font-bold leading-tight text-yellow-600">{subject?.title}</h2>
-      {isAdmin&&<p className={`mt-2 max-w-3xl text-sm leading-relaxed ${darkMode?'text-gray-400':'text-gray-600'}`}>Guarde aqui as provas anteriores desta aula, inclusive questões que dependem de imagens. Elas também orientam a seleção dos flashcards essenciais.</p>}
+      {isAdmin&&<p className={`mt-2 max-w-3xl text-sm leading-relaxed ${darkMode?'text-gray-400':'text-gray-600'}`}>{isAssessment?'Guarde aqui as edições anteriores desta prova, inclusive questões que dependem de imagens. Depois da conferência, publique o conjunto para os alunos.':'Guarde aqui as provas anteriores desta aula, inclusive questões que dependem de imagens. Elas também orientam a seleção dos flashcards essenciais.'}</p>}
     </div>
+
+    {isAdmin&&isAssessment&&<section className={`mb-6 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest opacity-45">Publicação</p>
+        <p className="mt-1 text-sm font-bold">{published?'Disponível para os alunos':'Rascunho visível somente para o admin'}</p>
+      </div>
+      <button type="button" disabled={saving||(!published&&!questionCount)} onClick={onTogglePublished} className={`min-h-[42px] rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 ${published?'bg-gray-600 hover:bg-gray-700':'bg-green-600 hover:bg-green-700'}`}>{published?'Retirar dos alunos':'Publicar para alunos'}</button>
+    </section>}
 
     {isAdmin&&<section className={`mb-6 rounded-2xl border p-5 md:p-6 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-white'}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -72,7 +84,7 @@ export default function FamedPastQuestionsView({
       {isAdmin&&<div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="font-serif text-xl font-bold">Blocos importados</h3>
-          <p className="mt-1 text-xs opacity-50">{study.pastQuestionSets.reduce((total,set)=>total + (set.questions || []).length,0)} questões em {study.pastQuestionSets.length} bloco(s)</p>
+          <p className="mt-1 text-xs opacity-50">{questionCount} questões em {study.pastQuestionSets.length} bloco(s)</p>
         </div>
       </div>}
       {!study.pastQuestionSets.length&&<div className={`rounded-xl border border-dashed px-4 py-10 text-center text-sm ${darkMode?'border-gray-700 text-gray-500':'border-gray-300 text-gray-400'}`}>Nenhuma questão antiga adicionada.</div>}

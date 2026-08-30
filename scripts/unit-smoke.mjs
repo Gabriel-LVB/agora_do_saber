@@ -169,6 +169,7 @@ import {
 } from '../src/services/ecgQuestionMatcher.js';
 import {
   questionHasEcgImage,
+  questionHasUnresolvedRequiredVisual,
   questionRequestsEcgImage,
 } from '../src/services/questionVisual.js';
 
@@ -905,6 +906,17 @@ const unresolvedVisual = enrichQuestionWithEcgImage({
 assert.equal(unresolvedVisual.status, 'unresolved');
 assert.equal(unresolvedVisual.question.visualRequirement.status, 'unresolved');
 assert.equal(questionHasEcgImage(unresolvedVisual.question), false);
+const famedImportedEcgQuestion = {
+  id:'famed-imported-ecg',
+  statement:'Observe o eletrocardiograma apresentado e assinale a alternativa correta.',
+  images:[{
+    assetId:'famed-asset-1',
+    url:'data:image/jpeg;base64,AA==',
+    altText:'Eletrocardiograma com derivações dos membros e precordiais apresentado no caso.',
+  }],
+};
+assert.equal(questionHasEcgImage(famedImportedEcgQuestion), true);
+assert.equal(questionHasUnresolvedRequiredVisual(famedImportedEcgQuestion), false);
 const preexistingVisualQuestion = {
   ...visualAfQuestion,
   images:[{ id:'existing', type:'ecg', url:'/custom/ecg.jpg' }],
@@ -2550,12 +2562,18 @@ const studyMapPreviewSource = await readFile(new URL('../src/features/study-map/
 assert.match(studyMapPreviewSource, /export default function StudyMapPreview/);
 
 const questionFeatureSource = await readFile(new URL('../src/features/questions/QuestionFeature.jsx', import.meta.url), 'utf8');
-assert.match(questionFeatureSource, /O traçado desta questão ainda não pôde ser associado com segurança/);
+assert.doesNotMatch(questionFeatureSource, /O traçado desta questão ainda não pôde ser associado com segurança/);
+assert.doesNotMatch(questionFeatureSource, /unresolvedRequiredEcg/);
 assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenAnswerModal \}/);
 assert.match(questionFeatureSource, /const isAnswerCorrect = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /const isFinalObjectiveAnswer = \(question, answer\) =>/);
 assert.match(questionFeatureSource, /normalizeDisplayedAlternativeReferences\(opt\.explanation, opt\.letter\)/);
 assert.match(questionFeatureSource, /normalizeDeclaredCorrectAlternativeReferences\(/);
+assert.match(questionFeatureSource, /const hasAlternativeExplanations = !!\(question\.options \|\| \[\]\)\.some\(option => option\.explanation\)/);
+assert.doesNotMatch(questionFeatureSource, /question\.explanationParts && \(question\.options \|\| \[\]\)\.some/);
+assert.match(questionFeatureSource, /API_KEY_MISSING/);
+assert.match(questionFeatureSource, /Configure uma chave Gemini nas Configurações/);
+assert.match(questionFeatureSource, /parsed\?\.answer && parsed\?\.score != null/);
 assert.match(questionFeatureSource, /const renderClozeSentence =/);
 assert.match(questionFeatureSource, /Revelar informação/);
 assert.match(questionFeatureSource, />Entenda</);
@@ -2802,6 +2820,12 @@ assert.match(famedPortalViewSource, /activeTrackId/);
 assert.match(famedPortalViewSource, /aria-label="Partes do S5"/);
 assert.match(famedPortalViewSource, /setActiveTrackId\(track\.id\)/);
 assert.match(famedPortalViewSource, /disciplineIds=\{activeTrack\.subjects\}/);
+assert.match(famedPortalViewSource, /buildFamedAssessmentContent/);
+assert.match(famedPortalViewSource, /contentKind:'exam'/);
+assert.match(famedPortalViewSource, /isAssessment=\{activeIsAssessment\}/);
+assert.match(famedPortalViewSource, /onGoToAula=\{activeIsAssessment\?null:/);
+assert.match(famedPortalViewSource, /apiKey=\{getKey\(\)\}/);
+assert.match(famedPortalViewSource, /onCall=\{callWithRotation\}/);
 
 const famedCatalogSource = await readFile(new URL('../src/features/famed/famedCatalog.js', import.meta.url), 'utf8');
 assert.match(famedCatalogSource, /curriculum:'PPC 2018'/);
@@ -2850,6 +2874,8 @@ assert.match(famedScheduleViewSource, /formatScheduleDate|item\.date|item\.time|
 assert.match(famedScheduleViewSource, /Materiais preservados/);
 assert.match(famedScheduleViewSource, /visibleDisciplineIds/);
 assert.match(famedScheduleViewSource, /Cronograma ainda não disponível/);
+assert.match(famedScheduleViewSource, /onOpenPastQuestions\?\.\(content,item\)/);
+assert.match(famedScheduleViewSource, /Adicionar questões antigas desta prova/);
 
 const famedPastQuestionsViewSource = await readFile(new URL('../src/features/famed/FamedPastQuestionsView.jsx', import.meta.url), 'utf8');
 assert.match(famedPastQuestionsViewSource, /Adicionar pacote de questões antigas/);
@@ -2858,6 +2884,9 @@ assert.match(famedPastQuestionsViewSource, /accept="\.zip,application\/zip/);
 assert.match(famedPastQuestionsViewSource, /\{isAdmin&&<p className=.*Guarde aqui as provas anteriores/);
 assert.match(famedPastQuestionsViewSource, /\{isAdmin&&<div className="mb-4 flex items-center justify-between gap-3">/);
 assert.doesNotMatch(famedPastQuestionsViewSource, /<textarea|buildExternalPrompt/);
+assert.match(famedPastQuestionsViewSource, /isAssessment=false/);
+assert.match(famedPastQuestionsViewSource, /Publicar para alunos/);
+assert.match(famedPastQuestionsViewSource, /Voltar ao cronograma/);
 
 const famedQuestionPackageSource = await readFile(new URL('../src/features/famed/famedQuestionPackage.js', import.meta.url), 'utf8');
 assert.match(famedQuestionPackageSource, /FAMED_QUESTION_PACKAGE_SCHEMA/);
@@ -2875,6 +2904,7 @@ assert.match(famedContentServiceSource, /saveFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /loadFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /deleteFamedQuestionAssets/);
 assert.match(famedContentServiceSource, /creationMode:'academia'/);
+assert.match(famedContentServiceSource, /contentKind/);
 assert.match(famedContentServiceSource, /famedTrackForDiscipline/);
 assert.match(famedContentServiceSource, /'gastro-endocrino'/);
 assert.doesNotMatch(famedContentServiceSource, /firebase\/storage/);
