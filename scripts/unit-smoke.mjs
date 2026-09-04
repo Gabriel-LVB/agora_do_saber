@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { strToU8, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { cleanFirestoreData } from '../src/lib/firestoreData.js';
@@ -11,6 +11,7 @@ import {
   coursePlayerSubscriptionMessages,
   readCoursePlayerEvent,
 } from '../src/services/coursePlayer.js';
+import { createCourseTranscriptArchive } from '../src/features/course/courseTranscriptArchive.js';
 import {
   normalizeQuestionTypesForGeneration,
   shouldGenerateHybridClinicalPass,
@@ -2984,6 +2985,8 @@ assert.match(appSource, /\bClock,/);
 
 const coursePortalViewSource = await readFile(new URL('../src/features/course/CoursePortalView.jsx', import.meta.url), 'utf8');
 assert.match(coursePortalViewSource, /export default function CoursePortalView/);
+assert.match(coursePortalViewSource, /import\('\.\/courseTranscriptArchive\.js'\)/);
+assert.match(coursePortalViewSource, /isAdmin&&\(/);
 assert.match(coursePortalViewSource, /dayIndex\+1/);
 assert.match(coursePortalViewSource, /Descanso/);
 assert.match(coursePortalViewSource, /useFeatureContext/);
@@ -3010,6 +3013,21 @@ assert.match(coursePortalViewSource, /onAdminDisableQuestion/);
 assert.match(coursePortalViewSource, /progress:scheduleProgress/);
 assert.doesNotMatch(coursePortalViewSource, /const lessonOrderIndex = new Map/);
 assertNoFreeIdentifiers(coursePortalViewSource, 'CoursePortalView');
+
+const transcriptArchive = createCourseTranscriptArchive({
+  subject:'Cardiologia / Clínica',
+  entries:[
+    { title:'Aula: Introdução?', topic:'Fundamentos', category:'main', transcript:'Primeira transcrição.' },
+    { title:'Aula bônus', topic:'Fundamentos', category:'bonus', transcript:'Segunda transcrição.' },
+    { title:'Aula sem texto', topic:'Fundamentos', category:'main', transcript:'' },
+  ],
+});
+assert.equal(transcriptArchive.filename, 'transcricoes-cardiologia-clinica.zip');
+assert.equal(transcriptArchive.exportedCount, 2);
+assert.equal(transcriptArchive.missingCount, 1);
+const transcriptArchiveFiles = unzipSync(transcriptArchive.bytes);
+assert.equal(strFromU8(transcriptArchiveFiles['001 - Aula Introdução.txt']).includes('Primeira transcrição.'), true);
+assert.equal(strFromU8(transcriptArchiveFiles['_TRANSCRICOES_NAO_DISPONIVEIS.txt']).includes('Aula sem texto'), true);
 assert.doesNotMatch(coursePortalViewSource, /const journeyInfoForLesson =/);
 assert.doesNotMatch(coursePortalViewSource, /const firstQuestionBlockForLesson =/);
 assert.match(coursePortalViewSource, /role="button"[\s\S]{0,260}setVqExpandedSubj\(p=>\(\{\.\.\.p,\[subj\]:!isExp\}\)\)/);

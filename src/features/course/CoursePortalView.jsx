@@ -44,10 +44,12 @@ export default function CoursePortalView() {
     cursoTab,
     curWeek,
     darkMode,
+    DownloadIcon,
     dueCount,
     effectiveCoursePlanLessonOrder,
     EmptyState,
     extractAulas,
+    fetchTranscript,
     flattenCourseLessons,
     formatCourseDuration,
     getAulaId,
@@ -87,6 +89,7 @@ export default function CoursePortalView() {
     setVqExpandedSubj,
     shortTopicName,
     sortCourseSubjectsForDisplay,
+    Spinner,
     toggleReviewFavorite,
     totalLessonSeconds,
     trackQuestionAnswered,
@@ -100,6 +103,7 @@ export default function CoursePortalView() {
   } = useFeatureContext();
 
           const dm = darkMode;
+          const [transcriptExport, setTranscriptExport] = React.useState(null);
           const scheduleJourney = useCourseHeroJourney({ enabled:true });
           const heroJourney = scheduleJourney; // compatibilidade do bloco legado, mantido inacessível
           React.useEffect(() => {
@@ -134,6 +138,39 @@ export default function CoursePortalView() {
           ];
           const plannedSubjectSet = new Set(effectivePlanSubjects);
           const plannedLessons = courseLessons.filter(lesson => plannedSubjectSet.has(lesson.subject));
+
+          const downloadSubjectTranscripts = async (subject, topics) => {
+            if (!isAdmin || transcriptExport) return;
+            const entries = Object.entries(topics || {}).flatMap(([topic, groups]) => [
+              ...(groups.main || []).map(aula => ({ aula, topic, category:'main', title:courseLessonDisplayTitle(aula) })),
+              ...(groups.bonus || []).map(aula => ({ aula, topic, category:'bonus', title:courseLessonDisplayTitle(aula) })),
+            ]);
+            setTranscriptExport({ subject, completed:0, total:entries.length });
+            try {
+              const {
+                createCourseTranscriptArchive,
+                downloadCourseTranscriptArchive,
+                fetchCourseTranscriptEntries,
+              } = await import('./courseTranscriptArchive.js');
+              const transcripts = await fetchCourseTranscriptEntries({
+                entries,
+                fetchTranscript,
+                onProgress:progress => setTranscriptExport(current => current?.subject === subject ? { subject, ...progress } : current),
+              });
+              const archive = createCourseTranscriptArchive({ subject, entries:transcripts });
+              if (!archive.bytes) {
+                addToast('Nenhuma transcrição disponível para esta matéria.', 'info', 4000);
+                return;
+              }
+              downloadCourseTranscriptArchive(archive);
+              const missingMessage = archive.missingCount ? ` · ${archive.missingCount === 1 ? '1 indisponível' : `${archive.missingCount} indisponíveis`}` : '';
+              addToast(`${archive.exportedCount} transcrição${archive.exportedCount === 1 ? '' : 'ões'} exportada${archive.exportedCount === 1 ? '' : 's'}${missingMessage}.`, archive.missingCount ? 'info' : 'success', 4500);
+            } catch (_error) {
+              addToast('Erro ao exportar as transcrições da matéria.', 'error', 4000);
+            } finally {
+              setTranscriptExport(null);
+            }
+          };
 
           const tabs = [
             {id:'videoaulas', label:'Videoaulas',   icon:<VideoIcon className="w-4 h-4"/>},
@@ -254,6 +291,18 @@ export default function CoursePortalView() {
                                   className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${dm?'border-gray-700 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                                   <PlayIcon className="w-3 h-3"/>Ver
                                 </button>
+                                {isAdmin&&(
+                                  <button
+                                    type="button"
+                                    onClick={event=>{event.stopPropagation();downloadSubjectTranscripts(subj, topics);}}
+                                    disabled={!!transcriptExport}
+                                    title={`Baixar transcrições de ${capitalizeDisplayLabel(subj)} em ZIP`}
+                                    aria-label={`Baixar transcrições de ${capitalizeDisplayLabel(subj)} em ZIP`}
+                                    className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-colors disabled:cursor-wait disabled:opacity-50 ${dm?'border-gray-700 text-gray-300 hover:bg-gray-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                    {transcriptExport?.subject===subj?<Spinner className="h-3 w-3"/>:<DownloadIcon className="h-3 w-3"/>}
+                                    <span className="hidden md:inline">{transcriptExport?.subject===subj?`${transcriptExport.completed}/${transcriptExport.total}`:'ZIP'}</span>
+                                  </button>
+                                )}
                                 {isExp?<ChevronDown className="w-4 h-4 opacity-40"/>:<ChevronRight className="w-4 h-4 opacity-40"/>}
                               </div>
                             </div>
