@@ -1,0 +1,183 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { chromium } from 'playwright';
+
+// The UI uses an isolated in-memory store. No Firebase account or production write.
+const base = process.env.UX_BASE_URL || 'http://127.0.0.1:3003';
+const zip = process.env.USMLE_TEST_ZIP;
+if (!zip) throw new Error('Set USMLE_TEST_ZIP to the supplied test package outside the repository.');
+const output = path.resolve('test-results/usmle');
+await fs.mkdir(output,{ recursive:true });
+const mock = `
+const state = {catalog:[],progress:{},sessions:[],packs:new Map(),listeners:{}};
+const watch = (name,next) => { state.listeners[name] = next;next(state[name]);return () => {}; };
+const emit = name => state.listeners[name]?.(state[name]);
+export const watchUsmleCatalog = (next,error) => watch('catalog',next);
+export const watchUsmleProgress = (uid,next,error) => watch('progress',next);
+export const watchUsmleSessions = (uid,next,error) => watch('sessions',next);
+export async function publishUsmlePackage(pack,onProgress) {
+ const old=state.catalog.find(p=>p.id===pack.id);if(old?.release===pack.release)return {duplicate:true};
+ state.packs.set(pack.id,pack);state.catalog=state.catalog.filter(p=>p.id!==pack.id).concat({id:pack.id,title:pack.title,step:pack.step,subject:pack.subject,release:pack.release,total:pack.questions.length,banks:[...new Set(pack.questions.map(q=>q.questionBank))],chunks:[]});
+ onProgress(100);emit('catalog');return {duplicate:false};
+}
+export async function deleteAllUsmlePackages({catalog,onProgress}) { const count=catalog.length;state.catalog=[];state.packs.clear();onProgress(100);emit('catalog');return {packages:count,releases:count,documents:count}; }
+export async function loadUsmleQuestions(pack) {return state.packs.get(pack.id).questions.map(q=>({...q,key:pack.id+'__'+q.id,packageId:pack.id,release:pack.release}));}
+export async function loadUsmleAsset(q,file) { const asset=state.packs.get(q.packageId).assets.find(a=>a.path===file);if(!asset)throw Error('Missing asset');return asset.dataUrl; }
+export async function saveUsmleAnnotation(uid,key,patch) {state.progress={...state.progress,[key]:{...state.progress[key],...patch}};emit('progress');}
+export async function saveUsmleSession(uid,session,questions) {
+ if(state.failNextSave){state.failNextSave=false;throw Error('Falha de conexão simulada.');}
+ const old=state.sessions.find(s=>s.id===session.id);if((old?.version||0)!==session.version)throw Error('Session conflict');
+ const saved=structuredClone({...session,version:session.version+1});
+ Object.entries(saved.answers).forEach(([key,a])=>{if(old?.answers[key]?.recorded)a.recorded=true;if(a.letter&&a.committed&&(saved.mode==='tutor'||saved.status==='completed')&&!a.recorded){const q=questions.find(q=>q.key===key);const p=state.progress[key]||{};state.progress[key]={...p,lastAnswer:a.letter,lastCorrect:a.letter===q.correctAnswer,firstCorrect:p.lastAnswer?p.firstCorrect:a.letter===q.correctAnswer,attempts:(p.attempts||0)+1};a.recorded=true;}});
+ state.sessions=state.sessions.filter(s=>s.id!==saved.id).concat(saved).sort((a,b)=>b.startedAt-a.startedAt);emit('progress');emit('sessions');return saved;
+}
+window.__usmleMock=state;
+`;
+const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:Inter,Arial,sans-serif;background:#fff}#root{max-width:1150px;margin:auto;padding:24px}html[data-theme=dark] body{background:#151719}@media(max-width:600px){#root{padding:16px}}</style></head><body><div id="root"></div><script type="module">
+import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
+</script><script type="module">import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom.js';
+import {FeatureProvider} from '/src/features/FeatureContext.jsx';import UsmleView from '/src/features/usmle/UsmleView.jsx';
+window.renderUsmle=(dark=false,admin=true)=>{document.documentElement.dataset.theme=dark?'dark':'light';ReactDOM.render(React.createElement(FeatureProvider,{value:{user:{uid:'test_admin'},isAdmin:admin,darkMode:dark}},React.createElement(UsmleView)),document.getElementById('root'));};window.renderUsmle();
+</script></body></html>`;
+const browser = await chromium.launch({ executablePath:process.env.UX_BROWSER_PATH || undefined });
+const page = await browser.newPage({ viewport:{ width:1440,height:1000 } });
+const errors = [];
+page.on('pageerror',e => errors.push(e.message));
+page.setDefaultTimeout(20000);
+await page.route('**/usmle-test',route => route.fulfill({ contentType:'text/html',body:html }));
+await page.route('**/src/services/usmleStore.js*',route => route.fulfill({ contentType:'text/javascript',body:mock }));
+const click = name => page.getByRole('button',{ name,exact:true }).click();
+const screenshot = async name => {
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth+2),false,`${name}: horizontal overflow`);
+  await page.screenshot({ path:path.join(output,`${name}.png`),fullPage:true });
+};
+const waitSaved = () => page.waitForFunction(() => !document.querySelector('.usmle-sync')?.textContent.includes('Salvando'));
+try {
+  await page.goto(`${base}/usmle-test`);
+  await page.getByRole('heading',{ name:'USMLE.' }).waitFor();
+  await screenshot('empty-desktop');
+  await click('Importar pacotes');
+  await page.locator('input[type=file]').setInputFiles(zip);
+  await page.getByText('Pacote conferido. Revise os dados antes de importar.').waitFor({ timeout:60000 });
+  await screenshot('import-preview');
+  await click('Importar questões');
+  await page.getByText('Importação concluída. O banco já está disponível para montar blocos.').waitFor();
+  assert.equal(await page.evaluate(() => window.__usmleMock.catalog[0].total),1239);
+  await click('Montar bloco');
+  await page.getByRole('button',{ name:'Iniciar bloco →',exact:true }).waitFor();
+  await page.waitForFunction(() => !document.querySelector('.usmle-start').disabled);
+  await screenshot('builder-desktop-light');
+  await page.evaluate(() => window.renderUsmle(true));
+  await screenshot('builder-desktop-dark');
+  await page.setViewportSize({ width:390,height:844 });
+  await screenshot('builder-mobile-dark');
+  await page.evaluate(() => { window.renderUsmle(false);document.documentElement.style.fontSize='20.8px'; });
+  await screenshot('builder-mobile-large-font');
+  await page.evaluate(() => {document.documentElement.style.fontSize='16px';});
+  await page.setViewportSize({ width:1440,height:1000 });
+  await page.getByLabel('Quantidade de questões').fill('2');
+  await page.getByLabel('Embaralhar a ordem das questões').uncheck();
+  await click('Iniciar bloco →');
+  await page.getByRole('radio').first().waitFor();
+  await page.evaluate(() => { const node=document.querySelector('.usmle-statement p').firstChild;const range=document.createRange();range.setStart(node,0);range.setEnd(node,15);window.getSelection().removeAllRanges();window.getSelection().addRange(range); });
+  await click('Destacar trecho');
+  assert.equal(await page.locator('.usmle-statement mark').count(),1);
+  await page.getByRole('button',{name:'Ampliar imagem',exact:true}).first().click();
+  await page.getByRole('dialog',{name:'Imagem ampliada'}).waitFor();
+  await click('Fechar imagem ×');
+  assert.equal(await page.getByText('Gabarito:',{exact:false}).count(),0);
+  await page.getByRole('radio').first().click();
+  assert.equal(await page.getByText('Gabarito:',{exact:false}).count(),0);
+  await click('Confirmar resposta');
+  await page.getByText('Gabarito: C',{exact:true}).waitFor();
+  await waitSaved();
+  await screenshot('question-desktop');
+  await click('☆ Favoritar');
+  await page.getByText('Anotações pessoais',{exact:false}).click();
+  await page.getByRole('textbox',{name:'O que você quer lembrar desta questão?'}).fill('Rever o raciocínio desta questão.');
+  await click('Salvar anotação');
+  await click('Próxima →');
+  await click('← Anterior');
+  await waitSaved();
+  assert.equal(await page.evaluate(() => Object.values(window.__usmleMock.progress)[0].attempts),1,'Navigation must not count another attempt');
+  await page.setViewportSize({ width:390,height:844 });
+  await screenshot('question-mobile');
+  await click('Encerrar bloco');
+  await click('Encerrar e ver resultado');
+  await page.getByRole('heading',{name:'Resultado do bloco'}).waitFor();
+  await waitSaved();
+  await screenshot('result-mobile');
+  await click('Voltar ao banco');
+  await click('Desempenho');
+  await screenshot('performance-mobile');
+  await click('Histórico');
+  await screenshot('history-mobile');
+  await click('Montar bloco');
+  await page.setViewportSize({ width:1440,height:1000 });
+  await page.getByRole('button',{name:/^Todas /}).click();
+  await page.getByRole('button',{name:'Prova Gabarito e resultado ao encerrar o bloco.',exact:true}).click();
+  await page.getByLabel('Quantidade de questões').fill('1');
+  await click('Iniciar bloco →');
+  await page.getByRole('radio').nth(2).click();
+  assert.equal(await page.getByText('Gabarito:',{exact:false}).count(),0,'Exam mode must not reveal answers');
+  await click('Pausar');
+  await page.getByRole('heading',{name:'Bloco pausado'}).waitFor();
+  await waitSaved();
+  await click('Voltar ao banco');
+  await click('Retomar bloco →');
+  await page.getByRole('heading',{name:'Bloco pausado'}).waitFor();
+  await click('Continuar bloco');
+  await page.getByRole('radio',{checked:true}).waitFor();
+  await click('Encerrar bloco');await click('Encerrar e ver resultado');await waitSaved();
+  await page.getByText('100',{exact:false}).first().waitFor();
+  await click('Revisar respostas');
+  await page.getByText('Gabarito: C',{exact:true}).waitFor();
+  await screenshot('exam-review-desktop');
+  await click('Voltar ao banco');
+  await click('Montar bloco');
+  await page.getByLabel('Usar cronômetro regressivo').check();
+  await page.getByLabel('Tempo por questão').selectOption('60');
+  await page.clock.install();
+  await click('Iniciar bloco →');
+  await page.getByRole('radio').first().waitFor();
+  await page.clock.fastForward(61000);
+  await page.getByRole('heading',{name:'Resultado do bloco'}).waitFor();
+  await waitSaved();
+  assert.equal(await page.evaluate(() => window.__usmleMock.sessions[0].summary.omitted),1,'Timeout submits omitted questions');
+  await click('Voltar ao banco');
+  await page.getByLabel('Usar cronômetro regressivo').uncheck();
+  const visual = await page.evaluate(() => window.__usmleMock.packs.values().next().value.questions.find(q => q.optionsInImage && !q.options.length && !q.unavailableReason));
+  await page.getByRole('searchbox').fill(visual.id);
+  await click('Iniciar bloco →');
+  await page.getByRole('textbox',{name:'Letra da alternativa na imagem'}).fill(visual.correctAnswer);
+  await page.clock.runFor(100);
+  await waitSaved();
+  await page.evaluate(() => {window.__usmleMock.failNextSave=true;});
+  await click('⚑ Sinalizar');
+  await page.clock.runFor(100);
+  await page.getByText('Falha de conexão simulada.',{exact:true}).waitFor();
+  await click('Tentar salvar novamente');
+  await page.clock.runFor(100);
+  await waitSaved();
+  assert.equal(await page.getByText('Falha de conexão simulada.',{exact:true}).count(),0);
+  await click('Encerrar bloco');await click('Encerrar e ver resultado');
+  await page.clock.runFor(100);await waitSaved();
+  assert.equal(await page.evaluate(() => window.__usmleMock.sessions[0].summary.correct),1,'Image-only answers are graded without inventing options');
+  await click('Voltar ao banco');
+  await page.getByRole('searchbox').fill('cardio-1048');
+  await click('Iniciar bloco →');
+  await page.locator('.usmle-statement').waitFor();
+  assert.equal((await page.locator('.usmle-statement').innerText()).split('\n\n').length,5,'Flattened source vignette should have readable paragraph breaks');
+  await screenshot('statement-paragraphs-desktop');
+  await page.setViewportSize({width:390,height:844});
+  await screenshot('statement-paragraphs-mobile');
+  await page.evaluate(() => window.renderUsmle(false,false));
+  assert.equal(await page.locator('.usmle').count(),0,'Non-admin must not render the feature');
+  assert.deepEqual(errors,[],'Browser errors');
+  console.log('ux-usmle ok: ZIP import, tutor/exam, hidden answers, notes, favorites, pause/resume, history, results, permissions and responsive layouts.');
+} catch(error) {
+  console.error('Browser errors:',errors);
+  await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});
+  throw error;
+} finally { await browser.close(); }

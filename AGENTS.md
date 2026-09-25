@@ -382,6 +382,8 @@ Use `persistLibraryTopicProgressPatches`/`saveLibraryTopicProgressPatch`. Na lei
 
 Conteúdo estrutural — criação, título, tópicos, aula gerada — ainda usa o documento em `library`. `updateSubject` faz merge defensivo para reduzir perda de progresso concorrente.
 
+Pacotes ZIP de questões importadas em **Meus materiais** reutilizam o contrato `agora-famed-question-package-v1`. As questões permanecem no tópico de `library`, mas as figuras ficam separadas em `users/{uid}/library_assets/{assetId}` e são hidratadas sob demanda pelo `QuestionCard`; exclusões de bloco, assunto ou pasta também removem esses assets.
+
 ## Modelo de questões
 
 Há vários formatos legados, portanto use os helpers existentes em vez de reinventar a interpretação.
@@ -785,7 +787,7 @@ Escopo vigente:
 - S1–S4 e internato fora do escopo;
 - usar datas, horários e professores somente dos cronogramas oficiais da turma 2026.2; práticas, segundas chamadas e AFs ficam fora.
 
-Não crie editor paralelo, geração externa da aula em lote ou dependência de Firebase Storage. A única importação ZIP autorizada é o pacote versionado de questões antigas e suas figuras. O conteúdo da aula deve continuar reutilizando o fluxo da Academia. Alunos veem apenas itens e assets com `published == true`; rascunhos são admin-only.
+Não crie editor paralelo, geração externa da aula em lote ou dependência de Firebase Storage. Na FAMED, a única importação ZIP autorizada é o pacote versionado de questões antigas e suas figuras; **Meus materiais** também pode reutilizar esse contrato para importações pessoais. O conteúdo da aula deve continuar reutilizando o fluxo da Academia. Alunos veem apenas itens e assets com `published == true`; rascunhos são admin-only.
 
 Hoje respostas e favoritos específicos da UI FAMED são mantidos em `localStorage` (`agora_famed_answers` e `agora_famed_favorites`). Não presuma sincronização multi-dispositivo sem implementar explicitamente uma migração.
 
@@ -799,6 +801,57 @@ Leia obrigatoriamente:
 
 - `docs/FAMED_CONTENT_WORKFLOW.md`;
 - `docs/FAMED_S5_ORDEM_REFERENCIA.md`.
+
+## USMLE
+
+A rota `view === 'usmle'` é uma área separada, atualmente **somente para o administrador**
+(inclusive no Firestore); não libere para alunos com curso ou somente site sem nova decisão.
+Na simulação de visão do aluno pelo admin, o acesso também fica oculto.
+O ponto de entrada é `features/usmle/UsmleView.jsx`, carregado com `React.lazy`.
+Há navegação na sidebar e no menu móvel. A bottom navigation some durante um bloco;
+o voltar interno pausa o bloco antes de retornar ao banco.
+
+O administrador envia os próprios ZIPs por **USMLE → Importar pacotes**, selecionando
+Step 1 ou Step 2 CK. Não copie os ZIPs recebidos para `public/`, `src/`, `dist/` ou o
+repositório. O pacote de Cardiologia enviado no chat é apenas uma referência de formato
+e um arquivo externo para testes, não conteúdo embutido no site. Bancos futuros,
+inclusive Mehlman, usam o campo aberto `questionBank`.
+
+`services/usmlePackage.js` descompacta com fflate assíncrono, valida o pacote e mantém
+as imagens/áudios em documentos protegidos, sem Firebase Storage e sem URLs públicas.
+`services/usmleModel.js` concentra validação, filtros, seleção, tempo e resultados.
+Texto de questões e comentários é renderizado como texto, nunca HTML executável.
+Alternativas e gabaritos mantêm as letras de origem. Imagens `back` só aparecem após
+a resposta no modo estudo ou o encerramento no modo prova. Questões sem áudio original
+ficam fora dos blocos por padrão. Questões que dependem de alternativas em imagem mas
+não têm figura `front` são preservadas no pacote, identificadas na importação e ficam
+fora dos blocos até a correção da origem; não mova imagens de comentário para o enunciado.
+
+Persistência em `services/usmleStore.js`:
+
+- `usmle_packages/{packageId}`: catálogo e ponteiro da versão disponível;
+- `usmle_packages/{packageId}/releases/{hash}/chunks/{id}`: questões em documentos até 500 KB;
+- `usmle_packages/{packageId}/releases/{hash}/assets/{id}`: imagens e áudios compactos;
+- `usmle_users/{uid}/questions/{packageId}__{questionId}`: progresso, favoritos e notas individuais;
+- `usmle_users/{uid}/sessions/{sessionId}`: blocos, respostas, tempo, sinalizações e destaques.
+
+A publicação grava primeiro os documentos da versão e só então troca o ponteiro do
+catálogo. Falha parcial pode ser repetida sem substituir a versão anterior; pacotes
+idênticos não se duplicam. Blocos antigos referenciam a versão original. Título do pacote
+e IDs devem permanecer estáveis nas atualizações. A importação não exclui versões antigas.
+
+Em **Importar pacotes**, o administrador possui a ação destrutiva confirmada **Excluir todas as questões**. Ela remove os documentos de catálogo e todas as versões, chunks, imagens e áudios conhecidos de `usmle_packages`, inclusive versões referenciadas por sessões históricas, mas preserva `usmle_users/{uid}` com histórico, desempenho, favoritos e notas. Publicações novas registram um manifesto e a lista de versões para que uma limpeza futura não deixe subcoleções órfãs.
+
+Respostas atualizam a UI imediatamente e são persistidas após o primeiro frame.
+Sessões usam transações com versão para detectar conflito entre abas/dispositivos.
+O marcador `answers[key].recorded` não pode ser perdido em navegação, anotação ou retry:
+ele evita contar a mesma resposta mais de uma vez. No modo prova, o progresso global só
+é contabilizado ao encerrar. O desempenho mostra a primeira tentativa, e a lista de erros
+usa o último resultado. Histórico mostra os 50 blocos mais recentes; não apaga os demais.
+O rascunho local é separado por UID e não substitui a confirmação remota.
+Não misture esses dados com `library`, `vq_blocks`, `vq_review` ou o FSRS do curso.
+
+Leia `docs/USMLE_WORKFLOW.md` para formato, limites, publicação e testes.
 
 ## Gemini e geração de conteúdo
 
@@ -861,6 +914,7 @@ Geração pode ser longa, parcial e retomável. Preserve flags `generating`, ín
 | --- | --- | --- | --- |
 | `users/{uid}` | perfil, username, settings e campos legados de API key | dono/admin | dono/admin |
 | `users/{uid}/library/{id}` | estrutura dos materiais pessoais | dono/admin | dono/admin |
+| `users/{uid}/library_assets/{id}` | imagens privadas de ZIPs importados em Meus materiais | dono/admin | dono/admin |
 | `users/{uid}/library_progress/{subjectId}__{topicId}` | respostas, favoritos, erros e revisão pessoal | dono/admin | dono/admin |
 | `users/{uid}/shared_library_progress/{lessonId}` | respostas da Biblioteca | dono/admin | dono/admin |
 | `users/{uid}/vq_blocks/{aulaId}` | questões/respostas do curso | dono/admin | dono/admin |

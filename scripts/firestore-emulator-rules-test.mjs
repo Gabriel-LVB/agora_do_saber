@@ -62,10 +62,17 @@ try {
     answers:{ q1:'A' },
     favorites:['q1'],
   }));
+  await assertSucceeds(setDoc(doc(studentDb, 'users', 'student_uid', 'library_assets', 'asset_1'), {
+    subjectId:'subject_1',
+    topicId:'topic_1',
+    dataUrl:'data:image/png;base64,AA==',
+  }));
   await assertFails(getDoc(doc(otherStudentDb, 'users', 'student_uid', 'library', 'subject_1')));
   await assertFails(getDoc(doc(otherStudentDb, 'users', 'student_uid', 'library_progress', 'subject_1__topic_1')));
+  await assertFails(getDoc(doc(otherStudentDb, 'users', 'student_uid', 'library_assets', 'asset_1')));
   await assertSucceeds(getDoc(doc(adminDb, 'users', 'student_uid', 'library', 'subject_1')));
   await assertSucceeds(getDoc(doc(adminDb, 'users', 'student_uid', 'library_progress', 'subject_1__topic_1')));
+  await assertSucceeds(getDoc(doc(adminDb, 'users', 'student_uid', 'library_assets', 'asset_1')));
 
   await assertFails(setDoc(doc(studentDb, 'shared_library', 'aula_1'), { title:'Aula' }));
   await assertSucceeds(setDoc(doc(adminDb, 'shared_library', 'aula_1'), { title:'Aula', published:true }));
@@ -117,6 +124,22 @@ try {
   await assertSucceeds(setDoc(doc(studentDb, 'access_logs', 'student_log'), { uid:'student_uid' }));
   await assertFails(setDoc(doc(studentDb, 'access_logs', 'other_log'), { uid:'other_uid' }));
   await assertSucceeds(getDoc(doc(adminDb, 'access_logs', 'student_log')));
+
+  await assertSucceeds(setDoc(doc(adminDb,'usmle_packages','cardiology'),{ title:'Cardiology',published:true }));
+  await assertSucceeds(setDoc(doc(adminDb,'usmle_packages','cardiology','releases','v1','chunks','chunk_0000'),{ questions:[] }));
+  await assertSucceeds(setDoc(doc(adminDb,'usmle_packages','cardiology','releases','v1','assets','figure'),{ dataUrl:'data:image/png;base64,AA==' }));
+  for (const deniedDb of [anonDb,studentDb,otherStudentDb]) {
+    await assertFails(getDoc(doc(deniedDb,'usmle_packages','cardiology')));
+    await assertFails(getDocs(collection(deniedDb,'usmle_packages')));
+    await assertFails(getDoc(doc(deniedDb,'usmle_packages','cardiology','releases','v1','chunks','chunk_0000')));
+    await assertFails(getDoc(doc(deniedDb,'usmle_packages','cardiology','releases','v1','assets','figure')));
+    await assertFails(setDoc(doc(deniedDb,'usmle_packages','new'),{ title:'No access' }));
+  }
+  await assertSucceeds(setDoc(doc(adminDb,'usmle_users','admin_uid','sessions','session1'),{ status:'active' }));
+  await assertSucceeds(setDoc(doc(adminDb,'usmle_users','admin_uid','questions','question1'),{ favorite:true }));
+  await assertFails(getDoc(doc(studentDb,'usmle_users','admin_uid','sessions','session1')));
+  await assertFails(setDoc(doc(studentDb,'usmle_users','student_uid','sessions','session1'),{ status:'active' }));
+  await assertFails(setDoc(doc(adminDb,'usmle_users','other_uid','sessions','session1'),{ status:'active' }));
 
   await assertFails(getDoc(doc(studentDb, 'unknown_collection', 'doc')));
   await assertFails(setDoc(doc(studentDb, 'unknown_collection', 'doc'), { ok:true }));

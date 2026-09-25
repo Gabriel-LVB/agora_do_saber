@@ -159,6 +159,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // USMLE permanece exclusivamente administrativo nesta etapa do produto.
+    // ZIPs e imagens nunca são servidos por public/ nem por URLs públicas.
+    match /usmle_packages/{packageId} {
+      allow read, write: if isAdmin();
+      match /releases/{releaseId}/{document=**} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /usmle_users/{userId}/{document=**} {
+      allow read, write: if isAdmin() && isOwner(userId);
+    }
+
     match /access_logs/{logId} {
       allow create, update: if ownsIncomingData() || isAdmin();
       allow read, delete: if isAdmin();

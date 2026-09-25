@@ -9,7 +9,7 @@
     "audit:moderate": "npm audit --audit-level=moderate",
     "budget": "node --no-warnings scripts/build-budget.mjs",
     "test:preflight": "npm run check",
-    "test:unit": "node --no-warnings scripts/unit-smoke.mjs",
+    "test:unit": "node --no-warnings scripts/unit-smoke.mjs && node --no-warnings scripts/usmle-smoke.mjs",
     "test:rules": "node --no-warnings scripts/firestore-rules-smoke.mjs",
     "test:rules:emulator": "npx firebase-tools@13.35.1 emulators:exec --only firestore \"node --no-warnings scripts/firestore-emulator-rules-test.mjs\"",
     "import:ecg-site-pack": "node --no-warnings scripts/import-ecg-site-pack.mjs",
@@ -17,7 +17,8 @@
     "build:ecg-question-index": "node --no-warnings scripts/build-ecg-question-index.mjs",
     "validate:ecg": "node --no-warnings scripts/validate-ecg-pack.mjs",
     "validate:ecg-staging": "node --no-warnings scripts/validate-ecg-staging.mjs",
-    "ux:smoke": "node scripts/ux-smoke.mjs"
+    "ux:smoke": "node scripts/ux-smoke.mjs",
+    "ux:usmle": "node scripts/ux-usmle.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2",

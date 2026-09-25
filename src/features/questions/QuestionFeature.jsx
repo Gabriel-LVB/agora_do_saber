@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 
 import { callGemini } from '../../services/gemini.js';
+import { loadLibraryQuestionAsset } from '../../services/libraryQuestionAssets.js';
 
 import { deferInteractionWork } from '../../lib/interaction.js';
 import {
@@ -137,6 +138,40 @@ const clinicalCaseKey = (question = {}) => {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+};
+
+const QuestionImage = ({ image, darkMode }) => {
+  const [loadedUrl,setLoadedUrl] = useState(String(image?.url || ''));
+  const [error,setError] = useState('');
+  const [retryKey,setRetryKey] = useState(0);
+
+  useEffect(() => {
+    const directUrl = String(image?.url || '');
+    if (directUrl) {
+      setLoadedUrl(directUrl);
+      setError('');
+      return undefined;
+    }
+    const assetId = String(image?.assetId || '').trim();
+    if (image?.assetStorage !== 'library' || !assetId) {
+      setLoadedUrl('');
+      setError('Imagem indisponível.');
+      return undefined;
+    }
+    let cancelled = false;
+    setLoadedUrl('');
+    setError('');
+    loadLibraryQuestionAsset(assetId).then(asset => {
+      if (!cancelled) setLoadedUrl(asset.url);
+    }).catch(loadError => {
+      if (!cancelled) setError(loadError?.message || 'Não foi possível carregar esta imagem.');
+    });
+    return () => { cancelled = true; };
+  },[image?.url,image?.assetId,image?.assetStorage,retryKey]);
+
+  if (loadedUrl) return <img src={loadedUrl} alt={image?.altText||'Imagem da questão'} className="max-h-[28rem] w-full object-contain" loading="lazy"/>;
+  if (error) return <div className={`flex min-h-[9rem] flex-col items-center justify-center gap-3 px-4 py-6 text-center text-xs ${darkMode?'text-red-300':'text-red-700'}`} role="alert"><span>{error}</span>{image?.assetStorage==='library'&&<button type="button" onClick={()=>setRetryKey(value=>value+1)} className={`rounded-lg border px-3 py-2 font-bold ${darkMode?'border-red-800 hover:bg-red-950/40':'border-red-200 hover:bg-red-50'}`}>Tentar novamente</button>}</div>;
+  return <div className={`flex min-h-[9rem] items-center justify-center text-xs ${darkMode?'text-gray-500':'text-gray-400'}`} role="status">Carregando imagem…</div>;
 };
 
 const ClinicalCaseIntro = ({ question, questionCount, darkMode }) => {
@@ -2055,8 +2090,8 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
           </section>}
           {!!question.images?.length&&(
             <div className="mb-6 grid gap-3 sm:grid-cols-2">
-              {question.images.map((image, imageIndex)=><figure key={image.id||image.url||imageIndex} className={`overflow-hidden rounded-xl border ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
-                <img src={image.url} alt={image.altText||'Imagem da questão'} className="max-h-[28rem] w-full object-contain" loading="lazy"/>
+              {question.images.map((image, imageIndex)=><figure key={image.id||image.assetId||image.url||imageIndex} className={`overflow-hidden rounded-xl border ${darkMode?'border-gray-700 bg-gray-900/30':'border-gray-200 bg-gray-50'}`}>
+                <QuestionImage image={image} darkMode={darkMode}/>
                 {(image.credit||image.altText)&&<figcaption className={`border-t px-3 py-2 text-xs leading-relaxed ${darkMode?'border-gray-700 text-gray-400':'border-gray-200 text-gray-500'}`}>{image.altText}{image.credit?` · ${image.credit}`:''}</figcaption>}
               </figure>)}
             </div>

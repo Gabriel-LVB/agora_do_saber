@@ -43,6 +43,15 @@ const CHUNK_RELOAD_KEY = 'agora_lazy_chunk_reload_v1';
 const QUESTION_FACTORY_VISIBLE = false;
 const DISABLED_COURSE_QUESTIONS_CONFIG_DOC = 'disabled_course_questions';
 const DISABLED_COURSE_QUESTIONS_VERSION = 'agora-disabled-course-questions-v1';
+const libraryQuestionAssetIds = questions => Array.from(new Set(
+  (questions || [])
+    .flatMap(question => question?.images || [])
+    .filter(image => image?.assetStorage === 'library')
+    .map(image => String(image?.assetId || '').trim())
+    .filter(Boolean),
+));
+const saveLibraryQuestionAssets = async params => (await import('./services/libraryQuestionAssets.js')).saveLibraryQuestionAssets(params);
+const deleteLibraryQuestionAssets = async params => (await import('./services/libraryQuestionAssets.js')).deleteLibraryQuestionAssets(params);
 const isChunkLoadError = (error) =>
   /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(String(error?.message || error || ''));
 const lazyWithRetry = (factory) => factory().catch(error => {
@@ -75,6 +84,7 @@ const LazyVqGenModal = React.lazy(() => lazyWithRetry(() => import('./features/v
 const LazyAcademiaTopicView = React.lazy(() => lazyWithRetry(() => import('./features/academia/AcademiaTopicView.jsx')));
 const LazyBulkGenerateModal = React.lazy(() => lazyWithRetry(() => import('./features/bulk/BulkGenerateModal.jsx')));
 const LazyFamedPortalView = React.lazy(() => lazyWithRetry(() => import('./features/famed/FamedPortalView.jsx')));
+const LazyUsmleView = React.lazy(() => lazyWithRetry(() => import('./features/usmle/UsmleView.jsx')));
 const LazyVideoaulasView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoaulasView.jsx')));
 const LazyCoursePortalView = React.lazy(() => lazyWithRetry(() => import('./features/course/CoursePortalView.jsx')));
 const LazyVideoQuestionsView = React.lazy(() => lazyWithRetry(() => import('./features/course/VideoQuestionsView.jsx')));
@@ -292,6 +302,7 @@ const PlusIcon    = ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="1
 const DownloadIcon= ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>');
 const PlayIcon    = ic('<polygon points="5 3 19 12 5 21 5 3"/>');
 const GraduationCap = ic('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>');
+const Globe = ic('<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 6h14M5 18h14"/>');
 const FamedIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M13 23h38v17.5C51 49 43.4 55 32 58 20.6 55 13 49 13 40.5Z"/>
@@ -3440,8 +3451,8 @@ const LESSON_TONE_OPTIONS = [
 const GeminiThinkingSelector = ({ value=false, onChange, darkMode, compact=false }) => {
   const dm = darkMode;
   const opts = [
-    { k:false, label:'Rápido', desc:'thinking desligado' },
-    { k:true, label:'Thinking', desc:'raciocínio dinâmico' },
+    { k:false, label:'Rápido', desc:'velocidade' },
+    { k:true, label:'Thinking', desc:'raciocínio' },
   ];
   return (
     <div className={`grid grid-cols-2 gap-2 ${compact ? '' : 'w-full'}`}>
@@ -3686,6 +3697,9 @@ export default function QuestionBankApp() {
   const [pasteSubName, setPasteSubName] = useState('');
   const [pasteTopic, setPasteTopic]   = useState('');
   const [showSubSugs, setShowSubSugs] = useState(false);
+  const [pasteZipFile, setPasteZipFile] = useState(null);
+  const [pasteZipBusy, setPasteZipBusy] = useState(false);
+  const pasteZipInputRef = useRef(null);
 
   // ── Academia do Saber ─────────────────────────────────────────────────────
   const [academiaCreatorStep, setAcademiaCreatorStep] = useState(1);
@@ -3763,6 +3777,11 @@ export default function QuestionBankApp() {
   const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
   const homeCanSeeSharedLibrary = QUESTION_FACTORY_VISIBLE && isAdmin && adminHomeMode !== 'site';
   const homeCanSeeFamed = homeCanSeeVideoaulas;
+  const homeCanSeeUsmle = homeShowsAdminTools;
+  const [usmleSessionActive, setUsmleSessionActive] = useState(false);
+  useEffect(() => {
+    if (!homeCanSeeUsmle && view === 'usmle') setView('library');
+  }, [homeCanSeeUsmle, view]);
   const homeCanUseAcademia = isAdmin ? true : canUseAcademia;
   const homeCanUseAdvancedFeatures = isAdmin ? true : canUseAdvancedFeatures;
   useEffect(() => {
@@ -6504,6 +6523,11 @@ export default function QuestionBankApp() {
         else setView('library');
         return true;
       }
+      if (view === 'usmle') {
+        const handled = !window.dispatchEvent(new Event('agora-usmle-back', { cancelable:true }));
+        if (!handled) setView('library');
+        return true;
+      }
       if (view === 'famed') { setView('library'); return true; }
       if (view === 'settings') { restoreReturnTarget('library'); return true; }
       if (view === 'spaced-review') { restoreReturnTarget('library'); return true; }
@@ -7524,12 +7548,26 @@ export default function QuestionBankApp() {
   const removeSubject = async (id) => {
     const removed = libraryRef.current.find(s=>s.id===id);
     if (isProtectedMirrorRootFolder(removed)) return;
+    const removedAssetIds = libraryQuestionAssetIds((removed?.topics || []).flatMap(topic => topic.questions || []));
     const nextLibrary = libraryRef.current.filter(s=>s.id!==id);
     libraryRef.current = nextLibrary;
     setLibrary(p=>p.filter(s=>s.id!==id));
     persistSignedLibraryCache(nextLibrary);
-    if(user&&!user.isAnonymous) await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
+    let remoteRemoved = false;
+    if(user&&!user.isAnonymous) {
+      try {
+        await deleteDoc(doc(db,'users',user.uid,'library',id.toString()));
+        remoteRemoved = true;
+      } catch(error) {
+        console.error(error);
+      }
+    }
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    if (remoteRemoved && removedAssetIds.length) {
+      await deleteLibraryQuestionAssets({ userId:user.uid, assetIds:removedAssetIds }).catch(error => {
+        console.warn('library subject asset cleanup failed:', error?.code || error?.message || error);
+      });
+    }
     await pruneReviewQueueForSubjectChanges(removed ? [removed] : [], []);
     if (removed?.source === 'academia' || hasAcademiaOriginTopic(removed)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
   };
@@ -8257,8 +8295,22 @@ export default function QuestionBankApp() {
     setLibrary(nextLibrary);
     persistSignedLibraryCache(nextLibrary);
     if(user&&!user.isAnonymous) {
+      const deletedSubjectIds = new Set();
       for (const id of idsToDelete) {
-        await deleteDoc(doc(db,'users',user.uid,'library',id.toString())).catch(console.error);
+        try {
+          await deleteDoc(doc(db,'users',user.uid,'library',id.toString()));
+          if (removedSubjects.some(subject => sameId(subject.id,id))) deletedSubjectIds.add(String(id));
+        } catch(error) {
+          console.error(error);
+        }
+      }
+      const removedAssetIds = libraryQuestionAssetIds(removedSubjects
+        .filter(subject => deletedSubjectIds.has(String(subject.id)))
+        .flatMap(subject => (subject.topics || []).flatMap(topic => topic.questions || [])));
+      if (removedAssetIds.length) {
+        await deleteLibraryQuestionAssets({ userId:user.uid, assetIds:removedAssetIds }).catch(error => {
+          console.warn('library folder asset cleanup failed:', error?.code || error?.message || error);
+        });
       }
     } else if(user?.isAnonymous) {
       localStorage.setItem(`qb_lib_${username}`, JSON.stringify(nextLibrary));
@@ -11671,19 +11723,112 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   // Paste import
+  const getPasteImportDestination = () => {
+    const items = libraryRef.current?.length ? libraryRef.current : library;
+    const subjectTitle = pasteSubName.trim() || 'Assunto Importado';
+    const namedSubject = items.find(item => !isFolderItem(item)
+      && item.source === 'external'
+      && item.id !== 'imported-folder'
+      && String(item.title || '').toLowerCase() === subjectTitle.toLowerCase());
+    const defaultSubject = !pasteSubName.trim() ? items.find(item => item.id === 'imported-folder') : null;
+    return {
+      subject:namedSubject || defaultSubject || null,
+      subjectId:namedSubject?.id || defaultSubject?.id || `imported-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+      subjectTitle,
+    };
+  };
+  const persistImportedQuestions = async ({ questions, summary='', suggestedTitle='', packageSchema='', destination=null, topicId=null }) => {
+    const target = destination || getPasteImportDestination();
+    const currentTargetSubject = (libraryRef.current?.length ? libraryRef.current : library)
+      .find(item => sameId(item.id,target.subjectId)) || target.subject;
+    const importedTypes = Array.from(new Set((questions || []).map(q => q.isCloze ? 'cloze' : q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
+    const nextTopic = {
+      id:topicId || `imp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+      title:pasteTopic.trim() || suggestedTitle || `Bloco (${new Date().toLocaleDateString()})`,
+      questions,
+      summary,
+      answers:{},
+      favorites:[],
+      errorNotebook:[],
+      spacedReview:{},
+      questionTypes:importedTypes,
+      ...(packageSchema ? {packageSchema} : {}),
+    };
+    if (currentTargetSubject) {
+      await updateSubject({...currentTargetSubject, topics:[...(currentTargetSubject.topics || []), nextTopic]});
+    } else {
+      await addSubject({
+        id:target.subjectId,
+        title:target.subjectTitle,
+        source:'external',
+        folderId:libFilter === 'external' ? (activeFolder?.id || null) : null,
+        fullSyllabus:'Importado',
+        topics:[nextTopic],
+      });
+    }
+    setActiveSubjectId(target.subjectId);
+    setPasteText('');
+    setPasteTopic('');
+    setPasteZipFile(null);
+    if (pasteZipInputRef.current) pasteZipInputRef.current.value = '';
+    setActiveTopicId(nextTopic.id);
+    setView('topic');
+    return nextTopic;
+  };
   const handlePasteImport = async () => {
     const allowedImportTypes = ['direct','vof','cespe','open','essay','flashcard', ...(isAdmin ? ['cloze'] : [])];
     const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, allowedImportTypes);
     const importTypeLabel = isAdmin ? 'flashcards e clozes' : 'flashcards';
     if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:`Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e ${importTypeLabel}, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:", "Texto:"${isAdmin ? ' com {{c1::...}}' : ''} ou alternativas A-E.`,isAlert:true});return;}
-    const sn=pasteSubName.trim()||'Assunto Importado'; const tn=pasteTopic.trim()||`Bloco (${new Date().toLocaleDateString()})`;
-    const importedTypes = Array.from(new Set(parsed.questions.map(q => q.isCloze ? 'cloze' : q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
-    const nt={id:`imp-${Date.now()}`,title:tn,questions:parsed.questions,summary:parsed.summary,answers:{},favorites:[],errorNotebook:[],spacedReview:{},questionTypes:importedTypes};
-    let ts=library.find(s=>s.title.toLowerCase()===sn.toLowerCase()&&s.source==='external'&&s.id!=='imported-folder');
-    if(ts){await updateSubject({...ts,topics:[...ts.topics,nt]});setActiveSubjectId(ts.id);}
-    else if(!pasteSubName.trim()){const f=library.find(s=>s.id==='imported-folder');if(f)await updateSubject({...f,topics:[...f.topics,nt]});setActiveSubjectId('imported-folder');}
-    else{const ns={id:Date.now(),title:sn,source:'external',folderId:libFilter==='external'?(activeFolder?.id || null):null,fullSyllabus:'Importado',topics:[nt]};await addSubject(ns);setActiveSubjectId(ns.id);}
-    setPasteText('');setPasteTopic('');setActiveTopicId(nt.id);setView('topic');
+    await persistImportedQuestions({ questions:parsed.questions, summary:parsed.summary });
+  };
+  const handlePasteZipImport = async () => {
+    if (!pasteZipFile || pasteZipBusy) return;
+    const destination = getPasteImportDestination();
+    const topicId = `imp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    let savedAssets = [];
+    setPasteZipBusy(true);
+    try {
+      const { parseFamedQuestionPackage } = await import('./features/famed/famedQuestionPackage.js');
+      const parsed = await parseFamedQuestionPackage(pasteZipFile,`${destination.subjectId}-${topicId}`);
+      savedAssets = await saveLibraryQuestionAssets({
+        userId:user?.uid,
+        subjectId:destination.subjectId,
+        topicId,
+        assets:parsed.assets,
+      });
+      const assetIdByFile = Object.fromEntries(savedAssets.map(asset => [asset.file,asset.assetId]));
+      const questions = parsed.questions.map(question => ({
+        ...question,
+        images:(question.images || []).map(image => ({
+          assetId:assetIdByFile[image.file],
+          assetStorage:'library',
+          altText:image.altText,
+          credit:image.credit,
+        })),
+      }));
+      await persistImportedQuestions({
+        questions,
+        suggestedTitle:parsed.title || String(pasteZipFile.name || '').replace(/\.zip$/i,''),
+        packageSchema:parsed.schema,
+        destination,
+        topicId,
+      });
+      setPasteZipFile(null);
+      if (pasteZipInputRef.current) pasteZipInputRef.current.value = '';
+      addToast(`${questions.length} questões do ZIP foram importadas.`, 'success', 4500);
+    } catch(error) {
+      if (savedAssets.length) {
+        await deleteLibraryQuestionAssets({ userId:user?.uid, assetIds:savedAssets.map(asset => asset.assetId) }).catch(() => {});
+      }
+      setErrorModal({
+        title:'Não foi possível importar o ZIP',
+        message:error?.message || 'Confira o pacote e tente novamente.',
+        isAlert:true,
+      });
+    } finally {
+      setPasteZipBusy(false);
+    }
   };
 
   const deleteImportedTopic = async ({ subjectId, topicId }) => {
@@ -11691,6 +11836,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!subject || subject.source !== 'external') return;
     const topic = (subject.topics || []).find(item => sameId(item.id, topicId));
     if (!topic) return;
+    const assetIds = libraryQuestionAssetIds(topic.questions);
 
     await updateSubject({
       ...subject,
@@ -11700,6 +11846,15 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       await deleteLibraryTopicProgress({ userId:user.uid, subjectId:subject.id, topicId }).catch(error => {
         console.warn('imported topic progress cleanup failed:', error?.code || error?.message || error);
       });
+      if (assetIds.length) {
+        const snapshot = await getDoc(doc(db,'users',user.uid,'library',subject.id.toString())).catch(() => null);
+        const topicStillExists = snapshot?.exists() && (snapshot.data()?.topics || []).some(item => sameId(item.id,topicId));
+        if (snapshot && !topicStillExists) {
+          await deleteLibraryQuestionAssets({ userId:user.uid, assetIds }).catch(error => {
+            console.warn('imported topic asset cleanup failed:', error?.code || error?.message || error);
+          });
+        }
+      }
     }
     if (sameId(activeTopicId, topicId)) setActiveTopicId(null);
     addToast(`Bloco “${topic.title || 'Importado'}” excluído.`, 'success', 3500);
@@ -13631,6 +13786,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     || activeFlashcardStudy
     || (canUseAdvancedFeatures && (settings.questionDisplayMode || 'list') === 'single' && (['topic','videoquestions'].includes(view) || (view === 'curso' && vqActiveBlockView)));
   const bottomNavEligibleView = view === 'library'
+    || (view === 'usmle' && !usmleSessionActive)
     || (view === 'shared-library' && !sharedLibraryActiveItemId)
     || (view === 'famed' && !famedDetailActive)
     || view === 'sub-library'
@@ -14841,6 +14997,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 {label:'Início', desc:'Visão geral', icon:<Landmark className="w-5 h-5"/>, active:view==='library', action:()=>setView('library')},
                 homeCanSeeSharedLibrary ? {label:'Fábrica de Questões', desc:isAdmin?'Produção e curadoria':'Questões do curso', icon:<FactoryIcon className="w-5 h-5"/>, active:view==='shared-library', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null,
                 homeCanSeeFamed ? {label:'FAMED', desc:'Conteúdo da faculdade', icon:<FamedIcon className="w-5 h-5"/>, active:view==='famed', action:()=>setView('famed')} : null,
+                homeCanSeeUsmle ? {label:'USMLE', desc:'Step 1 e Step 2 CK', icon:<Globe className="w-5 h-5"/>, active:view==='usmle', action:()=>setView('usmle')} : null,
                 {label:'Meus materiais', desc:'Acessar, criar e importar', icon:<FolderIcon className="w-5 h-5"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic','creator','academia-creator','paste'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}},
                 homeCanSeeVideoaulas ? {label:'Portal do Curso', desc:'Aulas e mais', icon:<GraduationCap className="w-5 h-5"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
               ].filter(Boolean).map(item=>(
@@ -14919,6 +15076,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
               <p className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.16em] opacity-40">Ferramentas</p>
               <div className="grid grid-cols-2 gap-2 mb-3">
+                {homeCanSeeUsmle&&<button onClick={()=>closeMobileMenu(()=>setView('usmle'))} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}><Globe className="w-4 h-4 flex-shrink-0 text-yellow-600"/><strong className="block truncate text-sm">USMLE</strong></button>}
                 {canUseAdvancedFeatures&&(
                   <button onClick={()=>closeMobileMenu(()=>openViewWithReturn('quick'))} className={`flex min-h-[44px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${darkMode?'border-gray-700 bg-gray-800/50':'border-gray-200 bg-gray-50'}`}>
                     <Flame className="w-4 h-4 flex-shrink-0 text-yellow-600"/>
@@ -14951,6 +15109,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 
           {/* ── FAMED ── */}
           {view==='famed'&&homeCanSeeFamed&&<FamedPortalView/>}
+          {view==='usmle'&&homeCanSeeUsmle&&<React.Suspense fallback={<LoadingState message="Abrindo USMLE..."/>}><LazyUsmleView onSessionActive={setUsmleSessionActive}/></React.Suspense>}
 
 	        {/* ── LIBRARY ── */}
 	        {view==='library'&&<HomeView/>}
@@ -15831,7 +15990,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3 leading-tight"><Feather className="w-8 h-8 flex-shrink-0"/>Importar Questões</h2>
             <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
               <p className="font-bold mb-1">Importe sem alterar o texto original</p>
-              <p>Cole questões com alternativas A-E e indicação de resposta. Elas serão organizadas em um assunto e bloco de Importar Questões.</p>
+              <p>Cole as questões ou envie o mesmo pacote ZIP versionado usado nas provas antigas da FAMED. Elas serão organizadas em um assunto e bloco de Importar Questões.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div>
@@ -15848,7 +16007,19 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
                 <input value={pasteTopic} onChange={e=>setPasteTopic(e.target.value)} placeholder="Ex: Prova 2025 ou Bloco 1" className={`w-full p-4 rounded-xl border outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}/>
               </div>
             </div>
-            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Texto das questões <span className="normal-case font-normal">(obrigatório)</span></label>
+            <section className={`mb-5 rounded-xl border border-dashed p-4 ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-300 bg-gray-50'}`}>
+              <input ref={pasteZipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" onChange={event=>setPasteZipFile(event.target.files?.[0] || null)} className="sr-only"/>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button type="button" disabled={pasteZipBusy} onClick={()=>pasteZipInputRef.current?.click()} className={`min-h-[44px] rounded-xl border px-4 py-2.5 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 ${darkMode?'border-gray-600 bg-gray-900 text-gray-200 hover:border-yellow-600':'border-gray-200 bg-white text-gray-700 hover:border-yellow-500'}`}><FileUp className="h-4 w-4"/>{pasteZipFile?'Trocar arquivo ZIP':'Selecionar arquivo ZIP'}</button>
+                <div className="min-w-0 flex-1 text-xs">
+                  <p className={`break-all font-bold ${pasteZipFile?(darkMode?'text-yellow-300':'text-yellow-700'):'opacity-55'}`}>{pasteZipFile?.name || 'questions.json na raiz e figuras em images/'}</p>
+                  <p className="mt-1 opacity-45">Formato: agora-famed-question-package-v1</p>
+                </div>
+              </div>
+              <button type="button" disabled={pasteZipBusy||!pasteZipFile} onClick={handlePasteZipImport} className="mt-4 w-full rounded-xl bg-yellow-600 px-5 py-3.5 text-sm font-bold text-white hover:bg-yellow-700 disabled:opacity-40">{pasteZipBusy?'Validando e salvando…':'Importar pacote ZIP'}</button>
+            </section>
+            <div className="mb-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest opacity-35"><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/><span>ou cole o texto</span><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/></div>
+            <label className="block text-xs font-bold uppercase mb-2 opacity-50">Texto das questões <span className="normal-case font-normal">(se não usar ZIP)</span></label>
             <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder="Cole as questões aqui..." className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-white border-gray-200'}`}/>
             <p className="text-xs mt-2 opacity-50">Também aceita questões V/F, CESPE, abertas, dissertativas e flashcards quando os rótulos de resposta e explicação estão presentes.</p>
             <button onClick={handlePasteImport} disabled={!pasteText.trim()} className="mt-4 w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Importar e abrir questões</button>
@@ -16214,7 +16385,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             homeCanSeeFamed ? {label:'FAMED', icon:<FamedIcon className="w-6 h-6"/>, active:view==='famed', action:()=>setView('famed')} : null,
             !isAdmin&&(!homeCanSeeSharedLibrary || !homeCanSeeVideoaulas) ? {label:'Materiais', icon:<FolderIcon className="w-6 h-6"/>, active:['academia','gemini','external'].includes(libFilter)&&['sub-library','subject','academia-topic','topic'].includes(view), action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}} : null,
             homeCanSeeVideoaulas ? {label:'Curso', icon:<GraduationCap className="w-6 h-6"/>, active:['curso','videoaulas','videoquestions'].includes(view), action:()=>setView('curso')} : null,
-            {label:'Mais', icon:<MoreIcon className="w-6 h-6"/>, active:menuOpen || ['favorites','quick'].includes(view), action:toggleMobileMenu},
+            {label:'Mais', icon:<MoreIcon className="w-6 h-6"/>, active:menuOpen || ['favorites','quick','usmle'].includes(view), action:toggleMobileMenu},
           ].filter(Boolean).map(item=>(
             <button key={item.label} type="button" onClick={event=>item.label==='Mais'?item.action(event):runMobileNavigation(event,item.action)} aria-label={item.label} title={item.label} aria-expanded={item.label==='Mais'?menuOpen:undefined} data-active={item.active?'true':'false'}
               className={`agora-bottom-nav__item relative min-w-0 min-h-[60px] flex-1 flex items-center justify-center rounded-xl transition-colors active:scale-95 ${item.active?(darkMode?'text-yellow-400':'text-yellow-700'):(darkMode?'text-gray-500':'text-gray-500')}`}>

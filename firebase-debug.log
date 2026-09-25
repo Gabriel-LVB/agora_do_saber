@@ -1,0 +1,21 @@
+[debug] [2026-09-16T04:24:39.287Z] ----------------------------------------------------------------------
+[debug] [2026-09-16T04:24:39.290Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Gabriel\AppData\Local\npm-cache\_npx\a2c365da195827f4\node_modules\firebase-tools\lib\bin\firebase.js emulators:exec --only firestore node --no-warnings scripts/firestore-emulator-rules-test.mjs
+[debug] [2026-09-16T04:24:39.290Z] CLI Version:   13.35.1
+[debug] [2026-09-16T04:24:39.290Z] Platform:      win32
+[debug] [2026-09-16T04:24:39.290Z] Node Version:  v24.18.0
+[debug] [2026-09-16T04:24:39.290Z] Time:          Wed Sep 16 2026 01:24:39 GMT-0300 (Horário Padrão de Brasília)
+[debug] [2026-09-16T04:24:39.290Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-16T04:24:39.304Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-09-16T04:24:39.473Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] Failed to authenticate, have you run firebase login?
+[warn] !  emulators: You are not currently authenticated so some features may not work correctly. Please run firebase login to authenticate the CLI. 
+[debug] [2026-09-16T04:24:39.507Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] i  emulators: Shutting down emulators. {"metadata":{"emulator":{"name":"hub"},"message":"Shutting down emulators."}}
+[debug] [2026-09-16T04:24:39.509Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[debug] [2026-09-16T04:24:39.510Z] Error: spawn java ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:287:19)
+    at onErrorNT (node:internal/child_process:508:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+[error] 
+[error] Error: Could not spawn `java -version`. Please make sure Java is installed and on your system PATH.

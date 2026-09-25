@@ -25,6 +25,8 @@ Uma prova ainda sem conteúdo abre um rascunho estrutural mínimo, identificado 
 
 O site valida o pacote antes da publicação. Questões ficam em `famedStudy.pastQuestionSets`; imagens são gravadas separadamente em `famed_assets` e referenciadas por `assetId`, acompanhando o estado publicado do conteúdo pai. Não há Firebase Storage. Ao abrir um bloco, o site hidrata as figuras e as mostra no cartão da questão. Excluir o bloco remove também seus assets; excluir todo o conteúdo remove todos os assets ligados a ele.
 
+O mesmo contrato de arquivo também pode ser enviado na importação pessoal de **Meus materiais**. Nesse destino, as questões ficam em `users/{uid}/library` e as figuras privadas em `users/{uid}/library_assets`; isso não transforma o pacote em conteúdo FAMED nem altera sua publicação.
+
 Os flashcards da FAMED são uma síntese seletiva, não uma conversão integral da aula. A ação de gerar permanece bloqueada até que:
 
 1. todos os tópicos da Academia tenham aula efetivamente gerada;

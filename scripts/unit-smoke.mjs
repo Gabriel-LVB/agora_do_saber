@@ -119,6 +119,11 @@ import { pruneCourseReviewQueue } from '../src/services/courseReviewReset.js';
 import { reconcileReviewSessionWithQueue } from '../src/features/review/reviewSessionSync.js';
 import { executeGeminiRotation } from '../src/services/geminiRotation.js';
 import {
+  buildGeminiPayload,
+  callGemini,
+  callGeminiStream,
+} from '../src/services/gemini.js';
+import {
   buildFamedCourseCatalogExport,
   FAMED_COURSE_LESSON_MAP,
   resolveFamedCourseLessons,
@@ -2356,6 +2361,10 @@ assert.match(appSource, /import \{ useCourseDerivedState \} from ['"]\.\/hooks\/
 assert.match(appSource, /import \{ useGeminiRuntime \} from ['"]\.\/hooks\/useGeminiRuntime\.js['"]/);
 assert.match(appSource, /import \{ useSharedLibrarySync \} from ['"]\.\/hooks\/useSharedLibrarySync\.js['"]/);
 assert.match(appSource, /<FeatureProvider value=\{featureContextValue\}>/);
+assert.match(appSource, /const handlePasteZipImport = async/);
+assert.match(appSource, /parseFamedQuestionPackage\(pasteZipFile/);
+assert.match(appSource, /saveLibraryQuestionAssets\(\{/);
+assert.match(appSource, /accept="\.zip,application\/zip,application\/x-zip-compressed"/);
 assert.match(appSource, /useCourseDerivedState\(\{/);
 assert.match(appSource, /useGeminiRuntime\(\{/);
 assert.match(appSource, /useSharedLibrarySync\(\{/);
@@ -2539,6 +2548,64 @@ assert.match(geminiServiceSource, /resolveGeminiTimeout/);
 assert.match(geminiServiceSource, /REQUEST_TIMEOUT/);
 assert.match(geminiServiceSource, /responseMimeType/);
 assert.match(geminiServiceSource, /responseSchema/);
+assert.match(geminiServiceSource, /gemini-3\.5-flash-lite/);
+assert.deepEqual(
+  buildGeminiPayload({ prompt:'p', systemPrompt:'s', model:'gemini-3.5-flash-lite', opts:{ thinkingBudget:0 } })
+    .generationConfig.thinkingConfig,
+  { thinkingLevel:'minimal' },
+);
+assert.deepEqual(
+  buildGeminiPayload({ prompt:'p', systemPrompt:'s', model:'gemini-3.8-flash', opts:{ thinkingBudget:-1 } })
+    .generationConfig.thinkingConfig,
+  { thinkingLevel:'medium' },
+);
+assert.deepEqual(
+  buildGeminiPayload({ prompt:'p', systemPrompt:'s', model:'gemini-2.5-flash', opts:{ thinkingBudget:0 } })
+    .generationConfig.thinkingConfig,
+  { thinkingBudget:0 },
+);
+
+const originalFetch = globalThis.fetch;
+const geminiRequestUrls = [];
+globalThis.fetch = async (url) => {
+  geminiRequestUrls.push(String(url));
+  return {
+    ok:true,
+    status:200,
+    json:async () => ({ candidates:[{ content:{ parts:[{ text:'fallback ok' }] } }] }),
+  };
+};
+try {
+  assert.equal(await callGemini('prompt', 'system', 'test-key'), 'fallback ok');
+} finally {
+  globalThis.fetch = originalFetch;
+}
+assert.equal(geminiRequestUrls.length, 1);
+assert.match(geminiRequestUrls[0], /gemini-3\.5-flash-lite:generateContent/);
+
+const geminiStreamRequestUrls = [];
+globalThis.fetch = async (url) => {
+  geminiStreamRequestUrls.push(String(url));
+  const chunks = [
+    new TextEncoder().encode('data: {"candidates":[{"content":{"parts":[{"text":"## Questão 1\\n"}]}}]}\n\n'),
+  ];
+  return {
+    ok:true,
+    status:200,
+    body:{
+      getReader:() => ({
+        read:async () => chunks.length ? { done:false, value:chunks.shift() } : { done:true },
+      }),
+    },
+  };
+};
+try {
+  assert.equal(await callGeminiStream('prompt', 'system', 'test-key'), '## Questão 1\n');
+} finally {
+  globalThis.fetch = originalFetch;
+}
+assert.equal(geminiStreamRequestUrls.length, 1);
+assert.match(geminiStreamRequestUrls[0], /gemini-3\.5-flash-lite:streamGenerateContent/);
 
 const sharedLibrarySyncSource = await readFile(new URL('../src/hooks/useSharedLibrarySync.js', import.meta.url), 'utf8');
 assert.match(sharedLibrarySyncSource, /export const useSharedLibrarySync/);
@@ -2563,6 +2630,8 @@ const studyMapPreviewSource = await readFile(new URL('../src/features/study-map/
 assert.match(studyMapPreviewSource, /export default function StudyMapPreview/);
 
 const questionFeatureSource = await readFile(new URL('../src/features/questions/QuestionFeature.jsx', import.meta.url), 'utf8');
+assert.match(questionFeatureSource, /loadLibraryQuestionAsset/);
+assert.match(questionFeatureSource, /<QuestionImage image=\{image\} darkMode=\{darkMode\}\/>/);
 assert.doesNotMatch(questionFeatureSource, /O traçado desta questão ainda não pôde ser associado com segurança/);
 assert.doesNotMatch(questionFeatureSource, /unresolvedRequiredEcg/);
 assert.match(questionFeatureSource, /export \{ QuestionView, QuestionCard, OpenAnswerModal \}/);
@@ -2894,6 +2963,13 @@ assert.match(famedQuestionPackageSource, /FAMED_QUESTION_PACKAGE_SCHEMA/);
 assert.match(famedQuestionPackageSource, /unzipSync/);
 assert.match(famedQuestionPackageSource, /isSafeRelativePath/);
 assert.match(famedQuestionPackageSource, /libraryQuestionKind:'old_exam'/);
+
+const libraryQuestionAssetsSource = await readFile(new URL('../src/services/libraryQuestionAssets.js', import.meta.url), 'utf8');
+assert.match(libraryQuestionAssetsSource, /ASSET_COLLECTION = 'library_assets'/);
+assert.match(libraryQuestionAssetsSource, /saveLibraryQuestionAssets/);
+assert.match(libraryQuestionAssetsSource, /loadLibraryQuestionAsset/);
+assert.match(libraryQuestionAssetsSource, /deleteLibraryQuestionAssets/);
+assert.doesNotMatch(libraryQuestionAssetsSource, /firebase\/storage/);
 
 const famedContentServiceSource = await readFile(new URL('../src/services/famedContent.js', import.meta.url), 'utf8');
 assert.match(famedContentServiceSource, /CONTENT_COLLECTION = 'famed_content'/);

@@ -38,6 +38,8 @@ let questionBankSizing = null;
 let questionBankSizingWorker = null;
 let ankiPackage = null;
 let sqlVendor = null;
+let usmle = null;
+let libraryQuestionAssets = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -69,6 +71,8 @@ for (const file of jsFiles) {
   if (file.startsWith('questionBankSizing.worker-')) questionBankSizingWorker = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('ankiPackage-')) ankiPackage = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('sql-vendor-')) sqlVendor = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('UsmleView-')) usmle = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('libraryQuestionAssets-')) libraryQuestionAssets = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -145,7 +149,10 @@ const COURSE_REVIEW_RESET_GZIP_LIMIT = 1 * 1024;
 // O crescimento medido é de 2,6 KiB gzip e continua integralmente no chunk lazy.
 // O total medido inclui o descompactador fflate compartilhado também pelo APKG;
 // ambos continuam lazy e nenhum deles entra na Home ou no bundle principal.
-const FAMED_GZIP_LIMIT = 31 * 1024;
+// USMLE reutiliza esse vendor e acrescenta a descompactação assíncrona do fflate
+// (aprox. 1,2 KiB gzip ao conjunto medido). Continua fora da entrada; a reserva
+// adicional é exclusivamente para o código compartilhado de ZIP, sem conteúdo.
+const FAMED_GZIP_LIMIT = 33 * 1024;
 // O dimensionamento de dezenas de milhares de questões é administrativo, manual
 // e roda em Worker. Tela e algoritmo ficam fora do núcleo para não bloquear a UI.
 // O Worker também recebe o índice global para retirar do próximo retrato tudo
@@ -156,6 +163,12 @@ const QUESTION_BANK_SIZING_GZIP_LIMIT = 11.75 * 1024;
 // A exportação .apkg monta um SQLite compatível no navegador. O gerador e o
 // runtime SQL só entram depois do clique; o WASM permanece em asset próprio.
 const ANKI_PACKAGE_GZIP_LIMIT = 18.5 * 1024;
+// Área administrativa nova, integralmente lazy: importador, sessão e desempenho.
+// Reserva própria de 20 KiB gzip; o budget da Home e do núcleo permanece intacto.
+const USMLE_GZIP_LIMIT = 20 * 1024;
+// Imagens privadas dos pacotes ZIP de Meus materiais so acessam o Firestore
+// quando o usuario importa o pacote ou abre uma questao que referencia um asset.
+const LIBRARY_QUESTION_ASSETS_GZIP_LIMIT = 1.5 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT
@@ -171,7 +184,9 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + COURSE_REVIEW_RESET_GZIP_LIMIT
   + FAMED_GZIP_LIMIT
   + (QUESTION_FACTORY_ARCHIVED ? 0 : QUESTION_BANK_SIZING_GZIP_LIMIT)
-  + ANKI_PACKAGE_GZIP_LIMIT;
+  + ANKI_PACKAGE_GZIP_LIMIT
+  + USMLE_GZIP_LIMIT
+  + LIBRARY_QUESTION_ASSETS_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
 const famedGzip = (famedPortal?.gzip || 0)
@@ -197,7 +212,17 @@ const coreGzip = totalGzip
   - famedGzip
   - questionBankSizingGzip
   - (ankiPackage?.gzip || 0)
-  - (sqlVendor?.gzip || 0);
+  - (sqlVendor?.gzip || 0)
+  - (usmle?.gzip || 0)
+  - (libraryQuestionAssets?.gzip || 0);
+
+assert.ok(usmle, 'A área USMLE deve permanecer em chunk lazy próprio.');
+assert.ok(usmle.gzip <= USMLE_GZIP_LIMIT, `USMLE passou do budget: ${fmt(usmle.gzip)}`);
+assert.ok(libraryQuestionAssets, 'Os assets de questões pessoais devem permanecer em chunk lazy próprio.');
+assert.ok(
+  libraryQuestionAssets.gzip <= LIBRARY_QUESTION_ASSETS_GZIP_LIMIT,
+  `Assets de questões pessoais passaram do budget: ${fmt(libraryQuestionAssets.gzip)}`
+);
 
 assert.ok(
   entry.raw <= ENTRY_RAW_LIMIT,
@@ -314,4 +339,4 @@ assert.ok(
 const factoryBudgetLabel = QUESTION_FACTORY_ARCHIVED
   ? 'Fábrica arquivada (0 chunks)'
   : `${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip`;
-console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; FAMED ${fmt(famedGzip)} gzip; APKG ${fmt(ankiPackage.gzip + sqlVendor.gzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
+console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; assets pessoais ${fmt(libraryQuestionAssets.gzip)} gzip; FAMED ${fmt(famedGzip)} gzip; APKG ${fmt(ankiPackage.gzip + sqlVendor.gzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);

@@ -154,7 +154,7 @@ export default function SettingsView() {
                 darkMode={darkMode}
               />
               <p className={`text-xs mt-3 leading-relaxed ${darkMode?'text-gray-500':'text-gray-400'}`}>
-                Rápido usa `thinkingBudget: 0`. Thinking usa `thinkingBudget: -1`, deixando o Gemini decidir quando raciocinar mais.
+                Thinking reforça tarefas complexas.
               </p>
             </SettingsSection>
             {/* Oracle Length */}

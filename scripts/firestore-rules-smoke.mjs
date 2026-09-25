@@ -55,4 +55,7 @@ assert.match(famedAssetsBlock, /allow write: if isAdmin\(\);/);
 
 assert.match(compact, /match \/{document=\*\*} \{ allow read, write: if false; \} \} \}$/);
 
+assert.match(ruleBlock('/usmle_packages/{packageId}'), /allow read, write: if isAdmin\(\);/);
+assert.match(ruleBlock('/releases/{releaseId}/{document=**}'), /allow read, write: if isAdmin\(\);/);
+assert.match(ruleBlock('/usmle_users/{userId}/{document=**}'), /allow read, write: if isAdmin\(\) && isOwner\(userId\);/);
 console.log('firestore-rules-smoke ok');
