@@ -524,6 +524,16 @@ assert.match(famedPackagePrompt, /arquivo ZIP baixável/);
 assert.match(famedPackagePrompt, /questions\.json na raiz/);
 assert.match(famedPackagePrompt, /agora-famed-question-package-v1/);
 assert.match(famedPackagePrompt, /images\/q1-figura\.png/);
+const pastQuestionPackagePrompt = await readFile(new URL('../public/prompts/past-question-package-contract.txt', import.meta.url), 'utf8');
+const externalPastQuestionPrompt = buildExternalPrompt({ questionTypes:['old_exam'] }, pastQuestionPackagePrompt);
+assert.match(externalPastQuestionPrompt, /PACOTE ZIP DE QUESTÕES ANTIGAS/);
+assert.match(externalPastQuestionPrompt, /arquivo ZIP realmente baixável/);
+assert.match(externalPastQuestionPrompt, /questions\.json diretamente na raiz/);
+assert.match(externalPastQuestionPrompt, /"schema": "agora-famed-question-package-v1"/);
+assert.match(externalPastQuestionPrompt, /Exatamente UMA alternativa deve ter isCorrect: true/);
+assert.match(externalPastQuestionPrompt, /options: \[\], isOpen: true e expectedAnswer não vazio/);
+assert.match(externalPastQuestionPrompt, /Soma das imagens efetivamente vinculadas: no máximo 12 MB/);
+assert.doesNotMatch(externalPastQuestionPrompt, /## Questão N/);
 const famedPackageZip = zipSync({
   'questions.json':strToU8(JSON.stringify({
     schema:'agora-famed-question-package-v1',

@@ -1,0 +1,138 @@
+[INSTRUÇÕES PARA CRIAR PACOTE ZIP DE QUESTÕES ANTIGAS — ÁGORA DO SABER]
+
+TAREFA:
+Depois destas instruções, enviarei questões antigas de prova em texto, imagem, PDF ou OCR. Posso enviar também o gabarito e arquivos de imagem separados. Transcreva TODAS as questões válidas e crie um pacote ZIP aceito pela tela Importar Questões do Ágora do Saber.
+
+Antes de começar, aguarde o envio do material. Se faltarem páginas, uma figura indispensável ou informação suficiente para determinar uma resposta, informe exatamente o que falta e peça esse item antes de gerar o ZIP. Não fabrique conteúdo para esconder uma lacuna.
+
+REGRA CENTRAL — PRESERVAÇÃO VERBATIM:
+- Preserve integralmente o conteúdo original de cada enunciado e de cada alternativa.
+- Preserve a ordem das questões e a ordem original das alternativas.
+- NÃO resuma, modernize, simplifique, complete, melhore, adapte ou reescreva o conteúdo das questões.
+- NÃO transforme a questão em outra questão e NÃO crie questões novas.
+- As únicas alterações permitidas no texto original são correções inequívocas de OCR, caracteres corrompidos, palavras partidas, hifenização acidental, espaços duplicados e quebras de linha inadequadas.
+- Se uma palavra estiver duvidosa, preserve-a como recebida. Não invente uma correção.
+
+EXCEÇÃO — ALTERNATIVAS AUSENTES OU ILEGÍVEIS:
+- Se uma questão objetiva estiver claramente incompleta porque uma ou mais alternativas não aparecem, foram cortadas, estão totalmente ilegíveis ou se perderam no OCR, crie apenas as alternativas faltantes necessárias para completar a questão.
+- Nunca altere alternativas que estejam presentes e legíveis. Preserve-as verbatim e mantenha suas letras/ordem originais.
+- Analise a questão antes de completar: a resposta correta pode estar justamente entre as alternativas ausentes. Não presuma que uma alternativa sobrevivente precisa ser a correta.
+- As alternativas reconstruídas devem ser tecnicamente plausíveis, pertencer à mesma categoria das originais, ter tamanho semelhante e não entregar o gabarito.
+- Determine o gabarito considerando conjuntamente as alternativas originais e reconstruídas.
+- Na explicação da alternativa reconstruída, comece com "[ALTERNATIVA RECONSTRUÍDA]" para deixar claro que ela não estava integralmente disponível no material.
+- Não reconstrua alternativa por mera dúvida de leitura parcial: tente primeiro corrigir somente o OCR. Reconstrua apenas quando realmente faltar conteúdo suficiente para formar uma alternativa utilizável.
+
+LIMPEZA DO MATERIAL:
+- Ignore cabeçalhos e rodapés de prova, nome da instituição, disciplina, professor, aluno, turma, data, paginação, instruções gerais e campos de identificação.
+- Ignore rabiscos, anotações manuscritas, marca-texto, círculos, setas, respostas marcadas pelo aluno e qualquer conteúdo que não faça parte da impressão original da questão.
+- Remova números de página e elementos repetidos entre páginas.
+- Não trate comentários, gabaritos rabiscados ou resoluções manuscritas como parte do enunciado.
+
+GABARITO E EXPLICAÇÕES:
+- Se houver gabarito oficial confiável no material, use-o.
+- Se não houver gabarito oficial, resolva a questão e determine a resposta correta sem alterar o enunciado ou as alternativas.
+- Para questões objetivas, escreva uma aula curta que ensine o conhecimento necessário para acertar e explique separadamente por que cada alternativa está certa ou errada.
+- Para questões abertas, acrescente somente a resposta esperada e uma explicação didática.
+- Se a questão original estiver anulada, tecnicamente errada ou sem alternativa defensável, não escolha uma alternativa arbitrariamente. O importador exige exatamente uma correta em toda objetiva: antes de gerar o ZIP, identifique a questão e peça uma decisão ao usuário.
+- explanation deve ensinar por que o gabarito está correto. Em options[].explanation, explique especificamente por que cada alternativa está correta ou errada; não escreva apenas "correta", "incorreta" ou "conforme o gabarito".
+
+REGRAS FINAIS:
+- Use o formato correspondente à estrutura original de cada questão; não converta questões abertas em objetivas nem objetivas em abertas.
+- Não omita questões válidas.
+- Preserve a quantidade e a ordem das questões válidas. Os IDs podem seguir essa ordem: q1, q2, q3 etc.
+
+ENTREGA OBRIGATÓRIA:
+- A resposta final deve ser um arquivo ZIP realmente baixável. Não entregue o JSON como texto, Markdown, bloco de código, link fictício, data URL ou base64.
+- O ZIP não pode ter senha e deve conter questions.json diretamente na raiz. Não coloque questions.json dentro de uma pasta superior.
+- Crie a pasta images/ somente quando houver figuras vinculadas às questões.
+- Não inclua README, relatório, PDF original, miniaturas, arquivos temporários nem imagens que nenhuma questão utilize.
+
+ESTRUTURA EXATA DO ZIP:
+pacote.zip
+├── questions.json
+└── images/                  (somente se necessária)
+    ├── q1-radiografia.png
+    └── q7-grafico.jpg
+
+CONTRATO EXATO DE questions.json:
+{
+  "schema": "agora-famed-question-package-v1",
+  "title": "nome da prova, avaliação ou bloco",
+  "questions": [
+    {
+      "id": "q1",
+      "statement": "enunciado e comando integrais da questão objetiva",
+      "caseContext": "caso clínico separado, ou string vazia",
+      "options": [
+        {
+          "letter": "A",
+          "text": "texto integral da alternativa A",
+          "isCorrect": false,
+          "explanation": "por que a alternativa A está correta ou errada"
+        },
+        {
+          "letter": "B",
+          "text": "texto integral da alternativa B",
+          "isCorrect": true,
+          "explanation": "por que a alternativa B está correta"
+        }
+      ],
+      "explanation": "explicação didática completa do gabarito e do raciocínio",
+      "expectedAnswer": "",
+      "isOpen": false,
+      "isEssay": false,
+      "images": [
+        {
+          "file": "images/q1-radiografia.png",
+          "altText": "descrição neutra da figura, sem revelar a resposta",
+          "credit": "fonte, somente quando constar no original"
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "statement": "enunciado e comando integrais da questão aberta",
+      "caseContext": "",
+      "options": [],
+      "explanation": "explicação didática da resposta",
+      "expectedAnswer": "resposta esperada completa",
+      "isOpen": true,
+      "isEssay": true,
+      "images": []
+    }
+  ]
+}
+
+REGRAS QUE O IMPORTADOR VALIDA:
+- questions.json deve ser JSON UTF-8 válido: use aspas duplas, valores booleanos true/false sem aspas, nenhuma vírgula final, nenhum comentário e nenhum trecho Markdown.
+- schema deve ser exatamente "agora-famed-question-package-v1" e questions deve ser um array não vazio.
+- Cada questão precisa de statement não vazio e id único. Para evitar colisões na normalização, use nos IDs somente letras sem acento, números, hífen e underscore, como q1, q2 e prova-2025_q3.
+- Em questão objetiva, options deve conter todas as alternativas como objetos. Cada alternativa precisa de letter, text não vazio, isCorrect booleano e explanation. Exatamente UMA alternativa deve ter isCorrect: true.
+- Em questão aberta ou dissertativa, use options: [], isOpen: true e expectedAnswer não vazio. Use isEssay: true somente quando a resposta original for dissertativa; para resposta curta, use isEssay: false.
+- Em questão objetiva, use expectedAnswer: "", isOpen: false e isEssay: false.
+- Use caseContext somente para separar um caso clínico que precede o comando; se não houver, use string vazia. Não duplique o mesmo texto em caseContext e statement.
+- Use images: [] quando a questão não depender de figura. Não coloque bytes, base64, data URL nem URL externa no JSON.
+- Se houver quebras de linha dentro de uma string JSON, codifique-as como \n.
+
+IMAGENS E VÍNCULOS:
+- Toda figura necessária para compreender ou responder a uma questão deve ser extraída para um arquivo próprio em images/ e citada no array images da questão correspondente.
+- Recorte apenas a figura relevante; não use a captura da página inteira quando for possível isolá-la. Preserve letras, setas, escalas, tabelas e legendas que façam parte da figura. Não redesenhe nem gere uma imagem nova.
+- Formatos aceitos: PNG, JPG, JPEG, WEBP e GIF. Use nomes únicos, minúsculos, sem acentos nem espaços.
+- O valor de images[].file deve começar por images/ e coincidir exatamente, inclusive em maiúsculas e minúsculas, com o caminho real do arquivo no ZIP.
+- altText deve identificar de forma neutra o tipo de figura sem antecipar diagnóstico, gabarito ou achado que o aluno precisa reconhecer.
+- Não deixe arquivo de imagem sem vínculo nem vínculo sem arquivo. Uma mesma imagem pode ser vinculada a mais de uma questão quando o original realmente a reutilizar.
+
+LIMITES TÉCNICOS DO IMPORTADOR:
+- ZIP completo: no máximo 25 MB.
+- Conteúdo total descompactado: no máximo 30 MB.
+- Cada imagem: no máximo 600 KB.
+- Soma das imagens efetivamente vinculadas: no máximo 12 MB.
+- Comprima as imagens sem apagar informação diagnóstica. Se o material ultrapassar os limites, divida-o em mais de um pacote coerente.
+
+VALIDAÇÃO FINAL SILENCIOSA:
+1. Abra o ZIP e confirme que questions.json está na raiz.
+2. Faça parse real do JSON e confirme schema, campos, tipos e IDs únicos.
+3. Confira que toda objetiva tem exatamente uma alternativa correta e toda aberta tem options: [] e expectedAnswer.
+4. Confira cada gabarito contra a fonte ou contra a resolução técnica quando a fonte não trouxer gabarito.
+5. Abra cada imagem, confira tamanho e formato e teste se cada caminho images[].file existe exatamente no ZIP.
+6. Depois dessas conferências, devolva somente o arquivo ZIP.

@@ -295,9 +295,17 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
   const isMemoryPrompt = (cfg.questionTypes || ['direct']).some(isMemoryCardType);
 
   const copy = async () => {
-    const { buildExternalPrompt } = await import('../../agora_prompts.js');
-    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg, adminQuestionExplanations:true});
-    navigator.clipboard.writeText(prompt);
+    const [{ buildExternalPrompt }, pastQuestionPackagePrompt] = await Promise.all([
+      import('../../agora_prompts.js'),
+      isOldExamPrompt
+        ? fetch(`${import.meta.env.BASE_URL}prompts/past-question-package-contract.txt`).then(response => {
+            if (!response.ok) throw new Error('Não foi possível carregar o contrato do pacote ZIP.');
+            return response.text();
+          })
+        : Promise.resolve(''),
+    ]);
+    const prompt = buildExternalPrompt({...settingsRef.current, ...cfg, adminQuestionExplanations:true}, pastQuestionPackagePrompt);
+    await navigator.clipboard.writeText(prompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -354,13 +362,13 @@ const ExternalPromptModal = ({ darkMode, settings, settingsRef, onClose, isAdmin
               />
               <p className="text-[11px] opacity-45 mt-2 leading-relaxed">
                 {isOldExamPrompt
-                  ? 'Cole o prompt na IA e, depois, envie as questões antigas. Ela preservará o texto e as alternativas, limpando somente ruídos de OCR e formatação.'
+                  ? 'Cole o prompt na IA e envie a prova, o gabarito e as figuras. Ela deverá devolver um ZIP pronto para o importador, preservando o texto e corrigindo somente ruídos de OCR e formatação.'
                   : 'O prompt copiado conterá somente as regras e o formato do tipo selecionado.'}
               </p>
             </div>
             {isOldExamPrompt ? (
               <p className={`text-xs rounded-xl border px-3 py-2 ${dm?'border-yellow-800/50 bg-yellow-900/15 text-yellow-300':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>
-                A quantidade será exatamente a quantidade de questões válidas fornecidas à IA.
+                Resultado esperado: arquivo ZIP com questions.json na raiz e, quando necessário, figuras em images/. A quantidade será exatamente a de questões válidas fornecidas.
               </p>
             ) : isMemoryPrompt ? (
               <p className={`text-xs rounded-xl border px-3 py-2 ${dm?'border-yellow-800/50 bg-yellow-900/15 text-yellow-300':'border-yellow-200 bg-yellow-50 text-yellow-800'}`}>

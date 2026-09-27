@@ -756,89 +756,13 @@ ${studyMap ? '- Preserve ou recalcule [Q:n] e [OBJ:objetivo verificável] em CAD
 
 // ─── PROMPT: IA EXTERNA ───────────────────────────────────────────────────────
 
-export const buildExternalPrompt = (s) => {
+export const buildExternalPrompt = (s, pastQuestionPackagePrompt = '') => {
   const na   = effectiveAlternativeCount(s);
   const qPerSub = Math.max(1, Number(s.qPerSub) || 1);
   const selectedType = s.questionTypes?.[0] || 'direct';
   const types = [selectedType];
   if (selectedType === 'old_exam') {
-    return `[INSTRUÇÕES PARA TRANSCREVER PROVAS ANTIGAS — ÁGORA DO SABER]
-
-TAREFA:
-Depois destas instruções, enviarei questões antigas de prova em texto, imagem, PDF ou OCR. Transcreva TODAS as questões válidas e devolva-as prontas para importação no Ágora do Saber.
-
-REGRA CENTRAL — PRESERVAÇÃO VERBATIM:
-- Preserve integralmente o conteúdo original de cada enunciado e de cada alternativa.
-- Preserve a ordem das questões e a ordem original das alternativas.
-- NÃO resuma, modernize, simplifique, complete, melhore, adapte ou reescreva o conteúdo das questões.
-- NÃO transforme a questão em outra questão e NÃO crie questões novas.
-- As únicas alterações permitidas no texto original são correções inequívocas de OCR, caracteres corrompidos, palavras partidas, hifenização acidental, espaços duplicados e quebras de linha inadequadas.
-- Se uma palavra estiver duvidosa, preserve-a como recebida. Não invente uma correção.
-
-EXCEÇÃO — ALTERNATIVAS AUSENTES OU ILEGÍVEIS:
-- Se uma questão objetiva estiver claramente incompleta porque uma ou mais alternativas não aparecem, foram cortadas, estão totalmente ilegíveis ou se perderam no OCR, crie apenas as alternativas faltantes necessárias para completar a questão.
-- Nunca altere alternativas que estejam presentes e legíveis. Preserve-as verbatim e mantenha suas letras/ordem originais.
-- Analise a questão antes de completar: a resposta correta pode estar justamente entre as alternativas ausentes. Não presuma que uma alternativa sobrevivente precisa ser a correta.
-- As alternativas reconstruídas devem ser tecnicamente plausíveis, pertencer à mesma categoria das originais, ter tamanho semelhante e não entregar o gabarito.
-- Determine o gabarito considerando conjuntamente as alternativas originais e reconstruídas.
-- Na explicação da alternativa reconstruída, comece com "[ALTERNATIVA RECONSTRUÍDA]" para deixar claro que ela não estava integralmente disponível no material.
-- Não reconstrua alternativa por mera dúvida de leitura parcial: tente primeiro corrigir somente o OCR. Reconstrua apenas quando realmente faltar conteúdo suficiente para formar uma alternativa utilizável.
-
-LIMPEZA DO MATERIAL:
-- Ignore cabeçalhos e rodapés de prova, nome da instituição, disciplina, professor, aluno, turma, data, paginação, instruções gerais e campos de identificação.
-- Ignore rabiscos, anotações manuscritas, marca-texto, círculos, setas, respostas marcadas pelo aluno e qualquer conteúdo que não faça parte da impressão original da questão.
-- Remova números de página e elementos repetidos entre páginas.
-- Não trate comentários, gabaritos rabiscados ou resoluções manuscritas como parte do enunciado.
-
-GABARITO E EXPLICAÇÕES:
-- Se houver gabarito oficial confiável no material, use-o.
-- Se não houver gabarito oficial, resolva a questão e determine a resposta correta sem alterar o enunciado ou as alternativas.
-- Para questões objetivas, escreva uma aula curta que ensine o conhecimento necessário para acertar e explique separadamente por que cada alternativa está certa ou errada.
-- Para questões abertas, acrescente somente a resposta esperada e uma explicação didática.
-- Se a questão original estiver anulada, tecnicamente errada ou sem alternativa defensável, preserve-a e informe isso claramente na explicação; não conserte silenciosamente a questão.
-
-FORMATO OBRIGATÓRIO PARA QUESTÃO OBJETIVA:
-## Questão N
-[enunciado original limpo]
-A) [alternativa original limpa]
-B) [alternativa original limpa]
-C) [alternativa original limpa]
-D) [alternativa original limpa]
-[E), se existir na questão original]
-Alternativa correta: [letra]
-Explicação:
-Aula:
-[explicação do tema necessária para compreender e acertar a questão]
-
-Alternativas:
-[[ALT:A]]
-[por que A está certa ou errada]
-
-[[ALT:B]]
-[por que B está certa ou errada]
-
-[[ALT:C]]
-[por que C está certa ou errada]
-
-[[ALT:D]]
-[por que D está certa ou errada]
-
-[[ALT:E]]
-[por que E está certa ou errada, somente se existir]
----
-
-FORMATO OBRIGATÓRIO PARA QUESTÃO ABERTA:
-## Questão N
-[enunciado original limpo]
-Resposta esperada: [resposta]
-Explicação: [explicação didática]
----
-
-REGRAS FINAIS:
-- Use o formato correspondente à estrutura original de cada questão; não converta questões abertas em objetivas nem objetivas em abertas.
-- Não inclua comentários antes ou depois dos blocos.
-- Não omita questões válidas.
-- Aguarde eu enviar a prova antes de responder.`;
+    return pastQuestionPackagePrompt || '[ERRO: o prompt do pacote ZIP não foi carregado. Copie o prompt novamente.]';
   }
   const hasClosed = types.some(t => ['direct','vof','cespe'].includes(t));
   const onlyFlashcards = onlyMemoryCards(types);

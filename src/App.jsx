@@ -8428,13 +8428,6 @@ export default function QuestionBankApp() {
     return buildOracleQuestionPrompt(s, focusBlock, s.autoMode || false);
   };
 
-  const getExternalPrompt = async () => {
-    const buildExternalPrompt = await getPromptBuilder('buildExternalPrompt');
-    const rawSettings = withAdminQuestionPromptSettings(settingsRef.current);
-    const questionTypes = normalizeQuestionTypesForGeneration(rawSettings.questionTypes);
-    return buildExternalPrompt({ ...rawSettings, questionTypes, ...(isOnlyMemoryCardType(questionTypes) ? { questionStyle:'direct' } : {}) });
-  };
-
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleFileUpload = async (e) => {
     const files=Array.from(e.target.files||[]);if(!files.length)return;setIsUploading(true);
