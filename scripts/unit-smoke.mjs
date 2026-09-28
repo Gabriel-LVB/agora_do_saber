@@ -378,6 +378,30 @@ assert.equal(
   'A alternativa **D** está incorreta.',
 );
 assert.equal(
+  normalizeDisplayedAlternativeReferences('Esta é a alternativa a ser assinalada.', 'D'),
+  'Esta é a alternativa a ser assinalada.',
+);
+assert.equal(
+  normalizeDisplayedAlternativeReferences('Esta é uma opção a considerar no tratamento.', 'D'),
+  'Esta é uma opção a considerar no tratamento.',
+);
+assert.equal(
+  normalizeDisplayedAlternativeReferences('Consulte a alternativa a seguir.', 'D'),
+  'Consulte a alternativa a seguir.',
+);
+assert.equal(
+  normalizeDisplayedAlternativeReferences('A alternativa a está incorreta.', 'D'),
+  'A alternativa D está incorreta.',
+);
+assert.equal(
+  normalizeDisplayedAlternativeReferences('A alternativa b está incorreta.', 'D'),
+  'A alternativa D está incorreta.',
+);
+assert.equal(
+  normalizeDeclaredCorrectAlternativeReferences('A resposta correta é a alternativa c.', 'E'),
+  'A resposta correta é a alternativa E.',
+);
+assert.equal(
   normalizeDeclaredCorrectAlternativeReferences('A alternativa A está incorreta.', 'D'),
   'A alternativa A está incorreta.',
 );

@@ -1,5 +1,30 @@
+const LOWERCASE_A_GRAMMATICAL_CONTINUATIONS = new Set([
+  'algo', 'aquela', 'aquelas', 'aquele', 'aqueles',
+  'curto', 'essa', 'essas', 'esse', 'esses',
+  'esta', 'estas', 'este', 'estes', 'favor',
+  'longo', 'o', 'os', 'qual', 'quais', 'que',
+  'respeito', 'uma', 'umas', 'um', 'uns',
+]);
+
+const isLowercaseAPreposition = ({ match, open, storedLetter, close, offset, source }) => {
+  if (storedLetter !== 'a' || open || close) return false;
+
+  const continuation = String(source || '').slice(offset + match.length);
+  const nextWord = continuation.match(/^\s+([a-zà-ÿ]+(?:-se)?)/i)?.[1]?.toLowerCase();
+  if (!nextWord) return false;
+
+  // Depois de "a", um infinitivo ou um complemento nominal indica a
+  // preposição do português, não o rótulo da alternativa A.
+  return /(?:ar|er|ir)(?:-se)?$/.test(nextWord)
+    || nextWord === 'pôr'
+    || LOWERCASE_A_GRAMMATICAL_CONTINUATIONS.has(nextWord);
+};
+
 const referenceGroupReplacer = letter => (
-  (_match, prefix, open = '', _storedLetter, close = '') => `${prefix}${open}${letter}${close}`
+  (match, prefix, open = '', storedLetter, close = '', offset, source) => {
+    if (isLowercaseAPreposition({ match, open, storedLetter, close, offset, source })) return match;
+    return `${prefix}${open}${letter}${close}`;
+  }
 );
 
 // Referências que declaram explicitamente qual é a resposta correta. Estas
