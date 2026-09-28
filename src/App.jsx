@@ -19,6 +19,12 @@ import { saveDailyStats, saveWatchedAulas } from './services/courseProgress.js';
 import { coursePlayerSubscriptionMessages, readCoursePlayerEvent } from './services/coursePlayer.js';
 import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiApiKey } from './services/gemini.js';
 import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, deleteLibraryTopicProgress, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
+import {
+  LIBRARY_QUESTION_CHUNK_STORAGE,
+  hydrateLibraryQuestionChunks,
+  libraryQuestionChunkIds,
+  serializeLibrarySubjectForWrite,
+} from './services/libraryQuestionChunks.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
 import {
   buildReviewForecast,
@@ -52,6 +58,8 @@ const libraryQuestionAssetIds = questions => Array.from(new Set(
 ));
 const saveLibraryQuestionAssets = async params => (await import('./services/libraryQuestionAssets.js')).saveLibraryQuestionAssets(params);
 const deleteLibraryQuestionAssets = async params => (await import('./services/libraryQuestionAssets.js')).deleteLibraryQuestionAssets(params);
+const saveLibraryQuestionChunks = async params => (await import('./services/libraryQuestionAssets.js')).saveLibraryQuestionChunks(params);
+const deleteLibraryQuestionChunks = async params => (await import('./services/libraryQuestionAssets.js')).deleteLibraryQuestionChunks(params);
 const isChunkLoadError = (error) =>
   /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(String(error?.message || error || ''));
 const lazyWithRetry = (factory) => factory().catch(error => {
@@ -7140,7 +7148,7 @@ export default function QuestionBankApp() {
     const cacheKey = userLibraryCacheKey(user.uid);
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.library, null);
     if (Array.isArray(cached.value)) {
-      const d = sortLibraryItems(cached.value);
+      const d = sortLibraryItems(hydrateLibraryQuestionChunks(cached.value));
       libraryRef.current = d.length ? d : defFolder;
       setLibrary(libraryRef.current);
       if (cached.fresh || !needsPersonalLibraryData) {
@@ -7165,7 +7173,7 @@ export default function QuestionBankApp() {
         ]);
         if (cancelled) return;
         const progressEntries = progressSnap.docs.map(entry => entry.data() || {});
-        const d = sortLibraryItems(applyLibraryProgressEntries(snap.docs.map(x=>x.data()), progressEntries));
+        const d = sortLibraryItems(applyLibraryProgressEntries(hydrateLibraryQuestionChunks(snap.docs.map(x=>x.data())), progressEntries));
         const next = d.length ? d : defFolder;
         libraryRef.current = next;
         setLibrary(next);
@@ -7188,8 +7196,9 @@ export default function QuestionBankApp() {
   },[user,username,needsPersonalLibraryData,foregroundPersonalLibraryData]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const activeSubject = library.find(s=>s.id===activeSubjectId);
-  const storedActiveTopic = activeSubject?.topics?.find(t=>t.id===activeTopicId);
+  const activeSubject = library.find(s=>sameId(s.id,activeSubjectId))
+    || libraryRef.current.find(s=>sameId(s.id,activeSubjectId));
+  const storedActiveTopic = activeSubject?.topics?.find(t=>sameId(t.id,activeTopicId));
   const resolveCustomStudyQuestions = (topic, items = libraryRef.current?.length ? libraryRef.current : library) => {
     if (!['customStudy','shuffledSubject'].includes(topic?.origin?.source) || !Array.isArray(topic.questionRefs)) return topic?.questions || [];
     return topic.questionRefs.map(ref => {
@@ -7293,7 +7302,7 @@ export default function QuestionBankApp() {
   })();
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
-  const updateSubject = async (s) => {
+  const updateSubject = async (s, { requireRemoteSuccess=false } = {}) => {
     let cleanSubject = cleanFirestoreData(pruneEmbeddedSpacedReview(s));
     const previous = libraryRef.current.find(x=>x.id===cleanSubject.id);
     const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
@@ -7315,11 +7324,27 @@ export default function QuestionBankApp() {
       } catch(e) {
         console.warn('subject merge skipped:', e?.code || e?.message || e);
       }
-      await setDoc(ref, cleanSubject).catch(console.error);
+      try {
+        await setDoc(ref, cleanFirestoreData(serializeLibrarySubjectForWrite(cleanSubject)));
+      } catch(error) {
+        console.error(error);
+        if (requireRemoteSuccess) {
+          const rollbackLibrary = previous
+            ? libraryRef.current.map(item => sameId(item.id,previous.id) ? previous : item)
+            : libraryRef.current.filter(item => !sameId(item.id,cleanSubject.id));
+          libraryRef.current = rollbackLibrary;
+          setLibrary(rollbackLibrary);
+          persistSignedLibraryCache(rollbackLibrary);
+          throw error;
+        }
+      }
     }
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
-    await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]);
+    await pruneReviewQueueForSubjectChanges(previous ? [previous] : [], [cleanSubject]).catch(error => {
+      console.warn('library review cleanup skipped:', error?.code || error?.message || error);
+    });
     if (cleanSubject.source === 'academia' || hasAcademiaOriginTopic(cleanSubject)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    return cleanSubject;
   };
 
   const closeMobileMenu = useCallback((afterClose) => {
@@ -7496,7 +7521,7 @@ export default function QuestionBankApp() {
           console.warn('library item merge skipped:', e?.code || e?.message || e);
         }
         mergedItems.push(finalItem);
-        await setDoc(ref, finalItem).catch(console.error);
+        await setDoc(ref, cleanFirestoreData(serializeLibrarySubjectForWrite(finalItem))).catch(console.error);
       }
       cleanItems = mergedItems;
       const merged = new Map(cleanItems.map(item=>[item.id,item]));
@@ -7529,8 +7554,9 @@ export default function QuestionBankApp() {
     if (repairs.length) updateLibraryItems(repairs).catch(console.error);
   }, [library.length]); // eslint-disable-line
 
-  const addSubject = async (s) => {
+  const addSubject = async (s, { requireRemoteSuccess=false } = {}) => {
     let ns = cleanFirestoreData(s);
+    const previous = libraryRef.current.find(item => sameId(item.id,ns.id));
     if (!Number.isFinite(Number(ns.sortOrder)) && ns.source) {
       const parent = isFolderItem(ns) ? (ns.parentFolderId || null) : (ns.folderId || null);
       const siblings = library.filter(item => item.source === ns.source && (isFolderItem(item) ? (item.parentFolderId || null) : (item.folderId || null)) === parent);
@@ -7541,14 +7567,34 @@ export default function QuestionBankApp() {
     libraryRef.current = nextLibrary;
     setLibrary(p=>sortLibraryItems([ns,...p.filter(x=>x.id!==ns.id)]));
     persistSignedLibraryCache(nextLibrary);
-    if(user&&!user.isAnonymous) await setDoc(doc(db,'users',user.uid,'library',ns.id.toString()),ns).catch(console.error);
+    if(user&&!user.isAnonymous) {
+      try {
+        await setDoc(
+          doc(db,'users',user.uid,'library',ns.id.toString()),
+          cleanFirestoreData(serializeLibrarySubjectForWrite(ns))
+        );
+      } catch(error) {
+        console.error(error);
+        if (requireRemoteSuccess) {
+          const rollbackLibrary = previous
+            ? sortLibraryItems([previous,...libraryRef.current.filter(item => !sameId(item.id,ns.id))])
+            : libraryRef.current.filter(item => !sameId(item.id,ns.id));
+          libraryRef.current = rollbackLibrary;
+          setLibrary(rollbackLibrary);
+          persistSignedLibraryCache(rollbackLibrary);
+          throw error;
+        }
+      }
+    }
     else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify([ns,...library]));
     if (ns.source === 'academia' || hasAcademiaOriginTopic(ns)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    return ns;
   };
   const removeSubject = async (id) => {
     const removed = libraryRef.current.find(s=>s.id===id);
     if (isProtectedMirrorRootFolder(removed)) return;
     const removedAssetIds = libraryQuestionAssetIds((removed?.topics || []).flatMap(topic => topic.questions || []));
+    const removedChunkIds = libraryQuestionChunkIds(removed);
     const nextLibrary = libraryRef.current.filter(s=>s.id!==id);
     libraryRef.current = nextLibrary;
     setLibrary(p=>p.filter(s=>s.id!==id));
@@ -7566,6 +7612,11 @@ export default function QuestionBankApp() {
     if (remoteRemoved && removedAssetIds.length) {
       await deleteLibraryQuestionAssets({ userId:user.uid, assetIds:removedAssetIds }).catch(error => {
         console.warn('library subject asset cleanup failed:', error?.code || error?.message || error);
+      });
+    }
+    if (remoteRemoved && removedChunkIds.length) {
+      await deleteLibraryQuestionChunks({ userId:user.uid, chunkIds:removedChunkIds }).catch(error => {
+        console.warn('library subject question chunk cleanup failed:', error?.code || error?.message || error);
       });
     }
     await pruneReviewQueueForSubjectChanges(removed ? [removed] : [], []);
@@ -8307,9 +8358,17 @@ export default function QuestionBankApp() {
       const removedAssetIds = libraryQuestionAssetIds(removedSubjects
         .filter(subject => deletedSubjectIds.has(String(subject.id)))
         .flatMap(subject => (subject.topics || []).flatMap(topic => topic.questions || [])));
+      const removedChunkIds = removedSubjects
+        .filter(subject => deletedSubjectIds.has(String(subject.id)))
+        .flatMap(libraryQuestionChunkIds);
       if (removedAssetIds.length) {
         await deleteLibraryQuestionAssets({ userId:user.uid, assetIds:removedAssetIds }).catch(error => {
           console.warn('library folder asset cleanup failed:', error?.code || error?.message || error);
+        });
+      }
+      if (removedChunkIds.length) {
+        await deleteLibraryQuestionChunks({ userId:user.uid, chunkIds:removedChunkIds }).catch(error => {
+          console.warn('library folder question chunk cleanup failed:', error?.code || error?.message || error);
         });
       }
     } else if(user?.isAnonymous) {
@@ -11735,7 +11794,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const currentTargetSubject = (libraryRef.current?.length ? libraryRef.current : library)
       .find(item => sameId(item.id,target.subjectId)) || target.subject;
     const importedTypes = Array.from(new Set((questions || []).map(q => q.isCloze ? 'cloze' : q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
-    const nextTopic = {
+    let nextTopic = {
       id:topicId || `imp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
       title:pasteTopic.trim() || suggestedTitle || `Bloco (${new Date().toLocaleDateString()})`,
       questions,
@@ -11747,33 +11806,77 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       questionTypes:importedTypes,
       ...(packageSchema ? {packageSchema} : {}),
     };
-    if (currentTargetSubject) {
-      await updateSubject({...currentTargetSubject, topics:[...(currentTargetSubject.topics || []), nextTopic]});
-    } else {
-      await addSubject({
-        id:target.subjectId,
-        title:target.subjectTitle,
-        source:'external',
-        folderId:libFilter === 'external' ? (activeFolder?.id || null) : null,
-        fullSyllabus:'Importado',
-        topics:[nextTopic],
-      });
+    let savedChunkIds = [];
+    try {
+      if (user && !user.isAnonymous) {
+        savedChunkIds = await saveLibraryQuestionChunks({
+          userId:user.uid,
+          subjectId:target.subjectId,
+          topicId:nextTopic.id,
+          questions,
+        });
+        nextTopic = {
+          ...nextTopic,
+          questionStorage:LIBRARY_QUESTION_CHUNK_STORAGE,
+          questionChunkIds:savedChunkIds,
+          questionCount:questions.length,
+        };
+      }
+      if (currentTargetSubject) {
+        await updateSubject(
+          {...currentTargetSubject, topics:[...(currentTargetSubject.topics || []), nextTopic]},
+          { requireRemoteSuccess:true }
+        );
+      } else {
+        await addSubject({
+          id:target.subjectId,
+          title:target.subjectTitle,
+          source:'external',
+          folderId:libFilter === 'external' ? (activeFolder?.id || null) : null,
+          fullSyllabus:'Importado',
+          topics:[nextTopic],
+        }, { requireRemoteSuccess:true });
+      }
+    } catch(error) {
+      if (savedChunkIds.length && user && !user.isAnonymous) {
+        await deleteLibraryQuestionChunks({ userId:user.uid, chunkIds:savedChunkIds }).catch(() => {});
+      }
+      throw error;
     }
-    setActiveSubjectId(target.subjectId);
+    const savedSubject = libraryRef.current.find(item => sameId(item.id,target.subjectId));
+    const savedTopic = savedSubject?.topics?.find(item => sameId(item.id,nextTopic.id));
+    if (!savedSubject || !savedTopic) throw new Error('O bloco foi gravado, mas não pôde ser aberto. Volte a Meus materiais e tente novamente.');
+    setLibFilter('external');
+    setActiveFolderId(savedSubject.folderId || null);
+    setActiveSubjectId(savedSubject.id);
     setPasteText('');
     setPasteTopic('');
     setPasteZipFile(null);
     if (pasteZipInputRef.current) pasteZipInputRef.current.value = '';
-    setActiveTopicId(nextTopic.id);
+    setActiveTopicId(savedTopic.id);
     setView('topic');
-    return nextTopic;
+    return savedTopic;
+  };
+  const importedQuestionsErrorMessage = error => {
+    const details = `${error?.code || ''} ${error?.message || ''}`.toLowerCase();
+    if (/too large|longer than|maximum.*size|resource-exhausted|question-too-large|package-too-large/.test(details)) {
+      return 'O bloco é grande demais para ser salvo. Divida as questões em dois ou mais pacotes ZIP e importe cada parte separadamente.';
+    }
+    if (/permission-denied|unauthenticated/.test(details)) return 'Sua sessão não autorizou a gravação. Entre novamente e repita a importação.';
+    if (/unavailable|network|offline|deadline-exceeded/.test(details)) return 'Não foi possível confirmar a gravação no servidor. Confira a conexão e tente novamente.';
+    return error?.message || 'Não foi possível confirmar a gravação do bloco.';
   };
   const handlePasteImport = async () => {
     const allowedImportTypes = ['direct','vof','cespe','open','essay','flashcard', ...(isAdmin ? ['cloze'] : [])];
     const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, allowedImportTypes);
     const importTypeLabel = isAdmin ? 'flashcards e clozes' : 'flashcards';
     if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:`Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e ${importTypeLabel}, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:", "Texto:"${isAdmin ? ' com {{c1::...}}' : ''} ou alternativas A-E.`,isAlert:true});return;}
-    await persistImportedQuestions({ questions:parsed.questions, summary:parsed.summary });
+    try {
+      await persistImportedQuestions({ questions:parsed.questions, summary:parsed.summary });
+      addToast(`${parsed.questions.length} questões foram importadas.`, 'success', 4000);
+    } catch(error) {
+      setErrorModal({ title:'Não foi possível salvar as questões', message:importedQuestionsErrorMessage(error), isAlert:true });
+    }
   };
   const handlePasteZipImport = async () => {
     if (!pasteZipFile || pasteZipBusy) return;
@@ -11807,8 +11910,6 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
         destination,
         topicId,
       });
-      setPasteZipFile(null);
-      if (pasteZipInputRef.current) pasteZipInputRef.current.value = '';
       addToast(`${questions.length} questões do ZIP foram importadas.`, 'success', 4500);
     } catch(error) {
       if (savedAssets.length) {
@@ -11816,7 +11917,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       }
       setErrorModal({
         title:'Não foi possível importar o ZIP',
-        message:error?.message || 'Confira o pacote e tente novamente.',
+        message:importedQuestionsErrorMessage(error),
         isAlert:true,
       });
     } finally {
@@ -11830,11 +11931,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const topic = (subject.topics || []).find(item => sameId(item.id, topicId));
     if (!topic) return;
     const assetIds = libraryQuestionAssetIds(topic.questions);
+    const chunkIds = Array.isArray(topic.questionChunkIds) ? topic.questionChunkIds : [];
 
     await updateSubject({
       ...subject,
       topics:(subject.topics || []).filter(item => !sameId(item.id, topicId)),
-    });
+    }, { requireRemoteSuccess:true });
     if (user && !user.isAnonymous) {
       await deleteLibraryTopicProgress({ userId:user.uid, subjectId:subject.id, topicId }).catch(error => {
         console.warn('imported topic progress cleanup failed:', error?.code || error?.message || error);
@@ -11847,6 +11949,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             console.warn('imported topic asset cleanup failed:', error?.code || error?.message || error);
           });
         }
+      }
+      if (chunkIds.length) {
+        await deleteLibraryQuestionChunks({ userId:user.uid, chunkIds }).catch(error => {
+          console.warn('imported topic question chunk cleanup failed:', error?.code || error?.message || error);
+        });
       }
     }
     if (sameId(activeTopicId, topicId)) setActiveTopicId(null);

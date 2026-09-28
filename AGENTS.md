@@ -300,7 +300,7 @@ Coleção:
 users/{uid}/library/{itemId}
 ```
 
-Ela guarda no mesmo nível pastas e assuntos. Não suponha que todo documento tenha `topics`.
+Ela guarda no mesmo nível pastas, assuntos e chunks internos de questões importadas. Não suponha que todo documento tenha `topics`. Documentos com `itemType: 'question-chunk'` são armazenamento interno, não itens de navegação; `hydrateLibraryQuestionChunks` os recompõe e os remove da lista visível.
 
 ### Pasta
 
@@ -382,7 +382,7 @@ Use `persistLibraryTopicProgressPatches`/`saveLibraryTopicProgressPatch`. Na lei
 
 Conteúdo estrutural — criação, título, tópicos, aula gerada — ainda usa o documento em `library`. `updateSubject` faz merge defensivo para reduzir perda de progresso concorrente.
 
-Pacotes ZIP de questões importadas em **Meus materiais** reutilizam o contrato `agora-famed-question-package-v1`. As questões permanecem no tópico de `library`, mas as figuras ficam separadas em `users/{uid}/library_assets/{assetId}` e são hidratadas sob demanda pelo `QuestionCard`; exclusões de bloco, assunto ou pasta também removem esses assets.
+Pacotes ZIP de questões importadas em **Meus materiais** reutilizam o contrato `agora-famed-question-package-v1`. Logicamente, as questões permanecem no tópico; fisicamente, `src/services/libraryQuestionChunks.js` divide blocos grandes em documentos irmãos `itemType: 'question-chunk'` na própria coleção `library`, e o loader os recompõe antes de expor a biblioteca. O documento do assunto guarda `questionStorage`, `questionChunkIds` e `questionCount`, sem duplicar o array completo no Firestore. As figuras ficam separadas em `users/{uid}/library_assets/{assetId}` e são hidratadas sob demanda pelo `QuestionCard`; exclusões de bloco, assunto ou pasta também removem chunks e assets. A importação só pode indicar sucesso depois que os chunks e o documento pai forem confirmados remotamente; em falha, reverta o estado otimista e limpe os documentos auxiliares.
 
 ## Modelo de questões
 

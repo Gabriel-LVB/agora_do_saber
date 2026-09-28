@@ -30,6 +30,12 @@ import {
   sharedLibraryChunkDocId,
 } from '../src/services/sharedLibraryContent.js';
 import {
+  LIBRARY_QUESTION_CHUNK_STORAGE,
+  hydrateLibraryQuestionChunks,
+  serializeLibrarySubjectForWrite,
+} from '../src/services/libraryQuestionChunks.js';
+import { splitLibraryQuestionsIntoChunks } from '../src/services/libraryQuestionAssets.js';
+import {
   mapSharedLibraryRepairCandidates,
   repairSharedLibraryIncompleteItems,
 } from '../src/services/sharedLibraryRepair.js';
@@ -253,6 +259,29 @@ assert.deepEqual(cleanFirestoreData(input), {
     null,
   ],
 });
+
+const importedQuestionChunks = splitLibraryQuestionsIntoChunks([
+  { id:'q1', statement:'a'.repeat(100) },
+  { id:'q2', statement:'b'.repeat(100) },
+], 180);
+assert.equal(importedQuestionChunks.length, 2);
+const hydratedImportedLibrary = hydrateLibraryQuestionChunks([
+  {
+    id:'subject-1',
+    source:'external',
+    topics:[{
+      id:'topic-1',
+      questions:[],
+      questionStorage:LIBRARY_QUESTION_CHUNK_STORAGE,
+      questionChunkIds:['chunk-1','chunk-2'],
+    }],
+  },
+  { id:'chunk-2', itemType:'question-chunk', parentSubjectId:'subject-1', topicId:'topic-1', chunkIndex:1, questions:[{id:'q2'}] },
+  { id:'chunk-1', itemType:'question-chunk', parentSubjectId:'subject-1', topicId:'topic-1', chunkIndex:0, questions:[{id:'q1'}] },
+]);
+assert.equal(hydratedImportedLibrary.length, 1);
+assert.deepEqual(hydratedImportedLibrary[0].topics[0].questions.map(question => question.id), ['q1','q2']);
+assert.deepEqual(serializeLibrarySubjectForWrite(hydratedImportedLibrary[0]).topics[0].questions, []);
 
 const bigQuestionText = 'x'.repeat(350000);
 const chunkPrepared = prepareSharedLibraryContentForWrite({

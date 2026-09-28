@@ -22,6 +22,7 @@ export default defineConfig({
             '/src/lib/interaction.js',
             '/src/lib/questionTypes.js',
             '/src/lib/safeStorage.js',
+            '/src/services/libraryQuestionChunks.js',
             '/src/services/reviewScheduler.js',
           ].some(suffix => normalizedId.endsWith(suffix))) return 'app-data-core'
           if (!id.includes('node_modules')) return;

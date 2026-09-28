@@ -166,9 +166,10 @@ const ANKI_PACKAGE_GZIP_LIMIT = 18.5 * 1024;
 // Área administrativa nova, integralmente lazy: importador, sessão e desempenho.
 // Reserva própria de 20 KiB gzip; o budget da Home e do núcleo permanece intacto.
 const USMLE_GZIP_LIMIT = 20 * 1024;
-// Imagens privadas dos pacotes ZIP de Meus materiais so acessam o Firestore
-// quando o usuario importa o pacote ou abre uma questao que referencia um asset.
-const LIBRARY_QUESTION_ASSETS_GZIP_LIMIT = 1.5 * 1024;
+// Imagens privadas e chunks de questoes dos pacotes ZIP de Meus materiais so
+// acessam o Firestore quando o usuario importa, exclui ou abre o material.
+// A reserva inclui particionamento e rollback de blocos grandes confirmados remotamente.
+const LIBRARY_QUESTION_ASSETS_GZIP_LIMIT = 2 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT
