@@ -457,12 +457,6 @@ html.agora-theme-fallback .agora-shell *::after {
   background: var(--surface-muted);
 }
 
-.agora-shell .question-case-context {
-  border: 0;
-  border-left: 3px solid color-mix(in srgb, var(--accent-2) 78%, var(--line));
-  background: var(--surface) !important;
-}
-
 .agora-shell .question-option {
   box-shadow: none !important;
 }
@@ -744,8 +738,7 @@ html.agora-theme-fallback .agora-shell *::after {
     padding: .85rem !important;
   }
 
-  .agora-shell .question-option,
-  .agora-shell .question-case-context {
+  .agora-shell .question-option {
     padding-right: .8rem !important;
     padding-left: .8rem !important;
   }

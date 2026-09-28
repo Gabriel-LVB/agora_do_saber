@@ -382,7 +382,7 @@ Use `persistLibraryTopicProgressPatches`/`saveLibraryTopicProgressPatch`. Na lei
 
 Conteúdo estrutural — criação, título, tópicos, aula gerada — ainda usa o documento em `library`. `updateSubject` faz merge defensivo para reduzir perda de progresso concorrente.
 
-Pacotes ZIP de questões importadas em **Meus materiais** reutilizam o contrato `agora-famed-question-package-v1`. Logicamente, as questões permanecem no tópico; fisicamente, `src/services/libraryQuestionChunks.js` divide blocos grandes em documentos irmãos `itemType: 'question-chunk'` na própria coleção `library`, e o loader os recompõe antes de expor a biblioteca. O documento do assunto guarda `questionStorage`, `questionChunkIds` e `questionCount`, sem duplicar o array completo no Firestore. As figuras ficam separadas em `users/{uid}/library_assets/{assetId}` e são hidratadas sob demanda pelo `QuestionCard`; exclusões de bloco, assunto ou pasta também removem chunks e assets. A importação só pode indicar sucesso depois que os chunks e o documento pai forem confirmados remotamente; em falha, reverta o estado otimista e limpe os documentos auxiliares.
+Pacotes ZIP de questões importadas em **Meus materiais** reutilizam o contrato `agora-famed-question-package-v1`. Logicamente, as questões permanecem no tópico; fisicamente, `src/services/libraryQuestionChunks.js` divide blocos grandes em documentos irmãos `itemType: 'question-chunk'` na própria coleção `library`, e o loader os recompõe antes de expor a biblioteca. O documento do assunto guarda `questionStorage`, `questionChunkIds` e `questionCount`, sem duplicar o array completo no Firestore. O cache local da biblioteca também deve excluir os arrays hidratados desses tópicos e forçar a leitura remota quando detectar chunks pendentes; nunca deixe uma falha de cota do `localStorage` preservar um cache antigo como se fosse atual. Ao abrir Meus materiais, assunto, tópico ou qualquer criador/importador, confirme a biblioteca diretamente no servidor para que dispositivos diferentes convirjam. As figuras ficam separadas em `users/{uid}/library_assets/{assetId}` e são hidratadas sob demanda pelo `QuestionCard`; exclusões de bloco, assunto ou pasta também removem chunks e assets. A importação só pode indicar sucesso depois que os chunks e o documento pai forem confirmados remotamente; em falha, reverta o estado otimista e limpe os documentos auxiliares. Exclusões estruturais também só devem sumir localmente depois da confirmação remota; se falharem, mantenha o item visível. Leituras da biblioteca iniciadas antes de uma mutação local não podem sobrescrever o estado recém-confirmado.
 
 ## Modelo de questões
 
@@ -412,6 +412,8 @@ Variações usam marcadores como:
 - verdadeiro/falso (`vof`);
 - certo/errado (`cespe`);
 - questões importadas (`old_exam`).
+
+Na apresentação clínica, um `caseContext` usado por apenas uma questão faz parte do próprio enunciado dentro do cartão, sem cabeçalho ou caixa visual separada. O bloco externo **Caso clínico compartilhado** só aparece quando duas ou mais questões exibidas realmente reutilizam o mesmo caso.
 
 Tipos disponíveis no seletor:
 

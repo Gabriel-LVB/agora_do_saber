@@ -77,7 +77,10 @@ for (const file of jsFiles) {
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
 
-const ENTRY_RAW_LIMIT = 500 * 1024;
+// A confirmação remota, a invalidação defensiva do cache e a exclusão
+// confirmada da biblioteca pessoal acrescentam menos de 1 KiB raw ao entry
+// e 0,5 KiB gzip ao núcleo.
+const ENTRY_RAW_LIMIT = 501 * 1024;
 const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A curadoria e a seleção da Fábrica acrescentam um módulo administrativo
 // completo; o teto cresceu somente pelo custo medido desta primeira fatia.
@@ -98,7 +101,7 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // cerca de 0,1 KiB medido e evita cópias divergentes entre tela e exportação.
 // A separação entre commit e atualização local, com diagnóstico por etapa,
 // acrescenta outros 0,2 KiB medidos ao handler administrativo.
-const CORE_TOTAL_GZIP_LIMIT = 447 * 1024;
+const CORE_TOTAL_GZIP_LIMIT = 447.5 * 1024;
 // A Fábrica concluída está arquivada no código-fonte, mas não possui ponto de
 // entrada no app. Seus chunks administrativos não devem ser emitidos enquanto
 // QUESTION_FACTORY_VISIBLE permanecer falso.

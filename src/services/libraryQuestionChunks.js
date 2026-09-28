@@ -1,3 +1,5 @@
+import { removeStorageItem, writeStorageJson } from '../lib/safeStorage.js';
+
 export const LIBRARY_QUESTION_CHUNK_TYPE = 'question-chunk';
 export const LIBRARY_QUESTION_CHUNK_STORAGE = 'library-question-chunks-v1';
 
@@ -35,6 +37,25 @@ export const serializeLibrarySubjectForWrite = subject => {
       : topic),
   };
 };
+
+export const serializeLibraryForCache = items => (Array.isArray(items) ? items : [])
+  .filter(item => !isLibraryQuestionChunk(item))
+  .map(serializeLibrarySubjectForWrite);
+
+export const replaceLibraryCache = ({ cacheKey, legacyCacheKey, items }) => {
+  if (legacyCacheKey) removeStorageItem(legacyCacheKey);
+  removeStorageItem(cacheKey);
+  return writeStorageJson(cacheKey, { value:serializeLibraryForCache(items), savedAt:Date.now() });
+};
+
+export const hasUnhydratedLibraryQuestionChunks = items => (Array.isArray(items) ? items : [])
+  .some(item => (item?.topics || []).some(topic => {
+    if (topic?.questionStorage !== LIBRARY_QUESTION_CHUNK_STORAGE) return false;
+    const expected = Number(topic.questionCount);
+    const loaded = Array.isArray(topic.questions) ? topic.questions.length : 0;
+    if (Number.isFinite(expected) && expected > 0) return loaded < expected;
+    return (topic.questionChunkIds || []).length > 0 && loaded === 0;
+  }));
 
 export const libraryQuestionChunkIds = subject => Array.from(new Set(
   (subject?.topics || [])

@@ -31,7 +31,9 @@ import {
 } from '../src/services/sharedLibraryContent.js';
 import {
   LIBRARY_QUESTION_CHUNK_STORAGE,
+  hasUnhydratedLibraryQuestionChunks,
   hydrateLibraryQuestionChunks,
+  serializeLibraryForCache,
   serializeLibrarySubjectForWrite,
 } from '../src/services/libraryQuestionChunks.js';
 import { splitLibraryQuestionsIntoChunks } from '../src/services/libraryQuestionAssets.js';
@@ -282,6 +284,10 @@ const hydratedImportedLibrary = hydrateLibraryQuestionChunks([
 assert.equal(hydratedImportedLibrary.length, 1);
 assert.deepEqual(hydratedImportedLibrary[0].topics[0].questions.map(question => question.id), ['q1','q2']);
 assert.deepEqual(serializeLibrarySubjectForWrite(hydratedImportedLibrary[0]).topics[0].questions, []);
+const importedLibraryCache = serializeLibraryForCache(hydratedImportedLibrary);
+assert.deepEqual(importedLibraryCache[0].topics[0].questions, []);
+assert.equal(hasUnhydratedLibraryQuestionChunks(importedLibraryCache), true);
+assert.equal(hasUnhydratedLibraryQuestionChunks(hydratedImportedLibrary), false);
 
 const bigQuestionText = 'x'.repeat(350000);
 const chunkPrepared = prepareSharedLibraryContentForWrite({
@@ -2490,6 +2496,7 @@ assert.match(appSource, /if \(!isAdmin\) \{\s*addToast\('As questões do curso s
 assert.match(appSource, /vqDirectGenerationRef\.current\.has\(aulaId\)/);
 assert.match(appSource, /const needsReviewQueueData = foregroundReviewQueueData \|\| \(canSeeVideoaulas && backgroundPrefetchStage >= 2\);/);
 assert.match(appSource, /const foregroundPersonalLibraryData = \[/);
+assert.match(appSource, /'creator',\s*'academia-creator',\s*'paste'/);
 assert.match(appSource, /const needsPersonalLibraryData = foregroundPersonalLibraryData \|\| backgroundPrefetchStage >= 1;/);
 assert.match(appSource, /getDocFromServer\(doc\(db, 'config', 'access_whitelist'\)\)/);
 assert.match(appSource, /const profilePromise = u\.isAnonymous/);
@@ -2501,7 +2508,17 @@ assert.match(appSource, /setVideoaulasLoadError/);
 assert.match(appSource, /Published video catalog unavailable; falling back to lessons\./);
 assert.match(appSource, /if \(cached\) removeStorageItem\(cacheKey\);/);
 assert.match(appSource, /error\.code = 'empty-course-catalog'/);
-assert.match(appSource, /cached\.fresh \|\| !needsPersonalLibraryData/);
+assert.match(appSource, /!foregroundPersonalLibraryData && cached\.fresh && !cachedNeedsQuestionHydration/);
+assert.match(appSource, /requestMutationVersion !== libraryMutationVersionRef\.current/);
+assert.match(appSource, /agora_library_\$\{uid\}_cache_v3/);
+assert.match(appSource, /getDocsFromServer\(collection\(db,'users',user\.uid,'library'\)\)/);
+assert.match(appSource, /removeStorageItem\(legacyUserLibraryCacheKey\(user\.uid\)\)/);
+const removeSubjectSource = appSource.slice(
+  appSource.indexOf('const removeSubject = async'),
+  appSource.indexOf('const createLibraryFolder = async'),
+);
+assert.ok(removeSubjectSource.indexOf('await deleteDoc(') < removeSubjectSource.indexOf('const nextLibrary ='));
+assert.match(removeSubjectSource, /O material continuará visível para evitar diferenças entre seus dispositivos/);
 assert.match(appSource, /saveSharedLibraryAnswerPatch/);
 assert.doesNotMatch(appSource, /setDoc\(doc\(db, ['"]users['"], user\.uid, SHARED_LIBRARY_PROGRESS_COLLECTION/);
 assert.match(appSource, /persistReviewQueueChanges/);
@@ -2692,6 +2709,10 @@ assert.match(questionFeatureSource, /aria-label="Modo de estudo"/);
 assert.match(questionFeatureSource, /`Questões \(\$\{ordinaryQuestions\.length\}\)`/);
 assert.match(questionFeatureSource, /`Flashcards \(\$\{memoryCardQuestions\.length\}\)`/);
 assert.match(questionFeatureSource, /const flashcardFirstPassPct =/);
+assert.match(questionFeatureSource, /const isSharedCase = !allFlashcards && !!caseMeta\.key && caseMeta\.count > 1/);
+assert.match(questionFeatureSource, /hideCaseContext=\{isSharedCase\}/);
+assert.match(questionFeatureSource, /Use este caso para responder às \{count\} questões a seguir/);
+assert.doesNotMatch(questionFeatureSource, /question-case-context/);
 assert.match(questionFeatureSource, /Baixar deck \(\.apkg\)/);
 assert.match(questionFeatureSource, /onDownloadAnkiDeck\(questions\)/);
 assert.match(questionFeatureSource, /flashcard-actions-popover/);
@@ -3203,6 +3224,7 @@ assert.match(brandCssSource, /home-icon/);
 assert.match(brandCssSource, /\.app-card\.famed-discipline:hover\s*\{\s*background: var\(--surface-strong\)/);
 assert.match(brandCssSource, /background: var\(--surface-muted\) !important/);
 assert.match(brandCssSource, /background: #151719/);
+assert.doesNotMatch(brandCssSource, /question-case-context/);
 const brandImage = await readFile(new URL('../public/brand/agora-brand-circle.png', import.meta.url));
 assert.ok(brandImage.length > 1_000_000);
 const faviconImage = await readFile(new URL('../public/brand/agora-favicon-v2.png', import.meta.url));

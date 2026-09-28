@@ -177,14 +177,14 @@ const QuestionImage = ({ image, darkMode }) => {
 const ClinicalCaseIntro = ({ question, questionCount, darkMode }) => {
   const { caseContext } = splitQuestionCase(question);
   if (!caseContext) return null;
-  const count = Math.max(1, Number(questionCount) || 1);
+  const count = Math.max(2, Number(questionCount) || 2);
   return (
     <section className={`mb-4 w-full rounded-2xl border px-4 py-4 md:px-6 md:py-5 ${darkMode?'border-yellow-900/70 bg-yellow-950/20':'border-yellow-200 bg-yellow-50/70'}`}>
       <div className={`mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
         <BrainIcon className="h-4 w-4"/>Caso clínico compartilhado
       </div>
       <p className={`mb-3 text-xs font-bold ${darkMode?'text-yellow-200/80':'text-yellow-800'}`}>
-        Use este caso para responder {count === 1 ? 'à questão a seguir' : `às ${count} questões a seguir`}.
+        Use este caso para responder às {count} questões a seguir.
       </p>
       <div className={`select-text text-base font-medium leading-7 md:text-[17px] ${darkMode?'text-gray-100':'text-gray-900'}`} style={{userSelect:'text'}}>
         {parseHtmlTextChat(caseContext)}
@@ -855,7 +855,8 @@ const QuestionView = ({
 	      ? (flashcardEntryAnswers[entryKey] || (entry.attempt === 0 ? validAnswers[q.id] : null) || null)
 	      : validAnswers[q.id];
 	    const caseMeta = clinicalCaseMeta[i] || {};
-	    const showSharedCase = !allFlashcards && !!caseMeta.key && (singleMode || caseMeta.startsGroup);
+	    const isSharedCase = !allFlashcards && !!caseMeta.key && caseMeta.count > 1;
+	    const showSharedCase = isSharedCase && (singleMode || caseMeta.startsGroup);
 	    return (
 	    <div
 	      key={entry ? entryKey : (q.id||i)}
@@ -876,7 +877,7 @@ const QuestionView = ({
 	        onOpenAnswer={onOpenAnswer}
 	        adminQuestionExplanations={adminQuestionExplanations}
 	        onAdminDisableQuestion={onAdminDisableQuestion ? ()=>onAdminDisableQuestion(q) : null}
-	        hideCaseContext={!!caseMeta.key}
+	        hideCaseContext={isSharedCase}
 	        flashcardStudyMode={!!entry}
 	        flashcardLarge={allFlashcards}/>
 	    </div>
@@ -2070,19 +2071,17 @@ const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isF
         </div>
       </div>}
 	      {!(question.isFlashcard && flashcardLarge)&&<>
-          {questionText.caseContext&&!hideCaseContext&&(
-            <section className="question-case-context mb-6 w-full rounded-xl px-4 py-4 md:px-5 md:py-5">
-              <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
-                <BrainIcon className="h-4 w-4"/>Cenário clínico
-              </div>
-              <div className={`select-text text-base font-medium leading-7 md:text-[17px] ${darkMode?'text-gray-100':'text-gray-900'}`} style={{userSelect:'text'}}>
+          {!question.isCloze&&<section className="mb-6">
+            {questionText.caseContext&&!hideCaseContext&&(
+              <div
+                className={`mb-4 select-text text-base font-normal leading-relaxed md:text-lg ${darkMode?'text-gray-200':'text-gray-800'}`}
+                style={{userSelect:'text'}}
+              >
                 {parseHtmlTextChat(questionText.caseContext)}
               </div>
-            </section>
-          )}
-          {!question.isCloze&&<section className={questionText.caseContext ? 'mb-6' : ''}>
+            )}
             <div
-              className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : `text-base md:text-lg font-normal ${questionText.caseContext?'leading-relaxed':'mb-6 leading-relaxed'}`} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
+              className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : 'text-base md:text-lg font-normal leading-relaxed'} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
               style={{userSelect:'text'}}
             >
               {parseHtmlTextChat(questionText.statement)}

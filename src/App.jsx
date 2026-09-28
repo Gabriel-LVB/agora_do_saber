@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleAuthProvider, browserLocalPersistence, getRedirectResult, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocFromServer, getDocs, deleteDoc, deleteField, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocFromServer, getDocs, getDocsFromServer, deleteDoc, deleteField, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { BackToTopButton, EmptyState, LoadingState, ToastContainer } from './components/feedback.jsx';
 import BrandIdentity from './components/BrandIdentity.jsx';
 import './brand.css';
@@ -21,8 +21,10 @@ import { callGemini, callGeminiStream, getGeminiThinkingBudget, normalizeGeminiA
 import { LIBRARY_PROGRESS_COLLECTION, applyLibraryProgressEntries, deleteLibraryTopicProgress, saveLibraryTopicProgressPatch } from './services/libraryProgress.js';
 import {
   LIBRARY_QUESTION_CHUNK_STORAGE,
+  hasUnhydratedLibraryQuestionChunks,
   hydrateLibraryQuestionChunks,
   libraryQuestionChunkIds,
+  replaceLibraryCache,
   serializeLibrarySubjectForWrite,
 } from './services/libraryQuestionChunks.js';
 import { persistReviewQueueChanges } from './services/reviewQueue.js';
@@ -440,7 +442,8 @@ const isCacheFresh = (key, maxAgeMs) => {
   return !!savedAt && Date.now() - savedAt < maxAgeMs;
 };
 const touchCache = (key) => writeStorageText(key, String(Date.now()));
-const userLibraryCacheKey = (uid) => `agora_library_${uid}_cache_v2`;
+const userLibraryCacheKey = (uid) => `agora_library_${uid}_cache_v3`;
+const legacyUserLibraryCacheKey = (uid) => `agora_library_${uid}_cache_v2`;
 const userWatchedTouchedKey = (uid) => `agora_watched_${uid}_touched_at`;
 const userVqBlocksCacheKey = (uid) => `agora_vq_blocks_${uid}_cache_v1`;
 const userReviewQueueCacheKey = (uid) => `agora_vq_review_${uid}_cache_v2`;
@@ -3607,6 +3610,7 @@ export default function QuestionBankApp() {
   // ── Library ───────────────────────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const libraryRef = useRef([]);
+  const libraryMutationVersionRef = useRef(0);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryLoadError, setLibraryLoadError] = useState('');
   const academiaMirrorSyncRef = useRef(false);
@@ -3768,7 +3772,12 @@ export default function QuestionBankApp() {
   const [accessAdminError, setAccessAdminError] = useState('');
   const accessLogSessionRef = useRef(new Set());
   const persistSignedLibraryCache = (items) => {
-    if (user && !user.isAnonymous) writeTimedCache(userLibraryCacheKey(user.uid), sortLibraryItems(items || []));
+    if (!user || user.isAnonymous) return false;
+    return replaceLibraryCache({
+      cacheKey:userLibraryCacheKey(user.uid),
+      legacyCacheKey:legacyUserLibraryCacheKey(user.uid),
+      items:sortLibraryItems(items || []),
+    });
   };
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const courseAllowedEmails = normalizeEmailList([ADMIN_EMAIL, ...(allowedEmails || [])]);
@@ -4507,6 +4516,9 @@ export default function QuestionBankApp() {
     'subject',
     'topic',
     'academia-topic',
+    'creator',
+    'academia-creator',
+    'paste',
     'favorites',
     'exam',
     'quick',
@@ -7145,13 +7157,21 @@ export default function QuestionBankApp() {
       return;
     }
     let cancelled = false;
+    const requestMutationVersion = libraryMutationVersionRef.current;
     const cacheKey = userLibraryCacheKey(user.uid);
+    removeStorageItem(legacyUserLibraryCacheKey(user.uid));
     const cached = readTimedCache(cacheKey, FIRESTORE_CACHE_TTL.library, null);
+    let cachedNeedsQuestionHydration = false;
     if (Array.isArray(cached.value)) {
       const d = sortLibraryItems(hydrateLibraryQuestionChunks(cached.value));
-      libraryRef.current = d.length ? d : defFolder;
-      setLibrary(libraryRef.current);
-      if (cached.fresh || !needsPersonalLibraryData) {
+      cachedNeedsQuestionHydration = hasUnhydratedLibraryQuestionChunks(d);
+      // Uma navegação iniciada por mutação local não pode ser substituída pelo
+      // retrato em cache que disparou este mesmo efeito.
+      if (requestMutationVersion === 0 || !libraryRef.current.length) {
+        libraryRef.current = d.length ? d : defFolder;
+        setLibrary(libraryRef.current);
+      }
+      if ((!foregroundPersonalLibraryData && cached.fresh && !cachedNeedsQuestionHydration) || !needsPersonalLibraryData) {
         setLibraryLoading(false);
         return;
       }
@@ -7168,17 +7188,17 @@ export default function QuestionBankApp() {
     (async () => {
       try {
         const [snap, progressSnap] = await Promise.all([
-          withFirestoreTimeout(getDocs(collection(db,'users',user.uid,'library'))),
+          withFirestoreTimeout(getDocsFromServer(collection(db,'users',user.uid,'library'))),
           withFirestoreTimeout(getDocs(collection(db,'users',user.uid, LIBRARY_PROGRESS_COLLECTION))),
         ]);
-        if (cancelled) return;
+        if (cancelled || requestMutationVersion !== libraryMutationVersionRef.current) return;
         const progressEntries = progressSnap.docs.map(entry => entry.data() || {});
         const d = sortLibraryItems(applyLibraryProgressEntries(hydrateLibraryQuestionChunks(snap.docs.map(x=>x.data())), progressEntries));
         const next = d.length ? d : defFolder;
         libraryRef.current = next;
         setLibrary(next);
         setLibraryLoadError('');
-        writeTimedCache(cacheKey, d);
+        persistSignedLibraryCache(d);
       } catch(e) {
         console.warn('library load failed:', e?.code || e?.message || e);
         if (!cancelled) {
@@ -7303,6 +7323,7 @@ export default function QuestionBankApp() {
 
   // ── DB helpers ─────────────────────────────────────────────────────────────
   const updateSubject = async (s, { requireRemoteSuccess=false } = {}) => {
+    libraryMutationVersionRef.current += 1;
     let cleanSubject = cleanFirestoreData(pruneEmbeddedSpacedReview(s));
     const previous = libraryRef.current.find(x=>x.id===cleanSubject.id);
     const nextLibrary = libraryRef.current.map(x=>x.id===cleanSubject.id?cleanSubject:x);
@@ -7555,6 +7576,7 @@ export default function QuestionBankApp() {
   }, [library.length]); // eslint-disable-line
 
   const addSubject = async (s, { requireRemoteSuccess=false } = {}) => {
+    libraryMutationVersionRef.current += 1;
     let ns = cleanFirestoreData(s);
     const previous = libraryRef.current.find(item => sameId(item.id,ns.id));
     if (!Number.isFinite(Number(ns.sortOrder)) && ns.source) {
@@ -7591,14 +7613,10 @@ export default function QuestionBankApp() {
     return ns;
   };
   const removeSubject = async (id) => {
-    const removed = libraryRef.current.find(s=>s.id===id);
-    if (isProtectedMirrorRootFolder(removed)) return;
+    const removed = libraryRef.current.find(s=>sameId(s.id,id));
+    if (!removed || isProtectedMirrorRootFolder(removed)) return false;
     const removedAssetIds = libraryQuestionAssetIds((removed?.topics || []).flatMap(topic => topic.questions || []));
     const removedChunkIds = libraryQuestionChunkIds(removed);
-    const nextLibrary = libraryRef.current.filter(s=>s.id!==id);
-    libraryRef.current = nextLibrary;
-    setLibrary(p=>p.filter(s=>s.id!==id));
-    persistSignedLibraryCache(nextLibrary);
     let remoteRemoved = false;
     if(user&&!user.isAnonymous) {
       try {
@@ -7606,9 +7624,20 @@ export default function QuestionBankApp() {
         remoteRemoved = true;
       } catch(error) {
         console.error(error);
+        setErrorModal({
+          title:'Não foi possível excluir',
+          message:'A exclusão não foi confirmada no servidor. O material continuará visível para evitar diferenças entre seus dispositivos.',
+          isAlert:true,
+        });
+        return false;
       }
     }
-    else if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
+    libraryMutationVersionRef.current += 1;
+    const nextLibrary = libraryRef.current.filter(s=>!sameId(s.id,id));
+    libraryRef.current = nextLibrary;
+    setLibrary(nextLibrary);
+    persistSignedLibraryCache(nextLibrary);
+    if(user?.isAnonymous) localStorage.setItem(`qb_lib_${username}`,JSON.stringify(nextLibrary));
     if (remoteRemoved && removedAssetIds.length) {
       await deleteLibraryQuestionAssets({ userId:user.uid, assetIds:removedAssetIds }).catch(error => {
         console.warn('library subject asset cleanup failed:', error?.code || error?.message || error);
@@ -7619,8 +7648,11 @@ export default function QuestionBankApp() {
         console.warn('library subject question chunk cleanup failed:', error?.code || error?.message || error);
       });
     }
-    await pruneReviewQueueForSubjectChanges(removed ? [removed] : [], []);
+    await pruneReviewQueueForSubjectChanges([removed], []).catch(error => {
+      console.warn('library review cleanup skipped:', error?.code || error?.message || error);
+    });
     if (removed?.source === 'academia' || hasAcademiaOriginTopic(removed)) scheduleAcademiaOracleMirrorSync(libraryRef.current);
+    return true;
   };
   const createLibraryFolder = async (source, title, parentFolderId = activeFolderId || null) => {
     const localItems = libraryRef.current?.length ? libraryRef.current : library;
@@ -11996,9 +12028,9 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     if (!subject) return;
     const nextTopics = (subject.topics || []).filter(t => t.id !== topicId);
     if (!nextTopics.length) {
-      await removeSubject(subject.id);
+      if (!await removeSubject(subject.id)) return;
     } else {
-      await updateSubject({ ...subject, topics:nextTopics });
+      await updateSubject({ ...subject, topics:nextTopics }, { requireRemoteSuccess:true });
     }
     if (activeTopicId === topicId) {
       setActiveTopicId(null);
@@ -15598,6 +15630,12 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	        )}
 
         {/* ── TOPIC ── */}
+        {view==='topic'&&!activeTopic&&(
+          <LoadingState
+            label={libraryLoading ? 'Sincronizando questões importadas...' : 'Bloco não encontrado. Volte para Meus materiais.'}
+            darkMode={darkMode}
+          />
+        )}
         {view==='topic'&&activeTopic&&(
           <div>
             <QuestionView
@@ -17274,8 +17312,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 	      })()}
 	      {bulkGenerateModal&&<BulkGenerateModal/>}
 	      {errorModal&&<GModal title={errorModal.title} message={errorModal.message} link={errorModal.link} confirmText={errorModal.confirmText||'OK'} onConfirm={errorModal.onConfirm||(()=>setErrorModal(null))} onCancel={errorModal.onCancel||(()=>setErrorModal(null))} actionLabel={errorModal.actionLabel} onAction={errorModal.onAction} darkMode={darkMode} isAlert={errorModal.isAlert!==false}/>}
-      {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={()=>{removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
-      {deleteId?.type==='external-topic'&&<GModal title="Excluir bloco?" message={`As questões, respostas, favoritos e revisões de “${deleteId.title || 'Bloco importado'}” serão apagados. Esta ação é permanente.`} confirmText="Excluir" onConfirm={async()=>{await deleteImportedTopic(deleteId);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='subject'&&<GModal title="Excluir Assunto?" message="Esta ação é permanente." confirmText="Excluir" onConfirm={async()=>{await removeSubject(deleteId.id);setDeleteId(null);}} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
+      {deleteId?.type==='external-topic'&&<GModal title="Excluir bloco?" message={`As questões, respostas, favoritos e revisões de “${deleteId.title || 'Bloco importado'}” serão apagados. Esta ação é permanente.`} confirmText="Excluir" onConfirm={async()=>{
+        try {
+          await deleteImportedTopic(deleteId);
+          setDeleteId(null);
+        } catch(error) {
+          setDeleteId(null);
+          setErrorModal({title:'Não foi possível excluir o bloco',message:importedQuestionsErrorMessage(error),isAlert:true});
+        }
+      }} onCancel={()=>setDeleteId(null)} darkMode={darkMode}/>}
       {deleteId?.type==='folder'&&(()=>{
         const folder = libraryFolders.find(f=>f.id===deleteId.id);
         if (isProtectedMirrorRootFolder(folder)) {
