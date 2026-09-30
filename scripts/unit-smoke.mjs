@@ -24,6 +24,13 @@ import {
   normalizeDisplayedAlternativeReferences,
 } from '../src/lib/questionExplanation.js';
 import {
+  QUESTION_OPTION_SHUFFLE_VERSION,
+  legacyImportedQuestionForDisplay,
+  mapDisplayedQuestionAnswerToStorage,
+  mapStoredQuestionAnswerToDisplay,
+  shuffleQuestionOptions,
+} from '../src/lib/questionOptions.js';
+import {
   mergeSharedLibraryQuestionChunks,
   normalizeSharedLibraryDocumentId,
   prepareSharedLibraryContentForWrite,
@@ -605,7 +612,7 @@ const famedPackageZip = zipSync({
         { letter:'A', text:'Achado correto', isCorrect:true, explanation:'Explica o mecanismo.' },
         { letter:'B', text:'Distrator', isCorrect:false, explanation:'Não corresponde ao mecanismo.' },
       ],
-      explanation:'A alternativa A decorre do mecanismo descrito.',
+      explanation:'A alternativa correta é a A porque decorre do mecanismo descrito.',
       expectedAnswer:'',
       isOpen:false,
       isEssay:false,
@@ -620,6 +627,67 @@ assert.equal(parsedFamedPackage.questions.length,1);
 assert.equal(parsedFamedPackage.questions[0].images[0].file,'images/q1.png');
 assert.equal(parsedFamedPackage.assets.length,1);
 assert.match(parsedFamedPackage.assets[0].dataUrl,/^data:image\/png;base64,/);
+const shuffledPackageQuestion = parsedFamedPackage.questions[0];
+const shuffledCorrectOption = shuffledPackageQuestion.options.find(option => option.isCorrect);
+assert.equal(shuffledPackageQuestion.optionShuffleVersion,QUESTION_OPTION_SHUFFLE_VERSION);
+assert.equal(shuffledCorrectOption.text,'Achado correto');
+assert.match(shuffledPackageQuestion.explanation,new RegExp(`correta é a ${shuffledCorrectOption.letter}\\b`,'i'));
+assert.deepEqual(
+  shuffleQuestionOptions(shuffledPackageQuestion),
+  shuffledPackageQuestion,
+  'o embaralhamento persistido deve ser idempotente',
+);
+
+const importedAnswerLetters = Array.from({ length:12 },(_,index) => shuffleQuestionOptions({
+  id:`imported-${index + 1}`,
+  statement:`Questão importada ${index + 1}`,
+  explanation:'A alternativa correta é a A.',
+  options:[
+    { letter:'A', text:`Correta ${index + 1}`, isCorrect:true, explanation:'A alternativa A está correta.' },
+    { letter:'B', text:`Distrator B ${index + 1}`, isCorrect:false, explanation:'A alternativa B está incorreta.' },
+    { letter:'C', text:`Distrator C ${index + 1}`, isCorrect:false, explanation:'A alternativa C está incorreta.' },
+    { letter:'D', text:`Distrator D ${index + 1}`, isCorrect:false, explanation:'A alternativa D está incorreta.' },
+  ],
+})).map(question => {
+  const correctOption = question.options.find(option => option.isCorrect);
+  assert.match(question.explanation,new RegExp(`correta é a ${correctOption.letter}\\b`,'i'));
+  question.options.forEach(option => {
+    assert.match(option.explanation,new RegExp(`alternativa ${option.letter}\\b`,'i'));
+  });
+  return correctOption.letter;
+});
+assert.ok(new Set(importedAnswerLetters).size >= 3,'questões importadas não devem concentrar o gabarito em uma única letra');
+
+const legacyImportedQuestion = {
+  id:'legacy-imported-q1',
+  libraryQuestionKind:'old_exam',
+  statement:'Questão importada antes da correção',
+  explanation:'A alternativa correta é a A.',
+  options:[
+    { letter:'A', text:'Correta antiga', isCorrect:true, explanation:'A alternativa A está correta.' },
+    { letter:'B', text:'Distrator antigo B', isCorrect:false, explanation:'A alternativa B está incorreta.' },
+    { letter:'C', text:'Distrator antigo C', isCorrect:false, explanation:'A alternativa C está incorreta.' },
+    { letter:'D', text:'Distrator antigo D', isCorrect:false, explanation:'A alternativa D está incorreta.' },
+  ],
+};
+const legacyDisplayQuestion = legacyImportedQuestionForDisplay(legacyImportedQuestion);
+const legacyDisplayCorrectLetter = legacyDisplayQuestion.options.find(option => option.isCorrect).letter;
+assert.notEqual(legacyDisplayQuestion,legacyImportedQuestion);
+assert.equal(
+  mapStoredQuestionAnswerToDisplay(legacyImportedQuestion,legacyDisplayQuestion,'A'),
+  legacyDisplayCorrectLetter,
+  'a resposta antiga deve acompanhar a alternativa correta na exibição embaralhada',
+);
+assert.equal(
+  mapDisplayedQuestionAnswerToStorage(legacyImportedQuestion,legacyDisplayQuestion,legacyDisplayCorrectLetter),
+  'A',
+  'a letra exibida deve voltar à alternativa original antes da persistência',
+);
+assert.equal(
+  legacyImportedQuestionForDisplay(shuffledPackageQuestion),
+  shuffledPackageQuestion,
+  'questões novas já embaralhadas não devem mudar novamente na exibição',
+);
 
 assert.equal(normalizeAuditText('Nó SA e eletrocardiograma'), 'no_sinoatrial e ecg');
 assert.equal(getQuestionCorrectAnswer({

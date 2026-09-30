@@ -8,6 +8,10 @@ import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
 } from '../../lib/questionExplanation.js';
+import {
+  legacyImportedAnswerAdapter,
+  legacyImportedQuestionForDisplay,
+} from '../../lib/questionOptions.js';
 import { toggleQuestionTypeSelection } from '../../lib/questionTypes.js';
 
 
@@ -1888,7 +1892,9 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
 };
 
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
-const QuestionCard = ({ question, index, selectedLetter, onAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false, onAdminDisableQuestion=null, allowGiveUp=false }) => {
+const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSelectedLetter, onAnswer:onStoredAnswer, darkMode, isFavorite, onToggleFavorite, showErrorNotebook=false, isInErrorNotebook=false, onToggleErrorNotebook, apiKey, oracleLength, revealMode='normal', onCall, onOpenAnswer, flashcardStudyMode=false, flashcardLarge=false, adminQuestionExplanations=false, hideCaseContext=false, onAdminDisableQuestion=null, allowGiveUp=false }) => {
+  const question = legacyImportedQuestionForDisplay(storedQuestion);
+  const { selectedLetter, onAnswer } = legacyImportedAnswerAdapter(storedQuestion, question, storedSelectedLetter, onStoredAnswer);
   const [optimisticNotebook, setOptimisticNotebook] = useState(isInErrorNotebook);
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
   const [pressedAnswer, setPressedAnswer] = useState(null);

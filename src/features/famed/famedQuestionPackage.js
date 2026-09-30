@@ -1,4 +1,5 @@
 import { strFromU8, unzipSync } from 'fflate';
+import { shuffleQuestionOptions } from '../../lib/questionOptions.js';
 
 export const FAMED_QUESTION_PACKAGE_SCHEMA = 'agora-famed-question-package-v1';
 
@@ -96,7 +97,7 @@ const normalizeQuestion = (question, index, namespace, files, assetsByPath) => {
       credit:cleanText(descriptor?.credit),
     };
   });
-  return {
+  return shuffleQuestionOptions({
     id:`${safeIdPart(namespace)}_${rawId}`,
     statement,
     caseContext:cleanText(question.caseContext),
@@ -107,7 +108,7 @@ const normalizeQuestion = (question, index, namespace, files, assetsByPath) => {
     isEssay,
     libraryQuestionKind:'old_exam',
     images,
-  };
+  });
 };
 
 export const parseFamedQuestionPackage = async (input, namespace='famed-past') => {
