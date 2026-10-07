@@ -2824,6 +2824,14 @@ assert.match(questionFeatureSource, /Rever difíceis/);
 const exportModalsSource = await readFile(new URL('../src/features/exporting/ExportModals.jsx', import.meta.url), 'utf8');
 assert.match(exportModalsSource, /export \{ ExportModal, AcademiaExportModal \}/);
 assert.match(exportModalsSource, /normalizeDeclaredCorrectAlternativeReferences\(/);
+assert.match(exportModalsSource, /prepareExportTopicImages\(topic\)/);
+assert.match(exportModalsSource, /loadLibraryQuestionAsset/);
+assert.match(exportModalsSource, /renderQuestionImagesHtml\(data\.images \|\| \[\]\)/);
+assert.match(exportModalsSource, /docxImageParagraphs\(data\.images \|\| \[\],imageRegistry\)/);
+assert.match(exportModalsSource, /officeDocument\/2006\/relationships\/image/);
+assert.match(exportModalsSource, /HTML interativo/);
+assert.match(exportModalsSource, /renderInteractiveDocument/);
+assert.match(exportModalsSource, /data-action="grade"/);
 
 const workflowModalsSource = await readFile(new URL('../src/features/modals/WorkflowModals.jsx', import.meta.url), 'utf8');
 assert.match(workflowModalsSource, /export \{ SRModal, ExternalPromptModal \}/);

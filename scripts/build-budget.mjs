@@ -41,6 +41,7 @@ let sqlVendor = null;
 let usmle = null;
 let libraryQuestionAssets = null;
 let questionOptions = null;
+let questionExport = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -75,6 +76,7 @@ for (const file of jsFiles) {
   if (file.startsWith('UsmleView-')) usmle = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('libraryQuestionAssets-')) libraryQuestionAssets = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('questionOptions-')) questionOptions = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('ExportModals-')) questionExport = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -103,7 +105,11 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // cerca de 0,1 KiB medido e evita cópias divergentes entre tela e exportação.
 // A separação entre commit e atualização local, com diagnóstico por etapa,
 // acrescenta outros 0,2 KiB medidos ao handler administrativo.
-const CORE_TOTAL_GZIP_LIMIT = 447.5 * 1024;
+// O exportador já era lazy (8,33 KiB gzip) e agora também incorpora imagens,
+// empacota mídia DOCX e gera HTML interativo autônomo. Ele ganha um budget
+// próprio medido; o teto do restante do núcleo foi reduzido na mesma proporção.
+const CORE_TOTAL_GZIP_LIMIT = 439.5 * 1024;
+const QUESTION_EXPORT_GZIP_LIMIT = 14 * 1024;
 // A Fábrica concluída está arquivada no código-fonte, mas não possui ponto de
 // entrada no app. Seus chunks administrativos não devem ser emitidos enquanto
 // QUESTION_FACTORY_VISIBLE permanecer falso.
@@ -197,7 +203,8 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + ANKI_PACKAGE_GZIP_LIMIT
   + USMLE_GZIP_LIMIT
   + LIBRARY_QUESTION_ASSETS_GZIP_LIMIT
-  + QUESTION_OPTIONS_GZIP_LIMIT;
+  + QUESTION_OPTIONS_GZIP_LIMIT
+  + QUESTION_EXPORT_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
 const famedGzip = (famedPortal?.gzip || 0)
@@ -226,7 +233,8 @@ const coreGzip = totalGzip
   - (sqlVendor?.gzip || 0)
   - (usmle?.gzip || 0)
   - (libraryQuestionAssets?.gzip || 0)
-  - (questionOptions?.gzip || 0);
+  - (questionOptions?.gzip || 0)
+  - (questionExport?.gzip || 0);
 
 assert.ok(usmle, 'A área USMLE deve permanecer em chunk lazy próprio.');
 assert.ok(usmle.gzip <= USMLE_GZIP_LIMIT, `USMLE passou do budget: ${fmt(usmle.gzip)}`);
@@ -239,6 +247,11 @@ assert.ok(questionOptions, 'A compatibilidade de alternativas importadas deve pe
 assert.ok(
   questionOptions.gzip <= QUESTION_OPTIONS_GZIP_LIMIT,
   `Alternativas importadas passaram do budget: ${fmt(questionOptions.gzip)} > ${fmt(QUESTION_OPTIONS_GZIP_LIMIT)}`
+);
+assert.ok(questionExport, 'O exportador de questões deve permanecer em chunk lazy próprio.');
+assert.ok(
+  questionExport.gzip <= QUESTION_EXPORT_GZIP_LIMIT,
+  `Exportador de questões passou do budget: ${fmt(questionExport.gzip)} > ${fmt(QUESTION_EXPORT_GZIP_LIMIT)}`
 );
 
 assert.ok(
@@ -356,4 +369,4 @@ assert.ok(
 const factoryBudgetLabel = QUESTION_FACTORY_ARCHIVED
   ? 'Fábrica arquivada (0 chunks)'
   : `${questionCuration.file} ${fmt(questionCuration.gzip)} gzip; ${ecgCaseBank.file} ${fmt(ecgCaseBank.gzip)} gzip`;
-console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; alternativas importadas ${fmt(questionOptions.gzip)} gzip; assets pessoais ${fmt(libraryQuestionAssets.gzip)} gzip; FAMED ${fmt(famedGzip)} gzip; APKG ${fmt(ankiPackage.gzip + sqlVendor.gzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
+console.log(`build-budget ok: ${entry.file} ${fmt(entry.gzip)} gzip; core ${fmt(coreGzip)} gzip; exportação ${fmt(questionExport.gzip)} gzip; alternativas importadas ${fmt(questionOptions.gzip)} gzip; assets pessoais ${fmt(libraryQuestionAssets.gzip)} gzip; FAMED ${fmt(famedGzip)} gzip; APKG ${fmt(ankiPackage.gzip + sqlVendor.gzip)} gzip; ${quickContent.file} ${fmt(quickContent.gzip)} gzip; política de cartões ${fmt(memoryCardPolicy.gzip)} gzip; ${factoryBudgetLabel}; FSRS ${fmt(fsrsSchedulerGzip)} gzip; migração ${fmt(reviewMigration.gzip)} gzip; revisões ${fmt(spacedReview.gzip)} gzip; reset do curso ${fmt(courseReviewReset.gzip)} gzip; reparo ${fmt(sharedLibraryRepair.gzip)} gzip; JS total ${fmt(totalGzip)} gzip (${fmt(totalJs)} raw)`);
