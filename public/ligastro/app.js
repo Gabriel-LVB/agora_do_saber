@@ -3,6 +3,22 @@ const PROGRESS_KEY = 'ligastro-gastro-s2-progress-v1';
 const THEME_KEY = 'ligastro-theme-v1';
 const TOTAL_QUESTIONS = 160;
 
+const initializeAnalytics = () => {
+  if (/^(localhost|127(?:\.\d+){3}|\[?::1\]?)$/.test(location.hostname)) return;
+  window.va = window.va || function (...params) {
+    (window.vaq = window.vaq || []).push(params);
+  };
+  if (document.head.querySelector('script[src="/_vercel/insights/script.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/_vercel/insights/script.js';
+  script.defer = true;
+  script.dataset.sdkn = '@vercel/analytics';
+  script.dataset.sdkv = '1.1.4';
+  document.head.appendChild(script);
+};
+
+initializeAnalytics();
+
 const emptyProgress = () => ({
   schemaVersion:1,
   materialId:MATERIAL_ID,

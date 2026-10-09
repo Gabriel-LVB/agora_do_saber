@@ -42,6 +42,7 @@ let usmle = null;
 let libraryQuestionAssets = null;
 let questionOptions = null;
 let questionExport = null;
+let vercelAnalytics = null;
 
 for (const file of jsFiles) {
   const data = await readFile(new URL(file, assetsDir));
@@ -77,6 +78,7 @@ for (const file of jsFiles) {
   if (file.startsWith('libraryQuestionAssets-')) libraryQuestionAssets = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('questionOptions-')) questionOptions = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('ExportModals-')) questionExport = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('vercel-analytics-')) vercelAnalytics = { file, raw:data.length, gzip:gzipSize };
 }
 
 assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
@@ -189,6 +191,9 @@ const LIBRARY_QUESTION_ASSETS_GZIP_LIMIT = 2 * 1024;
 // questões e preserva a letra original apenas na fronteira de persistência.
 // Mantê-lo em chunk próprio evita cobrar essa migração visual da Home.
 const QUESTION_OPTIONS_GZIP_LIMIT = 1 * 1024;
+// A telemetria da Vercel carrega em um chunk isolado depois da primeira pintura,
+// sem aumentar o núcleo da aplicação nem bloquear a Home.
+const VERCEL_ANALYTICS_GZIP_LIMIT = 2 * 1024;
 const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + QUICK_CONTENT_GZIP_LIMIT
   + MEMORY_CARD_POLICY_GZIP_LIMIT
@@ -208,6 +213,7 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + USMLE_GZIP_LIMIT
   + LIBRARY_QUESTION_ASSETS_GZIP_LIMIT
   + QUESTION_OPTIONS_GZIP_LIMIT
+  + VERCEL_ANALYTICS_GZIP_LIMIT
   + QUESTION_EXPORT_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
 const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual?.gzip || 0);
@@ -238,7 +244,8 @@ const coreGzip = totalGzip
   - (usmle?.gzip || 0)
   - (libraryQuestionAssets?.gzip || 0)
   - (questionOptions?.gzip || 0)
-  - (questionExport?.gzip || 0);
+  - (questionExport?.gzip || 0)
+  - (vercelAnalytics?.gzip || 0);
 
 assert.ok(usmle, 'A área USMLE deve permanecer em chunk lazy próprio.');
 assert.ok(usmle.gzip <= USMLE_GZIP_LIMIT, `USMLE passou do budget: ${fmt(usmle.gzip)}`);
@@ -256,6 +263,11 @@ assert.ok(questionExport, 'O exportador de questões deve permanecer em chunk la
 assert.ok(
   questionExport.gzip <= QUESTION_EXPORT_GZIP_LIMIT,
   `Exportador de questões passou do budget: ${fmt(questionExport.gzip)} > ${fmt(QUESTION_EXPORT_GZIP_LIMIT)}`
+);
+assert.ok(vercelAnalytics, 'O Vercel Analytics deve permanecer em chunk lazy próprio.');
+assert.ok(
+  vercelAnalytics.gzip <= VERCEL_ANALYTICS_GZIP_LIMIT,
+  `Vercel Analytics passou do budget: ${fmt(vercelAnalytics.gzip)} > ${fmt(VERCEL_ANALYTICS_GZIP_LIMIT)}`
 );
 
 assert.ok(

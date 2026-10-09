@@ -47,6 +47,7 @@ export default defineConfig({
           ].some(suffix => normalizedId.endsWith(suffix))) return 'app-data-core'
           if (!id.includes('node_modules')) return;
           if (id.includes('/firebase/')) return 'firebase';
+          if (normalizedId.includes('/@vercel/analytics/')) return 'vercel-analytics';
           if (id.includes('/react') || id.includes('/scheduler/')) return 'react-vendor';
           if (id.includes('/ts-fsrs/')) return 'fsrs-vendor';
           if (id.includes('/fflate/')) return 'fflate-vendor';

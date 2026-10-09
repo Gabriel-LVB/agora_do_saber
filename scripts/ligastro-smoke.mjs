@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 const root = new URL('../public/ligastro/',import.meta.url);
 const read = relativePath => fs.readFile(new URL(relativePath,root),'utf8');
 
-const [rawMaterial,indexHtml,questionsHtml,appSource,stylesSource,rawVercel,viteSource] = await Promise.all([
+const [rawMaterial,indexHtml,questionsHtml,appSource,stylesSource,rawVercel,viteSource,mainSource,rawPackage] = await Promise.all([
   read('data/questions.json'),
   read('index.html'),
   read('questoes.html'),
@@ -12,9 +12,12 @@ const [rawMaterial,indexHtml,questionsHtml,appSource,stylesSource,rawVercel,vite
   read('styles.css'),
   fs.readFile(new URL('../vercel.json',import.meta.url),'utf8'),
   fs.readFile(new URL('../vite.config.js',import.meta.url),'utf8'),
+  fs.readFile(new URL('../src/main.jsx',import.meta.url),'utf8'),
+  fs.readFile(new URL('../package.json',import.meta.url),'utf8'),
 ]);
 const material = JSON.parse(rawMaterial);
 const vercel = JSON.parse(rawVercel);
+const packageJson = JSON.parse(rawPackage);
 
 assert.equal(material.schemaVersion,1);
 assert.equal(material.materialId,'ligastro-gastro-s2-2026');
@@ -61,8 +64,13 @@ assert.match(appSource,/location\.replace\('\/ligastro'\)/);
 assert.match(appSource,/Fisiologia: /);
 assert.match(appSource,/renderQuestions\(material\.examOrder/);
 assert.match(appSource,/gradeQuestion/);
+assert.match(appSource,/\/_vercel\/insights\/script\.js/);
+assert.match(appSource,/location\.hostname/);
 assert.match(stylesSource,/:root\[data-theme="dark"\]/);
 assert.match(stylesSource,/@media\(max-width:760px\)/);
+assert.equal(packageJson.dependencies?.['@vercel/analytics'],'1.1.4');
+assert.match(mainSource,/import\('@vercel\/analytics'\)\.then\(\(\{ inject \}\) => inject\(\)\)/);
+assert.match(mainSource,/import\.meta\.env\.PROD/);
 
 assert.ok(vercel.rewrites?.some(rule => rule.source === '/ligastro' && rule.destination === '/ligastro/index.html'));
 assert.match(viteSource,/pathname === '\/ligastro'/);
