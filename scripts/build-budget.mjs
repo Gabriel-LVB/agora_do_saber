@@ -84,7 +84,9 @@ assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
 // A confirmação remota, a invalidação defensiva do cache e a exclusão
 // confirmada da biblioteca pessoal acrescentam menos de 1 KiB raw ao entry
 // e 0,5 KiB gzip ao núcleo.
-const ENTRY_RAW_LIMIT = 501 * 1024;
+// A ação de exportar a matéria importada acrescenta somente o disparador do
+// modal lazy ao menu de contexto: 28 bytes medidos acima do teto anterior.
+const ENTRY_RAW_LIMIT = 501.25 * 1024;
 const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A curadoria e a seleção da Fábrica acrescentam um módulo administrativo
 // completo; o teto cresceu somente pelo custo medido desta primeira fatia.
@@ -109,7 +111,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // empacota mídia DOCX e gera HTML interativo autônomo. Ele ganha um budget
 // próprio medido; o teto do restante do núcleo foi reduzido na mesma proporção.
 const CORE_TOTAL_GZIP_LIMIT = 439.5 * 1024;
-const QUESTION_EXPORT_GZIP_LIMIT = 14 * 1024;
+// Agrupar uma matéria inteira, oferecer ordem, aplicar a paleta completa e
+// converter marcadores em tags soma 1,8 KiB medido ao chunk lazy original.
+const QUESTION_EXPORT_GZIP_LIMIT = 16 * 1024;
 // A Fábrica concluída está arquivada no código-fonte, mas não possui ponto de
 // entrada no app. Seus chunks administrativos não devem ser emitidos enquanto
 // QUESTION_FACTORY_VISIBLE permanecer falso.

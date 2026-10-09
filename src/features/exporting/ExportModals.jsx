@@ -4,6 +4,7 @@ import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
 } from '../../lib/questionExplanation.js';
+import { extractQuestionExportTags } from './exportQuestionTags.js';
 
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
 const Printer = ic('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>');
@@ -145,12 +146,36 @@ const prepareExportTopicImages = async topic => {
     if (Array.isArray(block?.questions)) return { ...block, questions:await prepareQuestions(block.questions) };
     return block;
   }));
+  const exportBlocks = await Promise.all((topic?._exportBlocks || []).map(async block => ({
+    ...block,
+    questions:await prepareQuestions(block?.questions),
+  })));
   return {
     ...topic,
     questions:await prepareQuestions(topic?.questions),
     fixationQuestions,
     extraBattery,
+    _exportBlocks:exportBlocks,
   };
+};
+
+const shuffleExportQuestions = questions => {
+  const shuffled = [...(questions || [])];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index],shuffled[swapIndex]] = [shuffled[swapIndex],shuffled[index]];
+  }
+  return shuffled;
+};
+const buildExportQuestionLayout = (topic, order='blocks') => {
+  const blocks = (topic?._exportBlocks || [])
+    .map(block => ({ ...block, questions:Array.isArray(block?.questions) ? block.questions : [] }))
+    .filter(block => block.questions.length > 0);
+  if (!blocks.length) return { questions:topic?.questions || [], blocks:[] };
+  const questions = blocks.flatMap(block => block.questions);
+  return order === 'shuffled'
+    ? { questions:shuffleExportQuestions(questions), blocks:[] }
+    : { questions, blocks };
 };
 
 const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
@@ -246,11 +271,14 @@ const getQuestionExportData = (question = {}) => {
     cleanQuestionExplanation(question.explanationParts?.lesson || parsed.lesson || question.explanation || question.expectedAnswer || ''),
     correctLetter,
   );
+  const caseContent = extractQuestionExportTags(text.caseContext);
+  const statementContent = extractQuestionExportTags(text.statement);
   return {
     ...question,
     label:questionTypeLabel(question),
-    caseContext:text.caseContext,
-    statement:text.statement,
+    caseContext:caseContent.text,
+    statement:statementContent.text,
+    tags:Array.from(new Set([...caseContent.tags,...statementContent.tags])),
     options,
     explanation:lessonExplanation,
     hasAlternativeExplanations:options.some(opt => String(opt.explanation || '').trim()),
@@ -259,17 +287,18 @@ const getQuestionExportData = (question = {}) => {
 const renderAlternativeAnalysisHtml = (options = [], opts = {}) => {
   const rows = (options || []).filter(o => o.explanation);
   if (!rows.length) return '';
-  return `<div style="margin-top:${opts.compact?'10px':'12px'};border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;font-family:Arial,sans-serif">
-<div style="padding:9px 12px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#6b7280">Análise das alternativas</div>
-${rows.map((o, index)=>`<div style="display:flex;gap:10px;padding:10px 12px;${index?'border-top:1px solid #f1f5f9':''}">
-<span style="width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;font-size:12px;font-weight:bold;background:${o.isCorrect?'#dcfce7':'#f3f4f6'};color:${o.isCorrect?'#15803d':'#6b7280'}">${escapeHtml(o.letter)}</span>
-<div style="min-width:0">
-<p style="margin:0 0 3px;font-size:11px;font-weight:bold;color:${o.isCorrect?'#15803d':'#6b7280'}">${o.isCorrect?'Correta':'Incorreta'}</p>
-<div style="font-size:12px;line-height:1.55;color:#374151">${textToHtml(o.explanation)}</div>
+  return `<div class="alternative-analysis ${opts.compact?'compact':''}">
+<div class="alternative-analysis-title">Análise das alternativas</div>
+${rows.map(o=>`<div class="alternative-analysis-row ${o.isCorrect?'is-correct':''}">
+<span class="alternative-analysis-letter">${escapeHtml(o.letter)}</span>
+<div class="alternative-analysis-copy">
+<p class="alternative-analysis-result">${o.isCorrect?'Correta':'Incorreta'}</p>
+<div class="alternative-analysis-text">${textToHtml(o.explanation)}</div>
 </div>
 </div>`).join('')}
 </div>`;
 };
+const renderQuestionKicker = (data, idx) => `<p class="question-kicker"><span class="question-kicker-label"><span class="question-index">${idx + 1}</span>${escapeHtml(data.label)}</span>${data.tags?.length ? `<span class="question-export-tags">${data.tags.map(tag => `<span class="question-export-tag">${escapeHtml(tag)}</span>`).join('')}</span>` : ''}</p>`;
 const renderQuestionImagesHtml = (images = []) => {
   if (!images.length) return '';
   return `<div class="question-images">${images.map(image => {
@@ -298,7 +327,8 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .lesson-content th{border:1px solid #d1d5db;padding:7px 9px;text-align:left;background:#f9fafb;color:#374151}
 .lesson-content td{border:1px solid #e5e7eb;padding:7px 9px;color:#374151}
 .question-card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:0 0 18px;page-break-inside:avoid;background:#fff}
-.question-kicker{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
+.question-kicker{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
+.question-kicker-label{display:flex;min-width:0;align-items:center;gap:8px}.question-export-tags{display:flex;min-width:0;flex-wrap:wrap;justify-content:flex-end;gap:5px;margin-left:auto;text-transform:none;letter-spacing:.02em}.question-export-tag{max-width:100%;overflow:hidden;border:1px solid #e5e7eb;border-radius:999px;padding:3px 7px;background:#f3f4f6;color:#6b7280;font-size:9px;font-weight:700;line-height:1.2;text-overflow:ellipsis;white-space:nowrap;opacity:.68}
 .question-index{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:24px;border-radius:7px;background:#fef3c7;color:#92400e}
 .case-box{border:1px solid #e5e7eb;background:#f9fafb;border-radius:10px;padding:12px 14px;margin:0 0 14px}
 .case-label{margin:0 0 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
@@ -319,7 +349,8 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .answer-card.last{margin-bottom:16px}
 .answer-title{margin:0 0 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#15803d}
 .answer-correct{margin:0 0 10px;font-size:13px;font-weight:800;color:#065f46}
-.explanation-box{border-left:3px solid #f59e0b;background:#fffbeb;border-radius:0 10px 10px 0;padding:11px 13px;margin-top:10px;font-family:Georgia,serif;font-size:13px;line-height:1.62;color:#374151}
+.explanation-box{border-left:3px solid #d97706;background:#f9fafb;border-radius:0 10px 10px 0;padding:11px 13px;margin-top:10px;font-family:Georgia,serif;font-size:13px;line-height:1.62;color:#374151}
+.alternative-analysis{margin-top:12px;overflow:hidden;border:1px solid #e5e7eb;border-radius:10px;background:#fff;font-family:Arial,sans-serif}.alternative-analysis.compact{margin-top:10px}.alternative-analysis-title{border-bottom:1px solid #e5e7eb;padding:9px 12px;background:#f9fafb;color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.alternative-analysis-row{display:flex;gap:10px;padding:10px 12px}.alternative-analysis-row+.alternative-analysis-row{border-top:1px solid #f1f5f9}.alternative-analysis-letter{display:inline-flex;width:24px;height:24px;flex:0 0 24px;align-items:center;justify-content:center;border-radius:7px;background:#f3f4f6;color:#6b7280;font-size:12px;font-weight:700}.alternative-analysis-copy{min-width:0}.alternative-analysis-result{margin:0 0 3px;color:#6b7280;font-size:11px;font-weight:700}.alternative-analysis-text{color:#374151;font-size:12px;line-height:1.55}.alternative-analysis-row.is-correct .alternative-analysis-letter{background:#dcfce7;color:#15803d}.alternative-analysis-row.is-correct .alternative-analysis-result{color:#15803d}
 .answer-separator{border-top:1px dashed #cbd5e1;margin:24px 0 10px;text-align:center}
 .answer-separator span{position:relative;top:-8px;background:#fff;padding:0 10px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#9ca3af}
 .question-divider{border:0;border-top:1px solid #e5e7eb;margin:8px 0 30px}
@@ -328,6 +359,32 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .interactive-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}.interactive-button{border:1px solid #d97706;border-radius:8px;padding:7px 10px;background:#fff;color:#92400e;font-size:11px;font-weight:800;cursor:pointer}.interactive-button.primary{background:#d97706;color:#fff}.interactive-button:hover{filter:brightness(.97)}
 button.option-row{width:100%;font:inherit;text-align:left;cursor:pointer}.interactive-option:hover{border-color:#f59e0b;background:#fffbeb}.interactive-option.is-selected{border-color:#f59e0b;background:#fffbeb}.interactive-option.is-correct{border-color:#22c55e;background:#f0fdf4}.interactive-option.is-incorrect{border-color:#ef4444;background:#fef2f2}.interactive-option:disabled{cursor:default;opacity:1}
 .interactive-response{width:100%;min-height:88px;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;margin:2px 0 10px;font:13px/1.5 Arial,sans-serif;color:#1f2937;resize:vertical}.interactive-question-actions{display:flex;align-items:center;gap:8px;margin-top:10px}.interactive-feedback{min-height:18px;margin-top:9px;font-size:11px;font-weight:800;color:#6b7280}.interactive-feedback.correct{color:#15803d}.interactive-feedback.incorrect{color:#b91c1c}.interactive-answer[hidden]{display:none!important}.interactive-score{font-size:11px;font-weight:800;color:#15803d}
+html[data-theme="dark"]{color-scheme:dark;background:#151719;--export-bg:#151719;--export-surface:#1b1e22;--export-surface-strong:#20242a;--export-surface-muted:#282d33;--export-line:#30363d;--export-text:#d8dcdf;--export-muted:#9fa6ae;--export-accent:#b88a46;--export-accent-text:#e4bd72;--export-action:#2f668c}
+html[data-theme="dark"] body{color:var(--export-text);background:var(--export-bg)}
+html[data-theme="dark"] .export-header,html[data-theme="dark"] h2,html[data-theme="dark"] .question-divider{border-color:var(--export-line)}
+html[data-theme="dark"] h1,html[data-theme="dark"] h2,html[data-theme="dark"] .question-statement{color:var(--export-text)}
+html[data-theme="dark"] .export-brand,html[data-theme="dark"] h3,html[data-theme="dark"] .sub,html[data-theme="dark"] .case-label{color:var(--export-accent-text)}
+html[data-theme="dark"] .export-meta,html[data-theme="dark"] .question-kicker,html[data-theme="dark"] .question-figure figcaption,html[data-theme="dark"] .interactive-toolbar-help,html[data-theme="dark"] .interactive-feedback{color:var(--export-muted)}
+html[data-theme="dark"] .lesson-content p,html[data-theme="dark"] .lesson-content li,html[data-theme="dark"] .lesson-content th,html[data-theme="dark"] .lesson-content td,html[data-theme="dark"] .case-text,html[data-theme="dark"] .option-text{color:var(--export-text)}
+html[data-theme="dark"] .lesson-content th,html[data-theme="dark"] .lesson-content td,html[data-theme="dark"] .question-card,html[data-theme="dark"] .case-box,html[data-theme="dark"] .question-figure,html[data-theme="dark"] .question-figure figcaption,html[data-theme="dark"] .option-row{border-color:var(--export-line)}
+html[data-theme="dark"] .lesson-content th,html[data-theme="dark"] .question-card,html[data-theme="dark"] .answer-card,html[data-theme="dark"] .answer-card.compact,html[data-theme="dark"] .interactive-response{background:var(--export-surface-strong)}
+html[data-theme="dark"] .case-box,html[data-theme="dark"] .question-figure,html[data-theme="dark"] .option-row{background:var(--export-surface)}
+html[data-theme="dark"] .question-figure img{background:var(--export-bg)}
+html[data-theme="dark"] .question-index,html[data-theme="dark"] .option-letter{background:var(--export-surface-muted);color:var(--export-muted)}
+html[data-theme="dark"] .question-export-tag{border-color:var(--export-line);background:var(--export-surface-muted);color:var(--export-muted)}
+html[data-theme="dark"] .interactive-option:hover{background:var(--export-surface-muted)}
+html[data-theme="dark"] .interactive-option.is-selected{border-color:color-mix(in srgb,var(--export-action) 58%,transparent);background:color-mix(in srgb,var(--export-action) 16%,var(--export-surface))}
+html[data-theme="dark"] .option-row.is-correct,html[data-theme="dark"] .interactive-option.is-correct{border-color:color-mix(in srgb,#3f9b72 38%,transparent);background:color-mix(in srgb,#3f9b72 13%,var(--export-surface))}
+html[data-theme="dark"] .interactive-option.is-incorrect{border-color:color-mix(in srgb,#c45c60 38%,transparent);background:color-mix(in srgb,#c45c60 13%,var(--export-surface))}
+html[data-theme="dark"] .answer-card{border-color:color-mix(in srgb,#3f9b72 38%,transparent);border-left-color:#3f9b72}
+html[data-theme="dark"] .answer-title,html[data-theme="dark"] .answer-correct,html[data-theme="dark"] .interactive-score,html[data-theme="dark"] .interactive-feedback.correct{color:#9bd3b7}
+html[data-theme="dark"] .explanation-box{border-color:var(--export-accent);background:var(--export-surface);color:var(--export-text)}
+html[data-theme="dark"] .alternative-analysis{border-color:var(--export-line);background:var(--export-surface-strong)}html[data-theme="dark"] .alternative-analysis-title{border-color:var(--export-line);background:var(--export-surface);color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-row+.alternative-analysis-row{border-color:var(--export-line)}html[data-theme="dark"] .alternative-analysis-letter{background:var(--export-surface-muted);color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-result{color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-text{color:var(--export-text)}html[data-theme="dark"] .alternative-analysis-row.is-correct .alternative-analysis-letter{background:color-mix(in srgb,#3f9b72 18%,var(--export-surface));color:#9bd3b7}html[data-theme="dark"] .alternative-analysis-row.is-correct .alternative-analysis-result{color:#9bd3b7}
+html[data-theme="dark"] .answer-separator{border-color:var(--export-line)}html[data-theme="dark"] .answer-separator span{background:var(--export-bg);color:var(--export-muted)}
+html[data-theme="dark"] .interactive-toolbar{border-color:var(--export-line);background:var(--export-surface-strong);box-shadow:0 10px 30px rgba(0,0,0,.22)}
+html[data-theme="dark"] .interactive-toolbar-title{color:var(--export-accent-text)}html[data-theme="dark"] .interactive-button{border-color:var(--export-line);background:var(--export-surface-muted);color:var(--export-text)}html[data-theme="dark"] .interactive-button.primary{border-color:transparent;background:var(--export-action);color:#fff}
+html[data-theme="dark"] .interactive-response{border-color:var(--export-line);color:var(--export-text)}
+html[data-theme="dark"] .interactive-feedback.incorrect{color:#e9a9ab}
 .pb{page-break-before:always}
 @media(max-width:620px){body{padding:14px}.interactive-toolbar{position:static;align-items:flex-start;flex-direction:column}.interactive-actions{justify-content:flex-start}.question-images{grid-template-columns:1fr}}
 @media print{body{padding:0}.question-card,.answer-card,.case-box,.question-figure{break-inside:avoid}.pb{break-before:page}.interactive-toolbar,.interactive-question-actions,.interactive-feedback{display:none!important}}
@@ -347,7 +404,7 @@ const renderPdfQuestionHtml = (question, idx, { showAnswer = false, blank = fals
   const data = getQuestionExportData(question);
   const corr = data.options?.find(o => o.isCorrect);
   return `<article class="question-card">
-<p class="question-kicker"><span class="question-index">${idx + 1}</span>${escapeHtml(data.label)}</p>
+${renderQuestionKicker(data,idx)}
 ${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${textToHtml(data.caseContext)}</div></section>` : ''}
 <div class="question-statement">${textToHtml(data.statement || '')}</div>
 ${renderQuestionImagesHtml(data.images || [])}
@@ -377,8 +434,8 @@ const renderInteractiveToolbar = (mode, total) => `<section class="interactive-t
 <div class="interactive-toolbar-copy"><strong class="interactive-toolbar-title">${total} questões</strong><span class="interactive-toolbar-help">${interactiveModeHelp(mode)}</span></div>
 <div class="interactive-actions">
 ${mode === 'exam' ? '<button type="button" class="interactive-button primary" data-action="grade">Corrigir simulado</button>' : ''}
+<button type="button" class="interactive-button" data-action="theme" aria-pressed="false">Tema escuro</button>
 <button type="button" class="interactive-button" data-action="reset">Recomeçar</button>
-<button type="button" class="interactive-button" data-action="print">Imprimir</button>
 <output class="interactive-score" data-score aria-live="polite"></output>
 </div>
 </section>`;
@@ -387,7 +444,7 @@ const renderInteractiveQuestionHtml = (question, idx, { mode = 'study' } = {}) =
   const hasOptions = (data.options || []).length > 0;
   const answer = mode === 'blank' ? '' : `<div class="interactive-answer" data-answer hidden>${renderPdfAnswerHtml(question,idx,{ compact:true })}</div>`;
   return `<article class="question-card interactive-question" data-interactive-question data-mode="${mode}">
-<p class="question-kicker"><span class="question-index">${idx + 1}</span>${escapeHtml(data.label)}</p>
+${renderQuestionKicker(data,idx)}
 ${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${textToHtml(data.caseContext)}</div></section>` : ''}
 <div class="question-statement">${textToHtml(data.statement || '')}</div>
 ${renderQuestionImagesHtml(data.images || [])}
@@ -401,6 +458,19 @@ const INTERACTIVE_EXPORT_SCRIPT = `
 (() => {
   const questions = Array.from(document.querySelectorAll('[data-interactive-question]'));
   const score = document.querySelector('[data-score]');
+  const themeButton = document.querySelector('[data-action="theme"]');
+  const themeStorageKey = 'agora-export-theme';
+  const setTheme = theme => {
+    const nextTheme = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = nextTheme;
+    if (themeButton) {
+      const isDark = nextTheme === 'dark';
+      themeButton.textContent = isDark ? 'Tema claro' : 'Tema escuro';
+      themeButton.setAttribute('aria-pressed',String(isDark));
+      themeButton.setAttribute('aria-label',isDark ? 'Ativar tema claro' : 'Ativar tema escuro');
+    }
+  };
+  setTheme(document.documentElement.dataset.theme);
   const answerFor = question => question.querySelector('[data-answer]');
   const feedbackFor = question => question.querySelector('[data-feedback]');
   const showAnswer = question => { const answer = answerFor(question); if (answer) answer.hidden = false; };
@@ -443,6 +513,11 @@ const INTERACTIVE_EXPORT_SCRIPT = `
     }
     const actionElement = event.target.closest('[data-action]');
     const action = actionElement?.dataset.action;
+    if (action === 'theme') {
+      const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      setTheme(nextTheme);
+      try { localStorage.setItem(themeStorageKey,nextTheme); } catch {}
+    }
     if (action === 'reveal') gradeQuestion(actionElement.closest('[data-interactive-question]'));
     if (action === 'grade') {
       questions.forEach(gradeQuestion);
@@ -464,10 +539,10 @@ const INTERACTIVE_EXPORT_SCRIPT = `
       if (score) score.textContent = '';
       window.scrollTo({ top:0, behavior:'smooth' });
     }
-    if (action === 'print') window.print();
   });
 })();`;
-const renderInteractiveDocument = (body = '', { title = 'Questões interativas' } = {}) => `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeXml(title)}</title><style>${PDF_EXPORT_STYLES}</style></head><body>${body}<script>${INTERACTIVE_EXPORT_SCRIPT}</script></body></html>`;
+const INTERACTIVE_THEME_HEAD_SCRIPT = `(() => { let theme = ''; try { theme = localStorage.getItem('agora-export-theme') || ''; } catch {} if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; })();`;
+const renderInteractiveDocument = (body = '', { title = 'Questões interativas' } = {}) => `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeXml(title)}</title><script>${INTERACTIVE_THEME_HEAD_SCRIPT}</script><style>${PDF_EXPORT_STYLES}</style></head><body>${body}<script>${INTERACTIVE_EXPORT_SCRIPT}</script></body></html>`;
 
 const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -522,6 +597,14 @@ const docxParagraph = (text = '', opts = {}) => {
     ].join('');
     return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ''}${docxRuns(line, opts)}</w:p>`;
   }).join('');
+};
+const docxQuestionHeader = (data, idx) => {
+  const tagText = (data?.tags || []).filter(Boolean).join(' · ');
+  const tabs = tagText ? '<w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>' : '';
+  const tagRun = tagText
+    ? `<w:r><w:tab/></w:r><w:r><w:rPr><w:color w:val="8B929A"/><w:sz w:val="16"/><w:i/><w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/></w:rPr><w:t xml:space="preserve"> ${escapeXml(tagText)} </w:t></w:r>`
+    : '';
+  return `<w:p><w:pPr>${tabs}<w:spacing w:after="40" w:line="276" w:lineRule="auto"/></w:pPr>${docxRuns(`${data.label} ${idx + 1}`, { bold:true, size:20, color:'92400E' })}${tagRun}</w:p>`;
 };
 const docxBullet = (text = '') =>
   `<w:p><w:pPr><w:ind w:left="720" w:hanging="360"/><w:spacing w:after="60"/></w:pPr><w:r><w:t xml:space="preserve">• ${escapeXml(htmlishToText(text))}</w:t></w:r></w:p>`;
@@ -862,7 +945,7 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
 
     const renderQuestion = (q, idx, showAnswer) => {
       const data = getQuestionExportData(q);
-      let xml = docxParagraph(`${data.label} ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
+      let xml = docxQuestionHeader(data,idx);
       if (data.caseContext) {
         xml += docxParagraph('Cenário clínico', { bold:true, color:'92400E', after:40 });
         xml += docxParagraph(data.caseContext, { color:'374151', after:100 });
@@ -1037,15 +1120,31 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
 
 
 // ─── EXPORT MODAL ─────────────────────────────────────────────────────────────
-const ExportModal = ({ topic, subject, onClose, darkMode }) => {
+const ExportModal = ({ topic:requestedTopic, subject, onClose, darkMode }) => {
+  const subjectBlocks = (subject?.topics || [])
+    .map(block => ({ id:block.id, title:block.title || 'Bloco', questions:block.questions || [] }))
+    .filter(block => block.questions.length > 0);
+  const topic = requestedTopic || {
+    title:subject?.title || 'Questões importadas',
+    questions:subjectBlocks.flatMap(block => block.questions),
+    _exportBlocks:subjectBlocks,
+  };
   const [mode, setMode] = useState('study');   // 'study'|'exam'|'blank'
   const [fmt, setFmt]   = useState('pdf');     // 'pdf'|'word'|'html'
+  const [questionOrder,setQuestionOrder] = useState('blocks');
   const [isExporting,setIsExporting] = useState(false);
   const [exportError,setExportError] = useState('');
+  const isSubjectExport = !requestedTopic && subjectBlocks.length > 0;
 
   const buildHtml = (preparedTopic=topic, { interactive=false }={}) => {
     const topic = preparedTopic;
-    const qs = topic.questions;
+    const layout = buildExportQuestionLayout(topic,questionOrder);
+    const qs = layout.questions;
+    const renderQuestionGroups = (renderQuestion, headingTag='h2') => {
+      if (!layout.blocks.length) return qs.map(renderQuestion).join('');
+      let questionIndex = 0;
+      return layout.blocks.map(block => `<${headingTag}>${escapeHtml(block.title || 'Bloco')}</${headingTag}>${block.questions.map(question => renderQuestion(question,questionIndex++)).join('')}`).join('');
+    };
     let body = renderPdfHeader({
       title:topic.title || 'Exportar',
       meta:[`${qs.length} questões`, subject?.title, 'Ágora do Saber'].filter(Boolean).join(' • '),
@@ -1053,36 +1152,31 @@ const ExportModal = ({ topic, subject, onClose, darkMode }) => {
 
     if (interactive) {
       body += renderInteractiveToolbar(mode,qs.length);
-      qs.forEach((question,index) => { body += renderInteractiveQuestionHtml(question,index,{ mode }); });
+      body += renderQuestionGroups((question,index) => renderInteractiveQuestionHtml(question,index,{ mode }));
       return renderInteractiveDocument(body,{ title:`${topic.title || 'Questões'} — Ágora do Saber` });
     }
 
     if (mode==='blank') {
-      qs.forEach((q, idx) => {
-        body += renderPdfQuestionHtml(q, idx, { blank:true });
-      });
+      body += renderQuestionGroups((question,index) => renderPdfQuestionHtml(question,index,{ blank:true }));
     } else if (mode==='study') {
       // Study mode: each question appears WITHOUT answer highlighted,
       // then a big gap/separator, then the gabarito+explanation below.
       // This way you can answer it before accidentally seeing the response.
-      qs.forEach((q, idx) => {
+      body += renderQuestionGroups((q,idx) => {
         const isLast = idx === qs.length - 1;
-        body += renderPdfQuestionHtml(q, idx);
+        let questionHtml = renderPdfQuestionHtml(q,idx);
         // Spacer — big enough so the answer below isn't accidentally seen
-        body += '<div class="answer-separator"><span>Gabarito</span></div>';
+        questionHtml += '<div class="answer-separator"><span>Gabarito</span></div>';
         // Answer + explanation
-        body += renderPdfAnswerHtml(q, idx, { isLast });
-        if (!isLast) body += '<hr class="question-divider">';
+        questionHtml += renderPdfAnswerHtml(q,idx,{ isLast });
+        if (!isLast) questionHtml += '<hr class="question-divider">';
+        return questionHtml;
       });
     } else { // exam mode
       body += '<h2>Questões</h2>';
-      qs.forEach((q, idx) => {
-        body += renderPdfQuestionHtml(q, idx);
-      });
+      body += renderQuestionGroups((question,index) => renderPdfQuestionHtml(question,index),'h3');
       body += '<div class="pb"><h2>Gabarito e comentários</h2>';
-      qs.forEach((q, idx) => {
-        body += renderPdfAnswerHtml(q, idx, { compact:true });
-      });
+      body += renderQuestionGroups((question,index) => renderPdfAnswerHtml(question,index,{ compact:true }),'h3');
       body += '</div>';
     }
     return renderPdfDocument(body);
@@ -1090,12 +1184,13 @@ const ExportModal = ({ topic, subject, onClose, darkMode }) => {
 
   const buildDocx = (preparedTopic=topic, imageRegistry) => {
     const topic = preparedTopic;
-    const qs = topic.questions || [];
+    const layout = buildExportQuestionLayout(topic,questionOrder);
+    const qs = layout.questions;
     let body = docxParagraph(topic.title || 'Exportar', { bold:true, size:32, color:'92400E', after:80, border:true });
     body += docxParagraph(`${qs.length} questões • ${subject?.title || ''} • Ágora do Saber`, { size:20, color:'6B7280', after:260 });
     const renderQuestion = (q, idx, opts = {}) => {
       const data = getQuestionExportData(q);
-      let xml = docxParagraph(`${data.label} ${idx + 1}`, { bold:true, size:20, color:'92400E', after:40 });
+      let xml = docxQuestionHeader(data,idx);
       if (data.caseContext) {
         xml += docxParagraph('Cenário clínico', { bold:true, color:'92400E', after:40 });
         xml += docxParagraph(data.caseContext, { color:'374151', after:100 });
@@ -1129,20 +1224,28 @@ const ExportModal = ({ topic, subject, onClose, darkMode }) => {
       }
       return xml;
     };
+    const renderQuestionGroups = renderQuestion => {
+      if (!layout.blocks.length) return qs.map(renderQuestion).join('');
+      let questionIndex = 0;
+      return layout.blocks.map(block => (
+        docxParagraph(block.title || 'Bloco', { bold:true, size:24, color:'92400E', after:100 })
+        + block.questions.map(question => renderQuestion(question,questionIndex++)).join('')
+      )).join('');
+    };
 
     if (mode === 'blank') {
-      qs.forEach((q, idx) => { body += renderQuestion(q, idx, { blank:true }); });
+      body += renderQuestionGroups((q,idx) => renderQuestion(q,idx,{ blank:true }));
     } else if (mode === 'study') {
-      qs.forEach((q, idx) => {
-        body += renderQuestion(q, idx);
-        body += docxParagraph('GABARITO', { center:true, color:'D1D5DB', size:18, after:80, border:true });
-        body += renderAnswer(q, idx);
-      });
+      body += renderQuestionGroups((q,idx) => (
+        renderQuestion(q,idx)
+        + docxParagraph('GABARITO', { center:true, color:'D1D5DB', size:18, after:80, border:true })
+        + renderAnswer(q,idx)
+      ));
     } else {
       body += docxParagraph('QUESTÕES', { bold:true, size:26, color:'374151' });
-      qs.forEach((q, idx) => { body += renderQuestion(q, idx); });
+      body += renderQuestionGroups((q,idx) => renderQuestion(q,idx));
       body += docxParagraph('GABARITO E COMENTÁRIOS', { bold:true, size:28, color:'92400E', pageBreakBefore:true, border:true });
-      qs.forEach((q, idx) => { body += renderAnswer(q, idx); });
+      body += renderQuestionGroups((q,idx) => renderAnswer(q,idx));
     }
     return body;
   };
@@ -1196,6 +1299,20 @@ const ExportModal = ({ topic, subject, onClose, darkMode }) => {
             </label>
           ))}
         </div>
+        {isSubjectExport&&<>
+          <p className={`text-xs font-bold uppercase mb-3 ${darkMode?'text-gray-400':'text-gray-500'}`}>Ordem das questões</p>
+          <div className="space-y-3 mb-6">
+            {[
+              {k:'blocks',title:'Blocos na ordem',desc:`Mantém os ${topic._exportBlocks.length} blocos e suas questões na ordem original`},
+              {k:'shuffled',title:'Todas as questões embaralhadas',desc:'Mistura as questões de todos os blocos em uma sequência única'},
+            ].map(option=>(
+              <label key={option.k} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${questionOrder===option.k?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
+                <input type="radio" name="question-order" value={option.k} checked={questionOrder===option.k} onChange={()=>{setQuestionOrder(option.k);setExportError('');}} className="accent-yellow-600"/>
+                <div><p className="font-bold text-sm">{option.title}</p><p className="text-xs opacity-50 mt-0.5">{option.desc}</p></div>
+              </label>
+            ))}
+          </div>
+        </>}
         <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-3">
           {[{k:'pdf',l:'📄 PDF'},{k:'word',l:'📘 Word (.docx)'},{k:'html',l:'🌐 HTML interativo'}].map(f=>(
             <button key={f.k} disabled={isExporting} onClick={()=>{setFmt(f.k);setExportError('');}} className={`py-3 px-2 rounded-xl font-bold text-sm border-2 transition-all disabled:opacity-50 ${fmt===f.k?(darkMode?'border-yellow-500 bg-yellow-900/20 text-yellow-400':'border-yellow-500 bg-yellow-50 text-yellow-700'):(darkMode?'border-gray-700 text-gray-400':'border-gray-200 text-gray-600')}`}>{f.l}</button>

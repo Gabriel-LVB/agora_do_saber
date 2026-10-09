@@ -1,9 +1,29 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const ligastroPublicRoute = () => {
+  const routeToPublicIndex = (req,res,next) => {
+    const [pathname,query = ''] = (req.url || '').split('?')
+    if (pathname === '/ligastro' || pathname === '/ligastro/') {
+      req.url = `/ligastro/index.html${query ? `?${query}` : ''}`
+    }
+    next()
+  }
+
+  return {
+    name: 'ligastro-public-route',
+    configureServer(server) {
+      server.middlewares.use(routeToPublicIndex)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(routeToPublicIndex)
+    },
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [ligastroPublicRoute(),react()],
   build: {
     rollupOptions: {
       output: {

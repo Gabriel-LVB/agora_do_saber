@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/ligastro/" />
+    <meta name="description" content="160 questões antigas de Digestório S2, em parceria com a Ligastro UFC." />
+    <title>Questões Antigas de Digestório S2 — Ágora × Ligastro</title>
+    <script>
+      (() => {
+        let theme = '';
+        try { theme = localStorage.getItem('ligastro-theme-v1') || ''; } catch {}
+        if (theme !== 'light' && theme !== 'dark') theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="landing">
+    <main class="landing-shell">
+      <header class="brand-bar" aria-label="Ágora da Medicina e Ligastro">
+        <div class="brand-lockup">
+          <img class="brand-logo" src="./assets/ligastro-logo.png" alt="Logo da Liga de Gastroenterologia da UFC" />
+          <div>
+            <p class="brand-kicker">Ágora da Medicina × Ligastro</p>
+            <p class="brand-name">Digestório S2</p>
+          </div>
+        </div>
+        <button type="button" class="theme-button" data-theme-toggle>Tema escuro</button>
+      </header>
+
+      <section class="landing-introduction">
+        <h1>Material de Gastro do S2</h1>
+        <p>A Ágora da Medicina e a Liga de Gastroenterologia prepararam juntas um material essencial para você se preparar para a tão temida prova de Gastro do S2. Abaixo, você pode resolver <strong>todas</strong> as questões antigas que encontramos e organizamos no nosso Drive, incluindo os recalls da T135 e as novíssimas provas da T137. As questões estão separadas por tema, corrigidas e comentadas, e há ainda um modo simulado para você responder a todas as questões de uma vez. Gostou? Siga a <a href="https://www.instagram.com/ligastro.ufc/" target="_blank" rel="noopener noreferrer">@Ligastro no Instagram</a> e faça parte da melhor liga da FAMED! Nosso processo seletivo abre todos os semestres, e você será mais que bem-vindo(a)!</p>
+      </section>
+
+      <section class="landing-options" aria-labelledby="topics-title">
+        <h2 id="topics-title">Resolver por tema</h2>
+        <div class="landing-topic-list">
+          <a href="./questoes.html?modo=temas#anatomia-do-aparelho-digestorio"><span>Anatomia do Aparelho Digestório</span><small>22 questões</small></a>
+          <a href="./questoes.html?modo=temas#histologia-e-embriologia"><span>Histologia e Embriologia</span><small>27 questões</small></a>
+          <a href="./questoes.html?modo=temas#fisiologia-motilidade"><span>Fisiologia: Motilidade</span><small>44 questões</small></a>
+          <a href="./questoes.html?modo=temas#fisiologia-secrecao-digestao-e-absorcao"><span>Fisiologia: Secreção, Digestão e Absorção</span><small>45 questões</small></a>
+          <a href="./questoes.html?modo=temas#farmacologia-do-tgi"><span>Farmacologia do TGI</span><small>22 questões</small></a>
+        </div>
+
+        <div class="landing-simulated">
+          <h2>Modo simulado</h2>
+          <a class="primary-link" href="./questoes.html?modo=simulado">Responder às 160 questões</a>
+        </div>
+      </section>
+
+      <section class="invite-card">
+        <img src="./assets/ligastro-logo.png" alt="Ligastro UFC" />
+        <div>
+          <p class="eyebrow">Se até a Ágora entrou na Ligastro, você vai ficar de fora?</p>
+          <h2>Conheça a Ligastro UFC</h2>
+          <p>Acompanhe aulas abertas, atividades, materiais e os próximos processos seletivos da Liga de Gastroenterologia.</p>
+        </div>
+        <a href="https://www.instagram.com/ligastro.ufc/" target="_blank" rel="noopener noreferrer">Seguir @ligastro.ufc</a>
+      </section>
+
+      <footer class="landing-footer">
+        <p>Precisou sair? Não se preocupe, seu progresso fica salvo no próprio navegador.</p>
+      </footer>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -9,7 +9,7 @@
     "audit:moderate": "npm audit --audit-level=moderate",
     "budget": "node --no-warnings scripts/build-budget.mjs",
     "test:preflight": "npm run check",
-    "test:unit": "node --no-warnings scripts/unit-smoke.mjs && node --no-warnings scripts/usmle-smoke.mjs",
+    "test:unit": "node --no-warnings scripts/unit-smoke.mjs && node --no-warnings scripts/usmle-smoke.mjs && node --no-warnings scripts/ligastro-smoke.mjs",
     "test:rules": "node --no-warnings scripts/firestore-rules-smoke.mjs",
     "test:rules:emulator": "npx firebase-tools@13.35.1 emulators:exec --only firestore \"node --no-warnings scripts/firestore-emulator-rules-test.mjs\"",
     "import:ecg-site-pack": "node --no-warnings scripts/import-ecg-site-pack.mjs",

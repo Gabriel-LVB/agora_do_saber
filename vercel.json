@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/ligastro",
+      "destination": "/ligastro/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/",
@@ -24,6 +30,24 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/ligastro/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/ligastro/assets/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
         }
       ]
     },

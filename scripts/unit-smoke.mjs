@@ -23,6 +23,7 @@ import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
 } from '../src/lib/questionExplanation.js';
+import { extractQuestionExportTags } from '../src/features/exporting/exportQuestionTags.js';
 import {
   QUESTION_OPTION_SHUFFLE_VERSION,
   legacyImportedQuestionForDisplay,
@@ -2832,6 +2833,42 @@ assert.match(exportModalsSource, /officeDocument\/2006\/relationships\/image/);
 assert.match(exportModalsSource, /HTML interativo/);
 assert.match(exportModalsSource, /renderInteractiveDocument/);
 assert.match(exportModalsSource, /data-action="grade"/);
+assert.match(exportModalsSource, /data-action="theme"/);
+assert.doesNotMatch(exportModalsSource, /data-action="print"/);
+assert.doesNotMatch(exportModalsSource, /[🌙☀️]/u);
+assert.match(exportModalsSource, /agora-export-theme/);
+assert.match(exportModalsSource, /document\.documentElement\.dataset\.theme/);
+assert.match(exportModalsSource, /Tema escuro/);
+assert.match(exportModalsSource, /Tema claro/);
+assert.match(exportModalsSource, /--export-bg:#151719/);
+assert.match(exportModalsSource, /--export-surface-strong:#20242a/);
+assert.match(exportModalsSource, /--export-surface-muted:#282d33/);
+assert.match(exportModalsSource, /--export-accent:#b88a46/);
+assert.match(exportModalsSource, /--export-action:#2f668c/);
+assert.match(exportModalsSource, /alternative-analysis-text/);
+assert.match(exportModalsSource, /question-export-tag/);
+assert.match(exportModalsSource, /docxQuestionHeader\(data,idx\)/);
+assert.doesNotMatch(exportModalsSource, /\.explanation-box\{[^}]*background:#fffbeb/);
+assert.deepEqual(
+  extractQuestionExportTags('((T137 1ª chamada))\nQual é a conduta correta?'),
+  { text:'Qual é a conduta correta?',tags:['T137 1ª chamada'] },
+);
+assert.deepEqual(
+  extractQuestionExportTags('Enunciado clínico. ((Revisão)) ((Revisão))'),
+  { text:'Enunciado clínico.',tags:['Revisão'] },
+);
+const interactiveExportScript = exportModalsSource.match(/const INTERACTIVE_EXPORT_SCRIPT = `([\s\S]*?)`;/)?.[1];
+const interactiveThemeHeadScript = exportModalsSource.match(/const INTERACTIVE_THEME_HEAD_SCRIPT = `([\s\S]*?)`;/)?.[1];
+assert.ok(interactiveExportScript, 'Script do HTML interativo não encontrado.');
+assert.ok(interactiveThemeHeadScript, 'Inicialização de tema do HTML interativo não encontrada.');
+assert.doesNotThrow(() => new Function(interactiveExportScript));
+assert.doesNotThrow(() => new Function(interactiveThemeHeadScript));
+assert.match(exportModalsSource, /buildExportQuestionLayout/);
+assert.match(exportModalsSource, /Blocos na ordem/);
+assert.match(exportModalsSource, /Todas as questões embaralhadas/);
+assert.match(exportModalsSource, /_exportBlocks/);
+assert.match(appSource, /label:'Exportar questões'/);
+assert.match(appSource, /setExportModal\(\{subject:activeSubject\}\)/);
 
 const workflowModalsSource = await readFile(new URL('../src/features/modals/WorkflowModals.jsx', import.meta.url), 'utf8');
 assert.match(workflowModalsSource, /export \{ SRModal, ExternalPromptModal \}/);

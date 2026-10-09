@@ -15277,6 +15277,11 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
 		                      _originQId:question.id,
 		                    })));
 			                  const subjectActionItems = [
+			                    activeSubject.source==='external' && (activeSubject.topics || []).some(topic => topic.questions?.length) ? {
+			                      label:'Exportar questões',
+			                      icon:<Printer className="w-4 h-4"/>,
+			                      fn:()=>setExportModal({subject:activeSubject}),
+			                    } : null,
 			                    activeSubject.source==='academia' && (activeSubject.topics || []).some(t => Object.values(t.fixationQuestions || {}).flat().length > 0) ? {
 		                      label:'Limpar respostas da fixação',
 		                      icon:<Eraser className="w-4 h-4"/>,

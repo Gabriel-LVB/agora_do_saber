@@ -151,6 +151,10 @@ O app registra acessos em `access_logs` e presença/dispositivo em `user_devices
 
 ## Navegação
 
+### Microsite público da Ligastro
+
+`/ligastro` é uma página pública e autônoma, servida pelos arquivos estáticos de `public/ligastro/`. Ela não monta o React principal, não consulta Firebase, não passa pela whitelist e não deve aparecer na navegação ou nos atalhos do aplicativo. O único conteúdo disponível ali é o banco autorizado da parceria com a Ligastro; respostas e preferências de tema ficam somente no `localStorage` do navegador. Não use esse caminho como precedente para expor dados privados ou outras áreas autenticadas.
+
 O estado principal é:
 
 ```js
