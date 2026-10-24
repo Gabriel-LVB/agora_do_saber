@@ -2793,6 +2793,9 @@ assert.doesNotMatch(questionFeatureSource, /question\.explanationParts && \(ques
 assert.match(questionFeatureSource, /API_KEY_MISSING/);
 assert.match(questionFeatureSource, /Configure uma chave Gemini nas Configurações/);
 assert.match(questionFeatureSource, /parsed\?\.answer && parsed\?\.score != null/);
+assert.match(questionFeatureSource, /const OpenAnswerLoadingReference =/);
+assert.match(questionFeatureSource, /Resposta esperada/);
+assert.match(questionFeatureSource, /loading&&<OpenAnswerLoadingReference question=\{question\} darkMode=\{dm\}\/\>/);
 assert.match(questionFeatureSource, /const renderClozeSentence =/);
 assert.match(questionFeatureSource, /Revelar informação/);
 assert.match(questionFeatureSource, />Entenda</);

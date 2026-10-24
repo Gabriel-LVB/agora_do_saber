@@ -1327,6 +1327,25 @@ const QuestionView = ({
 
 // ─── OPEN ANSWER INLINE ──────────────────────────────────────────────────────
 // Componente inline para questões abertas/dissertativas dentro do QuestionCard
+const OpenAnswerLoadingReference = ({ question, darkMode }) => {
+  const expectedAnswer = String(question?.expectedAnswer || '').trim() || cleanQuestionExplanation(question?.explanation);
+  if (!expectedAnswer) return null;
+
+  return (
+    <aside
+      aria-live="polite"
+      className={`rounded-lg border border-dashed px-3 py-2.5 opacity-75 ${darkMode?'border-gray-600 bg-gray-800/30':'border-gray-200 bg-gray-50/60'}`}
+    >
+      <p className={`text-xs font-bold ${darkMode?'text-gray-300':'text-gray-600'}`}>
+        Resposta esperada
+      </p>
+      <div className={`mt-1 text-xs leading-relaxed ${darkMode?'text-gray-400':'text-gray-500'}`}>
+        {parseHtmlTextChat(expectedAnswer)}
+      </div>
+    </aside>
+  );
+};
+
 const OpenAnswerInline = ({ question, darkMode, apiKey, onCall, oracleLength, savedAnswer, onSave }) => {
   const dm = darkMode;
   const isEssay = question.isEssay;
@@ -1389,6 +1408,7 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
         <div className="space-y-2">
           <textarea
             value={answer} onChange={e=>setAnswer(e.target.value.slice(0, maxChars))}
+            readOnly={loading}
             placeholder={isEssay ? 'Escreva sua resposta dissertativa...' : 'Responda em até 3 linhas...'}
             rows={isEssay ? 7 : 3}
             className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-700 border-gray-600 text-white placeholder-gray-500':'bg-gray-50 border-gray-200'}`}
@@ -1403,6 +1423,7 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
               </button>
             </div>
           </div>
+          {loading&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
         </div>
       ) : (
         /* Resposta salva */
@@ -1502,6 +1523,7 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
             <>
               <textarea
                 value={answer} onChange={e=>setAnswer(e.target.value.slice(0, maxChars))}
+                readOnly={loading}
                 placeholder={isEssay ? 'Escreva sua resposta dissertativa aqui...' : 'Responda em até 3 linhas...'}
                 rows={isEssay ? 8 : 4}
                 className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
@@ -1513,6 +1535,7 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
                   {loading ? <><Spinner className="w-4 h-4 text-white"/>Corrigindo...</> : 'Enviar para o Oráculo'}
                 </button>
               </div>
+              {loading&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
             </>
           ) : (
             <div className={`rounded-xl border p-4 space-y-3 ${
