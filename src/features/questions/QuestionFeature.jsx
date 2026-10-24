@@ -119,6 +119,12 @@ const cleanQuestionExplanation = (explanation = '') => {
   return exp;
 };
 
+const cleanQuestionBizu = (bizu = '') => String(bizu || '')
+  .replace(/\r\n/g, '\n')
+  .replace(/(?:^|\n)[ \t]*-{3,}[ \t]*(?=\n|$)/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
 const cleanClinicalCaseContext = (context = '') => String(context || '')
   .replace(/^\s*Caso(?:-base|\s+cl[íi]nico)?\s*\d+\s*[—–:\-]\s*/i, '')
   .trim();
@@ -1338,9 +1344,9 @@ const OpenAnswerReference = ({ question, darkMode }) => {
   const themeExplanation = question?.libraryQuestionKind === 'old_exam'
     ? normalizeImportedQuestionText(rawThemeExplanation)
     : rawThemeExplanation;
-  const bizu = question?.libraryQuestionKind === 'old_exam'
+  const bizu = cleanQuestionBizu(question?.libraryQuestionKind === 'old_exam'
     ? normalizeImportedQuestionText(question?.bizu)
-    : String(question?.bizu || '').trim();
+    : question?.bizu);
   if (!expectedAnswer) return null;
 
   return (
@@ -1844,7 +1850,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
   // fallback: usa apiKey direto se onCall não for passado
   const callOracle = onCall || ((prompt, sys) => callGemini(prompt, sys, apiKey));
   const explanation = cleanQuestionExplanation(question.explanation);
-  const bizu = String(question.bizu || '').trim();
+  const bizu = cleanQuestionBizu(question.bizu);
   const chatOptions = question.options || [];
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -1974,7 +1980,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
     ? normalizeImportedQuestionText(value)
     : String(value || '');
   const explanation = normalizeDisplayText(cleanQuestionExplanation(question.explanation));
-  const bizu = normalizeDisplayText(question.bizu);
+  const bizu = cleanQuestionBizu(normalizeDisplayText(question.bizu));
   const rawQuestionText = splitQuestionCase(question);
   const questionText = {
     caseContext:normalizeDisplayText(rawQuestionText.caseContext),
