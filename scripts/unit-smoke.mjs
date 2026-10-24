@@ -422,6 +422,8 @@ const fullQuickPrompt = buildQuickPracticePrompt({
   distractorRule:'REGRA DOS DISTRATORES',
 });
 assert.match(fullQuickPrompt, /Gere de 4 a 6 quest/);
+assert.match(fullQuickPrompt, /Entenda o tema:/);
+assert.match(fullQuickPrompt, /Bizu:/);
 assert.match(fullQuickPrompt, /Não existe teto, piso, faixa, meta nem sugestão numérica de cartões/);
 assert.doesNotMatch(fullQuickPrompt, /Gere de 5 a 8 flashcards|Nunca gere menos de 5/);
 assert.equal(MEMORY_CARD_POLICY_VERSION, 'agora-memory-card-policy-v1');
@@ -457,6 +459,17 @@ const globalMemoryPromptFixtures = [
 for (const prompt of globalMemoryPromptFixtures) {
   assert.match(prompt, new RegExp(MEMORY_CARD_POLICY_VERSION));
 }
+const enhancedQuestionPrompt = buildOracleQuestionPrompt({
+  questionTypes:['direct'],
+  questionStyle:'direct',
+  numSubtopics:1,
+  qPerSub:1,
+});
+assert.match(enhancedQuestionPrompt, /Entenda o tema:/);
+assert.match(enhancedQuestionPrompt, /mini-aula autossuficiente de 1 a 3 parágrafos/);
+assert.match(enhancedQuestionPrompt, /Bizu:/);
+assert.match(enhancedQuestionPrompt, /caderno de erros/);
+assert.match(enhancedQuestionPrompt, /PODE reutilizar integralmente/);
 assert.match(fullQuickPrompt, /REGRA DOS DISTRATORES/);
 assert.match(buildQuickPracticePrompt({title:'Teste', outputs:['questions']}), /N.o gere flashcards/);
 assert.match(extractQuickSection('## Questoes\n## Questao 1\nEnunciado\n## Flashcards\n## Flashcard 1\nPergunta', 'Questoes'), /Questao 1/);
@@ -592,12 +605,15 @@ assert.match(famedPackagePrompt, /arquivo ZIP baixável/);
 assert.match(famedPackagePrompt, /questions\.json na raiz/);
 assert.match(famedPackagePrompt, /agora-famed-question-package-v1/);
 assert.match(famedPackagePrompt, /images\/q1-figura\.png/);
+assert.match(famedPackagePrompt, /"bizu"/);
+assert.match(famedPackagePrompt, /mini-aula autossuficiente de 1 a 3 parágrafos/);
 const pastQuestionPackagePrompt = await readFile(new URL('../public/prompts/past-question-package-contract.txt', import.meta.url), 'utf8');
 const externalPastQuestionPrompt = buildExternalPrompt({ questionTypes:['old_exam'] }, pastQuestionPackagePrompt);
 assert.match(externalPastQuestionPrompt, /PACOTE ZIP DE QUESTÕES ANTIGAS/);
 assert.match(externalPastQuestionPrompt, /arquivo ZIP realmente baixável/);
 assert.match(externalPastQuestionPrompt, /questions\.json diretamente na raiz/);
 assert.match(externalPastQuestionPrompt, /"schema": "agora-famed-question-package-v1"/);
+assert.match(externalPastQuestionPrompt, /"bizu":/);
 assert.match(externalPastQuestionPrompt, /Exatamente UMA alternativa deve ter isCorrect: true/);
 assert.match(externalPastQuestionPrompt, /options: \[\], isOpen: true e expectedAnswer não vazio/);
 assert.match(externalPastQuestionPrompt, /Soma das imagens efetivamente vinculadas: no máximo 12 MB/);
@@ -620,6 +636,7 @@ const famedPackageZip = zipSync({
         { letter:'B', text:'Distrator', isCorrect:false, explanation:'Não corresponde ao mecanismo.' },
       ],
       explanation:'A alternativa correta é a A porque decorre\ndo mecanismo descrito.',
+      bizu:'Associe o achado decisivo\nao mecanismo cobrado.',
       expectedAnswer:'',
       isOpen:false,
       isEssay:false,
@@ -640,6 +657,7 @@ assert.equal(shuffledPackageQuestion.optionShuffleVersion,QUESTION_OPTION_SHUFFL
 assert.equal(shuffledCorrectOption.text,'Achado correto');
 assert.match(shuffledPackageQuestion.explanation,new RegExp(`correta é a ${shuffledCorrectOption.letter}\\b`,'i'));
 assert.doesNotMatch(shuffledPackageQuestion.explanation,/\n/,'a importação deve remover quebras visuais dentro da prosa');
+assert.equal(shuffledPackageQuestion.bizu,'Associe o achado decisivo ao mecanismo cobrado.');
 assert.deepEqual(
   shuffleQuestionOptions(shuffledPackageQuestion),
   shuffledPackageQuestion,
@@ -650,6 +668,7 @@ const importedAnswerLetters = Array.from({ length:12 },(_,index) => shuffleQuest
   id:`imported-${index + 1}`,
   statement:`Questão importada ${index + 1}`,
   explanation:'A alternativa correta é a A.',
+  bizu:'O gabarito é A porque traz o conceito decisivo.',
   options:[
     { letter:'A', text:`Correta ${index + 1}`, isCorrect:true, explanation:'A alternativa A está correta.' },
     { letter:'B', text:`Distrator B ${index + 1}`, isCorrect:false, explanation:'A alternativa B está incorreta.' },
@@ -659,6 +678,7 @@ const importedAnswerLetters = Array.from({ length:12 },(_,index) => shuffleQuest
 })).map(question => {
   const correctOption = question.options.find(option => option.isCorrect);
   assert.match(question.explanation,new RegExp(`correta é a ${correctOption.letter}\\b`,'i'));
+  assert.match(question.bizu,new RegExp(`gabarito é ${correctOption.letter}\\b`,'i'));
   question.options.forEach(option => {
     assert.match(option.explanation,new RegExp(`alternativa ${option.letter}\\b`,'i'));
   });
@@ -2786,6 +2806,9 @@ const studyMapPreviewSource = await readFile(new URL('../src/features/study-map/
 assert.match(studyMapPreviewSource, /export default function StudyMapPreview/);
 
 const questionFeatureSource = await readFile(new URL('../src/features/questions/QuestionFeature.jsx', import.meta.url), 'utf8');
+assert.match(appSource, /const BIZU_LABELS =/);
+assert.match(appSource, /const extractQuestionBizu =/);
+assert.match(appSource, /explanation: exp,\s+bizu,/);
 assert.match(questionFeatureSource, /loadLibraryQuestionAsset/);
 assert.match(questionFeatureSource, /<QuestionImage image=\{image\} darkMode=\{darkMode\}\/>/);
 assert.doesNotMatch(questionFeatureSource, /O traçado desta questão ainda não pôde ser associado com segurança/);
@@ -2802,6 +2825,9 @@ assert.match(questionFeatureSource, /Configure uma chave Gemini nas Configuraç�
 assert.match(questionFeatureSource, /parsed\?\.answer && parsed\?\.score != null/);
 assert.match(questionFeatureSource, /const OpenAnswerReference =/);
 assert.match(questionFeatureSource, /Resposta esperada/);
+assert.match(questionFeatureSource, /Entenda o tema/);
+assert.match(questionFeatureSource, />Bizu</);
+assert.match(questionFeatureSource, /const \[bizuOpen, setBizuOpen\]/);
 assert.match(questionFeatureSource, /Mostrar resposta esperada/);
 assert.match(questionFeatureSource, /Corrigir com IA/);
 assert.match(questionFeatureSource, /showExpected&&<OpenAnswerReference question=\{question\} darkMode=\{dm\}\/\>/);
@@ -2863,6 +2889,9 @@ assert.match(exportModalsSource, /--export-surface-muted:#282d33/);
 assert.match(exportModalsSource, /--export-accent:#b88a46/);
 assert.match(exportModalsSource, /--export-action:#2f668c/);
 assert.match(exportModalsSource, /alternative-analysis-text/);
+assert.match(exportModalsSource, /class="learning-label">Entenda o tema/);
+assert.match(exportModalsSource, /class="bizu-box"/);
+assert.match(exportModalsSource, /docxParagraph\('Bizu'/);
 assert.match(exportModalsSource, /question-export-tag/);
 assert.match(exportModalsSource, /docxQuestionHeader\(data,idx\)/);
 assert.doesNotMatch(exportModalsSource, /\.explanation-box\{[^}]*background:#fffbeb/);

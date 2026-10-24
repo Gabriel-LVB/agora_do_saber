@@ -34,7 +34,9 @@ GABARITO E EXPLICAÇÕES:
 - Para questões objetivas, escreva uma aula curta que ensine o conhecimento necessário para acertar e explique separadamente por que cada alternativa está certa ou errada.
 - Para questões abertas, acrescente somente a resposta esperada e uma explicação didática.
 - Se a questão original estiver anulada, tecnicamente errada ou sem alternativa defensável, não escolha uma alternativa arbitrariamente. O importador exige exatamente uma correta em toda objetiva: antes de gerar o ZIP, identifique a questão e peça uma decisão ao usuário.
-- explanation deve ensinar por que o gabarito está correto. Em options[].explanation, explique especificamente por que cada alternativa está correta ou errada; não escreva apenas "correta", "incorreta" ou "conforme o gabarito".
+- explanation é o "Entenda o tema": uma mini-aula autossuficiente de 1 a 3 parágrafos sobre o assunto central, indo além da justificativa desta questão. Ela pode ser reutilizada em questões sobre o mesmo tema.
+- bizu é uma anotação High Yield de 1 a 3 frases específica para o item: a pista, regra, associação ou pegadinha que você escreveria no caderno de erros para não errar novamente.
+- Em options[].explanation, explique especificamente por que cada alternativa está correta ou errada; não escreva apenas "correta", "incorreta" ou "conforme o gabarito".
 
 REGRAS FINAIS:
 - Use o formato correspondente à estrutura original de cada questão; não converta questões abertas em objetivas nem objetivas em abertas.
@@ -77,7 +79,8 @@ CONTRATO EXATO DE questions.json:
           "explanation": "por que a alternativa B está correta"
         }
       ],
-      "explanation": "explicação didática completa do gabarito e do raciocínio",
+      "explanation": "Entenda o tema: mini-aula de 1 a 3 parágrafos",
+      "bizu": "anotação High Yield específica para esta questão",
       "expectedAnswer": "",
       "isOpen": false,
       "isEssay": false,
@@ -94,7 +97,8 @@ CONTRATO EXATO DE questions.json:
       "statement": "enunciado e comando integrais da questão aberta",
       "caseContext": "",
       "options": [],
-      "explanation": "explicação didática da resposta",
+      "explanation": "Entenda o tema: mini-aula de 1 a 3 parágrafos",
+      "bizu": "anotação High Yield específica para esta questão",
       "expectedAnswer": "resposta esperada completa",
       "isOpen": true,
       "isEssay": true,
@@ -110,6 +114,7 @@ REGRAS QUE O IMPORTADOR VALIDA:
 - Em questão objetiva, options deve conter todas as alternativas como objetos. Cada alternativa precisa de letter, text não vazio, isCorrect booleano e explanation. Exatamente UMA alternativa deve ter isCorrect: true.
 - Em questão aberta ou dissertativa, use options: [], isOpen: true e expectedAnswer não vazio. Use isEssay: true somente quando a resposta original for dissertativa; para resposta curta, use isEssay: false.
 - Em questão objetiva, use expectedAnswer: "", isOpen: false e isEssay: false.
+- bizu é opcional apenas para manter compatibilidade com pacotes antigos; preencha-o nos novos pacotes quando houver gabarito confiável.
 - Use caseContext somente para separar um caso clínico que precede o comando; se não houver, use string vazia. Não duplique o mesmo texto em caseContext e statement.
 - Use images: [] quando a questão não depender de figura. Não coloque bytes, base64, data URL nem URL externa no JSON.
 - Se houver quebras de linha dentro de uma string JSON, codifique-as como \n.

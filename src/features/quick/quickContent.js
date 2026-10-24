@@ -107,12 +107,13 @@ export const buildQuickPracticePrompt = ({
     mixed:'Organize a prática em poucos casos encadeados. Cada caso deve gerar perguntas progressivas e diferentes. Em toda questão use "Caso-base: Caso N — [vinheta original completa]" e depois "Enunciado: [pergunta específica]"; repita integralmente o mesmo caso-base na sequência.',
   }[settings.questionStyle || 'mixed'];
   const adminExplanationFormat = settings.adminQuestionExplanations ? `
-FORMATO ADMIN PARA EXPLICAÇÕES DAS QUESTÕES:
-- Separe a explicação em "Aula:" e "Alternativas:".
-- Aula: explique o conceito de modo suficiente para o aluno entender e acertar a questão.
+FORMATO ADMIN PARA O CONTEÚDO PÓS-QUESTÃO:
+- Separe "Entenda o tema" em "Aula:" e "Alternativas:" e finalize com "Bizu:".
+- Aula: escreva uma mini-aula autossuficiente de 1 a 3 parágrafos sobre o conceito central.
 - Alternativas: use [[ALT:A]], [[ALT:B]], [[ALT:C]], [[ALT:D]] e [[ALT:E]] quando houver E.
 - Em [[ALT:A]], explique por que a correta está certa. Nas demais, explique o erro específico em poucas palavras.
-- A explicação da alternativa precisa ficar presa ao conteúdo dela, pois o site embaralha alternativa + explicação juntas.` : '';
+- A explicação da alternativa precisa ficar presa ao conteúdo dela, pois o site embaralha alternativa + explicação juntas.
+- Bizu: escreva em 1 a 3 frases a anotação High Yield específica que entraria no caderno de erros.` : '';
   return `
 Você vai criar conteúdo de estudo para uma Dúvida Rápida em português brasileiro.
 
@@ -149,7 +150,9 @@ REGRAS DAS QUESTÕES:
 ${alts}
 ${vofRule}
 ${distractorRule}
-- Depois de cada questão inclua "Gabarito: X" e "Explicação:".
+- Depois de cada questão inclua "Gabarito: X", "Entenda o tema:" e "Bizu:".
+- "Entenda o tema" deve ser uma mini-aula autossuficiente de 1 a 3 parágrafos sobre o assunto central, não apenas a justificativa do gabarito. Pode ser reutilizada em questões sobre o mesmo tema.
+- "Bizu" deve ter 1 a 3 frases, ser específico para o item e registrar a pista, regra, associação ou pegadinha que evitaria o erro novamente.
 ${adminExplanationFormat}
 
 REGRAS DOS FLASHCARDS:
@@ -163,9 +166,9 @@ FORMATO FINAL OBRIGATÓRIO:
 [enunciado]
 ${alts}
 Gabarito: A
-Explicação:${settings.adminQuestionExplanations ? `
+Entenda o tema:${settings.adminQuestionExplanations ? `
 Aula:
-[aula curta e completa sobre o tema]
+[mini-aula de 1 a 3 parágrafos sobre o tema]
 
 Alternativas:
 [[ALT:A]]
@@ -181,7 +184,8 @@ Alternativas:
 [por que a alternativa D está errada]
 
 [[ALT:E]]
-[por que a alternativa E está errada, se existir]` : ' [explicação]'}
+[por que a alternativa E está errada, se existir]` : ' [mini-aula de 1 a 3 parágrafos sobre o tema]'}
+Bizu: [anotação High Yield específica para esta questão]
 
 ## Flashcards
 ## Flashcard 1

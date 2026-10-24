@@ -92,7 +92,9 @@ assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
 // e 0,5 KiB gzip ao núcleo.
 // A ação de exportar a matéria importada acrescenta somente o disparador do
 // modal lazy ao menu de contexto: 28 bytes medidos acima do teto anterior.
-const ENTRY_RAW_LIMIT = 501.25 * 1024;
+// O parser compatível de Entenda o tema/Bizu e o novo campo opcional acrescentam
+// 1,2 KiB raw medido ao entry, sem novas dependências ou leituras no carregamento.
+const ENTRY_RAW_LIMIT = 503 * 1024;
 const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A curadoria e a seleção da Fábrica acrescentam um módulo administrativo
 // completo; o teto cresceu somente pelo custo medido desta primeira fatia.
@@ -116,10 +118,14 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // O exportador já era lazy (8,33 KiB gzip) e agora também incorpora imagens,
 // empacota mídia DOCX e gera HTML interativo autônomo. Ele ganha um budget
 // próprio medido; o teto do restante do núcleo foi reduzido na mesma proporção.
-const CORE_TOTAL_GZIP_LIMIT = 439 * 1024;
+// Prompts, parser e apresentação compatível de Entenda o tema/Bizu acrescentam
+// cerca de 1,7 KiB gzip medido ao conjunto; os geradores e telas seguem lazy.
+const CORE_TOTAL_GZIP_LIMIT = 441 * 1024;
 // Agrupar uma matéria inteira, oferecer ordem, aplicar a paleta completa e
 // converter marcadores em tags soma 1,8 KiB medido ao chunk lazy original.
-const QUESTION_EXPORT_GZIP_LIMIT = 16 * 1024;
+// Os blocos rotulados Entenda o tema e Bizu nos formatos HTML/PDF/DOCX somam
+// 0,3 KiB gzip medido e permanecem integralmente no exportador lazy.
+const QUESTION_EXPORT_GZIP_LIMIT = 16.5 * 1024;
 // A Fábrica concluída está arquivada no código-fonte, mas não possui ponto de
 // entrada no app. Seus chunks administrativos não devem ser emitidos enquanto
 // QUESTION_FACTORY_VISIBLE permanecer falso.

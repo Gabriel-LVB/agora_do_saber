@@ -83,7 +83,7 @@ const Spinner = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" viewB
 const FLASHCARD_CORRECT = 'CORRECT';
 const FLASHCARD_WRONG = 'WRONG';
 
-const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
+const EXPLANATION_LABELS = 'Entenda(?:[ \\t]+o)?[ \\t]+tema|Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
 // Um separador só encerra a explicação quando realmente antecede a próxima
 // questão (ou o fim do texto). Listas, subtítulos e divisórias internas da aula
 // não podem amputar a explicação.
@@ -1329,24 +1329,35 @@ const QuestionView = ({
 // ─── OPEN ANSWER INLINE ──────────────────────────────────────────────────────
 // Componente inline para questões abertas/dissertativas dentro do QuestionCard
 const OpenAnswerReference = ({ question, darkMode }) => {
-  const rawExpectedAnswer = String(question?.expectedAnswer || '').trim() || cleanQuestionExplanation(question?.explanation);
+  const explicitExpectedAnswer = String(question?.expectedAnswer || '').trim();
+  const rawExpectedAnswer = explicitExpectedAnswer || cleanQuestionExplanation(question?.explanation);
   const expectedAnswer = question?.libraryQuestionKind === 'old_exam'
     ? normalizeImportedQuestionText(rawExpectedAnswer)
     : rawExpectedAnswer;
+  const rawThemeExplanation = explicitExpectedAnswer ? cleanQuestionExplanation(question?.explanation) : '';
+  const themeExplanation = question?.libraryQuestionKind === 'old_exam'
+    ? normalizeImportedQuestionText(rawThemeExplanation)
+    : rawThemeExplanation;
+  const bizu = question?.libraryQuestionKind === 'old_exam'
+    ? normalizeImportedQuestionText(question?.bizu)
+    : String(question?.bizu || '').trim();
   if (!expectedAnswer) return null;
 
   return (
-    <aside
-      aria-live="polite"
-      className={`rounded-xl border p-4 ${darkMode?'border-yellow-800/70 bg-yellow-950/25':'border-yellow-200 bg-yellow-50'}`}
-    >
-      <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
-        Resposta esperada
-      </p>
-      <div className={`mt-2 text-sm leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>
-        {parseHtmlTextChat(expectedAnswer)}
-      </div>
-    </aside>
+    <div className="space-y-3" aria-live="polite">
+      <aside className={`rounded-xl border p-4 ${darkMode?'border-yellow-800/70 bg-yellow-950/25':'border-yellow-200 bg-yellow-50'}`}>
+        <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-yellow-300':'text-yellow-800'}`}>Resposta esperada</p>
+        <div className={`mt-2 text-sm leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(expectedAnswer)}</div>
+      </aside>
+      {themeExplanation&&<aside className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/45':'border-gray-200 bg-gray-50'}`}>
+        <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-yellow-300':'text-yellow-800'}`}>Entenda o tema</p>
+        <div className={`mt-2 text-sm leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(themeExplanation)}</div>
+      </aside>}
+      {bizu&&<aside className={`rounded-xl border p-4 ${darkMode?'border-blue-800/70 bg-blue-950/25':'border-blue-200 bg-blue-50'}`}>
+        <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-blue-300':'text-blue-800'}`}>Bizu</p>
+        <div className={`mt-2 text-sm font-medium leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(bizu)}</div>
+      </aside>}
+    </div>
   );
 };
 
@@ -1833,6 +1844,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
   // fallback: usa apiKey direto se onCall não for passado
   const callOracle = onCall || ((prompt, sys) => callGemini(prompt, sys, apiKey));
   const explanation = cleanQuestionExplanation(question.explanation);
+  const bizu = String(question.bizu || '').trim();
   const chatOptions = question.options || [];
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -1847,7 +1859,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
     setLoading(true);
     try {
       const questionText = splitQuestionCase(question);
-      const ctx = `${questionText.caseContext ? `Caso clínico: ${questionText.caseContext}\n\n` : ''}Questão: ${questionText.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`;
+      const ctx = `${questionText.caseContext ? `Caso clínico: ${questionText.caseContext}\n\n` : ''}Questão: ${questionText.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nEntenda o tema: ${explanation}${bizu ? `\n\nBizu: ${bizu}` : ''}`;
       const sys = `Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Responda com precisão clínica. Contexto:\n${ctx}`;
       const hist = messages.map(m=>`${m.role==='user'?'Estudante':'Oráculo'}: ${m.text}`).join('\n');
       const r = await callOracle(`${hist}\nEstudante: ${msg}`, sys);
@@ -1888,7 +1900,7 @@ const ChatBox = ({ question, darkMode, apiKey, oracleLength='medium', onCall, se
                     : (darkMode?'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600':'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200');
                 return (
                   <button key={opt.letter}
-                    onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const questionText=splitQuestionCase(question); const ctx=`${questionText.caseContext ? `Caso clínico: ${questionText.caseContext}\n\n` : ''}Questão: ${questionText.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nExplicação: ${explanation}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
+                    onClick={()=>{ const msg=`Por que a opção "${opt.text}" está ${opt.isCorrect?'correta':'incorreta'}? Explique detalhadamente.`; setMessages(p=>[...p,{role:'user',text:msg}]); setLoading(true); (async()=>{ try{ const questionText=splitQuestionCase(question); const ctx=`${questionText.caseContext ? `Caso clínico: ${questionText.caseContext}\n\n` : ''}Questão: ${questionText.statement}\n\nAlternativas:\n${chatOptions.map(o=>`${o.letter}) ${o.text}${o.isCorrect?' ✓':''}`).join('\n')}\n\nEntenda o tema: ${explanation}${bizu ? `\n\nBizu: ${bizu}` : ''}`; const sys=`Você é o Oráculo de Medicina da Ágora do Saber. ${ORACLE_LENGTH[oracleLength]?.inst||''} Contexto:\n${ctx}`; const r=await callOracle(msg,sys); setMessages(p=>[...p,{role:'assistant',text:r}]); }catch(e){setMessages(p=>[...p,{role:'assistant',text:'Tente novamente.'}]);}finally{setLoading(false);} })(); }}
                     title={opt.isCorrect ? 'Alternativa correta' : isWrongSelected ? 'Sua resposta' : `Explicar alternativa ${opt.letter}`}
                     className={`h-8 min-w-8 px-3 rounded-lg border text-sm font-bold transition-colors flex-shrink-0 ${tone}`}>
                     {opt.letter}
@@ -1916,6 +1928,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
   const [optimisticAnswer, setOptimisticAnswer] = useState(null);
   const [pressedAnswer, setPressedAnswer] = useState(null);
   const [lessonExplanationOpen, setLessonExplanationOpen] = useState(false);
+  const [bizuOpen, setBizuOpen] = useState(false);
   const [alternativeExplanationsOpen, setAlternativeExplanationsOpen] = useState(false);
   const [adminDisableBusy, setAdminDisableBusy] = useState(false);
   const answerLockRef = useRef(null);
@@ -1930,6 +1943,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
     setOptimisticAnswer(null);
     setPressedAnswer(null);
     setLessonExplanationOpen(false);
+    setBizuOpen(false);
     setAlternativeExplanationsOpen(false);
     setAdminDisableBusy(false);
   }, [question?.id]);
@@ -1960,6 +1974,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
     ? normalizeImportedQuestionText(value)
     : String(value || '');
   const explanation = normalizeDisplayText(cleanQuestionExplanation(question.explanation));
+  const bizu = normalizeDisplayText(question.bizu);
   const rawQuestionText = splitQuestionCase(question);
   const questionText = {
     caseContext:normalizeDisplayText(rawQuestionText.caseContext),
@@ -2053,7 +2068,10 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
   };
 
   useEffect(() => {
-    if (showResults && isAnswered && !isCorrect && !isSkipped) setLessonExplanationOpen(true);
+    if (showResults && isAnswered && !isCorrect && !isSkipped) {
+      setLessonExplanationOpen(true);
+      setBizuOpen(true);
+    }
   }, [showResults, isAnswered, isCorrect, isSkipped, question?.id]);
 
 	  const cardClass = question.isFlashcard && flashcardLarge
@@ -2273,7 +2291,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
             >
               <span className="flex min-w-0 items-center gap-3 font-bold">
                 <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${darkMode?'bg-yellow-900/30 text-yellow-400':'bg-yellow-50 text-yellow-700'}`}><BookOpen className="h-4 w-4"/></span>
-                Explicação da questão
+                Entenda o tema
               </span>
               <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-50 transition-transform ${lessonExplanationOpen?'rotate-180':''}`}/>
             </button>
@@ -2287,6 +2305,22 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
               </div>
             )}
           </div>
+
+          {bizu&&<div className="question-explanation-panel overflow-hidden rounded-xl">
+            <button
+              type="button"
+              onClick={()=>setBizuOpen(open=>!open)}
+              aria-expanded={bizuOpen}
+              className={`flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors md:px-5 ${darkMode?'text-blue-100 hover:bg-blue-950/30':'text-blue-900 hover:bg-blue-50/60'}`}
+            >
+              <span className="flex min-w-0 items-center gap-3 font-bold">
+                <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${darkMode?'bg-blue-900/40 text-blue-300':'bg-blue-50 text-blue-700'}`}><Zap className="h-4 w-4"/></span>
+                Bizu
+              </span>
+              <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-50 transition-transform ${bizuOpen?'rotate-180':''}`}/>
+            </button>
+            {bizuOpen&&<div className={`select-text border-t px-4 py-4 text-[15px] font-medium leading-relaxed md:px-5 md:py-5 md:text-base ${darkMode?'border-blue-900/60 text-gray-100':'border-blue-100 text-gray-800'}`} style={{userSelect:'text'}}>{parseHtmlTextChat(bizu)}</div>}
+          </div>}
 
           <div className="question-explanation-panel overflow-hidden rounded-xl">
             <button

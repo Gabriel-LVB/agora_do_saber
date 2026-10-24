@@ -399,6 +399,7 @@ export default function QuestionCurationView({ items = [], subjectOrder = [] }) 
           options:question.options || [],
           expectedAnswer:question.expectedAnswer || '',
           explanation:question.explanation || '',
+          bizu:question.bizu || '',
           metadata:analysis.metadataByQuestion?.[String(question.id)] || null,
           automaticSelection:tierByQuestion[String(question.id)] || null,
         })),

@@ -64,6 +64,7 @@ export const shuffleQuestionOptions = (question = {}, seedValue = question?.id) 
   });
   const correctLetter = shuffledOptions.find(option => option.isCorrect)?.letter || '';
   const explanation = normalizeDeclaredCorrectAlternativeReferences(question.explanation, correctLetter);
+  const bizu = normalizeDeclaredCorrectAlternativeReferences(question.bizu, correctLetter);
   const explanationParts = question.explanationParts
     ? {
       ...question.explanationParts,
@@ -83,6 +84,7 @@ export const shuffleQuestionOptions = (question = {}, seedValue = question?.id) 
     ...question,
     options:shuffledOptions,
     explanation,
+    ...(question.bizu != null ? { bizu } : {}),
     ...(question.explanationParts ? { explanationParts } : {}),
     optionShuffleVersion:QUESTION_OPTION_SHUFFLE_VERSION,
   };

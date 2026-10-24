@@ -104,6 +104,7 @@ const normalizeQuestion = (question, index, namespace, files) => {
     caseContext:cleanQuestionText(question.caseContext),
     options,
     explanation:cleanQuestionText(question.explanation),
+    bizu:cleanQuestionText(question.bizu),
     expectedAnswer,
     isOpen,
     isEssay,

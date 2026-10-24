@@ -57,7 +57,7 @@ export default function BizuarioModal({
       return topicContexts.map(tc => {
         if (tc.questions?.length) {
           const qLines = tc.questions.slice(0, 10).map((q, i) =>
-            `  ${i + 1}. ${String(q.statement || '').substring(0, 100).replace(/\n/g, ' ')}...\n     ✓ ${(q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || ''} | ${String(q.explanation || '').substring(0, 200).replace(/\n/g, ' ')}...`
+            `  ${i + 1}. ${String(q.statement || '').substring(0, 100).replace(/\n/g, ' ')}...\n     ✓ ${(q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || ''} | ${String(q.bizu || q.explanation || '').substring(0, 200).replace(/\n/g, ' ')}...`
           ).join('\n');
           return `TÓPICO: ${tc.title}\n${qLines}`;
         }
@@ -67,7 +67,7 @@ export default function BizuarioModal({
     }
     if (questions.length) {
       return questions.slice(0, 15).map((q, i) =>
-        `${i + 1}. ${String(q.statement || '').substring(0, 120).replace(/\n/g, ' ')}...\n   ✓ ${(q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || ''}\n   ${String(q.explanation || '').substring(0, 300).replace(/\n/g, ' ')}...`
+        `${i + 1}. ${String(q.statement || '').substring(0, 120).replace(/\n/g, ' ')}...\n   ✓ ${(q.options || []).find(o => o.isCorrect)?.text || q.expectedAnswer || ''}\n   ${String(q.bizu || q.explanation || '').substring(0, 300).replace(/\n/g, ' ')}...`
       ).join('\n\n');
     }
     if (subtopics.length) return `Subtópicos do tópico: ${subtopics.join(', ')}`;

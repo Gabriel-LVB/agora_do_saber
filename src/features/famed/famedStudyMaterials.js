@@ -51,7 +51,8 @@ export const famedPastQuestionsSourceText = subject => getFamedStudyMaterials(su
         compactText(question.statement),
         options,
         expected ? `Gabarito/Resposta esperada: ${expected}` : '',
-        compactText(question.explanation) ? `Explicação: ${compactText(question.explanation)}` : '',
+        compactText(question.explanation) ? `Entenda o tema: ${compactText(question.explanation)}` : '',
+        compactText(question.bizu) ? `Bizu: ${compactText(question.bizu)}` : '',
       ].filter(Boolean).join('\n');
     }).join('\n\n');
     return questions ? `## ${set?.title || `Bloco ${setIndex + 1}`}\n${questions}` : '';

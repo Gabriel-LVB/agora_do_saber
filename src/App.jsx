@@ -776,11 +776,13 @@ const shouldSplitQuestionRequest = ({ total = 0, plans = [], enabled = false, fl
   return (enabled || total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET) && total > ADMIN_ORACLE_QUESTION_CHUNK_TARGET;
 };
 
-const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
+const EXPLANATION_LABELS = 'Entenda(?:[ \\t]+o)?[ \\t]+tema|Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
+const BIZU_LABELS = 'Bizu|Dica(?:[ \\t]+High[ \\t]*Yield)?';
 // Um separador só encerra a explicação quando realmente antecede a próxima
 // questão (ou o fim do texto). Listas, subtítulos e divisórias internas da aula
 // não podem amputar a explicação.
 const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---(?=[ \t]*(?:\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$))|\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$/i;
+const BIZU_OR_QUESTION_RE = /\n[ \t]*(?:[-*•][ \t]*)?(?:\*\*)?[ \t]*(?:Bizu|Dica(?:[ \t]+High[ \t]*Yield)?)[ \t]*(?:(?:\*\*)?[ \t]*[:\-–—][ \t]*|(?:\*\*)?[ \t]*(?:\n|$))|\n[ \t]*---(?=[ \t]*(?:\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$))|\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$/i;
 
 const extractLabeledSection = (text = '', labels = EXPLANATION_LABELS, stopRe = QUESTION_OR_SEPARATOR_RE) => {
   const labelRe = new RegExp(
@@ -795,6 +797,8 @@ const extractLabeledSection = (text = '', labels = EXPLANATION_LABELS, stopRe = 
   const stop = rest.search(stopRe);
   return (stop >= 0 ? rest.substring(0, stop) : rest).trim();
 };
+
+const extractQuestionBizu = (text = '') => extractLabeledSection(text, BIZU_LABELS, QUESTION_OR_SEPARATOR_RE);
 
 const cleanQuestionExplanation = (explanation = '') => {
   let exp = String(explanation || '').replace(/\r\n/g, '\n').trim();
@@ -1099,7 +1103,8 @@ const buildErrorNotebookReviewPrompt = async ({ subjectTitle='', topicTitle='', 
 Enunciado: ${String(q.statement || '').replace(/\s+/g, ' ').trim()}
 ${options ? `Alternativas originais:\n${options}` : ''}
 Resposta correta/esperada: ${correct}
-Explicação original: ${String(q.explanation || '').replace(/\s+/g, ' ').trim()}`;
+Entenda o tema original: ${String(q.explanation || '').replace(/\s+/g, ' ').trim()}
+Bizu original: ${String(q.bizu || '').replace(/\s+/g, ' ').trim()}`;
   }).join('\n\n---\n\n');
 
   return `Você é um examinador de residência médica criando uma revisão ativa de caderno de erros.
@@ -1134,6 +1139,10 @@ ESTILO: ${styleInst}
 ${typeInst ? `${typeInst}\n` : ''}
 ${getVofPromptRule(settings)}
 ${isFlashcard || openMode ? '' : DISTRACTOR_CORRUPTION_PROMPT_RULE}
+${isFlashcard ? '' : `CONTEÚDO PÓS-QUESTÃO:
+- "Entenda o tema" deve ser uma mini-aula autossuficiente de 1 a 3 parágrafos sobre o conceito central, indo além da justificativa do gabarito. Pode ser reutilizada em questões sobre o mesmo tema.
+- "Bizu" deve ter 1 a 3 frases e registrar a pista, regra, associação ou pegadinha High Yield específica que evitaria o erro novamente.
+- Não cite letras fixas no Entenda o tema ou no Bizu, pois as alternativas serão embaralhadas.`}
 ${isFlashcard ? (isCloze ? `FORMATO OBRIGATÓRIO:
 ## Cloze N
 Texto: [frase curta com {{c1::termo oculto}}]
@@ -1147,13 +1156,15 @@ Explicação: [explicação causal ou discriminativa que ensine por que a respos
 ## Questão N
 [Enunciado]
 Resposta esperada: [resposta]
-Explicação: [correção didática curta]
+Entenda o tema: [mini-aula de 1 a 3 parágrafos]
+Bizu: [anotação High Yield específica]
 ---` : `FORMATO OBRIGATÓRIO:
 ## Questão N
 [Enunciado]
 ${alts}
 Gabarito: A
-Explicação: [por que a correta está certa e por que os distratores estão errados]`}
+Entenda o tema: [mini-aula de 1 a 3 parágrafos sobre o conceito central]
+Bizu: [anotação High Yield específica para esta questão]`}
 
 QUESTÕES ERRADAS DO CADERNO:
 ${sourceQuestions}
@@ -1923,7 +1934,8 @@ const parseData = (text, namespace = '') => {
       if (options.length < 2) return;
 
       let exp = '';
-      const labeledExp = extractLabeledSection(block);
+      const bizu = extractQuestionBizu(block);
+      const labeledExp = extractLabeledSection(block, EXPLANATION_LABELS, BIZU_OR_QUESTION_RE);
       if (labeledExp.length > 5) {
         exp = labeledExp;
       } else if (ansM) {
@@ -1968,6 +1980,7 @@ const parseData = (text, namespace = '') => {
           caseContext:structuredQuestionText.caseContext,
           options: final,
           explanation: exp,
+          bizu,
           explanationParts: structuredExp.hasStructured ? { lesson:exp, alternatives:structuredExp.alternatives } : null,
         });
       } else {
@@ -1978,7 +1991,7 @@ const parseData = (text, namespace = '') => {
           isCorrect: false,
           explanation:structuredExp.alternatives?.[o.letter] || '',
         }));
-        questions.push({ id, statement: stmt, caseContext:structuredQuestionText.caseContext, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)' });
+        questions.push({ id, statement: stmt, caseContext:structuredQuestionText.caseContext, options: final, explanation: '(Gabarito não fornecido — adicione "Gabarito: X" ao texto para marcar a resposta correta.)', bizu });
       }
     } catch(e) {}
   });
@@ -1999,7 +2012,7 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
   blocks.forEach(block => {
     if (!block.trim()) return;
     try {
-      const respMatch = block.match(/Resposta esperada:\s*([\s\S]*?)(?:\nExplica[çc][aã]o:|\nAlternativa correta:|\n---|$)/i);
+      const respMatch = block.match(/Resposta esperada:\s*([\s\S]*?)(?:\n(?:Entenda(?:\s+o)?\s+tema|Explica[çc][aã]o):|\nBizu:|\nAlternativa correta:|\n---|$)/i);
       if (!respMatch) return;
       const idM = block.match(/(?:\*\*|##)?[ \t]*Quest[aã]o(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i) || block.match(/(?:^|\n)[ \t]*(\d{1,3})[ \t]*[).]/m);
       const rawId = idM ? idM[1] : `${++qCount}`;
@@ -2020,12 +2033,13 @@ const parseOpenQuestions = (text, namespace='', isEssay=false) => {
       const expectedAnswer = respMatch ? respMatch[1].trim() : '';
 
       // Extrai explicação
-      let exp = cleanQuestionExplanation(extractLabeledSection(block));
+      let exp = cleanQuestionExplanation(extractLabeledSection(block, EXPLANATION_LABELS, BIZU_OR_QUESTION_RE));
+      const bizu = extractQuestionBizu(block);
       const questionIsEssay = autoEssay
         ? /(?:dissertativa|disserte|discuta|explique\s+detalhadamente|relacione|compare\s+criticamente|analise\s+criticamente)/i.test(block)
         : !!isEssay;
 
-      questions.push({ id, statement: stmt, caseContext:structuredQuestionText.caseContext, options: [], explanation: exp, expectedAnswer, isOpen: true, isEssay:questionIsEssay });
+      questions.push({ id, statement: stmt, caseContext:structuredQuestionText.caseContext, options: [], explanation: exp, bizu, expectedAnswer, isOpen: true, isEssay:questionIsEssay });
     } catch(e) {}
   });
 
@@ -2210,7 +2224,8 @@ Explicação: ${q.explanation || ''}
     return `## Questão ${index + 1}
 ${caseContext ? `Caso-base: ${caseContext}\nEnunciado: ${statement}` : statement}
 Resposta esperada: ${q.expectedAnswer || ''}
-Explicação: ${q.explanation || ''}
+Entenda o tema: ${q.explanation || ''}
+Bizu: ${q.bizu || ''}
 ---`;
   }
   const correct = (q.options || []).find(o => o.isCorrect);
@@ -2230,8 +2245,9 @@ ${opt.explanation || ''}`).join('\n\n')}`
 ${caseContext ? `Caso-base: ${caseContext}\nEnunciado: ${statement}` : statement}
 ${options}
 Alternativa correta: A
-Explicação:
+Entenda o tema:
 ${structuredExplanation}
+Bizu: ${q.bizu || ''}
 ---`;
 }).join('\n\n');
 
@@ -11902,7 +11918,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const allowedImportTypes = ['direct','vof','cespe','open','essay','flashcard', ...(isAdmin ? ['cloze'] : [])];
     const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, allowedImportTypes);
     const importTypeLabel = isAdmin ? 'flashcards e clozes' : 'flashcards';
-    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:`Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e ${importTypeLabel}, mas o texto precisa manter rótulos como "Resposta esperada:", "Explicação:", "Texto:"${isAdmin ? ' com {{c1::...}}' : ''} ou alternativas A-E.`,isAlert:true});return;}
+    if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:`Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e ${importTypeLabel}, mas o texto precisa manter rótulos como "Resposta esperada:", "Entenda o tema:" (ou o legado "Explicação:"), "Bizu:", "Texto:"${isAdmin ? ' com {{c1::...}}' : ''} ou alternativas A-E.`,isAlert:true});return;}
     try {
       await persistImportedQuestions({ questions:parsed.questions, summary:parsed.summary });
       addToast(`${parsed.questions.length} questões foram importadas.`, 'success', 4000);

@@ -61,7 +61,8 @@ FORMATO OBRIGATÓRIO (siga à risca, sem variações):
 ## Questão N
 [Enunciado — pergunta direta sobre um conceito]
 Resposta esperada: [resposta em 1-2 frases]
-Explicação: [explicação didática em 2-3 frases]
+Entenda o tema: [mini-aula de 1 a 3 parágrafos sobre o conceito central]
+Bizu: [anotação High Yield específica para esta questão]
 ---
 NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa correta:". Apenas o formato acima.`,
 
@@ -72,7 +73,8 @@ FORMATO OBRIGATÓRIO (siga à risca, sem variações):
 ## Questão N
 [Enunciado — pede para explicar, discutir ou relacionar conceitos]
 Resposta esperada: [resposta completa cobrindo os pontos principais, em 4-6 frases]
-Explicação: [feedback sobre o que uma boa resposta deve conter]
+Entenda o tema: [mini-aula de 1 a 3 parágrafos sobre o conceito central]
+Bizu: [anotação High Yield específica para esta questão]
 ---
 NÃO inclua alternativas A/B/C/D. NÃO coloque "Gabarito:" nem "Alternativa correta:". Apenas o formato acima.`,
 
@@ -255,24 +257,25 @@ Um estudante que nunca viu o tema deve errar. Um que estudou superficialmente de
 Antes de finalizar cada questão, faça este teste mental: "dá para acertar por eliminação grosseira, tamanho da alternativa, categoria absurda ou bom senso leigo?". Se sim, refaça alternativas e/ou enunciado.`;
 
 const REGRAS_EXPLICACAO = `
-REGRAS DA EXPLICAÇÃO:
-- Comece pelo CONCEITO central que a questão testa, não pelo gabarito
-- Explique por que a alternativa correta está certa usando raciocínio fisiopatológico ou clínico
-- Para cada distrator: explique por que está errado pelo conteúdo (nunca pela letra)
-- A explicação deve ensinar o assunto, não apenas confirmar o gabarito
-- PROIBIDO explicar repetindo a pergunta/resposta com palavras diferentes. A explicação deve responder pelo menos uma destas perguntas: por que isso acontece? como o mecanismo leva ao achado/conduta? quando essa regra muda? qual confusão próxima isso evita? qual consequência prática ou de prova decorre disso?
+REGRAS DE "ENTENDA O TEMA" E "BIZU":
+- "Entenda o tema" é uma mini-aula autossuficiente de 1 a 3 parágrafos sobre o tema central abordado. Ela deve permitir compreender o assunto, não apenas justificar o gabarito desta questão.
+- Comece pelo conceito central e aprofunde o mecanismo, raciocínio clínico, critério, comparação ou exceção que realmente ensina o tema.
+- Não repita o enunciado nem apenas reescreva a resposta. Responda por que isso acontece, como o mecanismo leva ao achado/conduta, quando a regra muda, qual confusão próxima deve ser evitada ou qual consequência prática decorre disso.
+- Quando duas ou mais questões abordarem exatamente o mesmo tema, você PODE reutilizar integralmente o mesmo "Entenda o tema". Não force variações artificiais de uma mini-aula que já está correta.
+- "Bizu" é separado e específico para esta questão: escreva a anotação High Yield que o aluno colocaria no caderno de erros para não errá-la novamente.
+- O Bizu deve ser curto, direto e acionável, em 1 a 3 frases. Destaque a pista decisiva, regra prática, associação, contraste ou pegadinha que resolve ESTE item.
+- Não use frases vazias como "lembre-se de estudar", "preste atenção" ou "tema importante". Não transforme o Bizu em outra aula.
 - Se não existe uma explicação causal, mecanística, clínica ou comparativa além de uma paráfrase, a questão provavelmente é fraca e deve ser substituída.
-- Tamanho: 3 a 5 parágrafos objetivos
 
 PROIBIDO ABSOLUTO — LETRAS DAS ALTERNATIVAS:
 As alternativas serão EMBARALHADAS antes de serem exibidas ao aluno — as letras A, B, C, D, E NÃO têm significado fixo.
-JAMAIS escreva "a alternativa A", "a opção B", "a letra C" na explicação.
+JAMAIS escreva "a alternativa A", "a opção B", "a letra C" no Entenda o tema ou no Bizu.
 Refira-se SEMPRE pelo conteúdo: "a opção que menciona X", "confundir Y com Z é um erro comum pois..."`;
 
 const REGRAS_EXPLICACAO_ADMIN = `
-REGRAS DA EXPLICAÇÃO — FORMATO ADMIN EXPERIMENTAL:
-- Separe a explicação em duas partes obrigatórias: "Aula:" e "Alternativas:".
-- "Aula:" deve ensinar o assunto da questão antes de falar do gabarito. Se o aluno lesse essa aula antes da questão, deveria entender o conceito e conseguir acertar.
+REGRAS DE "ENTENDA O TEMA" E "BIZU" — FORMATO ADMIN EXPERIMENTAL:
+- Separe o conteúdo em "Aula:", "Alternativas:" e "Bizu:".
+- "Aula:" é o conteúdo de "Entenda o tema": uma mini-aula autossuficiente de 1 a 3 parágrafos. Ela deve ensinar o assunto antes de falar do gabarito e pode ser reutilizada integralmente em questões do mesmo tema.
 - A aula deve explicar mecanismo, raciocínio clínico, critério, exceção ou comparação central. Não repita o enunciado nem diga apenas que a alternativa correta está certa.
 - "Alternativas:" deve explicar cada alternativa em poucas palavras, uma por bloco, usando a marcação exata [[ALT:A]], [[ALT:B]], [[ALT:C]], [[ALT:D]] e [[ALT:E]] quando houver E.
 - Em [[ALT:A]], explique por que a alternativa correta está certa.
@@ -280,12 +283,13 @@ REGRAS DA EXPLICAÇÃO — FORMATO ADMIN EXPERIMENTAL:
 - A explicação de cada alternativa deve ficar presa ao conteúdo daquela alternativa, porque o site vai embaralhar alternativa + explicação juntas.
 - Como a alternativa A é sempre a correta no texto bruto, [[ALT:A]] deve ser a explicação da correta antes do embaralhamento.
 - Não use parágrafos genéricos como "está errada porque não é a conduta correta". Diga o erro de conteúdo.
-- Tamanho: Aula com 2 a 5 parágrafos objetivos; cada [[ALT:X]] com 1 a 3 frases curtas.
+- "Bizu:" deve conter 1 a 3 frases curtas com a anotação High Yield específica que entraria no caderno de erros desta questão.
+- Tamanho: Aula com 1 a 3 parágrafos; cada [[ALT:X]] com 1 a 3 frases curtas; Bizu com 1 a 3 frases.
 
-FORMATO OBRIGATÓRIO DA EXPLICAÇÃO:
-Explicação:
+FORMATO OBRIGATÓRIO:
+Entenda o tema:
 Aula:
-[aula curta e completa sobre o tema da questão]
+[mini-aula de 1 a 3 parágrafos sobre o tema]
 
 Alternativas:
 [[ALT:A]]
@@ -301,7 +305,10 @@ Alternativas:
 [por que a alternativa D está errada]
 
 [[ALT:E]]
-[por que a alternativa E está errada, se existir]`;
+[por que a alternativa E está errada, se existir]
+
+Bizu:
+[anotação High Yield específica para esta questão]`;
 
 const questionExplanationRules = (settings = {}) => settings.adminQuestionExplanations ? REGRAS_EXPLICACAO_ADMIN : REGRAS_EXPLICACAO;
 
@@ -371,9 +378,9 @@ ${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa; repit
 Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 ${alts}
 Alternativa correta: [Letra]
-Explicação:
+Entenda o tema:
 ${adminQuestionExplanations ? `Aula:
-[aula curta e completa sobre o tema]
+[mini-aula de 1 a 3 parágrafos sobre o tema]
 
 Alternativas:
 [[ALT:A]]
@@ -389,7 +396,8 @@ Alternativas:
 [por que a alternativa D está errada]
 
 [[ALT:E]]
-[por que a alternativa E está errada, se existir]` : '[Explicação]'}
+[por que a alternativa E está errada, se existir]` : '[mini-aula de 1 a 3 parágrafos sobre o tema central]'}
+Bizu: [anotação High Yield específica para esta questão]
 ---
 
 INSTRUÇÃO CRÍTICA SOBRE AS ALTERNATIVAS:
@@ -413,8 +421,9 @@ export const QUESTION_REPAIR_CHECKLIST = [
   'Distratores plausíveis, da mesma categoria semântica e com nível de especificidade semelhante',
   'Distratores derivados da correta por uma corrupção conceitual decisiva, preservando algum núcleo verdadeiro sem criar uma segunda resposta correta',
   'Alternativas no menor texto suficiente para responder ao alvo, sem resumos explicativos que deem pistas',
-  'Explicação ensina o porquê e o como do conceito, sem parafrasear a resposta',
-  'Explicação sem referência fixa a letras, pois o site embaralha alternativas',
+  'Entenda o tema traz uma mini-aula de 1 a 3 parágrafos, sem parafrasear a resposta',
+  'Bizu registra em 1 a 3 frases a pista, regra ou pegadinha High Yield específica do item',
+  'Entenda o tema e Bizu sem referência fixa a letras, pois o site embaralha alternativas',
   'Coerência do formato obrigatório para o parser do site',
 ];
 
@@ -445,7 +454,8 @@ FORMATO DE SAÍDA OBRIGATÓRIO:
 ${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa]
 Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 Resposta esperada: [resposta objetiva]
-Explicação: [explicação didática]
+Entenda o tema: [mini-aula de 1 a 3 parágrafos sobre o conceito central]
+Bizu: [anotação High Yield específica para esta questão]
 ---` : `
 FORMATO DE SAÍDA OBRIGATÓRIO:
 ## Questão N
@@ -453,9 +463,9 @@ ${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa]
 Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 ${alts}
 Alternativa correta: A
-Explicação:
+Entenda o tema:
 ${adminExplanations ? `Aula:
-[aula curta e completa sobre o tema]
+[mini-aula de 1 a 3 parágrafos sobre o tema]
 
 Alternativas:
 [[ALT:A]]
@@ -471,7 +481,8 @@ Alternativas:
 [por que a alternativa D está errada]
 
 [[ALT:E]]
-[por que a alternativa E está errada, se existir]` : '[Explicação didática sem referir letras]'}
+[por que a alternativa E está errada, se existir]` : '[mini-aula de 1 a 3 parágrafos sem referir letras]'}
+Bizu: [anotação High Yield específica para esta questão]
 ---`;
 
   return `Você é revisor sênior de questões médicas da Ágora do Saber. Sua tarefa é fazer um passe rigoroso sobre uma bateria recém-criada e devolver apenas a versão final corrigida.
@@ -593,7 +604,8 @@ FORMATO OBRIGATÓRIO para cada questão (separe com ---):
 ${caseSeries ? `Caso-base: Caso 1 — [vinheta clínica original completa; repita-a integralmente em cada questão da sequência]
 Enunciado: [pergunta específica desta questão e eventual evolução nova]` : '[Enunciado]'}
 Resposta esperada: [resposta objetiva]
-Explicação: [explicação didática]
+Entenda o tema: [mini-aula de 1 a 3 parágrafos sobre o conceito central]
+Bizu: [anotação High Yield específica para esta questão]
 ---` : `${REGRAS_ALTERNATIVAS}\n${explanationInst}\n${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, caseSeries)}`;
 
   return `Você é o Oráculo de Medicina da Ágora do Saber. Sua missão é criar questões médicas de altíssima qualidade para residência médica.
@@ -793,15 +805,15 @@ Para cada tópico gere ${onlyFlashcards ? `a quantidade ideal de ${memoryCardNam
 FORMATO PARA QUESTÕES COM ALTERNATIVAS:
 ${TEMPLATE_QUESTAO(alts, !!s.adminQuestionExplanations, s.questionStyle === 'mixed')}` : '';
   const importRule = selectedType === 'direct'
-    ? `Use exclusivamente blocos "## Questão N" com ${na} alternativas, "Alternativa correta: [letra]" e "Explicação:".`
+    ? `Use exclusivamente blocos "## Questão N" com ${na} alternativas, "Alternativa correta: [letra]", "Entenda o tema:" e "Bizu:".`
     : selectedType === 'vof'
-      ? `Use exclusivamente blocos "## Questão N" com exatamente ${normalizedVofStatementCount(s)} assertivas em numerais romanos, 5 alternativas A-E com combinações V/F, "Alternativa correta: [letra]" e "Explicação:".`
+      ? `Use exclusivamente blocos "## Questão N" com exatamente ${normalizedVofStatementCount(s)} assertivas em numerais romanos, 5 alternativas A-E com combinações V/F, "Alternativa correta: [letra]", "Entenda o tema:" e "Bizu:".`
       : selectedType === 'cespe'
-        ? 'Use exclusivamente blocos "## Questão N" com A) Certo, B) Errado, "Alternativa correta: [letra]" e "Explicação:".'
+        ? 'Use exclusivamente blocos "## Questão N" com A) Certo, B) Errado, "Alternativa correta: [letra]", "Entenda o tema:" e "Bizu:".'
         : selectedType === 'open'
-          ? 'Use exclusivamente blocos "## Questão N" com "Resposta esperada:" e "Explicação:", sem alternativas.'
+          ? 'Use exclusivamente blocos "## Questão N" com "Resposta esperada:", "Entenda o tema:" e "Bizu:", sem alternativas.'
           : selectedType === 'essay'
-            ? 'Use exclusivamente blocos "## Questão N", "Tipo: Dissertativa", "Resposta esperada:" e "Explicação:", sem alternativas.'
+            ? 'Use exclusivamente blocos "## Questão N", "Tipo: Dissertativa", "Resposta esperada:", "Entenda o tema:" e "Bizu:", sem alternativas.'
             : selectedType === 'flashcard'
               ? 'Use exclusivamente blocos "## Flashcard N" com "Pergunta:", "Resposta:" e "Explicação:".'
               : 'Use exclusivamente blocos "## Cloze N" com "Texto:" contendo {{c1::...}} e "Extra:".';
@@ -1410,7 +1422,9 @@ FIDELIDADE À PROVA:
 - Transcreva integralmente todos os enunciados, casos, comandos e alternativas, preservando conteúdo, ordem e sentido. Corrija apenas ruído inequívoco de OCR e formatação quebrada.
 - Nunca resuma, modernize, complete ou reescreva uma questão antiga.
 - Use o gabarito oficial anexado. Não invente resposta. Se uma questão estiver ilegível ou não tiver gabarito confiável, não a fabrique: registre o problema antes de gerar o ZIP e peça o arquivo faltante.
-- Em explanation, produza uma explicação médica útil: explique por que o gabarito está correto e, nas objetivas, por que os distratores estão errados. Não use comentários vazios como "é a correta", "cai em prova" ou "vale lembrar".
+- Em explanation, produza o "Entenda o tema": uma mini-aula autossuficiente de 1 a 3 parágrafos sobre o assunto central, aprofundando mecanismo, raciocínio clínico, critério, comparação ou exceção. Ela deve ensinar além desta questão e pode ser reutilizada em itens sobre o mesmo tema.
+- Em bizu, produza uma anotação High Yield de 1 a 3 frases específica para o item: a pista, regra, associação ou pegadinha que o aluno colocaria no caderno de erros para não errar novamente.
+- Não use comentários vazios como "é a correta", "cai em prova", "vale lembrar" ou "preste atenção".
 - Em options[].explanation, explique especificamente o acerto ou o erro daquela alternativa, com raciocínio causal, clínico ou discriminativo.
 
 IMAGENS:
@@ -1439,7 +1453,8 @@ CONTRATO EXATO DE questions.json:
           "explanation": "por que esta alternativa está correta ou errada"
         }
       ],
-      "explanation": "explicação didática completa do gabarito",
+      "explanation": "Entenda o tema: mini-aula de 1 a 3 parágrafos",
+      "bizu": "anotação High Yield específica para esta questão",
       "expectedAnswer": "resposta esperada apenas para questão aberta",
       "isOpen": false,
       "isEssay": false,
@@ -1459,6 +1474,7 @@ REGRAS DO JSON:
 - IDs de questões devem ser únicos e estáveis.
 - Em questão objetiva, options deve preservar todas as alternativas e exatamente uma deve ter isCorrect: true.
 - Em questão aberta/dissertativa, use options: [], isOpen: true e preencha expectedAnswer com base no gabarito oficial.
+- bizu é opcional para compatibilidade com pacotes antigos, mas deve ser preenchido em todos os novos pacotes quando houver gabarito confiável.
 - Use quebras de linha escapadas como \\n dentro de strings quando necessário.
 - Cada caminho images[].file deve corresponder exatamente a um arquivo existente no ZIP; não deixe imagem sem vínculo nem vínculo sem arquivo.
 

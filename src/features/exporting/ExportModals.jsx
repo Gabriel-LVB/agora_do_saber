@@ -4,6 +4,7 @@ import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
 } from '../../lib/questionExplanation.js';
+import { normalizeImportedQuestionText } from '../../lib/importedQuestionText.js';
 import { extractQuestionExportTags } from './exportQuestionTags.js';
 
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
@@ -178,7 +179,7 @@ const buildExportQuestionLayout = (topic, order='blocks') => {
     : { questions, blocks };
 };
 
-const EXPLANATION_LABELS = 'Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
+const EXPLANATION_LABELS = 'Entenda(?:[ \\t]+o)?[ \\t]+tema|Explica[çc][aã]o|Corre[çc][aã]o|Coment[áa]rio|Justificativa|Fundamento|Racional|Racioc[íi]nio';
 const QUESTION_OR_SEPARATOR_RE = /\n[ \t]*---(?=[ \t]*(?:\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$))|\n[ \t]*(?:(?:\*\*|#{2,4})[ \t]*)?Quest[aã]o|$/i;
 const extractLabeledSection = (text = '', labels = EXPLANATION_LABELS, stopRe = QUESTION_OR_SEPARATOR_RE) => {
   const labelRe = new RegExp(
@@ -254,6 +255,9 @@ const questionTypeLabel = (question = {}) => question.isCloze
           ? 'Fixação'
           : 'Questão';
 const getQuestionExportData = (question = {}) => {
+  const normalizeExportText = value => question.libraryQuestionKind === 'old_exam'
+    ? normalizeImportedQuestionText(value)
+    : String(value || '');
   const parsed = parseQuestionExplanationParts(question.explanation || '');
   const alternatives = {
     ...(question.explanationParts?.alternatives || {}),
@@ -264,23 +268,28 @@ const getQuestionExportData = (question = {}) => {
     const letter = String(opt.letter || '').toUpperCase();
     const originalLetter = String(opt.originalLetter || '').toUpperCase();
     const explanation = opt.explanation || alternatives[originalLetter] || alternatives[letter] || '';
-    return { ...opt, explanation:normalizeDisplayedAlternativeReferences(explanation, letter) };
+    return {
+      ...opt,
+      text:normalizeExportText(opt.text),
+      explanation:normalizeExportText(normalizeDisplayedAlternativeReferences(explanation, letter)),
+    };
   });
   const correctLetter = String((question.options || []).find(opt => opt.isCorrect)?.letter || '').toUpperCase();
-  const lessonExplanation = normalizeDeclaredCorrectAlternativeReferences(
+  const lessonExplanation = normalizeExportText(normalizeDeclaredCorrectAlternativeReferences(
     cleanQuestionExplanation(question.explanationParts?.lesson || parsed.lesson || question.explanation || question.expectedAnswer || ''),
     correctLetter,
-  );
+  ));
   const caseContent = extractQuestionExportTags(text.caseContext);
   const statementContent = extractQuestionExportTags(text.statement);
   return {
     ...question,
     label:questionTypeLabel(question),
-    caseContext:caseContent.text,
-    statement:statementContent.text,
+    caseContext:normalizeExportText(caseContent.text),
+    statement:normalizeExportText(statementContent.text),
     tags:Array.from(new Set([...caseContent.tags,...statementContent.tags])),
     options,
     explanation:lessonExplanation,
+    bizu:normalizeExportText(question.bizu),
     hasAlternativeExplanations:options.some(opt => String(opt.explanation || '').trim()),
   };
 };
@@ -349,7 +358,9 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .answer-card.last{margin-bottom:16px}
 .answer-title{margin:0 0 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#15803d}
 .answer-correct{margin:0 0 10px;font-size:13px;font-weight:800;color:#065f46}
+.learning-label{margin:12px 0 5px;font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;color:#92400e}
 .explanation-box{border-left:3px solid #d97706;background:#f9fafb;border-radius:0 10px 10px 0;padding:11px 13px;margin-top:10px;font-family:Georgia,serif;font-size:13px;line-height:1.62;color:#374151}
+.bizu-box{border-left:3px solid #2563eb;background:#eff6ff;border-radius:0 10px 10px 0;padding:10px 13px;font-size:12px;font-weight:600;line-height:1.6;color:#1e3a5f}
 .alternative-analysis{margin-top:12px;overflow:hidden;border:1px solid #e5e7eb;border-radius:10px;background:#fff;font-family:Arial,sans-serif}.alternative-analysis.compact{margin-top:10px}.alternative-analysis-title{border-bottom:1px solid #e5e7eb;padding:9px 12px;background:#f9fafb;color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.alternative-analysis-row{display:flex;gap:10px;padding:10px 12px}.alternative-analysis-row+.alternative-analysis-row{border-top:1px solid #f1f5f9}.alternative-analysis-letter{display:inline-flex;width:24px;height:24px;flex:0 0 24px;align-items:center;justify-content:center;border-radius:7px;background:#f3f4f6;color:#6b7280;font-size:12px;font-weight:700}.alternative-analysis-copy{min-width:0}.alternative-analysis-result{margin:0 0 3px;color:#6b7280;font-size:11px;font-weight:700}.alternative-analysis-text{color:#374151;font-size:12px;line-height:1.55}.alternative-analysis-row.is-correct .alternative-analysis-letter{background:#dcfce7;color:#15803d}.alternative-analysis-row.is-correct .alternative-analysis-result{color:#15803d}
 .answer-separator{border-top:1px dashed #cbd5e1;margin:24px 0 10px;text-align:center}
 .answer-separator span{position:relative;top:-8px;background:#fff;padding:0 10px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#9ca3af}
@@ -379,6 +390,7 @@ html[data-theme="dark"] .interactive-option.is-incorrect{border-color:color-mix(
 html[data-theme="dark"] .answer-card{border-color:color-mix(in srgb,#3f9b72 38%,transparent);border-left-color:#3f9b72}
 html[data-theme="dark"] .answer-title,html[data-theme="dark"] .answer-correct,html[data-theme="dark"] .interactive-score,html[data-theme="dark"] .interactive-feedback.correct{color:#9bd3b7}
 html[data-theme="dark"] .explanation-box{border-color:var(--export-accent);background:var(--export-surface);color:var(--export-text)}
+html[data-theme="dark"] .learning-label{color:var(--export-accent-text)}html[data-theme="dark"] .bizu-box{border-color:#4f8fd1;background:color-mix(in srgb,#2f668c 18%,var(--export-surface));color:var(--export-text)}
 html[data-theme="dark"] .alternative-analysis{border-color:var(--export-line);background:var(--export-surface-strong)}html[data-theme="dark"] .alternative-analysis-title{border-color:var(--export-line);background:var(--export-surface);color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-row+.alternative-analysis-row{border-color:var(--export-line)}html[data-theme="dark"] .alternative-analysis-letter{background:var(--export-surface-muted);color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-result{color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-text{color:var(--export-text)}html[data-theme="dark"] .alternative-analysis-row.is-correct .alternative-analysis-letter{background:color-mix(in srgb,#3f9b72 18%,var(--export-surface));color:#9bd3b7}html[data-theme="dark"] .alternative-analysis-row.is-correct .alternative-analysis-result{color:#9bd3b7}
 html[data-theme="dark"] .answer-separator{border-color:var(--export-line)}html[data-theme="dark"] .answer-separator span{background:var(--export-bg);color:var(--export-muted)}
 html[data-theme="dark"] .interactive-toolbar{border-color:var(--export-line);background:var(--export-surface-strong);box-shadow:0 10px 30px rgba(0,0,0,.22)}
@@ -419,7 +431,8 @@ const renderPdfAnswerHtml = (question, idx, { compact = false, embedded = false,
   return `<section class="answer-card ${compact || embedded ? 'compact' : ''} ${isLast ? 'last' : ''}">
 <p class="answer-title">Gabarito — ${escapeHtml(data.label)} ${idx + 1}</p>
 ${corr ? `<p class="answer-correct">${escapeHtml(corr.letter)}) ${textToHtml(corr.text || '')}</p>` : ''}
-${data.explanation ? `<div class="explanation-box">${textToHtml(data.explanation)}</div>` : ''}
+${data.explanation ? `<p class="learning-label">Entenda o tema</p><div class="explanation-box">${textToHtml(data.explanation)}</div>` : ''}
+${data.bizu ? `<p class="learning-label">Bizu</p><div class="bizu-box">${textToHtml(data.bizu)}</div>` : ''}
 ${data.hasAlternativeExplanations ? renderAlternativeAnalysisHtml(data.options, { compact:compact || embedded }) : ''}
 </section>`;
 };
@@ -962,7 +975,14 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
       if (showAnswer) {
         const corr = (data.options || []).find(o => o.isCorrect);
         if (corr) xml += docxParagraph(`Gabarito: ${corr.letter}) ${corr.text || ''}`, { bold:true, color:'15803D', after:80 });
-        xml += docxParagraph(data.explanation || '', { color:'374151', after:160 });
+        if (data.explanation) {
+          xml += docxParagraph('Entenda o tema', { bold:true, color:'92400E', after:40 });
+          xml += docxParagraph(data.explanation, { color:'374151', after:120 });
+        }
+        if (data.bizu) {
+          xml += docxParagraph('Bizu', { bold:true, color:'1D4ED8', after:40 });
+          xml += docxParagraph(data.bizu, { color:'1E3A5F', after:160 });
+        }
         if (data.hasAlternativeExplanations) {
           xml += docxParagraph('Análise das alternativas', { bold:true, color:'374151', after:60 });
           (data.options || []).filter(o => o.explanation).forEach(o => {
@@ -979,7 +999,14 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
       const data = getQuestionExportData(q);
       const corr = (data.options || []).find(o => o.isCorrect);
       let xml = docxParagraph(`Q${qi + 1}. ${corr ? `${corr.letter}) ${corr.text || ''}` : ''}`, { bold:true, color:'065F46', after:40 });
-      xml += docxParagraph(data.explanation || '', { color:'374151', after:120 });
+      if (data.explanation) {
+        xml += docxParagraph('Entenda o tema', { bold:true, color:'92400E', after:40 });
+        xml += docxParagraph(data.explanation, { color:'374151', after:100 });
+      }
+      if (data.bizu) {
+        xml += docxParagraph('Bizu', { bold:true, color:'1D4ED8', after:40 });
+        xml += docxParagraph(data.bizu, { color:'1E3A5F', after:120 });
+      }
       if (data.hasAlternativeExplanations) {
         xml += docxParagraph('Análise das alternativas', { bold:true, color:'374151', after:40 });
         (data.options || []).filter(o => o.explanation).forEach(o => {
@@ -1086,7 +1113,7 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
       <div className={`w-full max-w-lg rounded-2xl border overflow-y-auto p-8 ${dm?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar {isFolder?'Pasta':'Aula'}</h3>
 
-        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Gabarito e explicações</p>
+        <p className={`text-xs font-bold uppercase mb-3 ${dm?'text-gray-400':'text-gray-500'}`}>Gabarito, tema e bizu</p>
         <div className="space-y-2 mb-5">
           {[{k:'after',title:'Logo após cada questão',desc:'Resposta e explicação abaixo de cada questão'},
             {k:'end',title:'No final (modo simulado)',desc:'Questões sem resposta + gabarito em página separada'},
@@ -1175,7 +1202,7 @@ const ExportModal = ({ topic:requestedTopic, subject, onClose, darkMode }) => {
     } else { // exam mode
       body += '<h2>Questões</h2>';
       body += renderQuestionGroups((question,index) => renderPdfQuestionHtml(question,index),'h3');
-      body += '<div class="pb"><h2>Gabarito e comentários</h2>';
+      body += '<div class="pb"><h2>Gabarito, tema e bizu</h2>';
       body += renderQuestionGroups((question,index) => renderPdfAnswerHtml(question,index,{ compact:true }),'h3');
       body += '</div>';
     }
@@ -1212,7 +1239,14 @@ const ExportModal = ({ topic:requestedTopic, subject, onClose, darkMode }) => {
       const corr = (data.options || []).find(o => o.isCorrect);
       let xml = docxParagraph(`Gabarito — ${data.label} ${idx + 1}`, { bold:true, color:'15803D', after:60 });
       if (corr) xml += docxParagraph(`${corr.letter}) ${corr.text || ''}`, { bold:true, color:'065F46', after:60 });
-      xml += docxParagraph(data.explanation || '', { color:'374151', after:160 });
+      if (data.explanation) {
+        xml += docxParagraph('Entenda o tema', { bold:true, color:'92400E', after:40 });
+        xml += docxParagraph(data.explanation, { color:'374151', after:120 });
+      }
+      if (data.bizu) {
+        xml += docxParagraph('Bizu', { bold:true, color:'1D4ED8', after:40 });
+        xml += docxParagraph(data.bizu, { color:'1E3A5F', after:160 });
+      }
       if (data.hasAlternativeExplanations) {
         xml += docxParagraph('Análise das alternativas', { bold:true, color:'374151', after:60 });
         (data.options || []).filter(o => o.explanation).forEach(o => {
@@ -1290,7 +1324,7 @@ const ExportModal = ({ topic:requestedTopic, subject, onClose, darkMode }) => {
     <div className="modal-scroll fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black bg-opacity-90 p-4">
       <div className={`w-full max-w-md rounded-2xl border overflow-y-auto p-8 ${darkMode?'bg-gray-800 border-gray-700':'bg-white border-gray-200'}`} style={{maxHeight:'calc(100dvh - 6rem)'}}>
         <h3 className="text-xl font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3"><Printer className="w-6 h-6"/>Exportar</h3>
-        <p className={`text-xs font-bold uppercase mb-3 ${darkMode?'text-gray-400':'text-gray-500'}`}>Gabarito e explicações</p>
+        <p className={`text-xs font-bold uppercase mb-3 ${darkMode?'text-gray-400':'text-gray-500'}`}>Gabarito, tema e bizu</p>
         <div className="space-y-3 mb-6">
           {opts.map(o=>(
             <label key={o.k} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${mode===o.k?(darkMode?'border-yellow-500 bg-yellow-900/20':'border-yellow-500 bg-yellow-50'):(darkMode?'border-gray-700 hover:border-gray-500':'border-gray-200 hover:border-gray-300')}`}>
