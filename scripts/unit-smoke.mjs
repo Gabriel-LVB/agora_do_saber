@@ -2793,9 +2793,16 @@ assert.doesNotMatch(questionFeatureSource, /question\.explanationParts && \(ques
 assert.match(questionFeatureSource, /API_KEY_MISSING/);
 assert.match(questionFeatureSource, /Configure uma chave Gemini nas Configurações/);
 assert.match(questionFeatureSource, /parsed\?\.answer && parsed\?\.score != null/);
-assert.match(questionFeatureSource, /const OpenAnswerLoadingReference =/);
+assert.match(questionFeatureSource, /const OpenAnswerReference =/);
 assert.match(questionFeatureSource, /Resposta esperada/);
-assert.match(questionFeatureSource, /\(loading\|\|result\)&&<OpenAnswerLoadingReference question=\{question\} darkMode=\{dm\}\/\>/);
+assert.match(questionFeatureSource, /Mostrar resposta esperada/);
+assert.match(questionFeatureSource, /Corrigir com IA/);
+assert.match(questionFeatureSource, /showExpected&&<OpenAnswerReference question=\{question\} darkMode=\{dm\}\/\>/);
+assert.match(questionFeatureSource, /import\('\.\/openAnswerGrading\.js'\)/);
+const openAnswerGradingSource = await readFile(new URL('../src/features/questions/openAnswerGrading.js', import.meta.url), 'utf8');
+assert.match(openAnswerGradingSource, /avalie somente o que o enunciado pediu/);
+assert.match(openAnswerGradingSource, /“DUP duodenal” corresponde a “doença ulcerosa péptica/);
+assert.match(openAnswerGradingSource, /não pode perder pontos por omitir AINE, H\. pylori, EDA ou teste da urease/);
 assert.match(questionFeatureSource, /const renderClozeSentence =/);
 assert.match(questionFeatureSource, /Revelar informação/);
 assert.match(questionFeatureSource, />Entenda</);

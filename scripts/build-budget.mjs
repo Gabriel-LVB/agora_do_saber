@@ -42,6 +42,7 @@ let sqlVendor = null;
 let usmle = null;
 let libraryQuestionAssets = null;
 let questionOptions = null;
+let openAnswerGrading = null;
 let questionExport = null;
 let vercelAnalytics = null;
 
@@ -79,6 +80,7 @@ for (const file of jsFiles) {
   if (file.startsWith('UsmleView-')) usmle = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('libraryQuestionAssets-')) libraryQuestionAssets = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('questionOptions-')) questionOptions = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('openAnswerGrading-')) openAnswerGrading = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('ExportModals-')) questionExport = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('vercel-analytics-')) vercelAnalytics = { file, raw:data.length, gzip:gzipSize };
 }
@@ -195,6 +197,9 @@ const LIBRARY_QUESTION_ASSETS_GZIP_LIMIT = 2 * 1024;
 // questões e preserva a letra original apenas na fronteira de persistência.
 // Mantê-lo em chunk próprio evita cobrar essa migração visual da Home.
 const QUESTION_OPTIONS_GZIP_LIMIT = 1 * 1024;
+// As instruções detalhadas da correção de respostas abertas só são baixadas
+// quando o aluno pede explicitamente a avaliação da IA.
+const OPEN_ANSWER_GRADING_GZIP_LIMIT = 2 * 1024;
 // A telemetria da Vercel carrega em um chunk isolado depois da primeira pintura,
 // sem aumentar o núcleo da aplicação nem bloquear a Home.
 const VERCEL_ANALYTICS_GZIP_LIMIT = 2 * 1024;
@@ -217,6 +222,7 @@ const TOTAL_GZIP_LIMIT = CORE_TOTAL_GZIP_LIMIT
   + USMLE_GZIP_LIMIT
   + LIBRARY_QUESTION_ASSETS_GZIP_LIMIT
   + QUESTION_OPTIONS_GZIP_LIMIT
+  + OPEN_ANSWER_GRADING_GZIP_LIMIT
   + VERCEL_ANALYTICS_GZIP_LIMIT
   + QUESTION_EXPORT_GZIP_LIMIT;
 const fsrsSchedulerGzip = (fsrsScheduler?.gzip || 0) + (fsrsVendor?.gzip || 0);
@@ -249,6 +255,7 @@ const coreGzip = totalGzip
   - (usmle?.gzip || 0)
   - (libraryQuestionAssets?.gzip || 0)
   - (questionOptions?.gzip || 0)
+  - (openAnswerGrading?.gzip || 0)
   - (questionExport?.gzip || 0)
   - (vercelAnalytics?.gzip || 0);
 
@@ -263,6 +270,11 @@ assert.ok(questionOptions, 'A compatibilidade de alternativas importadas deve pe
 assert.ok(
   questionOptions.gzip <= QUESTION_OPTIONS_GZIP_LIMIT,
   `Alternativas importadas passaram do budget: ${fmt(questionOptions.gzip)} > ${fmt(QUESTION_OPTIONS_GZIP_LIMIT)}`
+);
+assert.ok(openAnswerGrading, 'A correção de respostas abertas deve permanecer em chunk lazy próprio.');
+assert.ok(
+  openAnswerGrading.gzip <= OPEN_ANSWER_GRADING_GZIP_LIMIT,
+  `Correção de respostas abertas passou do budget: ${fmt(openAnswerGrading.gzip)} > ${fmt(OPEN_ANSWER_GRADING_GZIP_LIMIT)}`
 );
 assert.ok(questionExport, 'O exportador de questões deve permanecer em chunk lazy próprio.');
 assert.ok(

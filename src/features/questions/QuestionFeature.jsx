@@ -1327,7 +1327,7 @@ const QuestionView = ({
 
 // ─── OPEN ANSWER INLINE ──────────────────────────────────────────────────────
 // Componente inline para questões abertas/dissertativas dentro do QuestionCard
-const OpenAnswerLoadingReference = ({ question, darkMode }) => {
+const OpenAnswerReference = ({ question, darkMode }) => {
   const expectedAnswer = String(question?.expectedAnswer || '').trim() || cleanQuestionExplanation(question?.explanation);
   if (!expectedAnswer) return null;
 
@@ -1361,32 +1361,23 @@ const OpenAnswerInline = ({ question, darkMode, apiKey, onCall, oracleLength, sa
   const [answer, setAnswer]   = useState(parsed?.answer || '');
   const [result, setResult]   = useState(parsed?.score != null ? parsed : null);
   const [loading, setLoading] = useState(false);
+  const [showExpected, setShowExpected] = useState(!!parsed);
   const [editing, setEditing] = useState(!(parsed?.answer && parsed?.score != null));
 
   const callOracle = onCall || ((p,s) => callGemini(p, s, apiKey));
 
-  const submit = async () => {
+  const correctWithAi = async () => {
     if (!answer.trim() || loading) return;
+    setShowExpected(true);
     setLoading(true);
     try {
-      const sys = `Você é um professor de medicina corrigindo uma prova de residência. Seja rigoroso e honesto.
-
-QUESTÃO: ${question.statement}
-GABARITO/REFERÊNCIA: ${question.expectedAnswer || question.explanation || ''}
-RESPOSTA DO ALUNO: ${answer}
-
-REGRA PRINCIPAL: avalie se a resposta demonstra conhecimento médico real sobre o tema perguntado.
-- Se a resposta é vaga, genérica, nonsense, incompleta demais ou claramente um chute → nota baixa (0 a 30)
-- Se menciona algo correto mas de forma superficial ou incompleta → nota média (31 a 65)
-- Se demonstra conhecimento técnico real e cobre os pontos essenciais → nota alta (66 a 100)
-- NÃO dê crédito por coincidências textuais — o aluno pode ter acertado uma palavra sem saber o conceito
-- NÃO seja condescendente — se errou, errou; se não sabe, não sabe
-
-Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
-{"nota":número de 0 a 100,"veredicto":"CORRETO|PARCIALMENTE CORRETO|INCORRETO","feedback":"Use 3-5 frases como aula: mostre o que o aluno acertou ou errou, qual é a resposta correta e por que cada ponto é clinicamente relevante. Se errou tudo, explique o conteúdo do zero."}`;
-      const raw = await callOracle('Corrija esta resposta.', sys);
+      const { buildOpenAnswerGradingPrompt } = await import('./openAnswerGrading.js');
+      const sys = buildOpenAnswerGradingPrompt({ question, answer, isEssay });
+      const raw = await callOracle('Avalie a resposta conforme o escopo exato do enunciado.', sys);
       const json = JSON.parse(raw.replace(/```json|```/g,'').trim());
-      const saved = { answer, score: json.nota, verdict: json.veredicto, feedback: json.feedback };
+      const score = Number(json.nota);
+      if (!Number.isFinite(score)) throw new Error('A correção não retornou uma nota válida.');
+      const saved = { answer, score:Math.max(0,Math.min(100,score)), verdict:json.veredicto, feedback:json.feedback };
       setResult(saved);
       setEditing(false);
       onSave(JSON.stringify(saved));
@@ -1413,13 +1404,17 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
             rows={isEssay ? 7 : 3}
             className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-700 border-gray-600 text-white placeholder-gray-500':'bg-gray-50 border-gray-200'}`}
           />
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{answer.length}/{maxChars}</span>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               {result && <button onClick={()=>setEditing(false)} className={`text-xs px-3 py-1.5 rounded-lg ${dm?'text-gray-400 hover:text-gray-200':'text-gray-500 hover:text-gray-700'}`}>Cancelar</button>}
-              <button onClick={submit} disabled={!answer.trim()||loading}
+              <button type="button" onClick={()=>setShowExpected(true)} disabled={loading||showExpected}
+                className={`px-4 py-2 rounded-xl border font-bold text-sm disabled:opacity-50 ${dm?'border-gray-600 text-gray-200 hover:bg-gray-700':'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+                {showExpected ? 'Resposta exibida' : 'Mostrar resposta esperada'}
+              </button>
+              <button type="button" onClick={correctWithAi} disabled={!answer.trim()||loading}
                 className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-40">
-                {loading ? <><Spinner className="w-3.5 h-3.5 text-white"/>Corrigindo...</> : 'Enviar'}
+                {loading ? <><Spinner className="w-3.5 h-3.5 text-white"/>Corrigindo...</> : 'Corrigir com IA'}
               </button>
             </div>
           </div>
@@ -1436,7 +1431,7 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
         </div>
       )}
 
-      {(loading||result)&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
+      {showExpected&&<OpenAnswerReference question={question} darkMode={dm}/>}
 
       {/* Resultado da correção */}
       {result && !editing && (
@@ -1472,31 +1467,19 @@ const OpenAnswerModal = ({ question, darkMode, apiKey, onCall, onClose, isEssay=
   const dm = darkMode;
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showExpected, setShowExpected] = useState(false);
   const [result, setResult] = useState(null); // { score, feedback }
   const maxChars = isEssay ? 2000 : 400;
 
-  const submit = async () => {
+  const correctWithAi = async () => {
     if (!answer.trim() || loading) return;
+    setShowExpected(true);
     setLoading(true);
     try {
-      const ctx = isEssay
-        ? `Questão dissertativa: ${question.statement}`
-        : `Questão de resposta curta: ${question.statement}`;
-      const esperado = question.expectedAnswer || question.explanation || '';
-      const sys = `Você é um professor/monitor corrigindo uma resposta de aluno. Seja direto, justo e formal — como um docente experiente, não um assistente puxa-saco.
-
-QUESTÃO: ${ctx}
-GABARITO/REFERÊNCIA: ${esperado}
-RESPOSTA DO ALUNO: ${answer}
-
-Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações fora do JSON):
-{
-  "nota": <número de 0 a 100>,
-  "veredicto": "<CORRETO|PARCIALMENTE CORRETO|INCORRETO>",
-  "feedback": "<2-4 frases diretas: o que acertou, o que errou, o que faltou. Sem elogios excessivos. Aponte a resposta correta se errou.>"
-}`;
+      const { buildOpenAnswerGradingPrompt } = await import('./openAnswerGrading.js');
+      const sys = buildOpenAnswerGradingPrompt({ question, answer, isEssay });
       const call = onCall || ((p, s) => callGemini(p, s, apiKey));
-      const raw = await call('Corrija esta resposta.', sys);
+      const raw = await call('Avalie a resposta conforme o escopo exato do enunciado.', sys);
       const json = JSON.parse(raw.replace(/```json|```/g, '').trim());
       setResult(json);
     } catch(e) {
@@ -1529,12 +1512,18 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
                 rows={isEssay ? 8 : 4}
                 className={`w-full p-3 rounded-xl border resize-none outline-none focus:ring-2 focus:ring-yellow-500 text-sm ${dm?'bg-gray-800 border-gray-700 text-white':'bg-white border-gray-200'}`}
               />
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className={`text-xs ${dm?'text-gray-500':'text-gray-400'}`}>{answer.length}/{maxChars} chars</span>
-                <button onClick={submit} disabled={!answer.trim() || loading}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-40">
-                  {loading ? <><Spinner className="w-4 h-4 text-white"/>Corrigindo...</> : 'Enviar para o Oráculo'}
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button type="button" onClick={()=>setShowExpected(true)} disabled={loading||showExpected}
+                    className={`px-4 py-2.5 rounded-xl border font-bold text-sm disabled:opacity-50 ${dm?'border-gray-600 text-gray-200':'border-gray-300 text-gray-700'}`}>
+                    {showExpected ? 'Resposta exibida' : 'Mostrar resposta esperada'}
+                  </button>
+                  <button type="button" onClick={correctWithAi} disabled={!answer.trim() || loading}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold text-sm disabled:opacity-40">
+                    {loading ? <><Spinner className="w-4 h-4 text-white"/>Corrigindo...</> : 'Corrigir com IA'}
+                  </button>
+                </div>
               </div>
             </>
           ) : (
@@ -1560,7 +1549,7 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
               )}
             </div>
           )}
-          {(loading||result)&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
+          {showExpected&&<OpenAnswerReference question={question} darkMode={dm}/>}
         </div>
         <div className={`px-5 pb-5 pt-3 border-t flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <button onClick={onClose} className={`w-full py-3 rounded-xl font-bold text-sm ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
