@@ -125,7 +125,7 @@ IMAGENS E VÍNCULOS:
 LIMITES TÉCNICOS DO IMPORTADOR:
 - ZIP completo: no máximo 25 MB.
 - Conteúdo total descompactado: no máximo 30 MB.
-- Cada imagem: no máximo 600 KB.
+- Prefira imagens compactas e nítidas. O importador otimiza automaticamente imagens estáticas maiores antes de salvá-las; GIFs animados ainda devem ter no máximo 600 KB.
 - Soma das imagens efetivamente vinculadas: no máximo 12 MB.
 - Comprima as imagens sem apagar informação diagnóstica. Se o material ultrapassar os limites, divida-o em mais de um pacote coerente.
 

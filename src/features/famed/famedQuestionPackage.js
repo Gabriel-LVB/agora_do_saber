@@ -34,6 +34,15 @@ const bytesToDataUrl = (bytes, mimeType) => {
   return `data:${mimeType};base64,${btoa(binary)}`;
 };
 
+const optimizeImage = async (bytes, mimeType, file) => {
+  if (bytes.length <= MAX_IMAGE_BYTES) return { bytes, mimeType, fileName:file.split('/').pop() };
+  if (mimeType === 'image/gif') {
+    throw new Error(`A imagem GIF “${file}” está grande demais e não pode ser compactada sem perder a animação. Reduza-a para menos de 600 KB e tente novamente.`);
+  }
+  const { optimizeQuestionImage } = await import('./questionImageOptimization.js');
+  return optimizeQuestionImage({ bytes, mimeType, file, maxBytes:MAX_IMAGE_BYTES });
+};
+
 const readBytes = async input => {
   if (input instanceof Uint8Array) return input;
   if (input instanceof ArrayBuffer) return new Uint8Array(input);
@@ -56,7 +65,7 @@ const normalizeOption = (option, index) => {
   };
 };
 
-const normalizeQuestion = (question, index, namespace, files, assetsByPath) => {
+const normalizeQuestion = (question, index, namespace, files) => {
   if (!question || typeof question !== 'object' || Array.isArray(question)) {
     throw new Error(`A questão ${index + 1} não é um objeto válido.`);
   }
@@ -81,16 +90,6 @@ const normalizeQuestion = (question, index, namespace, files, assetsByPath) => {
     const extension = extensionOf(file);
     const mimeType = IMAGE_MIME_TYPES[extension];
     if (!mimeType) throw new Error(`A imagem “${file}” usa um formato não aceito.`);
-    if (bytes.length > MAX_IMAGE_BYTES) throw new Error(`A imagem “${file}” está grande demais para ser salva. Comprima-a e gere o pacote novamente.`);
-    if (!assetsByPath.has(file)) {
-      assetsByPath.set(file, {
-        file,
-        fileName:file.split('/').pop(),
-        mimeType,
-        byteLength:bytes.length,
-        dataUrl:bytesToDataUrl(bytes,mimeType),
-      });
-    }
     return {
       file,
       altText:cleanText(descriptor?.altText) || 'Imagem necessária para responder à questão',
@@ -130,10 +129,6 @@ export const parseFamedQuestionPackage = async (input, namespace='famed-past') =
           rejectedEntry = 'O conteúdo descompactado é grande demais para ser processado com segurança.';
           return false;
         }
-        if (path.startsWith('images/') && (Number(entry.originalSize) || 0) > MAX_IMAGE_BYTES) {
-          rejectedEntry = `A imagem “${path}” está grande demais para ser salva. Comprima-a e gere o pacote novamente.`;
-          return false;
-        }
         return true;
       },
     });
@@ -158,10 +153,21 @@ export const parseFamedQuestionPackage = async (input, namespace='famed-past') =
     throw new Error(`O campo schema deve ser “${FAMED_QUESTION_PACKAGE_SCHEMA}”.`);
   }
   if (!Array.isArray(payload.questions) || !payload.questions.length) throw new Error('O pacote não contém questões.');
-  const assetsByPath = new Map();
-  const questions = payload.questions.map((question,index) => normalizeQuestion(question,index,namespace,files,assetsByPath));
+  const questions = payload.questions.map((question,index) => normalizeQuestion(question,index,namespace,files));
   if (new Set(questions.map(question => question.id)).size !== questions.length) throw new Error('O pacote contém IDs de questões repetidos.');
-  const assets = [...assetsByPath.values()];
+  const imageFiles = Array.from(new Set(questions.flatMap(question => question.images || []).map(image => image.file)));
+  const assets = [];
+  for (const file of imageFiles) {
+    const extension = extensionOf(file);
+    const optimized = await optimizeImage(files[file],IMAGE_MIME_TYPES[extension],file);
+    assets.push({
+      file,
+      fileName:optimized.fileName,
+      mimeType:optimized.mimeType,
+      byteLength:optimized.bytes.length,
+      dataUrl:bytesToDataUrl(optimized.bytes,optimized.mimeType),
+    });
+  }
   const totalImageBytes = assets.reduce((total,asset)=>total + asset.byteLength,0);
   if (totalImageBytes > MAX_TOTAL_IMAGE_BYTES) throw new Error('As imagens do pacote estão grandes demais em conjunto. Comprima-as e gere o ZIP novamente.');
   return {

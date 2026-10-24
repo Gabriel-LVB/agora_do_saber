@@ -1417,7 +1417,7 @@ IMAGENS:
 - Toda figura necessária para compreender ou responder a uma questão deve ser extraída para um arquivo próprio dentro de images/ e vinculada à questão correspondente.
 - Recorte apenas a figura relevante; não use uma captura da página inteira quando for possível isolar a imagem.
 - Preserve letras, setas, escalas e legendas que façam parte da figura. Não redesenhe nem gere uma imagem nova.
-- Use PNG, JPG, JPEG, WEBP ou GIF. Comprima cada imagem para ficar abaixo de 600 KB sem perder informação diagnóstica.
+- Use PNG, JPG, JPEG, WEBP ou GIF. Prefira recortes compactos e nítidos; o importador otimiza automaticamente imagens estáticas maiores antes de salvá-las.
 - Use nomes únicos, minúsculos, sem acentos nem espaços, por exemplo images/q12-radiografia.png.
 - altText deve descrever o tipo de figura sem revelar o diagnóstico nem a resposta.
 - Se a questão não depende de imagem, use images: [].

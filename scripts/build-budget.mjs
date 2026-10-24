@@ -32,6 +32,7 @@ let courseReviewReset = null;
 let famedPortal = null;
 let famedPastQuestions = null;
 let famedQuestionPackage = null;
+let questionImageOptimization = null;
 let fflateVendor = null;
 let famedStudyMaterials = null;
 let questionBankSizing = null;
@@ -68,6 +69,7 @@ for (const file of jsFiles) {
   if (file.startsWith('FamedPortalView-')) famedPortal = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('FamedPastQuestionsView-')) famedPastQuestions = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('famedQuestionPackage-')) famedQuestionPackage = { file, raw:data.length, gzip:gzipSize };
+  if (file.startsWith('questionImageOptimization-')) questionImageOptimization = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('fflate-vendor-')) fflateVendor = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('famedStudyMaterials-')) famedStudyMaterials = { file, raw:data.length, gzip:gzipSize };
   if (file.startsWith('QuestionBankSizingView-')) questionBankSizing = { file, raw:data.length, gzip:gzipSize };
@@ -169,7 +171,9 @@ const COURSE_REVIEW_RESET_GZIP_LIMIT = 1 * 1024;
 // USMLE reutiliza esse vendor e acrescenta a descompactação assíncrona do fflate
 // (aprox. 1,2 KiB gzip ao conjunto medido). Continua fora da entrada; a reserva
 // adicional é exclusivamente para o código compartilhado de ZIP, sem conteúdo.
-const FAMED_GZIP_LIMIT = 33 * 1024;
+// A compactação automática de imagens acrescenta menos de 1 KiB gzip em outro
+// chunk, carregado apenas quando um arquivo ultrapassa o limite do Firestore.
+const FAMED_GZIP_LIMIT = 35 * 1024;
 // O dimensionamento de dezenas de milhares de questões é administrativo, manual
 // e roda em Worker. Tela e algoritmo ficam fora do núcleo para não bloquear a UI.
 // O Worker também recebe o índice global para retirar do próximo retrato tudo
@@ -220,6 +224,7 @@ const ecgQuestionMatcherGzip = (ecgQuestionMatcher?.gzip || 0) + (questionVisual
 const famedGzip = (famedPortal?.gzip || 0)
   + (famedPastQuestions?.gzip || 0)
   + (famedQuestionPackage?.gzip || 0)
+  + (questionImageOptimization?.gzip || 0)
   + (fflateVendor?.gzip || 0)
   + (famedStudyMaterials?.gzip || 0);
 const questionBankSizingGzip = (questionBankSizing?.gzip || 0) + (questionBankSizingWorker?.gzip || 0);
@@ -357,6 +362,7 @@ assert.ok(
 assert.ok(famedPortal, 'O portal FAMED deve permanecer em modulo lazy proprio.');
 assert.ok(famedPastQuestions, 'A importacao de questoes antigas FAMED deve permanecer lazy.');
 assert.ok(famedQuestionPackage, 'O parser do pacote FAMED deve permanecer lazy.');
+assert.ok(questionImageOptimization, 'A compactacao de imagens importadas deve permanecer lazy.');
 assert.ok(fflateVendor, 'O descompactador ZIP deve permanecer fora do bundle inicial.');
 assert.ok(famedStudyMaterials, 'Os derivados de estudo FAMED devem permanecer fora do bundle inicial.');
 assert.ok(
