@@ -23,6 +23,7 @@ import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
 } from '../src/lib/questionExplanation.js';
+import { normalizeImportedQuestionText } from '../src/lib/importedQuestionText.js';
 import { extractQuestionExportTags } from '../src/features/exporting/exportQuestionTags.js';
 import {
   QUESTION_OPTION_SHUFFLE_VERSION,
@@ -601,6 +602,11 @@ assert.match(externalPastQuestionPrompt, /Exatamente UMA alternativa deve ter is
 assert.match(externalPastQuestionPrompt, /options: \[\], isOpen: true e expectedAnswer não vazio/);
 assert.match(externalPastQuestionPrompt, /Soma das imagens efetivamente vinculadas: no máximo 12 MB/);
 assert.doesNotMatch(externalPastQuestionPrompt, /## Questão N/);
+assert.equal(
+  normalizeImportedQuestionText("ENTENDA O TEMA\nHemorragia digestiva alta é o sangramento acima do ângulo de Treitz, a\n'dobra' que separa duodeno de jejuno.\n\n- Primeiro item\n  com continuação\n- Segundo item"),
+  "ENTENDA O TEMA\nHemorragia digestiva alta é o sangramento acima do ângulo de Treitz, a 'dobra' que separa duodeno de jejuno.\n\n- Primeiro item\ncom continuação\n- Segundo item",
+  'quebras visuais de PDF devem ser unidas sem apagar títulos, parágrafos e listas',
+);
 const famedPackageZip = zipSync({
   'questions.json':strToU8(JSON.stringify({
     schema:'agora-famed-question-package-v1',
@@ -613,7 +619,7 @@ const famedPackageZip = zipSync({
         { letter:'A', text:'Achado correto', isCorrect:true, explanation:'Explica o mecanismo.' },
         { letter:'B', text:'Distrator', isCorrect:false, explanation:'Não corresponde ao mecanismo.' },
       ],
-      explanation:'A alternativa correta é a A porque decorre do mecanismo descrito.',
+      explanation:'A alternativa correta é a A porque decorre\ndo mecanismo descrito.',
       expectedAnswer:'',
       isOpen:false,
       isEssay:false,
@@ -633,6 +639,7 @@ const shuffledCorrectOption = shuffledPackageQuestion.options.find(option => opt
 assert.equal(shuffledPackageQuestion.optionShuffleVersion,QUESTION_OPTION_SHUFFLE_VERSION);
 assert.equal(shuffledCorrectOption.text,'Achado correto');
 assert.match(shuffledPackageQuestion.explanation,new RegExp(`correta é a ${shuffledCorrectOption.letter}\\b`,'i'));
+assert.doesNotMatch(shuffledPackageQuestion.explanation,/\n/,'a importação deve remover quebras visuais dentro da prosa');
 assert.deepEqual(
   shuffleQuestionOptions(shuffledPackageQuestion),
   shuffledPackageQuestion,

@@ -1,5 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { shuffleQuestionOptions } from '../../lib/questionOptions.js';
+import { normalizeImportedQuestionText } from '../../lib/importedQuestionText.js';
 
 export const FAMED_QUESTION_PACKAGE_SCHEMA = 'agora-famed-question-package-v1';
 
@@ -23,6 +24,7 @@ const isSafeRelativePath = value => {
 };
 const extensionOf = value => normalizePath(value).split('.').pop()?.toLowerCase() || '';
 const cleanText = value => String(value ?? '').trim();
+const cleanQuestionText = value => normalizeImportedQuestionText(cleanText(value));
 const safeIdPart = value => cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9_-]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,80) || 'item';
 
 const bytesToDataUrl = (bytes, mimeType) => {
@@ -55,13 +57,13 @@ const normalizeOption = (option, index) => {
     throw new Error('Cada alternativa deve ser um objeto com letter, text e isCorrect.');
   }
   const letter = cleanText(option.letter || String.fromCharCode(65 + index)).toUpperCase();
-  const text = cleanText(option.text);
+  const text = cleanQuestionText(option.text);
   if (!text) throw new Error(`A alternativa ${letter} está sem texto.`);
   return {
     letter,
     text,
     isCorrect:option.isCorrect === true,
-    explanation:cleanText(option.explanation),
+    explanation:cleanQuestionText(option.explanation),
   };
 };
 
@@ -69,13 +71,13 @@ const normalizeQuestion = (question, index, namespace, files) => {
   if (!question || typeof question !== 'object' || Array.isArray(question)) {
     throw new Error(`A questão ${index + 1} não é um objeto válido.`);
   }
-  const statement = cleanText(question.statement);
+  const statement = cleanQuestionText(question.statement);
   if (!statement) throw new Error(`A questão ${index + 1} está sem enunciado.`);
   const rawId = safeIdPart(question.id || `q-${index + 1}`);
   const options = Array.isArray(question.options) ? question.options.map(normalizeOption) : [];
   const isEssay = question.isEssay === true;
   const isOpen = isEssay || question.isOpen === true || options.length === 0;
-  const expectedAnswer = cleanText(question.expectedAnswer);
+  const expectedAnswer = cleanQuestionText(question.expectedAnswer);
   if (!isOpen && options.filter(option => option.isCorrect).length !== 1) throw new Error(`A questão ${index + 1} precisa ter exatamente uma alternativa correta.`);
   if (isOpen && options.length) throw new Error(`A questão aberta ${index + 1} deve usar options: [].`);
   if (isOpen && !expectedAnswer) throw new Error(`A questão aberta ${index + 1} está sem expectedAnswer.`);
@@ -99,9 +101,9 @@ const normalizeQuestion = (question, index, namespace, files) => {
   return shuffleQuestionOptions({
     id:`${safeIdPart(namespace)}_${rawId}`,
     statement,
-    caseContext:cleanText(question.caseContext),
+    caseContext:cleanQuestionText(question.caseContext),
     options,
-    explanation:cleanText(question.explanation),
+    explanation:cleanQuestionText(question.explanation),
     expectedAnswer,
     isOpen,
     isEssay,

@@ -116,7 +116,7 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // O exportador já era lazy (8,33 KiB gzip) e agora também incorpora imagens,
 // empacota mídia DOCX e gera HTML interativo autônomo. Ele ganha um budget
 // próprio medido; o teto do restante do núcleo foi reduzido na mesma proporção.
-const CORE_TOTAL_GZIP_LIMIT = 439.5 * 1024;
+const CORE_TOTAL_GZIP_LIMIT = 439 * 1024;
 // Agrupar uma matéria inteira, oferecer ordem, aplicar a paleta completa e
 // converter marcadores em tags soma 1,8 KiB medido ao chunk lazy original.
 const QUESTION_EXPORT_GZIP_LIMIT = 16 * 1024;
@@ -193,10 +193,10 @@ const USMLE_GZIP_LIMIT = 20 * 1024;
 // acessam o Firestore quando o usuario importa, exclui ou abre o material.
 // A reserva inclui particionamento e rollback de blocos grandes confirmados remotamente.
 const LIBRARY_QUESTION_ASSETS_GZIP_LIMIT = 2 * 1024;
-// O embaralhamento compatível de importações antigas acompanha as telas lazy de
-// questões e preserva a letra original apenas na fronteira de persistência.
-// Mantê-lo em chunk próprio evita cobrar essa migração visual da Home.
-const QUESTION_OPTIONS_GZIP_LIMIT = 1 * 1024;
+// O embaralhamento e a normalização de quebras de PDF/OCR acompanham as telas e
+// o importador lazy. O acréscimo medido é de 0,37 KiB; a mesma margem foi retirada
+// do núcleo para manter inalterado o teto gzip total da aplicação.
+const QUESTION_OPTIONS_GZIP_LIMIT = 1.5 * 1024;
 // As instruções detalhadas da correção de respostas abertas só são baixadas
 // quando o aluno pede explicitamente a avaliação da IA.
 const OPEN_ANSWER_GRADING_GZIP_LIMIT = 2 * 1024;

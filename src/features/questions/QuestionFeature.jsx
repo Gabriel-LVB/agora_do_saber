@@ -4,6 +4,7 @@ import { callGemini } from '../../services/gemini.js';
 import { loadLibraryQuestionAsset } from '../../services/libraryQuestionAssets.js';
 
 import { deferInteractionWork } from '../../lib/interaction.js';
+import { normalizeImportedQuestionText } from '../../lib/importedQuestionText.js';
 import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
@@ -1328,7 +1329,10 @@ const QuestionView = ({
 // ─── OPEN ANSWER INLINE ──────────────────────────────────────────────────────
 // Componente inline para questões abertas/dissertativas dentro do QuestionCard
 const OpenAnswerReference = ({ question, darkMode }) => {
-  const expectedAnswer = String(question?.expectedAnswer || '').trim() || cleanQuestionExplanation(question?.explanation);
+  const rawExpectedAnswer = String(question?.expectedAnswer || '').trim() || cleanQuestionExplanation(question?.explanation);
+  const expectedAnswer = question?.libraryQuestionKind === 'old_exam'
+    ? normalizeImportedQuestionText(rawExpectedAnswer)
+    : rawExpectedAnswer;
   if (!expectedAnswer) return null;
 
   return (
@@ -1952,8 +1956,15 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
   const showResults = (question.isOpen || question.isFlashcard) ? false : ((revealMode==='normal' && isAnswered) || (revealMode==='revealed' && (isAnswered || isSkipped)));
   const correctLetter = question.options?.find(o=>o.isCorrect)?.letter;
   const isCorrect = isAnswered && (question.isFlashcard ? effectiveLetter === FLASHCARD_CORRECT : correctLetter === effectiveLetter);
-  const explanation = cleanQuestionExplanation(question.explanation);
-  const questionText = splitQuestionCase(question);
+  const normalizeDisplayText = value => question.libraryQuestionKind === 'old_exam'
+    ? normalizeImportedQuestionText(value)
+    : String(value || '');
+  const explanation = normalizeDisplayText(cleanQuestionExplanation(question.explanation));
+  const rawQuestionText = splitQuestionCase(question);
+  const questionText = {
+    caseContext:normalizeDisplayText(rawQuestionText.caseContext),
+    statement:normalizeDisplayText(rawQuestionText.statement),
+  };
   const questionTypeLabel = question.isCloze
     ? 'Cloze'
     : question.isFlashcard
@@ -2203,14 +2214,14 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
 	          const optionExplanationLabelClass = opt.isCorrect
 	            ? (darkMode ? 'text-green-300' : 'text-green-700')
 	            : (darkMode ? 'text-red-300' : 'text-red-700');
-	          const displayExplanation = normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter);
+	          const displayExplanation = normalizeDisplayText(normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter));
 	          const content = (
 	            <>
 	              <div className="flex items-start w-full">
 	                <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
 	                  {opt.letter}
 	                </div>
-	                <div className="pt-1.5 min-w-0 flex-1 leading-relaxed text-[15px] md:text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(opt.text)}</div>
+	                <div className="pt-1.5 min-w-0 flex-1 leading-relaxed text-[15px] md:text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDisplayText(opt.text))}</div>
 	              </div>
 	              {showOptionExplanation && (
 	                <div className={`mt-3 border-t pt-3 text-sm leading-relaxed select-text md:text-base ${optionExplanationClass}`} style={{userSelect:'text'}}>
@@ -2269,7 +2280,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
             {lessonExplanationOpen && (
               <div className={`border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700 text-gray-200':'border-gray-100 text-gray-800'}`}>
                 <div className="select-text text-[15px] leading-relaxed md:text-base" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDeclaredCorrectAlternativeReferences(
-                  hasAlternativeExplanations ? (question.explanationParts?.lesson || explanation) : explanation,
+                  hasAlternativeExplanations ? normalizeDisplayText(question.explanationParts?.lesson || explanation) : explanation,
                   getCorrectLetter(question),
                 ))}</div>
                 {apiKey && <ChatBox question={{...question, explanation}} darkMode={darkMode} apiKey={apiKey} oracleLength={oracleLength} onCall={onCall} selectedLetter={effectiveLetter}/>}
@@ -2294,12 +2305,12 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
             {alternativeExplanationsOpen && hasAlternativeExplanations && (
               <div className={`space-y-5 border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700':'border-gray-100'}`}>
                 {(question.options || []).filter(opt => opt.explanation).map(opt => {
-                  const displayExplanation = normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter);
+                  const displayExplanation = normalizeDisplayText(normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter));
                   return (
                   <div key={`alt-exp-${opt.letter}`} className="select-text" style={{userSelect:'text'}}>
                     <div className="flex items-start gap-3 text-sm font-bold leading-relaxed md:text-base">
                       <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-xs ${opt.isCorrect ? 'bg-green-500 text-white' : effectiveLetter === opt.letter ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'border border-gray-200 bg-gray-50 text-gray-600'}`}>{opt.letter}</span>
-                      <span className={darkMode?'text-gray-100':'text-gray-900'}>{parseHtmlTextChat(opt.text)}</span>
+                      <span className={darkMode?'text-gray-100':'text-gray-900'}>{parseHtmlTextChat(normalizeDisplayText(opt.text))}</span>
                     </div>
                     <div className={`mt-2 pl-10 text-sm leading-relaxed md:text-[15px] ${opt.isCorrect ? darkMode?'text-green-200':'text-green-800' : effectiveLetter === opt.letter ? darkMode?'text-red-200':'text-red-800' : darkMode?'text-gray-300':'text-gray-600'}`}>{parseHtmlTextChat(displayExplanation)}</div>
                   </div>
