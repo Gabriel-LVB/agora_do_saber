@@ -1334,12 +1334,12 @@ const OpenAnswerLoadingReference = ({ question, darkMode }) => {
   return (
     <aside
       aria-live="polite"
-      className={`rounded-lg border border-dashed px-3 py-2.5 opacity-75 ${darkMode?'border-gray-600 bg-gray-800/30':'border-gray-200 bg-gray-50/60'}`}
+      className={`rounded-xl border p-4 ${darkMode?'border-yellow-800/70 bg-yellow-950/25':'border-yellow-200 bg-yellow-50'}`}
     >
-      <p className={`text-xs font-bold ${darkMode?'text-gray-300':'text-gray-600'}`}>
+      <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-yellow-300':'text-yellow-800'}`}>
         Resposta esperada
       </p>
-      <div className={`mt-1 text-xs leading-relaxed ${darkMode?'text-gray-400':'text-gray-500'}`}>
+      <div className={`mt-2 text-sm leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>
         {parseHtmlTextChat(expectedAnswer)}
       </div>
     </aside>
@@ -1423,7 +1423,6 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
               </button>
             </div>
           </div>
-          {loading&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
         </div>
       ) : (
         /* Resposta salva */
@@ -1436,6 +1435,8 @@ Responda APENAS JSON válido (sem markdown, sem texto fora do JSON):
           </div>
         </div>
       )}
+
+      {(loading||result)&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
 
       {/* Resultado da correção */}
       {result && !editing && (
@@ -1535,7 +1536,6 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
                   {loading ? <><Spinner className="w-4 h-4 text-white"/>Corrigindo...</> : 'Enviar para o Oráculo'}
                 </button>
               </div>
-              {loading&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
             </>
           ) : (
             <div className={`rounded-xl border p-4 space-y-3 ${
@@ -1560,6 +1560,7 @@ Avalie e responda EXATAMENTE neste formato JSON (sem markdown, sem explicações
               )}
             </div>
           )}
+          {(loading||result)&&<OpenAnswerLoadingReference question={question} darkMode={dm}/>}
         </div>
         <div className={`px-5 pb-5 pt-3 border-t flex-shrink-0 ${dm?'border-gray-700':'border-gray-100'}`}>
           <button onClick={onClose} className={`w-full py-3 rounded-xl font-bold text-sm ${dm?'bg-gray-800 hover:bg-gray-700':'bg-gray-100 hover:bg-gray-200'}`}>
