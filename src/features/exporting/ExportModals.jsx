@@ -204,6 +204,11 @@ const cleanQuestionExplanation = (explanation = '') => {
     .replace(/\n---.*$/s, '')
     .trim();
 };
+const cleanExportBizu = (bizu = '') => String(bizu || '')
+  .replace(/\r\n/g, '\n')
+  .replace(/(?:^|\n)[ \t]*-{3,}[ \t]*(?=\n|$)/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
 const cleanClinicalCaseContext = (context = '') => String(context || '')
   .replace(/^\s*Caso(?:-base|\s+cl[íi]nico)?\s*\d+\s*[—–:\-]\s*/i, '')
   .trim();
@@ -289,7 +294,7 @@ const getQuestionExportData = (question = {}) => {
     tags:Array.from(new Set([...caseContent.tags,...statementContent.tags])),
     options,
     explanation:lessonExplanation,
-    bizu:normalizeExportText(question.bizu),
+    bizu:cleanExportBizu(normalizeExportText(question.bizu)),
     hasAlternativeExplanations:options.some(opt => String(opt.explanation || '').trim()),
   };
 };
@@ -356,6 +361,9 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .answer-card{border:1px solid #d1fae5;border-left:4px solid #22c55e;border-radius:12px;padding:14px 16px;margin:8px 0 28px;background:#fafffb;page-break-inside:avoid}
 .answer-card.compact{margin-bottom:16px;background:#fff}
 .answer-card.last{margin-bottom:16px}
+.answer-card.inline-correction{border:0;border-top:1px solid #e5e7eb;border-radius:0;padding:14px 0 0;margin:12px 0 4px;background:transparent}
+.answer-card.inline-correction .learning-label:first-child{margin-top:0}
+.answer-card.inline-correction .explanation-box,.answer-card.inline-correction .bizu-box{border-radius:0;background:transparent;padding:5px 0 5px 13px}
 .answer-title{margin:0 0 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#15803d}
 .answer-correct{margin:0 0 10px;font-size:13px;font-weight:800;color:#065f46}
 .learning-label{margin:12px 0 5px;font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;color:#92400e}
@@ -388,9 +396,10 @@ html[data-theme="dark"] .interactive-option.is-selected{border-color:color-mix(i
 html[data-theme="dark"] .option-row.is-correct,html[data-theme="dark"] .interactive-option.is-correct{border-color:color-mix(in srgb,#3f9b72 38%,transparent);background:color-mix(in srgb,#3f9b72 13%,var(--export-surface))}
 html[data-theme="dark"] .interactive-option.is-incorrect{border-color:color-mix(in srgb,#c45c60 38%,transparent);background:color-mix(in srgb,#c45c60 13%,var(--export-surface))}
 html[data-theme="dark"] .answer-card{border-color:color-mix(in srgb,#3f9b72 38%,transparent);border-left-color:#3f9b72}
+html[data-theme="dark"] .answer-card.inline-correction{border-color:var(--export-line);background:transparent}
 html[data-theme="dark"] .answer-title,html[data-theme="dark"] .answer-correct,html[data-theme="dark"] .interactive-score,html[data-theme="dark"] .interactive-feedback.correct{color:#9bd3b7}
 html[data-theme="dark"] .explanation-box{border-color:var(--export-accent);background:var(--export-surface);color:var(--export-text)}
-html[data-theme="dark"] .learning-label{color:var(--export-accent-text)}html[data-theme="dark"] .bizu-box{border-color:#4f8fd1;background:color-mix(in srgb,#2f668c 18%,var(--export-surface));color:var(--export-text)}
+html[data-theme="dark"] .learning-label{color:var(--export-accent-text)}html[data-theme="dark"] .bizu-box{border-color:#4f8fd1;background:color-mix(in srgb,#2f668c 18%,var(--export-surface));color:var(--export-text)}html[data-theme="dark"] .answer-card.inline-correction .explanation-box,html[data-theme="dark"] .answer-card.inline-correction .bizu-box{background:transparent}
 html[data-theme="dark"] .alternative-analysis{border-color:var(--export-line);background:var(--export-surface-strong)}html[data-theme="dark"] .alternative-analysis-title{border-color:var(--export-line);background:var(--export-surface);color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-row+.alternative-analysis-row{border-color:var(--export-line)}html[data-theme="dark"] .alternative-analysis-letter{background:var(--export-surface-muted);color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-result{color:var(--export-muted)}html[data-theme="dark"] .alternative-analysis-text{color:var(--export-text)}html[data-theme="dark"] .alternative-analysis-row.is-correct .alternative-analysis-letter{background:color-mix(in srgb,#3f9b72 18%,var(--export-surface));color:#9bd3b7}html[data-theme="dark"] .alternative-analysis-row.is-correct .alternative-analysis-result{color:#9bd3b7}
 html[data-theme="dark"] .answer-separator{border-color:var(--export-line)}html[data-theme="dark"] .answer-separator span{background:var(--export-bg);color:var(--export-muted)}
 html[data-theme="dark"] .interactive-toolbar{border-color:var(--export-line);background:var(--export-surface-strong);box-shadow:0 10px 30px rgba(0,0,0,.22)}
@@ -422,18 +431,21 @@ ${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário c
 ${renderQuestionImagesHtml(data.images || [])}
 ${renderPdfOptions(data.options || [], { showAnswer })}
 ${blank ? '<div class="answer-space"></div>' : ''}
-${showAnswer ? renderPdfAnswerHtml(question, idx, { embedded:true }) : ''}
+${showAnswer ? renderPdfAnswerHtml(question, idx, { embedded:true, correctShownInOptions:Boolean(corr) }) : ''}
 </article>`;
 };
-const renderPdfAnswerHtml = (question, idx, { compact = false, embedded = false, isLast = false } = {}) => {
+const renderPdfAnswerHtml = (question, idx, { compact = false, embedded = false, isLast = false, correctShownInOptions = false } = {}) => {
   const data = getQuestionExportData(question);
   const corr = data.options?.find(o => o.isCorrect);
-  return `<section class="answer-card ${compact || embedded ? 'compact' : ''} ${isLast ? 'last' : ''}">
-<p class="answer-title">Gabarito — ${escapeHtml(data.label)} ${idx + 1}</p>
-${corr ? `<p class="answer-correct">${escapeHtml(corr.letter)}) ${textToHtml(corr.text || '')}</p>` : ''}
-${data.explanation ? `<p class="learning-label">Entenda o tema</p><div class="explanation-box">${textToHtml(data.explanation)}</div>` : ''}
+  const omitRepeatedKey = Boolean(correctShownInOptions && corr);
+  const details = `${data.explanation ? `<p class="learning-label">Entenda o tema</p><div class="explanation-box">${textToHtml(data.explanation)}</div>` : ''}
 ${data.bizu ? `<p class="learning-label">Bizu</p><div class="bizu-box">${textToHtml(data.bizu)}</div>` : ''}
-${data.hasAlternativeExplanations ? renderAlternativeAnalysisHtml(data.options, { compact:compact || embedded }) : ''}
+${data.hasAlternativeExplanations ? renderAlternativeAnalysisHtml(data.options, { compact:compact || embedded }) : ''}`;
+  if (omitRepeatedKey && !details) return '';
+  return `<section class="answer-card ${compact || embedded ? 'compact' : ''} ${omitRepeatedKey ? 'inline-correction' : ''} ${isLast ? 'last' : ''}">
+${omitRepeatedKey ? '' : `<p class="answer-title">Gabarito — ${escapeHtml(data.label)} ${idx + 1}</p>`}
+${corr && !omitRepeatedKey ? `<p class="answer-correct">${escapeHtml(corr.letter)}) ${textToHtml(corr.text || '')}</p>` : ''}
+${details}
 </section>`;
 };
 const renderPdfDocument = (body = '') => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${PDF_EXPORT_STYLES}</style></head><body>${body}</body></html>`;
@@ -455,7 +467,7 @@ ${mode === 'exam' ? '<button type="button" class="interactive-button primary" da
 const renderInteractiveQuestionHtml = (question, idx, { mode = 'study' } = {}) => {
   const data = getQuestionExportData(question);
   const hasOptions = (data.options || []).length > 0;
-  const answer = mode === 'blank' ? '' : `<div class="interactive-answer" data-answer hidden>${renderPdfAnswerHtml(question,idx,{ compact:true })}</div>`;
+  const answer = mode === 'blank' ? '' : `<div class="interactive-answer" data-answer hidden>${renderPdfAnswerHtml(question,idx,{ compact:true, correctShownInOptions:hasOptions })}</div>`;
   return `<article class="question-card interactive-question" data-interactive-question data-mode="${mode}">
 ${renderQuestionKicker(data,idx)}
 ${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${textToHtml(data.caseContext)}</div></section>` : ''}
@@ -973,8 +985,6 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
         });
       });
       if (showAnswer) {
-        const corr = (data.options || []).find(o => o.isCorrect);
-        if (corr) xml += docxParagraph(`Gabarito: ${corr.letter}) ${corr.text || ''}`, { bold:true, color:'15803D', after:80 });
         if (data.explanation) {
           xml += docxParagraph('Entenda o tema', { bold:true, color:'92400E', after:40 });
           xml += docxParagraph(data.explanation, { color:'374151', after:120 });
