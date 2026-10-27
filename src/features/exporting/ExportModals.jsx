@@ -449,6 +449,7 @@ ${details}
 </section>`;
 };
 const renderPdfDocument = (body = '') => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${PDF_EXPORT_STYLES}</style></head><body>${body}</body></html>`;
+const HTML_EXPORT_FONT_STYLES = `body,body *{font-family:Arial,Helvetica,sans-serif!important}`;
 
 const interactiveModeHelp = mode => mode === 'exam'
   ? 'Marque suas respostas e use “Corrigir simulado” quando terminar.'
@@ -567,7 +568,7 @@ const INTERACTIVE_EXPORT_SCRIPT = `
   });
 })();`;
 const INTERACTIVE_THEME_HEAD_SCRIPT = `(() => { let theme = ''; try { theme = localStorage.getItem('agora-export-theme') || ''; } catch {} if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; })();`;
-const renderInteractiveDocument = (body = '', { title = 'Questões interativas' } = {}) => `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeXml(title)}</title><script>${INTERACTIVE_THEME_HEAD_SCRIPT}</script><style>${PDF_EXPORT_STYLES}</style></head><body>${body}<script>${INTERACTIVE_EXPORT_SCRIPT}</script></body></html>`;
+const renderInteractiveDocument = (body = '', { title = 'Questões interativas' } = {}) => `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeXml(title)}</title><script>${INTERACTIVE_THEME_HEAD_SCRIPT}</script><style>${PDF_EXPORT_STYLES}${HTML_EXPORT_FONT_STYLES}</style></head><body>${body}<script>${INTERACTIVE_EXPORT_SCRIPT}</script></body></html>`;
 
 const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);

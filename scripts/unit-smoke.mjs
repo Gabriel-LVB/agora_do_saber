@@ -2875,6 +2875,8 @@ assert.match(exportModalsSource, /docxImageParagraphs\(data\.images \|\| \[\],im
 assert.match(exportModalsSource, /officeDocument\/2006\/relationships\/image/);
 assert.match(exportModalsSource, /HTML interativo/);
 assert.match(exportModalsSource, /renderInteractiveDocument/);
+assert.match(exportModalsSource, /HTML_EXPORT_FONT_STYLES/);
+assert.match(exportModalsSource, /body,body \*\{font-family:Arial,Helvetica,sans-serif!important\}/);
 assert.match(exportModalsSource, /data-action="grade"/);
 assert.match(exportModalsSource, /data-action="theme"/);
 assert.doesNotMatch(exportModalsSource, /data-action="print"/);
