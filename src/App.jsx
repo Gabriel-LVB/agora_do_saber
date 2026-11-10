@@ -11926,6 +11926,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
       setErrorModal({ title:'Não foi possível salvar as questões', message:importedQuestionsErrorMessage(error), isAlert:true });
     }
   };
+  const handlePasteTxtFile = async event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      setPasteText(await file.text());
+    } catch {
+      setErrorModal({ title:'Erro ao ler TXT', message:'Confira o arquivo e tente novamente.', isAlert:true });
+    }
+  };
   const handlePasteZipImport = async () => {
     if (!pasteZipFile || pasteZipBusy) return;
     const destination = getPasteImportDestination();
@@ -14306,6 +14316,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     setActiveSubjectVid,
     setActiveSubtopicVid,
     setActiveTopicId,
+    setTopicStudyPreference,
     setBlockActionMenu,
     setBulkActionMenu,
     setBulkGenerateModal,
@@ -15661,6 +15672,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
           <div>
             <QuestionView
               title={activeTopic.title}
+              resumeTarget={!isShuffledSubjectTopic}
               onBack={()=>{
                 setTopicStudyPreference(null);
                 viewReturnTarget?.view ? restoreReturnTarget('subject') : setView('subject');
@@ -16149,7 +16161,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3 leading-tight"><Feather className="w-8 h-8 flex-shrink-0"/>Importar Questões</h2>
             <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
               <p className="font-bold mb-1">Importe sem alterar o texto original</p>
-              <p>Cole as questões ou envie o mesmo pacote ZIP versionado usado nas provas antigas da FAMED. Elas serão organizadas em um assunto e bloco de Importar Questões.</p>
+              <p>Cole as questões, selecione um TXT ou envie o pacote ZIP das provas antigas da FAMED. Elas serão organizadas em um assunto e bloco.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div>
@@ -16177,7 +16189,8 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               </div>
               <button type="button" disabled={pasteZipBusy||!pasteZipFile} onClick={handlePasteZipImport} className="mt-4 w-full rounded-xl bg-yellow-600 px-5 py-3.5 text-sm font-bold text-white hover:bg-yellow-700 disabled:opacity-40">{pasteZipBusy?'Validando e salvando…':'Importar pacote ZIP'}</button>
             </section>
-            <div className="mb-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest opacity-35"><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/><span>ou cole o texto</span><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/></div>
+            <div className="mb-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest opacity-35"><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/><span>ou use texto</span><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/></div>
+            <label className="mb-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"><FileUp className="h-4 w-4"/>Selecionar arquivo TXT<input type="file" accept=".txt,text/plain" onChange={handlePasteTxtFile} className="sr-only"/></label>
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Texto das questões <span className="normal-case font-normal">(se não usar ZIP)</span></label>
             <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder="Cole as questões aqui..." className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-white border-gray-200'}`}/>
             <p className="text-xs mt-2 opacity-50">Também aceita questões V/F, CESPE, abertas, dissertativas e flashcards quando os rótulos de resposta e explicação estão presentes.</p>

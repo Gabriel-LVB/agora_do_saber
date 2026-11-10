@@ -120,7 +120,8 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // próprio medido; o teto do restante do núcleo foi reduzido na mesma proporção.
 // Prompts, parser e apresentação compatível de Entenda o tema/Bizu acrescentam
 // cerca de 1,7 KiB gzip medido ao conjunto; os geradores e telas seguem lazy.
-const CORE_TOTAL_GZIP_LIMIT = 441 * 1024;
+// Retomada de blocos na Home e exportação do resultado acrescentam cerca de 1 KiB gzip ao núcleo.
+const CORE_TOTAL_GZIP_LIMIT = 443 * 1024;
 // Agrupar uma matéria inteira, oferecer ordem, aplicar a paleta completa e
 // converter marcadores em tags soma 1,8 KiB medido ao chunk lazy original.
 // Os blocos rotulados Entenda o tema e Bizu nos formatos HTML/PDF/DOCX somam

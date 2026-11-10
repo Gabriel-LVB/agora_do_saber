@@ -2,6 +2,7 @@ import React from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
 import { useCourseHeroJourney } from '../course/useCourseHeroJourney.js';
 import BrandIdentity from '../../components/BrandIdentity.jsx';
+import { readQuestionResume } from '../questions/questionResume.js';
 
 export default function HomeView() {
   const {
@@ -43,6 +44,8 @@ export default function HomeView() {
     saveSettings,
     setActiveAulaAndReset,
     setActiveFolderId,
+    setActiveSubjectId,
+    setActiveTopicId,
     setActiveSubjectVid,
     setActiveSubtopicVid,
     setExamSetup,
@@ -52,6 +55,8 @@ export default function HomeView() {
     settings,
     settingsRef,
     setView,
+    setTopicStudyPreference,
+    setQuickStudyTab,
     setVqActiveBlock,
     setVqActiveBlockView,
     setVqAula,
@@ -64,6 +69,7 @@ export default function HomeView() {
     vqBlocks,
     vqBlocksLoaded,
     watchedAulas,
+    user,
     Zap,
   } = useFeatureContext();
 
@@ -86,6 +92,21 @@ export default function HomeView() {
                       ? `${capitalizeDisplayLabel(heroJourneyStep.item.subject)} · ${heroJourneyStep.step.subdetail}`
                       : `${capitalizeDisplayLabel(heroJourneyStep.item.subject)} · ${heroJourneyStep.step.label}`,
                   } : null;
+                  const unfinishedBlock = readQuestionResume(user?.uid).find(item => item.type === 'library' || (item.type === 'quick' && homeCanUseAdvancedFeatures) || (item.type === 'course' && homeCanSeeVideoaulas));
+                  const continueBlock = () => {
+                    if (!unfinishedBlock) return;
+                    if (unfinishedBlock.type === 'course') {
+                      setVqSubject(unfinishedBlock.subject); setVqTopic(unfinishedBlock.topic); setVqAula(unfinishedBlock.aula);
+                      setVqActiveBlockView({blockId:unfinishedBlock.blockId, showWrong:false}); setView('videoquestions');
+                    } else if (unfinishedBlock.type === 'quick') {
+                      setActiveSubjectId(unfinishedBlock.subjectId); setActiveTopicId(unfinishedBlock.topicId);
+                      setQuickStudyTab(unfinishedBlock.studyKind); setView('quick-topic');
+                    } else {
+                      setLibFilter(unfinishedBlock.source); setActiveFolderId(unfinishedBlock.folderId);
+                      setActiveSubjectId(unfinishedBlock.subjectId); setActiveTopicId(unfinishedBlock.topicId);
+                      setTopicStudyPreference({subjectId:unfinishedBlock.subjectId, topicId:unfinishedBlock.topicId, kind:unfinishedBlock.studyKind}); setView('topic');
+                    }
+                  };
                   const renderHomeCard = (card) => (
                     <button key={card.key} onClick={card.action} className="home-study-card group rounded-xl px-4 py-4 text-left flex items-start gap-3.5 transition-colors">
                       <span className="home-icon home-study-card__icon mt-0.5">{card.icon}</span>
@@ -147,6 +168,18 @@ export default function HomeView() {
                                 Continuar<ChevronRight className="w-3.5 h-3.5"/>
                               </button>
                             </div>
+                          </section>
+                        )}
+
+                        {unfinishedBlock&&(
+                          <section className="home-journey-row rounded-xl px-3.5 py-3 flex items-center gap-3">
+                            <span className="home-icon mt-0.5"><FolderIcon className="w-5 h-5"/></span>
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${darkMode?'text-gray-500':'text-gray-400'}`}>Continue suas questões</p>
+                              <h3 className={`mt-0.5 text-sm md:text-[15px] font-bold truncate ${darkMode?'text-gray-100':'text-gray-900'}`}>{unfinishedBlock.title}</h3>
+                              <p className={`mt-0.5 text-xs truncate ${darkMode?'text-gray-400':'text-gray-600'}`}>{unfinishedBlock.subjectTitle} · {unfinishedBlock.answered}/{unfinishedBlock.total} respondidas</p>
+                            </div>
+                            <button onClick={continueBlock} className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-lg bg-yellow-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-yellow-700">Continuar<ChevronRight className="w-3.5 h-3.5"/></button>
                           </section>
                         )}
 

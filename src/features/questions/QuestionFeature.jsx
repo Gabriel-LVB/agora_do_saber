@@ -14,6 +14,8 @@ import {
   legacyImportedQuestionForDisplay,
 } from '../../lib/questionOptions.js';
 import { toggleQuestionTypeSelection } from '../../lib/questionTypes.js';
+import { saveQuestionResume } from './questionResume.js';
+import { useFeatureContext } from '../FeatureContext.jsx';
 
 
 
@@ -458,7 +460,12 @@ const QuestionView = ({
 	  onDownloadAnkiDeck=null,
 	  onExportAnki=null,
 	  initialStudyKind='auto',
+	  resumeTarget:resumeTargetProp=null,
 }) => {
+  const { user, activeSubject, activeTopic } = useFeatureContext();
+  const resumeTarget = resumeTargetProp === true && activeSubject && activeTopic
+    ? {key:`library:${activeSubject.id}:${activeTopic.id}`, type:'library', subjectId:activeSubject.id, topicId:activeTopic.id, subjectTitle:activeSubject.title, title:activeTopic.title, source:activeSubject.source, folderId:activeSubject.folderId || null}
+    : resumeTargetProp;
   const dm = darkMode;
   const memoryCardQuestions = useMemo(
     () => sourceQuestions.filter(question => isMemoryCard(question)),
@@ -673,6 +680,22 @@ const QuestionView = ({
 
 	  const allDone = questions.length > 0 && (allFlashcards ? questions.every(q => isFlashcardMastered(q)) : answeredCount === questions.length);
 	  const pct = allDone ? Math.round(correctCount/questions.length*100) : null;
+
+  const resumeSeenRef = useRef(null);
+  useEffect(() => {
+    if (!resumeTarget) return;
+    const completed = Object.fromEntries(questions.filter(q => {
+      const answer = answers[q.id];
+      if (!answer || answer === 'SKIPPED') return false;
+      if (q.isOpen) { try { const value = JSON.parse(answer); return !!value?.answer && value?.score != null; } catch { return false; } }
+      return true;
+    }).map(q => [q.id, true]));
+    const key = `${resumeTarget.key}:${studyKind}`;
+    const firstRender = resumeSeenRef.current !== key;
+    resumeSeenRef.current = key;
+    if (firstRender && !Object.keys(completed).length) return;
+    saveQuestionResume(user?.uid, {...resumeTarget, key:`${resumeTarget.key}:${studyKind}`, studyKind}, completed, questions.length);
+  }, [user?.uid, resumeTarget?.key, answers, questions, studyKind]);
 
 	  useEffect(() => {
 	    const active = allFlashcards && singleMode;
@@ -964,6 +987,22 @@ const QuestionView = ({
       ...notebookActions,
     ].filter(Boolean);
 	    const extraActions = [
+	      {
+	        label:'Exportar resultado (.txt)',
+	        icon:<DownloadIcon className="w-4 h-4"/>,
+	        fn:()=>{
+	          const lines = questions.map((q, index) => ({
+	            text:`${index + 1}. ${String(q.statement || q.text || 'Questão').replace(/\s+/g, ' ').trim()}`,
+	            correct:allFlashcards ? !flashcardMissedQuestions.includes(q) : isAnswerCorrect(q, validAnswers[q.id]),
+	            notebook:errorNotebookSet.has(String(q.id)),
+	          }));
+	          const section = (label, items) => `${label}\n${items.length ? items.map(item => item.text).join('\n') : 'Nenhuma.'}`;
+	          const content = [`Resultado: ${title}`, section('Acertos', lines.filter(item => item.correct)), section('Erros', lines.filter(item => !item.correct)), section('Caderno de erros', lines.filter(item => item.notebook))].join('\n\n');
+	          const url = URL.createObjectURL(new Blob(['\ufeff', content], {type:'text/plain;charset=utf-8'}));
+	          const link = document.createElement('a'); link.href = url; link.download = 'resultado-questoes.txt'; link.click();
+	          setTimeout(() => URL.revokeObjectURL(url), 1000);
+	        },
+	      },
 	      allFlashcards && onDownloadAnkiDeck ? {
 	        label:'Baixar deck (.apkg)',
 	        icon:<DownloadIcon className="w-4 h-4"/>,

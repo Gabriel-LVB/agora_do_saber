@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/ligastro/" />
+    <meta name="description" content="Questões antigas comentadas de Digestório S2." />
+    <title>Questões de Digestório S2 — Ágora × Ligastro</title>
+    <script>
+      (() => {
+        let theme = '';
+        try { theme = localStorage.getItem('ligastro-theme-v1') || ''; } catch {}
+        if (theme !== 'light' && theme !== 'dark') theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="questions">
+    <header class="study-header">
+      <div class="study-header-inner">
+        <a class="back-link" href="/ligastro" aria-label="Voltar para a página da Ligastro">Voltar</a>
+        <div class="brand-lockup brand-lockup-compact">
+          <img class="brand-logo" src="./assets/ligastro-logo.png" alt="Logo da Liga de Gastroenterologia da UFC" />
+          <div>
+            <p class="brand-kicker">Ágora da Medicina × Ligastro</p>
+            <p class="brand-name">Digestório S2</p>
+          </div>
+        </div>
+        <button type="button" class="theme-button" data-theme-toggle>Tema escuro</button>
+      </div>
+    </header>
+
+    <main class="study-shell">
+      <section class="study-intro">
+        <p class="eyebrow" data-mode-eyebrow>Banco de questões</p>
+        <h1 data-mode-title>Carregando material…</h1>
+        <p data-mode-description>Preparando as questões.</p>
+      </section>
+
+      <section class="study-toolbar" aria-label="Controles do estudo">
+        <div class="toolbar-progress">
+          <div><strong data-toolbar-title>160 questões</strong><span data-progress-text>0 de 160 respondidas</span></div>
+          <div class="progress-track"><span data-progress-bar></span></div>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" class="button button-primary" data-grade-exam hidden>Corrigir simulado</button>
+          <button type="button" class="button button-quiet" data-reset-progress>Zerar progresso</button>
+        </div>
+        <output class="toolbar-score" data-score aria-live="polite"></output>
+      </section>
+
+      <section class="loading-panel" data-loading role="status">Carregando as 160 questões…</section>
+      <section class="topic-active-header" data-topic-active-header hidden>
+        <div><p class="eyebrow">Bloco atual</p><h2 data-topic-title></h2><p data-topic-meta></p></div>
+      </section>
+
+      <section class="question-list" data-question-list aria-live="polite"></section>
+
+      <nav class="topic-footer-nav" data-topic-footer hidden aria-label="Navegação entre temas">
+        <button type="button" class="button button-primary" data-next-topic>Próximo tema</button>
+      </nav>
+
+      <section class="invite-card invite-card-compact">
+        <img src="./assets/ligastro-logo.png" alt="Ligastro UFC" />
+        <div><p class="eyebrow">Gostou do material?</p><h2>Fique por dentro de tudo da liga.</h2></div>
+        <a href="https://www.instagram.com/ligastro.ufc/" target="_blank" rel="noopener noreferrer">Seguir @ligastro.ufc</a>
+      </section>
+    </main>
+
+    <noscript><p class="noscript-message">Ative o JavaScript para responder às questões e salvar seu progresso.</p></noscript>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
