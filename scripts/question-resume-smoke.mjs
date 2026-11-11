@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildResumeUpdate, missingLegacyEntries, requestQuestionResume, consumeQuestionResume } from '../src/features/questions/questionResume.js';
+import { resumeProgressFromQuestions } from '../src/features/questions/reconcileQuestionResume.js';
 
 const first = buildResumeUpdate([], {key:'first'}, {q1:true}, 2, 1);
 const second = buildResumeUpdate(first.next, {key:'second'}, {q1:true}, 3, 2);
@@ -10,6 +11,15 @@ assert.deepEqual(finished.next.map(entry => entry.key), ['first']);
 assert.deepEqual(missingLegacyEntries(second.next, [finished.entry]).map(entry => entry.key), ['first']);
 assert.equal(buildResumeUpdate(first.next, {key:'first'}, {}, 2).entry.completed, true);
 assert.equal(buildResumeUpdate([], {key:'cards'}, {q1:'wrong'}, 1, 4, false).entry.completed, false);
+const questions = Array.from({length:30}, (_, i) => ({id:`q${i}`}));
+const answersOnTwoDevices = Object.fromEntries(questions.map(question => [question.id, 'A']));
+const merged = resumeProgressFromQuestions(questions, answersOnTwoDevices, 'questions');
+assert.equal(merged.answered, 30);
+assert.equal(merged.completed, true);
+const partial = resumeProgressFromQuestions(questions, Object.fromEntries(Object.entries(answersOnTwoDevices).slice(0, 15)), 'questions');
+assert.equal(partial.answered, 15);
+assert.equal(partial.completed, false);
+assert.equal(resumeProgressFromQuestions([{id:'c', isFlashcard:true}], {c:'WRONG'}, 'flashcards').completed, false);
 requestQuestionResume('first');
 assert.equal(consumeQuestionResume('other'), false);
 assert.equal(consumeQuestionResume('first'), true);

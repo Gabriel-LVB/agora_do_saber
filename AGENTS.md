@@ -151,6 +151,8 @@ O app registra acessos em `access_logs` e presença/dispositivo em `user_devices
 
 A Home oferece retomada de blocos de Meus materiais, Dúvida Rápida e Questões do Curso. O índice individual em `users/{uid}/question_resume` sincroniza entre dispositivos sem carregar todos os blocos na Home; registros concluídos ou zerados permanecem como marcadores inativos para impedir que um cache antigo os recrie. O cache anterior do navegador é migrado apenas após confirmar os registros remotos. Ao retomar, aguarde o carregamento do progresso antes de posicionar na primeira questão pendente. A FAMED não participa desse índice.
 
+O contador desse índice é derivado e pode ficar defasado quando respostas chegam de outro dispositivo. Na Home, confira somente o bloco de retomada indicado, lendo seus documentos de conteúdo e progresso diretamente no servidor; ao abri-lo, confira também o conteúdo já hidratado, inclusive blocos derivados do banco compartilhado. Atualize o índice sem alterar as respostas, sem mudar a ordem de atividade e sem sobrescrever um índice alterado durante a conferência. Nunca faça prefetch global de blocos para corrigir esse contador.
+
 ## Navegação
 
 ### Microsite público da Ligastro

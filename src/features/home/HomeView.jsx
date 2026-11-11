@@ -100,6 +100,14 @@ export default function HomeView() {
                       : `${capitalizeDisplayLabel(heroJourneyStep.item.subject)} · ${heroJourneyStep.step.label}`,
                   } : null;
                   const unfinishedBlock = resumeEntries.find(item => item.type === 'library' || (item.type === 'quick' && homeCanUseAdvancedFeatures) || (item.type === 'course' && homeCanSeeVideoaulas));
+                  useEffect(() => {
+                    if (!user?.uid || !unfinishedBlock) return;
+                    let cancelled = false;
+                    import('../questions/reconcileQuestionResume.js').then(({reconcileQuestionResume}) => {
+                      if (!cancelled) return reconcileQuestionResume(user.uid, unfinishedBlock);
+                    }).catch(error => console.warn('Falha ao conferir progresso do bloco:', error));
+                    return () => { cancelled = true; };
+                  }, [user?.uid, unfinishedBlock?.key, unfinishedBlock?.signature, unfinishedBlock?.updatedAt]);
                   const continueBlock = () => {
                     if (!unfinishedBlock) return;
                     requestQuestionResume(unfinishedBlock.key);

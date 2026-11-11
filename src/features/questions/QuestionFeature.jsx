@@ -546,6 +546,8 @@ const QuestionView = ({
 	  const singleMode = (allFlashcards || displayMode === 'single') && questions.length > 0;
 	  const [singleIndex, setSingleIndex] = useState(0);
 	  const [resumeRequested] = useState(() => consumeQuestionResume(resumeTarget && `${resumeTarget.key}:${studyKind}`));
+	  const [resumeOpenedAt] = useState(() => Date.now());
+	  const resumeReconciledRef = useRef(false);
 	  const scrolledRef = useRef(false);
 	  const currentSingleQuestionIdRef = useRef(null);
 	  const [showCompletion, setShowCompletion] = useState(false);
@@ -584,6 +586,16 @@ const QuestionView = ({
 	  };
 
   const resumeLoading = resumeTarget?.type === 'course' ? (!vqBlocksLoaded || vqLoading) : !!libraryLoading;
+  useEffect(() => {
+    if (!resumeRequested || resumeReconciledRef.current || resumeLoading || !questions.length || !resumeTarget?.key) return;
+    const timer = setTimeout(() => {
+      resumeReconciledRef.current = true;
+      import('./reconcileQuestionResume.js').then(({reconcileVisibleQuestionResume}) =>
+        reconcileVisibleQuestionResume(user?.uid, `${resumeTarget.key}:${studyKind}`, questions, answers, studyKind, resumeOpenedAt)
+      ).catch(error => console.warn('Falha ao conferir progresso do bloco:', error));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [resumeRequested, resumeLoading, resumeTarget?.key, questions, answers, studyKind, user?.uid, resumeOpenedAt]);
   useEffect(() => {
     if (scrolledRef.current || resumeLoading || !questions.length || allFlashcards) return;
     const isAnswered = q => {
