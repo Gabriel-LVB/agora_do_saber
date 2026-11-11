@@ -218,6 +218,7 @@ export default function VideoQuestionsView() {
                 <div className="w-full">
                   <QuestionView
                     title={visibleTitle}
+                    initialStudyKind={vqActiveBlockView.studyKind || 'auto'}
                     resumeTarget={{key:`course:${aulaIdNew}:${blockId}`, type:'course', aula:{title:vqAula.title, bunny_id:vqAula.bunny_id, embed_url:vqAula.embed_url, path:vqAula.path, duration_seconds:vqAula.duration_seconds}, subject:vqSubject, topic:vqTopic, blockId, subjectTitle:vqAula.title, title:visibleTitle}}
                     onBack={backFromCourseQuestions}
                     backLabel={vqActiveBlockView?.fromPlan ? 'Voltar ao plano' : 'Voltar à aula'}

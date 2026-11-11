@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFeatureContext } from '../FeatureContext.jsx';
 import { useCourseHeroJourney } from '../course/useCourseHeroJourney.js';
 import BrandIdentity from '../../components/BrandIdentity.jsx';
-import { readQuestionResume } from '../questions/questionResume.js';
+import { requestQuestionResume, subscribeQuestionResume } from '../questions/questionResume.js';
 
 export default function HomeView() {
   const {
@@ -73,6 +73,13 @@ export default function HomeView() {
     Zap,
   } = useFeatureContext();
 
+                  const [resumeEntries, setResumeEntries] = useState([]);
+                  useEffect(() => {
+                    setResumeEntries([]);
+                    if (!user?.uid || user.isAnonymous) return;
+                    return subscribeQuestionResume(user.uid, setResumeEntries);
+                  }, [user?.uid, user?.isAnonymous]);
+
 			    const sharedLibraryCard = homeCanSeeSharedLibrary ? {key:'shared-library', icon:<FactoryIcon className="w-5 h-5"/>, title:'Fábrica de Questões', desc:isAdmin?'Produção, curadoria, seleção e auditoria do banco de questões.':'Questões do curso organizadas por aula e prontas para praticar.', action:()=>{setSharedLibraryActiveItemId(null);setView('shared-library');}} : null;
 			    const famedCard = homeCanSeeFamed ? {key:'famed', icon:<FamedIcon className="w-5 h-5"/>, title:'FAMED', desc:'Aulas e questões da faculdade', action:()=>setView('famed')} : null;
 			    const creationCard = {key:'creation', icon:<FolderIcon className="w-5 h-5"/>, title:'Meus materiais', desc:'Acesse, crie ou importe suas aulas e bancos de questões.', action:()=>{setLibFilter(homeCanUseAcademia?'academia':'gemini');setActiveFolderId(null);setView('sub-library');}};
@@ -92,12 +99,13 @@ export default function HomeView() {
                       ? `${capitalizeDisplayLabel(heroJourneyStep.item.subject)} · ${heroJourneyStep.step.subdetail}`
                       : `${capitalizeDisplayLabel(heroJourneyStep.item.subject)} · ${heroJourneyStep.step.label}`,
                   } : null;
-                  const unfinishedBlock = readQuestionResume(user?.uid).find(item => item.type === 'library' || (item.type === 'quick' && homeCanUseAdvancedFeatures) || (item.type === 'course' && homeCanSeeVideoaulas));
+                  const unfinishedBlock = resumeEntries.find(item => item.type === 'library' || (item.type === 'quick' && homeCanUseAdvancedFeatures) || (item.type === 'course' && homeCanSeeVideoaulas));
                   const continueBlock = () => {
                     if (!unfinishedBlock) return;
+                    requestQuestionResume(unfinishedBlock.key);
                     if (unfinishedBlock.type === 'course') {
                       setVqSubject(unfinishedBlock.subject); setVqTopic(unfinishedBlock.topic); setVqAula(unfinishedBlock.aula);
-                      setVqActiveBlockView({blockId:unfinishedBlock.blockId, showWrong:false}); setView('videoquestions');
+                      setVqActiveBlockView({blockId:unfinishedBlock.blockId, showWrong:false, studyKind:unfinishedBlock.studyKind}); setView('videoquestions');
                     } else if (unfinishedBlock.type === 'quick') {
                       setActiveSubjectId(unfinishedBlock.subjectId); setActiveTopicId(unfinishedBlock.topicId);
                       setQuickStudyTab(unfinishedBlock.studyKind); setView('quick-topic');

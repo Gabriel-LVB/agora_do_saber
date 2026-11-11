@@ -14,7 +14,7 @@ import {
   legacyImportedQuestionForDisplay,
 } from '../../lib/questionOptions.js';
 import { toggleQuestionTypeSelection } from '../../lib/questionTypes.js';
-import { saveQuestionResume } from './questionResume.js';
+import { consumeQuestionResume, saveQuestionResume } from './questionResume.js';
 import { useFeatureContext } from '../FeatureContext.jsx';
 
 
@@ -462,7 +462,7 @@ const QuestionView = ({
 	  initialStudyKind='auto',
 	  resumeTarget:resumeTargetProp=null,
 }) => {
-  const { user, activeSubject, activeTopic } = useFeatureContext();
+  const { user, activeSubject, activeTopic, libraryLoading, vqLoading, vqBlocksLoaded } = useFeatureContext();
   const resumeTarget = resumeTargetProp === true && activeSubject && activeTopic
     ? {key:`library:${activeSubject.id}:${activeTopic.id}`, type:'library', subjectId:activeSubject.id, topicId:activeTopic.id, subjectTitle:activeSubject.title, title:activeTopic.title, source:activeSubject.source, folderId:activeSubject.folderId || null}
     : resumeTargetProp;
@@ -539,41 +539,14 @@ const QuestionView = ({
     }
   };
 
-  // Auto-scroll to first unanswered question when block loads
-  useEffect(() => {
-    if (!questions || questions.length === 0) return;
-    const validAns = Object.fromEntries(
-      Object.entries(answers).filter(([id]) => questionIdSet.has(String(id)))
-    );
-    const answeredCount = questions.filter(q => {
-      const v = validAns[q.id];
-      if (!v || v === 'SKIPPED') return false;
-      if (q.isOpen) { try { const parsed = JSON.parse(v); return !!parsed?.answer && parsed?.score != null; } catch(e) { return false; } }
-      return true;
-    }).length;
-    // Don't scroll if none answered or all answered
-    if (answeredCount === 0 || answeredCount === questions.length) return;
-    // Find first unanswered
-    const firstUnanswered = questions.find(q => {
-      const v = validAns[q.id];
-      if (!v || v === 'SKIPPED') return true;
-      if (q.isOpen) { try { const parsed = JSON.parse(v); return !parsed?.answer || parsed?.score == null; } catch(e) { return true; } }
-      return false;
-    });
-    if (!firstUnanswered) return;
-    const timer = setTimeout(() => {
-      const el = document.querySelector(`[data-question-id="${firstUnanswered.id}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []); // only on mount
-
   const validAnswers = useMemo(() => Object.fromEntries(
     Object.entries({...answers, ...pendingAnswers}).filter(([id]) => questionIdSet.has(String(id)))
   ), [answers, pendingAnswers, questionIdSet]);
   const allFlashcards = useMemo(() => questions.length > 0 && questions.every(q => isMemoryCard(q)), [questionIdsKey, questions]);
 	  const singleMode = (allFlashcards || displayMode === 'single') && questions.length > 0;
 	  const [singleIndex, setSingleIndex] = useState(0);
+	  const [resumeRequested] = useState(() => consumeQuestionResume(resumeTarget && `${resumeTarget.key}:${studyKind}`));
+	  const scrolledRef = useRef(false);
 	  const currentSingleQuestionIdRef = useRef(null);
 	  const [showCompletion, setShowCompletion] = useState(false);
 	  const [flashcardQueue, setFlashcardQueue] = useState([]);
@@ -609,6 +582,33 @@ const QuestionView = ({
 	    if (!q.isOpen) return false;
 	    try { const p = JSON.parse(validAnswers[q.id]); return (p?.score ?? 0) >= 70; } catch(e) { return false; }
 	  };
+
+  const resumeLoading = resumeTarget?.type === 'course' ? (!vqBlocksLoaded || vqLoading) : !!libraryLoading;
+  useEffect(() => {
+    if (scrolledRef.current || resumeLoading || !questions.length || allFlashcards) return;
+    const isAnswered = q => {
+      const answer = answers[q.id];
+      if (!answer || answer === 'SKIPPED') return false;
+      if (q.isOpen) { try { const value = JSON.parse(answer); return !!value?.answer && value?.score != null; } catch { return false; } }
+      return true;
+    };
+    const first = questions.findIndex(q => !isAnswered(q));
+    const count = questions.filter(isAnswered).length;
+    if (!count || first < 0) {
+      if (!resumeRequested) {
+        const timer = setTimeout(() => { scrolledRef.current = true; }, 300);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (singleMode && resumeRequested) setSingleIndex(first);
+      const el = singleMode ? null : Array.from(document.querySelectorAll('[data-question-id]')).find(node => node.dataset.questionId === String(questions[first].id));
+      if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+      scrolledRef.current = true;
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [questions, answers, resumeLoading, allFlashcards, singleMode, resumeRequested]);
 
 	  useEffect(() => {
 	    if (!allFlashcards) return;
@@ -683,19 +683,21 @@ const QuestionView = ({
 
   const resumeSeenRef = useRef(null);
   useEffect(() => {
-    if (!resumeTarget) return;
+    if (!resumeTarget || resumeLoading || !questions.length) return;
     const completed = Object.fromEntries(questions.filter(q => {
       const answer = answers[q.id];
       if (!answer || answer === 'SKIPPED') return false;
       if (q.isOpen) { try { const value = JSON.parse(answer); return !!value?.answer && value?.score != null; } catch { return false; } }
       return true;
-    }).map(q => [q.id, true]));
+    }).map(q => [q.id, allFlashcards ? answers[q.id] : true]));
     const key = `${resumeTarget.key}:${studyKind}`;
-    const firstRender = resumeSeenRef.current !== key;
-    resumeSeenRef.current = key;
-    if (firstRender && !Object.keys(completed).length) return;
-    saveQuestionResume(user?.uid, {...resumeTarget, key:`${resumeTarget.key}:${studyKind}`, studyKind}, completed, questions.length);
-  }, [user?.uid, resumeTarget?.key, answers, questions, studyKind]);
+    const signature = JSON.stringify(completed);
+    const previous = resumeSeenRef.current;
+    resumeSeenRef.current = {key, signature};
+    if (!previous || previous.key !== key || previous.signature === signature) return;
+    const complete = allFlashcards ? questions.every(q => answers[q.id] === FLASHCARD_CORRECT) : Object.keys(completed).length === questions.length;
+    saveQuestionResume(user?.uid, {...resumeTarget, key, studyKind}, completed, questions.length, complete);
+  }, [user?.uid, resumeTarget?.key, answers, questions, studyKind, resumeLoading, allFlashcards]);
 
 	  useEffect(() => {
 	    const active = allFlashcards && singleMode;

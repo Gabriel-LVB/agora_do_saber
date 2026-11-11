@@ -3809,7 +3809,7 @@ export default function QuestionBankApp() {
   const homeShowsAdminTools = isAdmin && adminHomeMode === 'admin';
   const homeCanSeeVideoaulas = isAdmin ? adminHomeMode !== 'site' : canSeeVideoaulas;
   const homeCanSeeSharedLibrary = QUESTION_FACTORY_VISIBLE && isAdmin && adminHomeMode !== 'site';
-  const homeCanSeeFamed = homeCanSeeVideoaulas;
+  const homeCanSeeFamed = false;
   const homeCanSeeUsmle = homeShowsAdminTools;
   const [usmleSessionActive, setUsmleSessionActive] = useState(false);
   useEffect(() => {
@@ -6736,7 +6736,6 @@ export default function QuestionBankApp() {
   useEffect(() => {
     if (!username) return;
     const preloadPrimaryViews = () => Promise.allSettled([
-      import('./features/famed/FamedPortalView.jsx'),
       import('./features/library/SubLibraryView.jsx'),
       import('./features/course/CoursePortalView.jsx'),
     ]);

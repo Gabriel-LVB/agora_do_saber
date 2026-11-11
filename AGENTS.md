@@ -137,7 +137,7 @@ Há fallback legado para `config/videoaulas_whitelist`.
 
 2. **Aluno com curso**
    - Está em `courseEmails`.
-   - Vê Portal do Curso e FAMED.
+   - Vê o Portal do Curso. A FAMED está oculta para todos, inclusive o admin.
    - Pode usar Meus materiais, Academia, Oráculo, importação, Dúvida Rápida, simulados e revisão.
 
 3. **Aluno sem curso**
@@ -148,6 +148,8 @@ Há fallback legado para `config/videoaulas_whitelist`.
 Quem não estiver em nenhuma lista recebe “Acesso negado”. A autorização deve ser confirmada remotamente em cada carregamento; cache serve somente como fallback de indisponibilidade, nunca como fonte definitiva após revogação.
 
 O app registra acessos em `access_logs` e presença/dispositivo em `user_devices`. Não enfraqueça essa autorização apenas escondendo elementos na UI: a regra real precisa continuar protegida no Firestore.
+
+A Home oferece retomada de blocos de Meus materiais, Dúvida Rápida e Questões do Curso. O índice individual em `users/{uid}/question_resume` sincroniza entre dispositivos sem carregar todos os blocos na Home; registros concluídos ou zerados permanecem como marcadores inativos para impedir que um cache antigo os recrie. O cache anterior do navegador é migrado apenas após confirmar os registros remotos. Ao retomar, aguarde o carregamento do progresso antes de posicionar na primeira questão pendente. A FAMED não participa desse índice.
 
 ## Navegação
 
@@ -169,7 +171,7 @@ Não há URLs por tela nem histórico de rotas convencional. Back do navegador �
 | --- | --- |
 | `library` | Início/Home |
 | `shared-library` | Fábrica de Questões (admin) |
-| `famed` | Portal FAMED |
+| `famed` | Portal FAMED preservado, atualmente oculto para todos |
 | `sub-library` | Raiz/pasta de Meus materiais |
 | `subject` | Lista de tópicos de um assunto pessoal |
 | `topic` | Banco de questões de um tópico |
