@@ -24,7 +24,9 @@ import {
   normalizeDisplayedAlternativeReferences,
 } from '../src/lib/questionExplanation.js';
 import { normalizeImportedQuestionText } from '../src/lib/importedQuestionText.js';
+import { splitMarkdownTableBlocks } from '../src/lib/markdownTables.js';
 import { extractQuestionExportTags } from '../src/features/exporting/exportQuestionTags.js';
+import { renderDocxQuestionTable } from '../src/features/exporting/docxQuestionTable.js';
 import {
   QUESTION_OPTION_SHUFFLE_VERSION,
   legacyImportedQuestionForDisplay,
@@ -623,6 +625,24 @@ assert.equal(
   "ENTENDA O TEMA\nHemorragia digestiva alta é o sangramento acima do ângulo de Treitz, a 'dobra' que separa duodeno de jejuno.\n\n- Primeiro item\ncom continuação\n- Segundo item",
   'quebras visuais de PDF devem ser unidas sem apagar títulos, parágrafos e listas',
 );
+const densitometryTable = [
+  '| Coluna lombar | | | Colo do fêmur | | | Fêmur proximal total | | |',
+  '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+  '| DMO g/cm² | T-score | Z-score | DMO g/cm² | T-score | Z-score | DMO g/cm² | T-score | Z-score |',
+  '| 0,989 | -1,6 | -2,1 | 0,661 | -2,7 | -2,2 | 0,703 | -2,5 | -2,2 |',
+].join('\n');
+const normalizedTableQuestion = normalizeImportedQuestionText(`Paciente saudável.\n\n${densitometryTable}\n\nQual é o diagnóstico?`);
+assert.equal(normalizedTableQuestion, `Paciente saudável.\n\n${densitometryTable}\n\nQual é o diagnóstico?`);
+const tableBlocks = splitMarkdownTableBlocks(normalizedTableQuestion);
+assert.equal(tableBlocks[1].type, 'table');
+assert.equal(tableBlocks[1].columnCount, 9);
+assert.deepEqual(tableBlocks[1].headers.map(cell => cell.colSpan), [3, 3, 3]);
+assert.equal(tableBlocks[1].rows[1][6], '0,703');
+assert.equal(splitMarkdownTableBlocks('A | B em uma frase.')[0].type, 'text');
+const docxTableXml = renderDocxQuestionTable(tableBlocks[1], text => `<w:p>${text}</w:p>`, text => text);
+assert.equal((docxTableXml.match(/<w:gridSpan w:val="3"\/>/g) || []).length, 3);
+assert.equal((docxTableXml.match(/<w:tr>/g) || []).length, 3);
+assert.match(docxTableXml, /<w:p>0,703<\/w:p>/);
 const famedPackageZip = zipSync({
   'questions.json':strToU8(JSON.stringify({
     schema:'agora-famed-question-package-v1',

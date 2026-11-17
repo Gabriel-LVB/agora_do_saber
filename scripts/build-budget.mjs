@@ -123,12 +123,14 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // Retomada de blocos na Home e exportação do resultado acrescentam cerca de 1 KiB gzip ao núcleo.
 // A conferência remota de um único bloco acrescenta cerca de 1,6 KiB gzip,
 // em um módulo carregado sob demanda, para corrigir contadores entre dispositivos.
-const CORE_TOTAL_GZIP_LIMIT = 445 * 1024;
+// Leitura de tabelas nos enunciados acrescenta ~0,3 KiB ao conjunto de telas lazy.
+const CORE_TOTAL_GZIP_LIMIT = 445.5 * 1024;
 // Agrupar uma matéria inteira, oferecer ordem, aplicar a paleta completa e
 // converter marcadores em tags soma 1,8 KiB medido ao chunk lazy original.
 // Os blocos rotulados Entenda o tema e Bizu nos formatos HTML/PDF/DOCX somam
 // 0,3 KiB gzip medido e permanecem integralmente no exportador lazy.
-const QUESTION_EXPORT_GZIP_LIMIT = 16.5 * 1024;
+// A renderização de tabelas nos enunciados HTML/PDF acrescenta ~0,1 KiB ao exportador lazy.
+const QUESTION_EXPORT_GZIP_LIMIT = 16.75 * 1024;
 // A Fábrica concluída está arquivada no código-fonte, mas não possui ponto de
 // entrada no app. Seus chunks administrativos não devem ser emitidos enquanto
 // QUESTION_FACTORY_VISIBLE permanecer falso.

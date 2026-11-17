@@ -1,0 +1,6 @@
+export const renderDocxQuestionTable = (table, docxParagraph, htmlishToText) => {
+  const width = Math.floor(9360 / table.columnCount);
+  const cell = ({ text, colSpan = 1 }, header = false) => `<w:tc><w:tcPr><w:tcW w:w="${width * colSpan}" w:type="dxa"/>${colSpan > 1 ? `<w:gridSpan w:val="${colSpan}"/>` : ''}${header ? '<w:shd w:fill="F3F4F6"/>' : ''}</w:tcPr>${docxParagraph(htmlishToText(text), { bold:header, size:18, after:40 }) || '<w:p/>'}</w:tc>`;
+  const row = (cells, header = false) => `<w:tr>${cells.map(value => cell(typeof value === 'string' ? { text:value } : value, header)).join('')}</w:tr>`;
+  return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="C7C7C7"/><w:left w:val="single" w:sz="4" w:color="C7C7C7"/><w:bottom w:val="single" w:sz="4" w:color="C7C7C7"/><w:right w:val="single" w:sz="4" w:color="C7C7C7"/><w:insideH w:val="single" w:sz="4" w:color="C7C7C7"/><w:insideV w:val="single" w:sz="4" w:color="C7C7C7"/></w:tblBorders></w:tblPr><w:tblGrid>${Array.from({ length:table.columnCount }, () => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(table.headers, true)}${table.rows.map(cells => row(cells)).join('')}</w:tbl>`;
+};

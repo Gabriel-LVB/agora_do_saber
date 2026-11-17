@@ -5,6 +5,7 @@ import {
   normalizeDisplayedAlternativeReferences,
 } from '../../lib/questionExplanation.js';
 import { normalizeImportedQuestionText } from '../../lib/importedQuestionText.js';
+import { splitMarkdownTableBlocks } from '../../lib/markdownTables.js';
 import { extractQuestionExportTags } from './exportQuestionTags.js';
 
 const ic = (d) => ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:d}}/>;
@@ -34,6 +35,10 @@ const escapeHtml = (s = '') => parseInlineMarkdown(s).map(part => {
   return part.bold ? `<strong>${text}</strong>` : text;
 }).join('');
 const textToHtml = (s = '') => escapeHtml(s).replace(/\n/g, '<br>');
+const questionTextToHtml = (value = '') => splitMarkdownTableBlocks(value).map(block => {
+  if (block.type === 'text') return textToHtml(block.text);
+  return `<div class="question-table-wrap"><table class="question-table"><thead><tr>${block.headers.map(cell => `<th colspan="${cell.colSpan}">${escapeHtml(cell.text)}</th>`).join('')}</tr></thead><tbody>${block.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}).join('');
 
 const EXPORT_IMAGE_MIME_BY_EXTENSION = {
   png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp',
@@ -337,9 +342,9 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .lesson-content p{font-family:Georgia,serif;font-size:14px;line-height:1.72;margin:0 0 8px;color:#1f2937}
 .lesson-content ul{margin:6px 0 10px 20px;padding:0}
 .lesson-content li{font-family:Georgia,serif;font-size:14px;line-height:1.65;margin:3px 0}
-.lesson-content table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12px}
-.lesson-content th{border:1px solid #d1d5db;padding:7px 9px;text-align:left;background:#f9fafb;color:#374151}
-.lesson-content td{border:1px solid #e5e7eb;padding:7px 9px;color:#374151}
+.lesson-content table,.question-table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12px}
+.lesson-content th,.question-table th{border:1px solid #d1d5db;padding:7px 9px;text-align:left;background:#f9fafb;color:#374151}
+.lesson-content td,.question-table td{border:1px solid #e5e7eb;padding:7px 9px;color:#374151}
 .question-card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:0 0 18px;page-break-inside:avoid;background:#fff}
 .question-kicker{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
 .question-kicker-label{display:flex;min-width:0;align-items:center;gap:8px}.question-export-tags{display:flex;min-width:0;flex-wrap:wrap;justify-content:flex-end;gap:5px;margin-left:auto;text-transform:none;letter-spacing:.02em}.question-export-tag{max-width:100%;overflow:hidden;border:1px solid #e5e7eb;border-radius:999px;padding:3px 7px;background:#f3f4f6;color:#6b7280;font-size:9px;font-weight:700;line-height:1.2;text-overflow:ellipsis;white-space:nowrap;opacity:.68}
@@ -348,6 +353,7 @@ h3{font-size:14px;color:#92400e;margin:18px 0 8px}
 .case-label{margin:0 0 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#92400e}
 .case-text{font-family:Georgia,serif;font-size:13px;line-height:1.6;color:#374151}
 .question-statement{font-family:Georgia,serif;font-size:15px;line-height:1.65;margin:0 0 14px;color:#111827}
+.question-table-wrap{max-width:100%;overflow-x:auto}.question-table{min-width:580px;line-height:1.4}.question-table td,.question-table th{overflow-wrap:anywhere}
 .question-images{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 15px}
 .question-figure{overflow:hidden;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;margin:0}
 .question-figure img{display:block;width:100%;max-height:430px;object-fit:contain;background:#fff}
@@ -382,6 +388,7 @@ html[data-theme="dark"]{color-scheme:dark;background:#151719;--export-bg:#151719
 html[data-theme="dark"] body{color:var(--export-text);background:var(--export-bg)}
 html[data-theme="dark"] .export-header,html[data-theme="dark"] h2,html[data-theme="dark"] .question-divider{border-color:var(--export-line)}
 html[data-theme="dark"] h1,html[data-theme="dark"] h2,html[data-theme="dark"] .question-statement{color:var(--export-text)}
+html[data-theme="dark"] .question-table th,html[data-theme="dark"] .question-table td{border-color:var(--export-line);color:var(--export-text)}html[data-theme="dark"] .question-table th{background:var(--export-surface-muted)}
 html[data-theme="dark"] .export-brand,html[data-theme="dark"] h3,html[data-theme="dark"] .sub,html[data-theme="dark"] .case-label{color:var(--export-accent-text)}
 html[data-theme="dark"] .export-meta,html[data-theme="dark"] .question-kicker,html[data-theme="dark"] .question-figure figcaption,html[data-theme="dark"] .interactive-toolbar-help,html[data-theme="dark"] .interactive-feedback{color:var(--export-muted)}
 html[data-theme="dark"] .lesson-content p,html[data-theme="dark"] .lesson-content li,html[data-theme="dark"] .lesson-content th,html[data-theme="dark"] .lesson-content td,html[data-theme="dark"] .case-text,html[data-theme="dark"] .option-text{color:var(--export-text)}
@@ -408,7 +415,7 @@ html[data-theme="dark"] .interactive-response{border-color:var(--export-line);co
 html[data-theme="dark"] .interactive-feedback.incorrect{color:#e9a9ab}
 .pb{page-break-before:always}
 @media(max-width:620px){body{padding:14px}.interactive-toolbar{position:static;align-items:flex-start;flex-direction:column}.interactive-actions{justify-content:flex-start}.question-images{grid-template-columns:1fr}}
-@media print{body{padding:0}.question-card,.answer-card,.case-box,.question-figure{break-inside:avoid}.pb{break-before:page}.interactive-toolbar,.interactive-question-actions,.interactive-feedback{display:none!important}}
+@media print{body{padding:0}.question-table{min-width:0}.question-table-wrap{overflow:visible}.question-card,.answer-card,.case-box,.question-figure{break-inside:avoid}.pb{break-before:page}.interactive-toolbar,.interactive-question-actions,.interactive-feedback{display:none!important}}
 `;
 const renderPdfHeader = ({ title = 'Exportar', meta = '' }) => `<header class="export-header">
 <div class="export-brand">Ágora do Saber</div>
@@ -426,8 +433,8 @@ const renderPdfQuestionHtml = (question, idx, { showAnswer = false, blank = fals
   const corr = data.options?.find(o => o.isCorrect);
   return `<article class="question-card">
 ${renderQuestionKicker(data,idx)}
-${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${textToHtml(data.caseContext)}</div></section>` : ''}
-<div class="question-statement">${textToHtml(data.statement || '')}</div>
+${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${questionTextToHtml(data.caseContext)}</div></section>` : ''}
+<div class="question-statement">${questionTextToHtml(data.statement || '')}</div>
 ${renderQuestionImagesHtml(data.images || [])}
 ${renderPdfOptions(data.options || [], { showAnswer })}
 ${blank ? '<div class="answer-space"></div>' : ''}
@@ -471,8 +478,8 @@ const renderInteractiveQuestionHtml = (question, idx, { mode = 'study' } = {}) =
   const answer = mode === 'blank' ? '' : `<div class="interactive-answer" data-answer hidden>${renderPdfAnswerHtml(question,idx,{ compact:true, correctShownInOptions:hasOptions })}</div>`;
   return `<article class="question-card interactive-question" data-interactive-question data-mode="${mode}">
 ${renderQuestionKicker(data,idx)}
-${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${textToHtml(data.caseContext)}</div></section>` : ''}
-<div class="question-statement">${textToHtml(data.statement || '')}</div>
+${data.caseContext ? `<section class="case-box"><p class="case-label">Cenário clínico</p><div class="case-text">${questionTextToHtml(data.caseContext)}</div></section>` : ''}
+<div class="question-statement">${questionTextToHtml(data.statement || '')}</div>
 ${renderQuestionImagesHtml(data.images || [])}
 ${hasOptions ? data.options.map(option => `<button type="button" class="option-row interactive-option" data-option data-correct="${option.isCorrect ? 'true' : 'false'}" aria-pressed="false"><span class="option-letter">${escapeHtml(option.letter)}</span><span class="option-text">${textToHtml(option.text || '')}</span></button>`).join('') : `<textarea class="interactive-response" data-open-response placeholder="Digite ou organize sua resposta aqui…" aria-label="Sua resposta para a questão ${idx + 1}"></textarea>`}
 ${!hasOptions && mode === 'study' ? '<div class="interactive-question-actions"><button type="button" class="interactive-button primary" data-action="reveal">Ver resposta</button></div>' : ''}
@@ -638,6 +645,10 @@ const docxTable = (rows = []) => {
   if (!rows.length) return '';
   return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="C7C7C7"/><w:left w:val="single" w:sz="4" w:color="C7C7C7"/><w:bottom w:val="single" w:sz="4" w:color="C7C7C7"/><w:right w:val="single" w:sz="4" w:color="C7C7C7"/><w:insideH w:val="single" w:sz="4" w:color="C7C7C7"/><w:insideV w:val="single" w:sz="4" w:color="C7C7C7"/></w:tblBorders></w:tblPr>${rows.map(row => `<w:tr>${row.map(cell => `<w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>${docxParagraph(cell, { after:60 })}</w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`;
 };
+let renderDocxQuestionTable = null;
+const questionTextToDocx = (value = '', opts = {}) => splitMarkdownTableBlocks(value).map(block =>
+  block.type === 'table' ? renderDocxQuestionTable(block, docxParagraph, htmlishToText) : docxParagraph(block.text, opts)
+).join('');
 const markdownToDocx = (md = '') => {
   const lines = String(md || '').split('\n');
   let xml = '';
@@ -974,9 +985,9 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
       let xml = docxQuestionHeader(data,idx);
       if (data.caseContext) {
         xml += docxParagraph('Cenário clínico', { bold:true, color:'92400E', after:40 });
-        xml += docxParagraph(data.caseContext, { color:'374151', after:100 });
+        xml += questionTextToDocx(data.caseContext, { color:'374151', after:100 });
       }
-      xml += docxParagraph(data.statement || '', { after:120 });
+      xml += questionTextToDocx(data.statement || '', { after:120 });
       xml += docxImageParagraphs(data.images || [],imageRegistry);
       (data.options || []).forEach(o => {
         xml += docxParagraph(`${o.letter}) ${o.text || ''}`, {
@@ -1103,6 +1114,7 @@ const AcademiaExportModal = ({ topic, subject, onClose, darkMode }) => {
       } else if (fmt === 'html') {
         downloadBlob(new Blob([buildHtml(preparedTopic,{ interactive:true })],{ type:'text/html;charset=utf-8' }),`${fileName}.html`);
       } else {
+        renderDocxQuestionTable ||= (await import('./docxQuestionTable.js')).renderDocxQuestionTable;
         const imageRegistry = createDocxImageRegistry();
         const documentXml = buildDocx(preparedTopic,imageRegistry);
         downloadBlob(createDocxBlob(documentXml,imageRegistry.entries()),`${fileName}.docx`);
@@ -1231,9 +1243,9 @@ const ExportModal = ({ topic:requestedTopic, subject, onClose, darkMode }) => {
       let xml = docxQuestionHeader(data,idx);
       if (data.caseContext) {
         xml += docxParagraph('Cenário clínico', { bold:true, color:'92400E', after:40 });
-        xml += docxParagraph(data.caseContext, { color:'374151', after:100 });
+        xml += questionTextToDocx(data.caseContext, { color:'374151', after:100 });
       }
-      xml += docxParagraph(data.statement || '', { after:120 });
+      xml += questionTextToDocx(data.statement || '', { after:120 });
       xml += docxImageParagraphs(data.images || [],imageRegistry);
       (data.options || []).forEach(o => {
         xml += docxParagraph(`${o.letter}) ${o.text || ''}`, {
@@ -1312,6 +1324,7 @@ const ExportModal = ({ topic:requestedTopic, subject, onClose, darkMode }) => {
       } else if (fmt === 'html') {
         downloadBlob(new Blob([buildHtml(preparedTopic,{ interactive:true })],{ type:'text/html;charset=utf-8' }),`${fileName}.html`);
       } else {
+        renderDocxQuestionTable ||= (await import('./docxQuestionTable.js')).renderDocxQuestionTable;
         const imageRegistry = createDocxImageRegistry();
         const documentXml = buildDocx(preparedTopic,imageRegistry);
         downloadBlob(createDocxBlob(documentXml,imageRegistry.entries()),`${fileName}.docx`);

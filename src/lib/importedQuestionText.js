@@ -1,3 +1,5 @@
+import { looksLikeMarkdownTableRow } from './markdownTables.js';
+
 const LIST_ITEM_RE = /^\s*(?:[-*•]\s+|\d{1,3}[.)]\s+|[A-H][.)]\s+)/i;
 const STRUCTURED_LINE_RE = /^\s*(?:#{1,6}\s+|\[{1,2}\s*ALT\s*[:\-]?\s*[A-H]\s*\]{1,2}|(?:Aula|Alternativas)\s*:)/i;
 
@@ -40,6 +42,8 @@ export const normalizeImportedQuestionText = (value = '') => {
       || previous === ''
       || isStructuralLine(previous)
       || isStructuralLine(line)
+      || looksLikeMarkdownTableRow(previous)
+      || looksLikeMarkdownTableRow(line)
       || /<br\s*\/?>\s*$/i.test(previous)
     ) {
       normalized.push(line);

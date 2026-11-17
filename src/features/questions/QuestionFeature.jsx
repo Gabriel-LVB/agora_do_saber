@@ -5,6 +5,7 @@ import { loadLibraryQuestionAsset } from '../../services/libraryQuestionAssets.j
 
 import { deferInteractionWork } from '../../lib/interaction.js';
 import { normalizeImportedQuestionText } from '../../lib/importedQuestionText.js';
+import { splitMarkdownTableBlocks } from '../../lib/markdownTables.js';
 import {
   normalizeDeclaredCorrectAlternativeReferences,
   normalizeDisplayedAlternativeReferences,
@@ -420,6 +421,25 @@ const renderRichText = (text, multiline = false) => {
 // Aliases para compatibilidade
 const parseHtmlText     = (text) => renderRichText(text, false);
 const parseHtmlTextChat = (text) => renderRichText(text, true);
+const renderQuestionText = (text) => {
+  const blocks = splitMarkdownTableBlocks(text);
+  if (!blocks.some(block => block.type === 'table')) return parseHtmlTextChat(text);
+  return blocks.map((block, index) => block.type === 'text'
+    ? <React.Fragment key={`text-${index}`}>{parseHtmlTextChat(block.text)}</React.Fragment>
+    : <div key={`table-${index}`} className="my-4 max-w-full overflow-x-auto select-text" style={{userSelect:'text'}}>
+        <table className="w-full border-collapse text-left text-sm" style={{minWidth:'max-content'}}>
+          <thead><tr>{block.headers.map((cell, cellIndex) =>
+            <th key={cellIndex} colSpan={cell.colSpan} className="border border-gray-400 bg-gray-500 bg-opacity-10 px-3 py-2 font-semibold whitespace-nowrap">{parseHtmlText(cell.text)}</th>
+          )}</tr></thead>
+          <tbody>{block.rows.map((row, rowIndex) =>
+            <tr key={rowIndex}>{row.map((cell, cellIndex) =>
+              <td key={cellIndex} className="border border-gray-400 px-3 py-2 whitespace-nowrap">{parseHtmlText(cell)}</td>
+            )}</tr>
+          )}</tbody>
+        </table>
+      </div>
+  );
+};
 
 const QuestionView = ({
   title, onBack, backLabel='Voltar',
@@ -1575,7 +1595,7 @@ const OpenAnswerModal = ({ question, darkMode, apiKey, onCall, onClose, isEssay=
           <button type="button" aria-label="Fechar" onClick={onClose} className={`text-xl ${dm?'text-gray-400':'text-gray-400'}`}>×</button>
         </div>
         <div className="px-5 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
-          <p className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{parseHtmlTextChat(question.statement)}</p>
+          <div className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-800'}`}>{renderQuestionText(question.statement)}</div>
 
           {!result ? (
             <>
@@ -2184,14 +2204,14 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
                 className={`mb-4 select-text text-base font-normal leading-relaxed md:text-lg ${darkMode?'text-gray-200':'text-gray-800'}`}
                 style={{userSelect:'text'}}
               >
-                {parseHtmlTextChat(questionText.caseContext)}
+                {renderQuestionText(questionText.caseContext)}
               </div>
             )}
             <div
               className={`${question.isFlashcard ? 'text-base md:text-xl font-bold text-center leading-snug my-2 md:my-4 max-w-2xl mx-auto flex-shrink-0' : 'text-base md:text-lg font-normal leading-relaxed'} select-text ${darkMode?'text-gray-200':'text-gray-800'}`}
               style={{userSelect:'text'}}
             >
-              {parseHtmlTextChat(questionText.statement)}
+              {renderQuestionText(questionText.statement)}
             </div>
           </section>}
           {!!question.images?.length&&(
@@ -2215,7 +2235,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
 	            return onAnswer(l);
 	          }}
 	          large={flashcardLarge || flashcardStudyMode}
-	          front={parseHtmlTextChat(questionText.statement)}
+	          front={renderQuestionText(questionText.statement)}
 	        />
       ) : question.isOpen ? (
         <OpenAnswerInline
