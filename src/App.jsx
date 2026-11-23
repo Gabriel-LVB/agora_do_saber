@@ -2094,9 +2094,11 @@ const parseFlashcards = (text, namespace='') => {
       const idM = block.match(/Flashcard(?:[ \t]*(?:n[ºo]\.?)?)?[ \t]*[:#\-–—]?[ \t]*\[?(\d+(?:\.\d+)*)\]?/i);
       const rawId = idM ? idM[1] : `${++qCount}`;
       const id = namespace ? `${namespace}_${rawId}` : rawId;
-      const questionM = block.match(/Pergunta:\s*([\s\S]*?)(?:\nResposta:|\nVerso:|\nExplica[çc][aã]o:|\n---|$)/i);
-      const answerM = block.match(/Resposta:\s*([\s\S]*?)(?:\nExplica[çc][aã]o:|\n---|$)/i);
-      const expM = block.match(/Explica[çc][aã]o:\s*([\s\S]*?)(?:\n---|$)/i);
+      // Rótulos são linhas estruturais: "outra pergunta:" e "sua resposta:"
+      // dentro de uma questão/comentário não podem criar um flashcard extra.
+      const questionM = block.match(/(?:^|\n)[ \t]*Pergunta:\s*([\s\S]*?)(?:\n[ \t]*(?:Resposta|Verso|Explica[çc][aã]o):|\n---|$)/i);
+      const answerM = block.match(/(?:^|\n)[ \t]*Resposta:\s*([\s\S]*?)(?:\n[ \t]*Explica[çc][aã]o:|\n---|$)/i);
+      const expM = block.match(/(?:^|\n)[ \t]*Explica[çc][aã]o:\s*([\s\S]*?)(?:\n---|$)/i);
       let statement = questionM?.[1]?.trim() || '';
       let expectedAnswer = answerM?.[1]?.trim() || '';
       let explanation = expM?.[1]?.trim() || '';
