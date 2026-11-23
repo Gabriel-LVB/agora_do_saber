@@ -24,6 +24,7 @@ import {
   normalizeDisplayedAlternativeReferences,
 } from '../src/lib/questionExplanation.js';
 import { normalizeImportedQuestionText } from '../src/lib/importedQuestionText.js';
+import { parseBulkQuestionText, isBulkQuestionText, importBulkQuestionText } from '../src/lib/bulkQuestionText.js';
 import { splitMarkdownTableBlocks } from '../src/lib/markdownTables.js';
 import { extractQuestionExportTags } from '../src/features/exporting/exportQuestionTags.js';
 import { renderDocxQuestionTable } from '../src/features/exporting/docxQuestionTable.js';
@@ -639,6 +640,51 @@ assert.equal(tableBlocks[1].columnCount, 9);
 assert.deepEqual(tableBlocks[1].headers.map(cell => cell.colSpan), [3, 3, 3]);
 assert.equal(tableBlocks[1].rows[1][6], '0,703');
 assert.equal(splitMarkdownTableBlocks('A | B em uma frase.')[0].type, 'text');
+const bulkQuestionText = `AGORA-MULTIBLOCOS-V1
+=== BLOCO ===
+ASSUNTO: Cardiologia
+NOME: Densitometria
+Questão 1
+Qual é o diagnóstico?
+${densitometryTable}
+A) Normal
+B) Reduzida
+Gabarito: B
+=== FIM DO BLOCO ===
+
+=== BLOCO ===
+ASSUNTO: Pneumologia
+NOME: Asma
+Questão 1
+Texto da segunda questão.
+A) Sim
+B) Não
+Gabarito: A
+=== FIM DO BLOCO ===`;
+assert.equal(isBulkQuestionText(bulkQuestionText), true);
+assert.deepEqual(parseBulkQuestionText(bulkQuestionText).map(block => [block.subject, block.title]), [
+  ['Cardiologia','Densitometria'], ['Pneumologia','Asma'],
+]);
+assert.match(parseBulkQuestionText(bulkQuestionText)[0].questionsText, /\| 0,989 \| -1,6 \|/);
+assert.throws(() => parseBulkQuestionText(bulkQuestionText.replace('=== FIM DO BLOCO ===', '')), /falta === FIM DO BLOCO ===/);
+const bulkSaved = [];
+assert.deepEqual(await importBulkQuestionText({
+  text:bulkQuestionText,
+  parseQuestions:() => ({ questions:[{ id:'q1' }], summary:'' }),
+  saveBlock:async block => { bulkSaved.push(`${block.subject}/${block.title}`); },
+}), { completedBlocks:2, completedQuestions:2 });
+assert.deepEqual(bulkSaved, ['Cardiologia/Densitometria','Pneumologia/Asma']);
+await assert.rejects(importBulkQuestionText({
+  text:bulkQuestionText,
+  parseQuestions:(_,index) => ({ questions:index ? [] : [{ id:'q1' }] }),
+  saveBlock:async () => { throw new Error('não deveria salvar'); },
+}), /Bloco 2/);
+let attemptedBulkBlocks = 0;
+await assert.rejects(importBulkQuestionText({
+  text:bulkQuestionText,
+  parseQuestions:() => ({ questions:[{ id:'q1' }] }),
+  saveBlock:async () => { if (++attemptedBulkBlocks === 2) throw new Error('rede'); },
+}), error => error.message === 'rede' && error.completedBlocks === 1);
 const docxTableXml = renderDocxQuestionTable(tableBlocks[1], text => `<w:p>${text}</w:p>`, text => text);
 assert.equal((docxTableXml.match(/<w:gridSpan w:val="3"\/>/g) || []).length, 3);
 assert.equal((docxTableXml.match(/<w:tr>/g) || []).length, 3);

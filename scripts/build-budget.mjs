@@ -94,7 +94,9 @@ assert.ok(entry, 'Bundle principal index-*.js nao encontrado.');
 // modal lazy ao menu de contexto: 28 bytes medidos acima do teto anterior.
 // O parser compatível de Entenda o tema/Bizu e o novo campo opcional acrescentam
 // 1,2 KiB raw medido ao entry, sem novas dependências ou leituras no carregamento.
-const ENTRY_RAW_LIMIT = 503 * 1024;
+// O importador administrativo de TXT com vários blocos acrescenta 2,6 KiB raw
+// ao App; o parser e a validação do lote permanecem em módulo lazy.
+const ENTRY_RAW_LIMIT = 506 * 1024;
 const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A curadoria e a seleção da Fábrica acrescentam um módulo administrativo
 // completo; o teto cresceu somente pelo custo medido desta primeira fatia.
@@ -124,7 +126,9 @@ const ENTRY_GZIP_LIMIT = 220 * 1024;
 // A conferência remota de um único bloco acrescenta cerca de 1,6 KiB gzip,
 // em um módulo carregado sob demanda, para corrigir contadores entre dispositivos.
 // Leitura de tabelas nos enunciados acrescenta ~0,3 KiB ao conjunto de telas lazy.
-const CORE_TOTAL_GZIP_LIMIT = 445.5 * 1024;
+// O gatilho administrativo e a proteção contra tabelas confundidas com
+// flashcards somam cerca de 1,5 KiB gzip ao conjunto principal.
+const CORE_TOTAL_GZIP_LIMIT = 447.25 * 1024;
 // Agrupar uma matéria inteira, oferecer ordem, aplicar a paleta completa e
 // converter marcadores em tags soma 1,8 KiB medido ao chunk lazy original.
 // Os blocos rotulados Entenda o tema e Bizu nos formatos HTML/PDF/DOCX somam

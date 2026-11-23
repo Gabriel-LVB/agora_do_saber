@@ -8,6 +8,7 @@ import { FeatureProvider } from './features/FeatureContext.jsx';
 import { adminEmail } from './config/environment.js';
 import { cleanFirestoreData } from './lib/firestoreData.js';
 import { deferInteractionWork } from './lib/interaction.js';
+import { parseMarkdownTableAt } from './lib/markdownTables.js';
 import { normalizeQuestionTypesForGeneration, shouldGenerateHybridClinicalPass, toggleQuestionTypeSelection } from './lib/questionTypes.js';
 import { readStorageJson, readStorageText, removeStorageItem, writeStorageJson, writeStorageText } from './lib/safeStorage.js';
 import { useCourseDerivedState } from './hooks/useCourseDerivedState.js';
@@ -2051,9 +2052,17 @@ const parseFlashcards = (text, namespace='') => {
   const questions = [];
   let qCount = 0;
 
-  const pipeLines = norm.split('\n').map(l => l.trim()).filter(l =>
-    l.includes('|') && !/^question\s*\|/i.test(l) && !/^pergunta\s*\|/i.test(l)
-  );
+  const lines = norm.split('\n');
+  const tableRows = new Set();
+  for (let index = 0; index < lines.length; index++) {
+    const table = parseMarkdownTableAt(lines, index);
+    if (!table) continue;
+    for (let row = index; row < table.nextIndex; row++) tableRows.add(row);
+    index = table.nextIndex - 1;
+  }
+  const pipeLines = lines.map((line,index) => ({ line:line.trim(), index })).filter(({ line,index }) =>
+    !tableRows.has(index) && line.includes('|') && !/^question\s*\|/i.test(line) && !/^pergunta\s*\|/i.test(line)
+  ).map(({ line }) => line);
   if (pipeLines.length >= 1 && !/(?:^|\n)\s*(?:##\s*)?Flashcard\s+\d+/i.test(norm)) {
     pipeLines.forEach(line => {
       const parts = line.split('|');
@@ -3727,6 +3736,7 @@ export default function QuestionBankApp() {
   const [showSubSugs, setShowSubSugs] = useState(false);
   const [pasteZipFile, setPasteZipFile] = useState(null);
   const [pasteZipBusy, setPasteZipBusy] = useState(false);
+  const [pasteBulkBusy, setPasteBulkBusy] = useState(false);
   const pasteZipInputRef = useRef(null);
 
   // ── Academia do Saber ─────────────────────────────────────────────────────
@@ -11822,28 +11832,28 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
   };
 
   // Paste import
-  const getPasteImportDestination = () => {
+  const getPasteImportDestination = (subjectName = pasteSubName) => {
     const items = libraryRef.current?.length ? libraryRef.current : library;
-    const subjectTitle = pasteSubName.trim() || 'Assunto Importado';
+    const subjectTitle = subjectName.trim() || 'Assunto Importado';
     const namedSubject = items.find(item => !isFolderItem(item)
       && item.source === 'external'
       && item.id !== 'imported-folder'
       && String(item.title || '').toLowerCase() === subjectTitle.toLowerCase());
-    const defaultSubject = !pasteSubName.trim() ? items.find(item => item.id === 'imported-folder') : null;
+    const defaultSubject = !subjectName.trim() ? items.find(item => item.id === 'imported-folder') : null;
     return {
       subject:namedSubject || defaultSubject || null,
       subjectId:namedSubject?.id || defaultSubject?.id || `imported-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
       subjectTitle,
     };
   };
-  const persistImportedQuestions = async ({ questions, summary='', suggestedTitle='', packageSchema='', destination=null, topicId=null }) => {
+  const persistImportedQuestions = async ({ questions, summary='', suggestedTitle='', packageSchema='', destination=null, topicId=null, topicTitle='', keepImportView=false }) => {
     const target = destination || getPasteImportDestination();
     const currentTargetSubject = (libraryRef.current?.length ? libraryRef.current : library)
       .find(item => sameId(item.id,target.subjectId)) || target.subject;
     const importedTypes = Array.from(new Set((questions || []).map(q => q.isCloze ? 'cloze' : q.isFlashcard ? 'flashcard' : q.isEssay ? 'essay' : q.isOpen ? 'open' : 'direct')));
     let nextTopic = {
       id:topicId || `imp-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-      title:pasteTopic.trim() || suggestedTitle || `Bloco (${new Date().toLocaleDateString()})`,
+      title:topicTitle || pasteTopic.trim() || suggestedTitle || `Bloco (${new Date().toLocaleDateString()})`,
       questions,
       summary,
       answers:{},
@@ -11893,6 +11903,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     const savedSubject = libraryRef.current.find(item => sameId(item.id,target.subjectId));
     const savedTopic = savedSubject?.topics?.find(item => sameId(item.id,nextTopic.id));
     if (!savedSubject || !savedTopic) throw new Error('O bloco foi gravado, mas não pôde ser aberto. Volte a Meus materiais e tente novamente.');
+    if (keepImportView) return savedTopic;
     setLibFilter('external');
     setActiveFolderId(savedSubject.folderId || null);
     setActiveSubjectId(savedSubject.id);
@@ -11914,7 +11925,41 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
     return error?.message || 'Não foi possível confirmar a gravação do bloco.';
   };
   const handlePasteImport = async () => {
+    if (pasteBulkBusy) return;
     const allowedImportTypes = ['direct','vof','cespe','open','essay','flashcard', ...(isAdmin ? ['cloze'] : [])];
+    if (String(pasteText || '').trimStart().startsWith('AGORA-MULTIBLOCOS-V1')) {
+      if (!isAdmin) {
+        setErrorModal({ title:'Formato restrito', message:'A importação de TXT com vários blocos está disponível somente para o administrador.', isAlert:true });
+        return;
+      }
+      setPasteBulkBusy(true);
+      try {
+        const { importBulkQuestionText } = await import('./lib/bulkQuestionText.js');
+        const { completedBlocks, completedQuestions } = await importBulkQuestionText({
+          text:pasteText,
+          parseQuestions:(text,index) => parseGeneratedQuestionsByTypes(text, `imp_${Date.now()}_${index}`, allowedImportTypes),
+          saveBlock:block => persistImportedQuestions({
+            questions:block.questions,
+            summary:block.summary,
+            destination:getPasteImportDestination(block.subject),
+            topicTitle:block.title,
+            keepImportView:true,
+          }),
+        });
+        setPasteText('');
+        setPasteTopic('');
+        setLibFilter('external');
+        setActiveFolderId(null);
+        setView('sub-library');
+        addToast(`${completedQuestions} questões importadas em ${completedBlocks} blocos.`, 'success', 5000);
+      } catch(error) {
+        const partial = error?.completedBlocks ? `${error.completedBlocks} bloco(s) já foram salvos; mantenha apenas os restantes no TXT antes de tentar novamente. ` : '';
+        setErrorModal({ title:'Não foi possível concluir a importação em lote', message:partial + importedQuestionsErrorMessage(error), isAlert:true });
+      } finally {
+        setPasteBulkBusy(false);
+      }
+      return;
+    }
     const parsed=parseGeneratedQuestionsByTypes(pasteText, `imp_${Date.now()}`, allowedImportTypes);
     const importTypeLabel = isAdmin ? 'flashcards e clozes' : 'flashcards';
     if(!parsed.questions.length){setErrorModal({title:'Ilegível',message:`Verifique a estrutura. Agora aceito múltipla escolha, V/F, CESPE, abertas, dissertativas e ${importTypeLabel}, mas o texto precisa manter rótulos como "Resposta esperada:", "Entenda o tema:" (ou o legado "Explicação:"), "Bizu:", "Texto:"${isAdmin ? ' com {{c1::...}}' : ''} ou alternativas A-E.`,isAlert:true});return;}
@@ -16160,7 +16205,7 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
             <h2 className="text-3xl mobile-title-lg mobile-wrap font-serif font-bold text-yellow-600 mb-6 flex items-center gap-3 leading-tight"><Feather className="w-8 h-8 flex-shrink-0"/>Importar Questões</h2>
             <div className={`rounded-xl border p-4 mb-5 text-sm leading-relaxed ${darkMode?'bg-yellow-900/20 border-yellow-800/40 text-yellow-100':'bg-yellow-50 border-yellow-200 text-yellow-900'}`}>
               <p className="font-bold mb-1">Importe sem alterar o texto original</p>
-              <p>Cole as questões, selecione um TXT ou envie o pacote ZIP das provas antigas da FAMED. Elas serão organizadas em um assunto e bloco.</p>
+              <p>Cole as questões, selecione um TXT ou envie o pacote ZIP das provas antigas da FAMED. O formato comum cria um assunto e um bloco.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative">
               <div>
@@ -16189,11 +16234,16 @@ REGRA FINAL: responda apenas com as ${missing} questões faltantes no formato ob
               <button type="button" disabled={pasteZipBusy||!pasteZipFile} onClick={handlePasteZipImport} className="mt-4 w-full rounded-xl bg-yellow-600 px-5 py-3.5 text-sm font-bold text-white hover:bg-yellow-700 disabled:opacity-40">{pasteZipBusy?'Validando e salvando…':'Importar pacote ZIP'}</button>
             </section>
             <div className="mb-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest opacity-35"><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/><span>ou use texto</span><span className={`h-px flex-1 ${darkMode?'bg-gray-700':'bg-gray-200'}`}/></div>
-            <label className="mb-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"><FileUp className="h-4 w-4"/>Selecionar arquivo TXT<input type="file" accept=".txt,text/plain" onChange={handlePasteTxtFile} className="sr-only"/></label>
+            <label className="mb-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"><FileUp className="h-4 w-4"/>Selecionar arquivo TXT<input type="file" accept=".txt,text/plain" onChange={handlePasteTxtFile} disabled={pasteBulkBusy} className="sr-only"/></label>
+            {isAdmin&&<details className={`mb-4 rounded-xl border p-4 text-sm ${darkMode?'border-gray-700 bg-gray-900/40':'border-gray-200 bg-gray-50'}`}>
+              <summary className="cursor-pointer font-bold">TXT com vários assuntos e blocos · admin</summary>
+              <p className="mt-2 opacity-70">Os campos Assunto e Nome do bloco acima são ignorados neste formato. Cada bloco informa seus próprios nomes; todos são validados antes de salvar.</p>
+              <pre className="mt-3 overflow-x-auto text-xs leading-relaxed">{'AGORA-MULTIBLOCOS-V1\n=== BLOCO ===\nASSUNTO: Cardiologia\nNOME: Insuficiência cardíaca\nQuestão 1\n...\n=== FIM DO BLOCO ===\n\n=== BLOCO ===\nASSUNTO: Pneumologia\nNOME: Asma\nQuestão 1\n...\n=== FIM DO BLOCO ==='}</pre>
+            </details>}
             <label className="block text-xs font-bold uppercase mb-2 opacity-50">Texto das questões <span className="normal-case font-normal">(se não usar ZIP)</span></label>
-            <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder="Cole as questões aqui..." className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-white border-gray-200'}`}/>
+            <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} disabled={pasteBulkBusy} placeholder="Cole as questões aqui..." className={`w-full h-[40vh] p-6 rounded-xl border font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-yellow-500 ${darkMode?'bg-gray-800 border-gray-700 text-gray-300':'bg-white border-gray-200'}`}/>
             <p className="text-xs mt-2 opacity-50">Também aceita questões V/F, CESPE, abertas, dissertativas e flashcards quando os rótulos de resposta e explicação estão presentes.</p>
-            <button onClick={handlePasteImport} disabled={!pasteText.trim()} className="mt-4 w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">Importar e abrir questões</button>
+            <button onClick={handlePasteImport} disabled={!pasteText.trim()||pasteBulkBusy} className="mt-4 w-full bg-yellow-600 text-white px-5 py-4 rounded-xl font-bold hover:bg-yellow-700 disabled:opacity-50">{pasteBulkBusy?'Validando e salvando blocos…':isAdmin&&String(pasteText).trimStart().startsWith('AGORA-MULTIBLOCOS-V1')?'Importar todos os blocos':'Importar e abrir questões'}</button>
           </div>
         )}
 
