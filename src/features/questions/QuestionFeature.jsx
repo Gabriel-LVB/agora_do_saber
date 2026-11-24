@@ -1426,15 +1426,15 @@ const OpenAnswerReference = ({ question, darkMode }) => {
     <div className="space-y-3" aria-live="polite">
       <aside className={`rounded-xl border p-4 ${darkMode?'border-yellow-800/70 bg-yellow-950/25':'border-yellow-200 bg-yellow-50'}`}>
         <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-yellow-300':'text-yellow-800'}`}>Resposta esperada</p>
-        <div className={`mt-2 text-sm leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(expectedAnswer)}</div>
+        <div className={`mt-2 text-base leading-relaxed ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(expectedAnswer)}</div>
       </aside>
       {themeExplanation&&<aside className={`rounded-xl border p-4 ${darkMode?'border-gray-700 bg-gray-800/45':'border-gray-200 bg-gray-50'}`}>
         <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-yellow-300':'text-yellow-800'}`}>Entenda o tema</p>
-        <div className={`mt-2 text-sm leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(themeExplanation)}</div>
+        <div className={`mt-2 text-base leading-relaxed ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(themeExplanation)}</div>
       </aside>}
       {bizu&&<aside className={`rounded-xl border p-4 ${darkMode?'border-blue-800/70 bg-blue-950/25':'border-blue-200 bg-blue-50'}`}>
         <p className={`text-xs font-black uppercase tracking-wider ${darkMode?'text-blue-300':'text-blue-800'}`}>Bizu</p>
-        <div className={`mt-2 text-sm font-medium leading-relaxed md:text-base ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(bizu)}</div>
+        <div className={`mt-2 text-base font-medium leading-relaxed ${darkMode?'text-gray-100':'text-gray-800'}`}>{parseHtmlTextChat(bizu)}</div>
       </aside>}
     </div>
   );
@@ -1543,7 +1543,7 @@ const OpenAnswerInline = ({ question, darkMode, apiKey, onCall, oracleLength, sa
               </div>
             </div>
           )}
-          <div className={`text-sm leading-relaxed ${dm?'text-gray-200':'text-gray-700'}`}>{parseHtmlTextChat(result.feedback||'')}</div>
+          <div className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-700'}`}>{parseHtmlTextChat(result.feedback||'')}</div>
         </div>
       )}
 
@@ -1637,7 +1637,7 @@ const OpenAnswerModal = ({ question, darkMode, apiKey, onCall, onClose, isEssay=
                   </div>
                 </div>
               )}
-              <p className={`text-sm leading-relaxed ${dm?'text-gray-200':'text-gray-700'}`}>{result.feedback}</p>
+              <p className={`text-base leading-relaxed ${dm?'text-gray-200':'text-gray-700'}`}>{result.feedback}</p>
               {result.veredicto === 'ERRO' && (
                 <button onClick={()=>{setResult(null);}} className="text-xs text-yellow-600 font-bold underline">Tentar novamente</button>
               )}
@@ -1674,7 +1674,7 @@ const renderClozeSentence = (clozeText, revealed, darkMode) => {
 };
 
 const FlashcardExplanation = ({ explanation, darkMode }) => explanation ? (
-  <div className={`mt-6 rounded-xl border p-4 text-left text-sm leading-relaxed md:text-base ${darkMode?'border-gray-700 bg-gray-950/45 text-gray-300':'border-gray-200 bg-gray-50 text-gray-700'}`}>
+  <div className={`mt-6 rounded-xl border p-4 text-left text-base leading-relaxed ${darkMode?'border-gray-700 bg-gray-950/45 text-gray-300':'border-gray-200 bg-gray-50 text-gray-700'}`}>
     <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-yellow-600">Entenda</p>
     <div className="select-text" style={{userSelect:'text'}}>{parseHtmlTextChat(explanation)}</div>
   </div>
@@ -2318,10 +2318,10 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
 	                <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center font-bold mr-4 text-sm ${letterBadge}`}>
 	                  {opt.letter}
 	                </div>
-	                <div className="pt-1.5 min-w-0 flex-1 leading-relaxed text-[15px] md:text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDisplayText(opt.text))}</div>
+	                <div className="pt-1.5 min-w-0 flex-1 leading-relaxed text-base select-text mobile-safe-text" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDisplayText(opt.text))}</div>
 	              </div>
 	              {showOptionExplanation && (
-	                <div className={`mt-3 border-t pt-3 text-sm leading-relaxed select-text md:text-base ${optionExplanationClass}`} style={{userSelect:'text'}}>
+	                <div className={`mt-3 border-t pt-3 text-base leading-relaxed select-text ${optionExplanationClass}`} style={{userSelect:'text'}}>
 	                  <span className={`font-bold ${optionExplanationLabelClass}`}>{optionExplanationLabel}</span>{' '}
 	                  <span>{parseHtmlTextChat(displayExplanation)}</span>
 	                </div>
@@ -2376,7 +2376,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
             </button>
             {lessonExplanationOpen && (
               <div className={`border-t px-4 py-4 md:px-5 md:py-5 ${darkMode?'border-gray-700 text-gray-200':'border-gray-100 text-gray-800'}`}>
-                <div className="select-text text-[15px] leading-relaxed md:text-base" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDeclaredCorrectAlternativeReferences(
+                <div className="select-text text-base leading-relaxed" style={{userSelect:'text'}}>{parseHtmlTextChat(normalizeDeclaredCorrectAlternativeReferences(
                   hasAlternativeExplanations ? normalizeDisplayText(question.explanationParts?.lesson || explanation) : explanation,
                   getCorrectLetter(question),
                 ))}</div>
@@ -2398,7 +2398,7 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
               </span>
               <ChevronDown className={`h-4 w-4 flex-shrink-0 opacity-50 transition-transform ${bizuOpen?'rotate-180':''}`}/>
             </button>
-            {bizuOpen&&<div className={`select-text border-t px-4 py-4 text-[15px] font-medium leading-relaxed md:px-5 md:py-5 md:text-base ${darkMode?'border-blue-900/60 text-gray-100':'border-blue-100 text-gray-800'}`} style={{userSelect:'text'}}>{parseHtmlTextChat(bizu)}</div>}
+            {bizuOpen&&<div className={`select-text border-t px-4 py-4 text-base font-medium leading-relaxed md:px-5 md:py-5 ${darkMode?'border-blue-900/60 text-gray-100':'border-blue-100 text-gray-800'}`} style={{userSelect:'text'}}>{parseHtmlTextChat(bizu)}</div>}
           </div>}
 
           <div className="question-explanation-panel overflow-hidden rounded-xl">
@@ -2421,11 +2421,11 @@ const QuestionCard = ({ question:storedQuestion, index, selectedLetter:storedSel
                   const displayExplanation = normalizeDisplayText(normalizeDisplayedAlternativeReferences(opt.explanation, opt.letter));
                   return (
                   <div key={`alt-exp-${opt.letter}`} className="select-text" style={{userSelect:'text'}}>
-                    <div className="flex items-start gap-3 text-sm font-bold leading-relaxed md:text-base">
+                    <div className="flex items-start gap-3 text-base font-bold leading-relaxed">
                       <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-xs ${opt.isCorrect ? 'bg-green-500 text-white' : effectiveLetter === opt.letter ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'border border-gray-200 bg-gray-50 text-gray-600'}`}>{opt.letter}</span>
                       <span className={darkMode?'text-gray-100':'text-gray-900'}>{parseHtmlTextChat(normalizeDisplayText(opt.text))}</span>
                     </div>
-                    <div className={`mt-2 pl-10 text-sm leading-relaxed md:text-[15px] ${opt.isCorrect ? darkMode?'text-green-200':'text-green-800' : effectiveLetter === opt.letter ? darkMode?'text-red-200':'text-red-800' : darkMode?'text-gray-300':'text-gray-600'}`}>{parseHtmlTextChat(displayExplanation)}</div>
+                    <div className={`mt-2 pl-10 text-base leading-relaxed ${opt.isCorrect ? darkMode?'text-green-200':'text-green-800' : effectiveLetter === opt.letter ? darkMode?'text-red-200':'text-red-800' : darkMode?'text-gray-300':'text-gray-600'}`}>{parseHtmlTextChat(displayExplanation)}</div>
                   </div>
                   );
                 })}
